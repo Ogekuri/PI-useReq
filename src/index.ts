@@ -1,3 +1,5 @@
+export const VERSION = "0.0.0"
+
 import path from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ToolInfo } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
