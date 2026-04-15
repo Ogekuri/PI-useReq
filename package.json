@@ -6,7 +6,13 @@
   "scripts": {
     "test": "node --import tsx --test tests/**/*.test.ts",
     "test:watch": "node --import tsx --test --watch tests/**/*.test.ts",
-    "cli": "node --import tsx ./src/cli.ts"
+    "cli": "node --import tsx ./src/cli.ts",
+    "debug:ext": "node --import tsx ./scripts/debug-extension.ts",
+    "debug:ext:inspect": "node --import tsx ./scripts/debug-extension.ts inspect",
+    "debug:ext:session": "node --import tsx ./scripts/debug-extension.ts session-start",
+    "debug:ext:command": "node --import tsx ./scripts/debug-extension.ts command",
+    "debug:ext:tool": "node --import tsx ./scripts/debug-extension.ts tool",
+    "debug:ext:sdk": "node --import tsx ./scripts/debug-extension.ts sdk-smoke"
   },
   "pi": {
     "extensions": [

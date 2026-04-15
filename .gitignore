@@ -38,7 +38,12 @@
 !other-stuff/
 !other-stuff/**/*
 !scripts/
+!scripts/lib/
 !scripts/**/*.sh
+!scripts/**/*.ts
+!req/
+!req/docs/
+!req/docs/**/*.md
 !images/
 !images/**/*
 
@@ -68,6 +73,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!scripts/lib/
+!scripts/lib/**/*.ts
 lib64/
 parts/
 sdist/

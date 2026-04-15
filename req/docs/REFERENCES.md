@@ -1,6 +1,8 @@
 # Files Structure
 ```
 .
+├── scripts
+│   └── debug-extension.ts
 └── src
     ├── cli.ts
     ├── core
@@ -21,6 +23,148 @@
     │   └── utils.ts
     └── index.ts
 ```
+
+# debug-extension.ts | TypeScript | 497L | 17 symbols | 4 imports | 19 comments
+> Path: `scripts/debug-extension.ts`
+- @brief Implements the standalone extension debug harness CLI.
+- @details Parses debug-harness subcommands, dispatches offline inspection and replay operations, formats reports as JSON or human-readable markdown, and converts `ReqError` instances into process-style stderr plus exit codes. Runtime is dominated by the selected harness subcommand. Side effects include stdout/stderr writes and any extension-owned behavior triggered by delegated replay operations.
+
+## Imports
+```
+import process from "node:process";
+import { ReqError } from "../src/core/errors.js";
+import {
+import { runSdkSmoke, type ParityMismatch, type SdkSmokeReport } from "./lib/sdk-smoke.js";
+```
+
+## Definitions
+
+- type `type OutputFormat = "json" | "pretty";` (L26)
+- @brief Enumerates the supported harness output formats.
+- @details Keeps the CLI formatter selection constrained to deterministic JSON output or human-readable markdown output. The alias is compile-time only and introduces no runtime cost.
+### iface `interface ParsedHarnessArgs` (L32-44)
+- @brief Describes the parsed debug-harness CLI arguments.
+- @details Captures the selected subcommand plus all recognized option values in the normalized shape consumed by `main`. The interface is compile-time only and introduces no runtime cost.
+
+### fn `function parseArgs(argv: string[]): ParsedHarnessArgs` (L78-141)
+- @brief Parses raw CLI arguments into a normalized harness command object.
+- @details Performs a single left-to-right scan, records the first positional token as the subcommand, supports repeatable `--select` and `--input` options, and defaults the output format to `pretty`. Runtime is O(n) in argument count. No external state is mutated.
+- @param[in] argv {string[]} Raw CLI arguments excluding executable and script path.
+- @return {ParsedHarnessArgs} Parsed harness arguments.
+
+### fn `function parseJsonObject(text: string | undefined, label: string, fallback: Record<string, unknown>): Record<string, unknown>` (L152-168)
+- @brief Parses a JSON object option from the CLI.
+- @details Accepts an omitted value as the supplied fallback, requires object payloads for present values, and wraps parse failures in `ReqError` for deterministic CLI error reporting. Runtime is O(n) in input size. No external state is mutated.
+- @param[in] text {string | undefined} Raw JSON option value.
+- @param[in] label {string} Human-readable option label.
+- @param[in] fallback {Record<string, unknown>} Fallback object when the option is omitted.
+- @return {Record<string, unknown>} Parsed JSON object.
+- @throws {ReqError} Throws when the option is present but not valid JSON object syntax.
+
+### fn `function writeStdout(text: string): void` (L176-180)
+- @brief Writes non-empty text to stdout.
+- @details Skips zero-length writes so callers can compose output safely. Runtime is O(n) in text length. Side effects are limited to stdout writes.
+- @param[in] text {string} Text payload.
+- @return {void} No return value.
+
+### fn `function writeStderr(text: string): void` (L188-193)
+- @brief Writes non-empty text to stderr with a trailing newline.
+- @details Appends a newline when needed and skips empty payloads. Runtime is O(n) in text length. Side effects are limited to stderr writes.
+- @param[in] text {string} Text payload.
+- @return {void} No return value.
+
+### fn `function formatJson(value: unknown): string` (L201-203)
+- @brief Serializes one arbitrary report as pretty-printed JSON.
+- @details Uses two-space indentation and appends a trailing newline for stable automation-friendly output. Runtime is O(n) in report size. No external state is mutated.
+- @param[in] value {unknown} Report payload.
+- @return {string} JSON document.
+
+### fn `function formatSnapshotHeader(snapshot: OfflineContractSnapshot): string[]` (L211-222)
+- @brief Formats the common snapshot header for human-readable output.
+- @details Renders normalized path metadata, registration counts, and event names shared by all offline reports. Runtime is O(n) in inventory size. No external state is mutated.
+- @param[in] snapshot {OfflineContractSnapshot} Snapshot payload.
+- @return {string[]} Markdown lines.
+
+### fn `function formatInspectReport(report: InspectReport): string` (L230-249)
+- @brief Formats one offline inspection report for human-readable output.
+- @details Emits sections for inventory counts, commands, tools, sent user messages, and the generated usage manual. Runtime is O(n) in report size. No external state is mutated.
+- @param[in] report {InspectReport} Inspection report.
+- @return {string} Markdown document.
+
+### fn `function formatUiState(ui: SessionStartReport["ui"]): string[]` (L257-281)
+- @brief Formats one recorded UI state snapshot for human-readable output.
+- @details Emits statuses, notifications, editor text, and scripted interaction traces used by session-start and command/tool replay reports. Runtime is O(n) in interaction count. No external state is mutated.
+- @param[in] ui {SessionStartReport["ui"]} UI-state snapshot.
+- @return {string[]} Markdown lines.
+
+### fn `function formatSessionStartReport(report: SessionStartReport): string` (L289-300)
+- @brief Formats one session-start replay report for human-readable output.
+- @details Emits common snapshot metadata plus the recorded event payload and UI side effects. Runtime is O(n) in report size. No external state is mutated.
+- @param[in] report {SessionStartReport} Session-start replay report.
+- @return {string} Markdown document.
+
+### fn `function formatCommandReplayReport(report: CommandReplayReport): string` (L308-325)
+- @brief Formats one command replay report for human-readable output.
+- @details Emits common snapshot metadata, command identity, sent user messages, and UI side effects. Runtime is O(n) in report size. No external state is mutated.
+- @param[in] report {CommandReplayReport} Command replay report.
+- @return {string} Markdown document.
+
+### fn `function formatToolReplayReport(report: ToolReplayReport): string` (L333-352)
+- @brief Formats one tool replay report for human-readable output.
+- @details Emits common snapshot metadata, tool identity, input parameters, streamed updates, final result payload, and UI side effects. Runtime is O(n) in report size. No external state is mutated.
+- @param[in] report {ToolReplayReport} Tool replay report.
+- @return {string} Markdown document.
+
+### fn `function formatMismatch(mismatch: ParityMismatch): string[]` (L360-367)
+- @brief Formats one parity mismatch for human-readable output.
+- @details Emits the category, subject, detail, and normalized offline versus SDK payloads for deterministic troubleshooting. Runtime is O(n) in payload size. No external state is mutated.
+- @param[in] mismatch {ParityMismatch} Mismatch payload.
+- @return {string[]} Markdown lines.
+
+### fn `function formatSdkSmokeReport(report: SdkSmokeReport): string` (L375-395)
+- @brief Formats one SDK smoke report for human-readable output.
+- @details Emits parity status, offline versus SDK inventory counts, runtime-shape metadata, and detailed mismatch entries when parity fails. Runtime is O(n) in report size. No external state is mutated.
+- @param[in] report {SdkSmokeReport} SDK smoke report.
+- @return {string} Markdown document.
+
+### fn `function formatReport(` (L405-427)
+- @brief Formats the selected report according to the requested output mode.
+- @details Uses JSON for automation-friendly output and markdown for human review. Runtime is O(n) in report size. No external state is mutated.
+- @param[in] format {OutputFormat} Requested output format.
+- @param[in] subcommand {string} Executed harness subcommand.
+- @param[in] report {InspectReport | SessionStartReport | CommandReplayReport | ToolReplayReport | SdkSmokeReport} Report payload.
+- @return {string} Final stdout payload.
+
+### fn `export async function main(argv = process.argv.slice(2)): Promise<number>` (L436-491)
+- @brief Executes one standalone debug-harness invocation.
+- @details Parses CLI arguments, validates subcommand-specific requirements, dispatches the selected harness workflow, and formats the result for stdout while converting `ReqError` failures into stderr plus exit codes. Runtime is dominated by the selected subcommand. Side effects include stdout/stderr writes and delegated extension replay behavior.
+- @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
+- @return {Promise<number>} Process exit code.
+- @throws {ReqError} Internally catches `ReqError` and returns its exit code.
+
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`OutputFormat`|type||26||
+|`ParsedHarnessArgs`|iface||32-44|interface ParsedHarnessArgs|
+|`parseArgs`|fn||78-141|function parseArgs(argv: string[]): ParsedHarnessArgs|
+|`parseJsonObject`|fn||152-168|function parseJsonObject(text: string | undefined, label:...|
+|`writeStdout`|fn||176-180|function writeStdout(text: string): void|
+|`writeStderr`|fn||188-193|function writeStderr(text: string): void|
+|`formatJson`|fn||201-203|function formatJson(value: unknown): string|
+|`formatSnapshotHeader`|fn||211-222|function formatSnapshotHeader(snapshot: OfflineContractSn...|
+|`formatInspectReport`|fn||230-249|function formatInspectReport(report: InspectReport): string|
+|`formatUiState`|fn||257-281|function formatUiState(ui: SessionStartReport["ui"]): str...|
+|`formatSessionStartReport`|fn||289-300|function formatSessionStartReport(report: SessionStartRep...|
+|`formatCommandReplayReport`|fn||308-325|function formatCommandReplayReport(report: CommandReplayR...|
+|`formatToolReplayReport`|fn||333-352|function formatToolReplayReport(report: ToolReplayReport)...|
+|`formatMismatch`|fn||360-367|function formatMismatch(mismatch: ParityMismatch): string[]|
+|`formatSdkSmokeReport`|fn||375-395|function formatSdkSmokeReport(report: SdkSmokeReport): st...|
+|`formatReport`|fn||405-427|function formatReport(|
+|`main`|fn||436-491|export async function main(argv = process.argv.slice(2)):...|
+
+
+---
 
 # cli.ts | TypeScript | 356L | 9 symbols | 5 imports | 9 comments
 > Path: `src/cli.ts`

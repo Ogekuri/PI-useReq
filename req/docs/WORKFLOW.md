@@ -6,6 +6,13 @@
     - `main(...)` [`src/cli.ts`]
   - Parent Process: none
   - Threads: no explicit threads detected
+- ID: `PROC:debug-ext`
+  - Type: Process
+  - Role: Standalone extension debug-harness dispatcher for offline registration inspection, handler replay, and SDK parity smoke execution.
+  - Entrypoints:
+    - `main(...)` [`scripts/debug-extension.ts`]
+  - Parent Process: none
+  - Threads: no explicit threads detected
 - ID: `PROC:pi-host`
   - Type: Process
   - Role: pi extension host callback surface for commands, tools, session initialization, and interactive configuration.
@@ -450,6 +457,104 @@
   - Filesystem access for config, docs discovery, source reads, and bundled resources.
   - Git, bash, pyright, ruff, and arbitrary configured checker subprocesses via child-process execution.
 
+### `PROC:debug-ext`
+- Entrypoints:
+  - `main(...)`: debug-harness runtime root [`scripts/debug-extension.ts`]
+- Lifecycle/trigger:
+  - Start trigger: Node executes `scripts/debug-extension.ts` as a one-shot command.
+  - Stop trigger: returns numeric exit code after one harness subcommand or caught `ReqError`.
+  - Looping model: single-pass argument parse followed by single branch dispatch.
+  - Threads: no explicit threads detected.
+- Internal Call-Trace Tree:
+  - `main(...)`: parse argv, dispatch inspect/session-start/command/tool/sdk-smoke, and serialize the selected report [`scripts/debug-extension.ts`]
+    - `parseArgs(...)`: map argv tokens into harness subcommand options [`scripts/debug-extension.ts`]
+    - `parseJsonObject(...)`: parse JSON object options for tool and session replay [`scripts/debug-extension.ts`]
+    - `inspectExtension(...)`: load the extension as a black box, capture registrations, and render the manual [`scripts/lib/extension-debug-harness.ts`]
+      - `registerExtensionOffline(...)`: resolve paths, load the extension default export, and invoke registration under the requested cwd [`scripts/lib/extension-debug-harness.ts`]
+        - `resolveHarnessPaths(...)`: validate working-directory and extension-entry paths [`scripts/lib/extension-debug-harness.ts`]
+        - `loadExtensionFactory(...)`: dynamically import the extension default export [`scripts/lib/extension-debug-harness.ts`]
+        - `withProcessCwd(...)`: execute registration under the requested cwd [`scripts/lib/extension-debug-harness.ts`]
+          - `piUsereqExtension(...)`: register extension commands, tools, and the session-start hook [`src/index.ts`]
+            - `ensureHomeResources(...)`: provision bundled resources before registration [`src/core/resources.ts`]
+            - `registerPromptCommands(...)`: register bundled `req-*` prompt commands [`src/index.ts`]
+            - `registerAgentTools(...)`: register structured agent tools [`src/index.ts`]
+            - `registerConfigCommands(...)`: register configuration commands [`src/index.ts`]
+      - `buildDebugManual(...)`: render mode and per-command/per-tool examples [`scripts/lib/extension-debug-harness.ts`]
+    - `replaySessionStart(...)`: replay recorded `session_start` handlers and capture resulting UI state [`scripts/lib/extension-debug-harness.ts`]
+      - `registerExtensionOffline(...)`: rebuild the recorded extension registration surface [`scripts/lib/extension-debug-harness.ts`]
+      - `RecordingCommandContext(...)`: initialize the recorded command-context UI adapter [`scripts/lib/recording-extension-api.ts`]
+      - `withProcessCwd(...)`: execute `session_start` under the requested cwd [`scripts/lib/extension-debug-harness.ts`]
+        - `loadProjectConfig(...)`: session-start configuration load [`src/index.ts`]
+          - `getProjectBase(...)`: resolve project base from command context cwd [`src/index.ts`]
+          - `loadConfig(...)`: load config or defaults [`src/core/config.ts`]
+          - `isInsideGitRepo(...)`: probe git repository membership [`src/core/tool-runner.ts`]
+          - `resolveGitRoot(...)`: resolve repository root [`src/core/tool-runner.ts`]
+        - `applyConfiguredPiUsereqTools(...)`: enable configured startup tools [`src/index.ts`]
+          - `getConfiguredEnabledPiUsereqTools(...)`: canonicalize configured enabled tools [`src/index.ts`]
+            - `normalizeEnabledPiUsereqTools(...)`: canonicalize startup tools [`src/core/pi-usereq-tools.ts`]
+          - `getPiUsereqStartupTools(...)`: enumerate startup-capable tools [`src/index.ts`]
+    - `replayCommand(...)`: replay a recorded command handler and capture prompt/UI side effects [`scripts/lib/extension-debug-harness.ts`]
+      - `registerExtensionOffline(...)`: rebuild the recorded extension registration surface [`scripts/lib/extension-debug-harness.ts`]
+      - `RecordingCommandContext(...)`: initialize the recorded command-context UI adapter [`scripts/lib/recording-extension-api.ts`]
+      - `withProcessCwd(...)`: execute the named command under the requested cwd [`scripts/lib/extension-debug-harness.ts`]
+        - `ensureHomeResources(...)`: prompt-command registration path when invoking `req-*` handlers [`src/core/resources.ts`]
+        - `getProjectBase(...)`: resolve command project base [`src/index.ts`]
+        - `loadProjectConfig(...)`: load command runtime config [`src/index.ts`]
+        - `renderPrompt(...)`: render prompt-command payloads [`src/core/prompts.ts`]
+        - `configurePiUsereq(...)`: execute the interactive configuration menu [`src/index.ts`]
+          - `saveProjectConfig(...)`: persist menu updates on save-and-close [`src/index.ts`]
+    - `replayTool(...)`: replay a recorded tool execute handler and capture content/details [`scripts/lib/extension-debug-harness.ts`]
+      - `registerExtensionOffline(...)`: rebuild the recorded extension registration surface [`scripts/lib/extension-debug-harness.ts`]
+      - `RecordingCommandContext(...)`: initialize the recorded command-context UI adapter [`scripts/lib/recording-extension-api.ts`]
+      - `withProcessCwd(...)`: execute the named tool under the requested cwd [`scripts/lib/extension-debug-harness.ts`]
+        - `ensureHomeResources(...)`: refresh bundled assets for tool executes that need them [`src/core/resources.ts`]
+        - `getProjectBase(...)`: resolve tool project base [`src/index.ts`]
+        - `loadProjectConfig(...)`: load tool runtime config [`src/index.ts`]
+        - `runGitPath(...)`: example project-scoped tool execution path [`src/core/tool-runner.ts`]
+        - `runGetBasePath(...)`: example project-scoped tool execution path [`src/core/tool-runner.ts`]
+        - `runFilesReferences(...)`: explicit-file tool execution path [`src/core/tool-runner.ts`]
+        - `runFilesCompress(...)`: explicit-file tool execution path [`src/core/tool-runner.ts`]
+        - `runFilesFind(...)`: explicit-file tool execution path [`src/core/tool-runner.ts`]
+        - `runReferences(...)`: project-scan tool execution path [`src/core/tool-runner.ts`]
+        - `runCompress(...)`: project-scan tool execution path [`src/core/tool-runner.ts`]
+        - `runFind(...)`: project-scan tool execution path [`src/core/tool-runner.ts`]
+        - `runTokens(...)`: project-scan tool execution path [`src/core/tool-runner.ts`]
+        - `runFilesStaticCheck(...)`: explicit-file static-check path [`src/core/tool-runner.ts`]
+        - `runProjectStaticCheck(...)`: project-scan static-check path [`src/core/tool-runner.ts`]
+        - `runGitCheck(...)`: git validation path [`src/core/tool-runner.ts`]
+        - `runDocsCheck(...)`: docs validation path [`src/core/tool-runner.ts`]
+        - `runGitWtName(...)`: worktree naming path [`src/core/tool-runner.ts`]
+        - `runGitWtCreate(...)`: worktree creation path [`src/core/tool-runner.ts`]
+        - `runGitWtDelete(...)`: worktree deletion path [`src/core/tool-runner.ts`]
+    - `runSdkSmoke(...)`: replay offline `session_start`, probe the official SDK runtime, and compare inventories [`scripts/lib/sdk-smoke.ts`]
+      - `replaySessionStart(...)`: capture the offline `session_start` contract [`scripts/lib/extension-debug-harness.ts`]
+      - `probeSdkRuntime(...)`: load the official SDK runtime and extract extension-owned inventory [`scripts/lib/sdk-smoke.ts`]
+        - `resolveHarnessPaths(...)`: validate working-directory and extension-entry paths [`scripts/lib/extension-debug-harness.ts`]
+        - `extractSdkApi(...)`: locate the runtime inventory surface [`scripts/lib/sdk-smoke.ts`]
+        - `normalizeCommandRecord(...)`: normalize SDK command metadata [`scripts/lib/sdk-smoke.ts`]
+          - `normalizeSourceInfo(...)`: normalize command provenance fields [`scripts/lib/sdk-smoke.ts`]
+            - `normalizePathValue(...)`: normalize source paths relative to project root [`scripts/lib/sdk-smoke.ts`]
+        - `normalizeToolRecord(...)`: normalize SDK tool metadata [`scripts/lib/sdk-smoke.ts`]
+          - `normalizeSourceInfo(...)`: normalize tool provenance fields [`scripts/lib/sdk-smoke.ts`]
+            - `normalizePathValue(...)`: normalize source paths relative to project root [`scripts/lib/sdk-smoke.ts`]
+      - `buildParityReport(...)`: compare offline and SDK inventories [`scripts/lib/sdk-smoke.ts`]
+        - `compareCommandInventories(...)`: detect command-name, description, and provenance mismatches [`scripts/lib/sdk-smoke.ts`]
+        - `compareToolInventories(...)`: detect tool-name, description, schema-presence, and provenance mismatches [`scripts/lib/sdk-smoke.ts`]
+        - `compareActiveTools(...)`: detect active-tool mismatches after `session_start` [`scripts/lib/sdk-smoke.ts`]
+    - `formatReport(...)`: serialize the selected report as JSON or markdown [`scripts/debug-extension.ts`]
+      - `formatJson(...)`: serialize a machine-readable payload [`scripts/debug-extension.ts`]
+      - `formatInspectReport(...)`: render offline inspection markdown [`scripts/debug-extension.ts`]
+      - `formatSessionStartReport(...)`: render `session_start` replay markdown [`scripts/debug-extension.ts`]
+      - `formatCommandReplayReport(...)`: render command replay markdown [`scripts/debug-extension.ts`]
+      - `formatToolReplayReport(...)`: render tool replay markdown [`scripts/debug-extension.ts`]
+      - `formatSdkSmokeReport(...)`: render parity markdown [`scripts/debug-extension.ts`]
+    - `writeStdout(...)`: emit the final report payload [`scripts/debug-extension.ts`]
+    - `writeStderr(...)`: emit CLI failure diagnostics on error paths [`scripts/debug-extension.ts`]
+- External Boundaries:
+  - Dynamic module loading for the target extension entry and optional `@mariozechner/pi-coding-agent` SDK package.
+  - Filesystem validation for requested cwd and extension paths.
+  - Any filesystem, git, or subprocess side effects triggered indirectly by the registered extension handlers during replay.
+
 ### `PROC:pi-host`
 - Entrypoints:
   - `piUsereqExtension(...)`: extension activation root [`src/index.ts`]
@@ -617,4 +722,4 @@
 - None.
   - Internal IPC edges: none.
   - Internal thread communication edges: none.
-  - Relationship note: `PROC:main` and `PROC:pi-host` are alternative runtime entry modes over shared modules; no direct internal message channel is implemented between them.
+  - Relationship note: `PROC:main`, `PROC:debug-ext`, and `PROC:pi-host` are alternative runtime entry modes over shared modules; no direct internal message channel is implemented between them.
