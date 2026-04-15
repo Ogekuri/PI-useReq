@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.2"
+version: "0.0.3"
 date: "2026-04-15"
 author: "OpenAI Codex"
 scope:
@@ -100,6 +100,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI for requirements-
 - **REQ-032**: MUST inject a pi.dev conformance block into rendered prompts when `docs/pi.dev/agent-document-manifest.json` exists under the project base.
 - **REQ-033**: MUST make that conformance block require manifest-guided document review before implementing or changing extension code that interfaces with pi CLI.
 - **REQ-034**: MUST make that conformance block require manifest-guided document review before validating, analyzing, or fixing extension code that interfaces with pi CLI.
+- **REQ-035**: MUST parse repeatable `--enable-static-check LANG=MODULE[,CMD[,PARAM...]]` CLI options before command dispatch and merge resulting entries into persisted project configuration for the current project base.
+- **REQ-036**: MUST preserve existing `static-check` entries, append non-duplicate `--enable-static-check` entries in argument order, and treat canonical language, module, cmd, and params as the duplicate identity.
+- **REQ-037**: MUST reject `--enable-static-check` `Command` entries whose executable is unavailable on `PATH` and MUST NOT modify persisted project configuration when validation fails.
+- **REQ-038**: MUST honor `--verbose` only for `files-references`, `files-compress`, `files-find`, `references`, `compress`, and `find`, emitting command progress to stderr while leaving stdout payload format unchanged.
+- **REQ-039**: MUST support `--enable-line-numbers` only for `files-compress`, `compress`, `files-find`, and `find`, and MUST leave corresponding outputs unnumbered when the flag is absent.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, tool-wrapper command, agent tool, configuration command, and `test-static-check` command.
@@ -113,6 +118,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI for requirements-
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
 - **TST-010**: MUST verify `tsconfig.json` declares `NodeNext`, `strict`, `noEmit`, and includes both `src/**/*.ts` and `tests/**/*.ts`.
 - **TST-011**: MUST verify pi.dev-aware prompt rendering injects manifest-driven conformance rules only when the pi.dev manifest exists under the project base.
+- **TST-012**: MUST verify TypeScript CLI parity for standalone command-option regressions covering `--files-tokens`, `--files-references`, `--files-compress`, `--files-find`, `--test-static-check`, `--enable-line-numbers`, `--enable-static-check`, and `--verbose`.
+- **TST-013**: MUST verify TypeScript CLI parity for project-scoped command-option regressions covering `--references`, `--compress`, `--find`, `--tokens`, `--files-static-check`, `--static-check`, `--git-check`, `--git-wt-*`, `--git-path`, and `--get-base-path`.
+- **TST-014**: MUST maintain an executable mapping from each imported command-option regression case to one TypeScript test case identifier and fail verification when any mapped case is missing.
 
 ## 5. Observed Component Model
 

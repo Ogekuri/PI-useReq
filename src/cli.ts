@@ -7,9 +7,12 @@
 
 import process from "node:process";
 import { ReqError } from "./core/errors.js";
-import { loadConfig } from "./core/config.js";
+import { loadConfig, saveConfig, type UseReqConfig } from "./core/config.js";
 import {
+  isInsideGitRepo,
   loadAndRepairConfig,
+  resolveGitRoot,
+  resolveProjectBase,
   runCompress,
   runDocsCheck,
   runFilesCompress,
@@ -28,7 +31,12 @@ import {
   runReferences,
   runTokens,
 } from "./core/tool-runner.js";
-import { runStaticCheck } from "./core/static-check.js";
+import {
+  buildStaticCheckEntryIdentity,
+  parseEnableStaticCheck,
+  runStaticCheck,
+  validateStaticCheckEntry,
+} from "./core/static-check.js";
 
 /**
  * @brief Represents the parsed CLI flag state for one invocation.
@@ -37,7 +45,9 @@ import { runStaticCheck } from "./core/static-check.js";
 interface ParsedArgs {
   base?: string;
   here?: boolean;
+  verbose?: boolean;
   enableLineNumbers?: boolean;
+  enableStaticCheck?: string[];
   filesTokens?: string[];
   filesReferences?: string[];
   filesCompress?: string[];
@@ -88,9 +98,17 @@ function parseArgs(argv: string[]): ParsedArgs {
         parsed.here = true;
         index += 1;
         break;
+      case "--verbose":
+        parsed.verbose = true;
+        index += 1;
+        break;
       case "--enable-line-numbers":
         parsed.enableLineNumbers = true;
         index += 1;
+        break;
+      case "--enable-static-check":
+        parsed.enableStaticCheck = [...(parsed.enableStaticCheck ?? []), argv[index + 1] ?? ""];
+        index += 2;
         break;
       case "--files-tokens": {
         const [values, next] = takeUntilOption(index + 1);
@@ -216,6 +234,58 @@ function writeResult(result: { stdout: string; stderr: string; code: number }): 
 }
 
 /**
+ * @brief Loads mutable project config state without persisting intermediate repairs.
+ * @details Resolves the project base, loads existing config or defaults, refreshes `base-path`, recomputes `git-path` when the base resides inside a repository, and returns the in-memory pair used by CLI mutations. Runtime is dominated by config I/O plus optional git probing. Side effects are limited to config reads and git subprocess execution.
+ * @param[in] projectBase {string} Candidate project root path.
+ * @return {{ base: string; config: UseReqConfig }} Validated project base and repaired in-memory config.
+ * @satisfies REQ-035
+ */
+function loadMutableProjectConfig(projectBase: string): { base: string; config: UseReqConfig } {
+  const base = resolveProjectBase(projectBase);
+  const config = loadConfig(base);
+  config["base-path"] = base;
+  if (isInsideGitRepo(base)) {
+    config["git-path"] = resolveGitRoot(base);
+  } else {
+    delete config["git-path"];
+  }
+  return { base, config };
+}
+
+/**
+ * @brief Applies repeatable `--enable-static-check` specifications to project config.
+ * @details Parses each specification, validates command-backed entries before persistence, appends only non-duplicate identities in argument order, preserves existing entries, and writes the merged config once after all validations succeed. Runtime is O(s + e) plus PATH probing where s is spec count and e is existing entry count. Side effects include config writes.
+ * @param[in] projectBase {string} Candidate project root path.
+ * @param[in] specs {string[]} Raw `--enable-static-check` specifications in CLI order.
+ * @return {UseReqConfig} Persisted merged project configuration.
+ * @throws {ReqError} Throws when parsing or validation fails.
+ * @satisfies REQ-035, REQ-036, REQ-037
+ */
+function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseReqConfig {
+  const { base, config } = loadMutableProjectConfig(projectBase);
+  const seen = new Set<string>();
+  for (const [language, entries] of Object.entries(config["static-check"] ?? {})) {
+    for (const entry of entries) {
+      seen.add(buildStaticCheckEntryIdentity(language, entry));
+    }
+  }
+  config["static-check"] ??= {};
+  for (const spec of specs) {
+    const [language, entry] = parseEnableStaticCheck(spec);
+    validateStaticCheckEntry(entry);
+    const identity = buildStaticCheckEntryIdentity(language, entry);
+    if (seen.has(identity)) {
+      continue;
+    }
+    config["static-check"][language] ??= [];
+    config["static-check"][language]!.push(entry);
+    seen.add(identity);
+  }
+  saveConfig(base, config);
+  return config;
+}
+
+/**
  * @brief Executes one pi-usereq CLI invocation.
  * @details Parses arguments, enforces mutually exclusive project-selection rules, repairs config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config repair writes and stdout/stderr output.
  * @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
@@ -244,20 +314,25 @@ export function main(argv = process.argv.slice(2)): number {
     }
 
     const projectBase = args.base ? args.base : process.cwd();
-    if (args.here || args.base) {
-      loadAndRepairConfig(projectBase);
+    let config: UseReqConfig;
+    if (args.enableStaticCheck && args.enableStaticCheck.length > 0) {
+      config = applyEnableStaticCheckSpecs(projectBase, args.enableStaticCheck);
+    } else {
+      if (args.here || args.base) {
+        loadAndRepairConfig(projectBase);
+      }
+      config = loadConfig(projectBase);
     }
-    const config = loadConfig(projectBase);
 
     if (args.filesTokens) return writeResult(runFilesTokens(args.filesTokens));
-    if (args.filesReferences) return writeResult(runFilesReferences(args.filesReferences, process.cwd()));
-    if (args.filesCompress) return writeResult(runFilesCompress(args.filesCompress, process.cwd(), args.enableLineNumbers));
-    if (args.filesFind) return writeResult(runFilesFind(args.filesFind, args.enableLineNumbers));
+    if (args.filesReferences) return writeResult(runFilesReferences(args.filesReferences, process.cwd(), args.verbose));
+    if (args.filesCompress) return writeResult(runFilesCompress(args.filesCompress, process.cwd(), args.enableLineNumbers, args.verbose));
+    if (args.filesFind) return writeResult(runFilesFind(args.filesFind, args.enableLineNumbers, args.verbose));
     if (args.testStaticCheck) return runStaticCheck(args.testStaticCheck);
     if (args.filesStaticCheck) return writeResult(runFilesStaticCheck(args.filesStaticCheck, projectBase, config));
-    if (args.references) return writeResult(runReferences(projectBase, config));
-    if (args.compress) return writeResult(runCompress(projectBase, config, args.enableLineNumbers));
-    if (args.find) return writeResult(runFind(projectBase, args.find[0], args.find[1], config, args.enableLineNumbers));
+    if (args.references) return writeResult(runReferences(projectBase, config, args.verbose));
+    if (args.compress) return writeResult(runCompress(projectBase, config, args.enableLineNumbers, args.verbose));
+    if (args.find) return writeResult(runFind(projectBase, args.find[0], args.find[1], config, args.enableLineNumbers, args.verbose));
     if (args.tokens) return writeResult(runTokens(projectBase, config));
     if (args.staticCheck) return writeResult(runProjectStaticCheck(projectBase, config));
     if (args.gitCheck) return writeResult(runGitCheck(projectBase, config));

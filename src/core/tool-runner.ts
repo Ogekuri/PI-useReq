@@ -484,9 +484,21 @@ export function runGitCheck(projectBase: string, config?: UseReqConfig): ToolRes
   if (!gitPath || !fs.existsSync(gitPath) || !fs.statSync(gitPath).isDirectory()) {
     fail("Error: git-path not configured or does not exist.", 11);
   }
-  const command = "git rev-parse --is-inside-work-tree && ! git status --porcelain | grep -q . && { git symbolic-ref -q HEAD || git rev-parse --verify HEAD ; }";
-  const result = spawnSync("bash", ["-c", command], { cwd: gitPath, encoding: "utf8" });
-  if (result.error || result.status !== 0) fail("ERROR: Git status unclear!", 1);
+  const insideResult = runCapture(["git", "rev-parse", "--is-inside-work-tree"], { cwd: gitPath });
+  if (insideResult.error || insideResult.status !== 0 || insideResult.stdout.trim() !== "true") {
+    fail("ERROR: Git status unclear!", 1);
+  }
+  const statusResult = runCapture(["git", "status", "--porcelain"], { cwd: gitPath });
+  if (statusResult.error || statusResult.status !== 0 || statusResult.stdout.trim() !== "") {
+    fail("ERROR: Git status unclear!", 1);
+  }
+  const symbolicHead = runCapture(["git", "symbolic-ref", "-q", "HEAD"], { cwd: gitPath });
+  if (symbolicHead.error || symbolicHead.status !== 0) {
+    const detachedHead = runCapture(["git", "rev-parse", "--verify", "HEAD"], { cwd: gitPath });
+    if (detachedHead.error || detachedHead.status !== 0) {
+      fail("ERROR: Git status unclear!", 1);
+    }
+  }
   return ok();
 }
 

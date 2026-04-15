@@ -222,6 +222,42 @@ export function parseEnableStaticCheck(spec: string): [string, StaticCheckEntry]
 }
 
 /**
+ * @brief Builds the duplicate-identity token for one static-check entry.
+ * @details Canonicalizes the language key, module name, command name, and parameter list into a stable JSON tuple used for merge deduplication. Runtime is O(p) in parameter count. No side effects occur.
+ * @param[in] language {string} Canonical or alias language name associated with the entry.
+ * @param[in] entry {StaticCheckEntry} Static-check configuration entry to normalize.
+ * @return {string} Stable identity token suitable for equality comparison.
+ * @satisfies REQ-036
+ */
+export function buildStaticCheckEntryIdentity(language: string, entry: StaticCheckEntry): string {
+  const moduleName = String(entry.module ?? "").trim().toLowerCase();
+  const cmd = typeof entry.cmd === "string" ? entry.cmd.trim() : "";
+  const params = Array.isArray(entry.params) ? entry.params.map((value) => String(value).trim()) : [];
+  return JSON.stringify([language.trim().toLowerCase(), moduleName, cmd, params]);
+}
+
+/**
+ * @brief Validates pre-persistence invariants for one static-check entry.
+ * @details Rejects `Command` entries whose executable cannot be resolved before config writes while leaving non-command modules untouched. Runtime is O(p) in PATH entry count. Side effects are limited to filesystem reads.
+ * @param[in] entry {StaticCheckEntry} Static-check configuration entry to validate.
+ * @return {void} No return value.
+ * @throws {ReqError} Throws when a `Command` entry omits `cmd` or resolves to a non-executable program.
+ * @satisfies REQ-037
+ */
+export function validateStaticCheckEntry(entry: StaticCheckEntry): void {
+  if (String(entry.module ?? "").trim().toLowerCase() !== "command") {
+    return;
+  }
+  const cmd = typeof entry.cmd === "string" ? entry.cmd.trim() : "";
+  if (!cmd) {
+    throw new ReqError("Error: Command module requires a cmd argument in --enable-static-check. Format: LANG=Command,CMD[,PARAM...]", 1);
+  }
+  if (!findExecutable(cmd)) {
+    throw new ReqError(`Error: external command '${cmd}' is not an executable program on PATH.`, 1);
+  }
+}
+
+/**
  * @brief Resolves explicit files, directories, and glob patterns into absolute file paths.
  * @details Expands glob inputs with `fast-glob`, enumerates direct children for directory inputs, accepts regular files, and warns for invalid entries. Runtime is O(n + m) where m is the total matched path count. Side effects are filesystem reads and warning output to stderr.
  * @param[in] inputs {string[]} Raw file, directory, or glob inputs.
@@ -528,17 +564,38 @@ export class StaticCheckCommand extends StaticCheckBase {
 }
 
 /**
+ * @brief Tests whether one filesystem path is executable.
+ * @details Requires the candidate to exist, be a regular file, and pass `X_OK` access checks. Runtime is O(1). Side effects are limited to filesystem reads.
+ * @param[in] candidate {string} Absolute or relative path to inspect.
+ * @return {boolean} `true` when the candidate is executable by the current process.
+ */
+function isExecutableFile(candidate: string): boolean {
+  if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) {
+    return false;
+  }
+  try {
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * @brief Locates an executable by scanning the current PATH.
- * @details Checks each PATH directory for a regular file named exactly as the requested command. Runtime is O(p) in PATH entry count. Side effects are filesystem reads.
+ * @details Checks each PATH directory for an executable file named exactly as the requested command. Runtime is O(p) in PATH entry count. Side effects are filesystem reads.
  * @param[in] cmd {string} Executable name to locate.
  * @return {string | undefined} Absolute executable path, or `undefined` when not found.
  */
 function findExecutable(cmd: string): string | undefined {
+  if (cmd.includes(path.sep)) {
+    return isExecutableFile(cmd) ? path.resolve(cmd) : undefined;
+  }
   const pathValue = process.env.PATH ?? "";
   for (const dir of pathValue.split(path.delimiter)) {
     if (!dir) continue;
     const candidate = path.join(dir, cmd);
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+    if (isExecutableFile(candidate)) return candidate;
   }
   return undefined;
 }

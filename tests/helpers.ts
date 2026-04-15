@@ -11,7 +11,11 @@ import { normalizeEnabledPiUsereqTools } from "../src/core/pi-usereq-tools.js";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TSX_LOADER = require.resolve("tsx", { paths: [ROOT] });
-const PYTHON = path.join(ROOT, ".venv-oracle", "bin", "python");
+const ORACLE_VENV_PYTHON = path.join(ROOT, ".venv-oracle", "bin", "python");
+const PYTHON = fs.existsSync(ORACLE_VENV_PYTHON) ? ORACLE_VENV_PYTHON : "python3";
+const ORACLE_SRC = fs.existsSync(path.join(ROOT, "temp", "usereq", "src"))
+  ? path.join(ROOT, "temp", "usereq", "src")
+  : path.join(ROOT, "..", "PI-useReq", "temp", "usereq", "src");
 const FIXTURES_DIR = path.join(ROOT, "tests", "fixtures");
 
 export function getFixtureFiles(): string[] {
@@ -22,25 +26,43 @@ export function getFixtureFiles(): string[] {
     .sort();
 }
 
-export function runNodeCli(args: string[], cwd = ROOT) {
+/**
+ * @brief Executes the TypeScript CLI in a subprocess.
+ * @details Invokes `node --import tsx src/cli.ts` with the supplied arguments, cwd, and environment overrides while preserving the oracle Python interpreter binding. Runtime is dominated by child-process execution. Side effects are limited to subprocess creation.
+ * @param[in] args {string[]} CLI arguments forwarded to `src/cli.ts`.
+ * @param[in] cwd {string} Working directory for the child process.
+ * @param[in] envOverrides {NodeJS.ProcessEnv | undefined} Optional environment additions or overrides.
+ * @return {import("node:child_process").SpawnSyncReturns<string>} Captured process result.
+ */
+export function runNodeCli(args: string[], cwd = ROOT, envOverrides?: NodeJS.ProcessEnv) {
   return spawnSync("node", ["--import", TSX_LOADER, path.join(ROOT, "src", "cli.ts"), ...args], {
     cwd,
     encoding: "utf8",
     env: {
       ...process.env,
       PI_USEREQ_PYTHON: PYTHON,
+      ...envOverrides,
     },
   });
 }
 
-export function runPythonCli(args: string[], cwd = ROOT) {
-  assert.ok(fs.existsSync(PYTHON), "Python oracle virtualenv not found");
+/**
+ * @brief Executes the Python oracle CLI in a subprocess.
+ * @details Invokes `python -m usereq.cli` with the supplied arguments, cwd, and environment overrides while preserving the oracle `PYTHONPATH`. Runtime is dominated by child-process execution. Side effects are limited to subprocess creation.
+ * @param[in] args {string[]} CLI arguments forwarded to the oracle module.
+ * @param[in] cwd {string} Working directory for the child process.
+ * @param[in] envOverrides {NodeJS.ProcessEnv | undefined} Optional environment additions or overrides.
+ * @return {import("node:child_process").SpawnSyncReturns<string>} Captured process result.
+ */
+export function runPythonCli(args: string[], cwd = ROOT, envOverrides?: NodeJS.ProcessEnv) {
+  assert.ok(fs.existsSync(ORACLE_SRC), `Python oracle source not found at ${ORACLE_SRC}`);
   return spawnSync(PYTHON, ["-m", "usereq.cli", ...args], {
     cwd,
     encoding: "utf8",
     env: {
       ...process.env,
-      PYTHONPATH: path.join(ROOT, "usereq", "src"),
+      PYTHONPATH: ORACLE_SRC,
+      ...envOverrides,
     },
   });
 }
@@ -49,6 +71,13 @@ export function createTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+/**
+ * @brief Persists the Python oracle configuration mirror for one fixture project.
+ * @details Writes `.req/config.json` with the supplied config plus the oracle-specific `guidelines-dir` field so Node and Python parity tests observe the same project metadata. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
+ * @param[in] projectBase {string} Fixture project root.
+ * @param[in] config {UseReqConfig} Effective project configuration to mirror.
+ * @return {void} No return value.
+ */
 function writeOracleReqConfig(projectBase: string, config: UseReqConfig): void {
   const reqDir = path.join(projectBase, ".req");
   fs.mkdirSync(reqDir, { recursive: true });
@@ -57,6 +86,42 @@ function writeOracleReqConfig(projectBase: string, config: UseReqConfig): void {
     ...config,
   };
   fs.writeFileSync(path.join(reqDir, "config.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+/**
+ * @brief Persists both Node and Python-oracle project configs for parity tests.
+ * @details Writes `.pi/pi-usereq/config.json` for the TypeScript CLI and `.req/config.json` for the Python oracle using the same logical payload. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
+ * @param[in] projectBase {string} Fixture project root.
+ * @param[in] config {UseReqConfig} Effective project configuration to persist.
+ * @return {void} No return value.
+ */
+export function saveFixtureConfigs(projectBase: string, config: UseReqConfig): void {
+  saveConfig(projectBase, config);
+  writeOracleReqConfig(projectBase, config);
+}
+
+/**
+ * @brief Reads the raw persisted TypeScript project config JSON.
+ * @details Loads `.pi/pi-usereq/config.json` without normalization so tests can inspect merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Fixture project root.
+ * @return {Record<string, unknown>} Parsed raw configuration object.
+ */
+export function readProjectConfigJson(projectBase: string): Record<string, unknown> {
+  return JSON.parse(fs.readFileSync(path.join(projectBase, ".pi", "pi-usereq", "config.json"), "utf8")) as Record<string, unknown>;
+}
+
+/**
+ * @brief Writes one executable shell script for integration tests.
+ * @details Creates the parent directory when required, writes UTF-8 content, and marks the file owner-executable. Runtime is O(n) in script size. Side effects include directory creation, file overwrite, and permission changes.
+ * @param[in] filePath {string} Absolute destination path for the script.
+ * @param[in] content {string} Full script body.
+ * @return {string} Absolute script path.
+ */
+export function writeExecutableScript(filePath: string, content: string): string {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, "utf8");
+  fs.chmodSync(filePath, 0o755);
+  return filePath;
 }
 
 export function initFixtureRepo(options: {
@@ -103,12 +168,12 @@ export function initFixtureRepo(options: {
     "base-path": projectBase,
     "git-path": gitPath,
   };
-  saveConfig(projectBase, config);
-  writeOracleReqConfig(projectBase, config);
+  saveFixtureConfigs(projectBase, config);
 
   const localVenv = path.join(projectBase, ".venv");
-  if (!fs.existsSync(localVenv)) {
-    fs.symlinkSync(path.join(ROOT, ".venv-oracle"), localVenv, "dir");
+  const oracleVenvRoot = path.dirname(path.dirname(ORACLE_VENV_PYTHON));
+  if (!fs.existsSync(localVenv) && fs.existsSync(oracleVenvRoot)) {
+    fs.symlinkSync(oracleVenvRoot, localVenv, "dir");
   }
 
   return { projectBase, config };
