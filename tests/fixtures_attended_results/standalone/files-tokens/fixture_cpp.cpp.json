@@ -1,0 +1,5 @@
+{
+  "code": 0,
+  "stdout": "  📄 fixture_cpp.cpp: 2,702 tokens, 11,200 chars\n\n📊 Pack Summary:\n────────────────\n  Total Files: 1 files\n Total Tokens: 2,702 tokens\n  Total Chars: 11,200 chars\n",
+  "stderr": ""
+}

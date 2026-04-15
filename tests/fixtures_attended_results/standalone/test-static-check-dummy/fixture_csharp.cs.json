@@ -1,0 +1,5 @@
+{
+  "code": 0,
+  "stdout": "# Static-Check(Dummy): <ROOT>/tests/fixtures/fixture_csharp.cs\nResult: OK\n\n",
+  "stderr": ""
+}

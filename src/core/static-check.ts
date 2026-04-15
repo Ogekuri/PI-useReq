@@ -253,7 +253,7 @@ export function validateStaticCheckEntry(entry: StaticCheckEntry): void {
     throw new ReqError("Error: Command module requires a cmd argument in --enable-static-check. Format: LANG=Command,CMD[,PARAM...]", 1);
   }
   if (!findExecutable(cmd)) {
-    throw new ReqError(`Error: external command '${cmd}' is not an executable program on PATH.`, 1);
+    throw new ReqError(`Error: --enable-static-check Command cmd '${cmd}' is not an executable program on this system.`, 1);
   }
 }
 

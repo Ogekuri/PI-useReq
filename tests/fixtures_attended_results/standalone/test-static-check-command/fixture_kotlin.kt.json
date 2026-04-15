@@ -1,0 +1,5 @@
+{
+  "code": 1,
+  "stdout": "# Static-Check(Command[false]): <ROOT>/tests/fixtures/fixture_kotlin.kt\nResult: FAIL\nEvidence:\n\n\n",
+  "stderr": ""
+}

@@ -1,0 +1,5 @@
+{
+  "code": 1,
+  "stdout": "# Static-Check(Command[false]): <PROJECT_BASE>/src/fixture_python.py\nResult: FAIL\nEvidence:\n\n\n",
+  "stderr": ""
+}

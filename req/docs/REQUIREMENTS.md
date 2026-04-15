@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.3"
+version: "0.0.4"
 date: "2026-04-15"
 author: "OpenAI Codex"
 scope:
@@ -10,6 +10,7 @@ scope:
     - "scripts/**"
     - ".github/workflows/**"
     - "tests/**/*.ts"
+    - "tests/fixtures_attended_results/**/*.json"
   excludes:
     - "node_modules/**"
     - "dist/**"
@@ -105,6 +106,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI for requirements-
 - **REQ-037**: MUST reject `--enable-static-check` `Command` entries whose executable is unavailable on `PATH` and MUST NOT modify persisted project configuration when validation fails.
 - **REQ-038**: MUST honor `--verbose` only for `files-references`, `files-compress`, `files-find`, `references`, `compress`, and `find`, emitting command progress to stderr while leaving stdout payload format unchanged.
 - **REQ-039**: MUST support `--enable-line-numbers` only for `files-compress`, `compress`, `files-find`, and `find`, and MUST leave corresponding outputs unnumbered when the flag is absent.
+- **REQ-040**: MUST store canonical expected CLI result fixtures as UTF-8 text files under `tests/fixtures_attended_results/`, preserving normalized exit code, stdout, and stderr for each archived scenario.
+- **REQ-041**: MUST canonicalize environment-dependent path and timestamp segments in archived and observed CLI results with stable placeholder tokens before exact comparison.
+- **REQ-042**: MUST archive explicit-file scenarios for `files-tokens`, `files-references`, `files-compress`, `files-find`, and `test-static-check` across every file under `tests/fixtures/`.
+- **REQ-043**: MUST archive repository scenarios for `references`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, `static-check`, `git-check`, `git-wt-*`, `git-path`, and `get-base-path`.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, tool-wrapper command, agent tool, configuration command, and `test-static-check` command.
@@ -121,6 +126,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI for requirements-
 - **TST-012**: MUST verify TypeScript CLI parity for standalone command-option regressions covering `--files-tokens`, `--files-references`, `--files-compress`, `--files-find`, `--test-static-check`, `--enable-line-numbers`, `--enable-static-check`, and `--verbose`.
 - **TST-013**: MUST verify TypeScript CLI parity for project-scoped command-option regressions covering `--references`, `--compress`, `--find`, `--tokens`, `--files-static-check`, `--static-check`, `--git-check`, `--git-wt-*`, `--git-path`, and `--get-base-path`.
 - **TST-014**: MUST maintain an executable mapping from each imported command-option regression case to one TypeScript test case identifier and fail verification when any mapped case is missing.
+- **TST-015**: MUST verify archive-backed standalone CLI scenarios load expected results from `tests/fixtures_attended_results/standalone` and compare exact normalized exit code, stdout, and stderr for every file under `tests/fixtures/`.
+- **TST-016**: MUST verify archive-backed repository CLI scenarios load expected results from `tests/fixtures_attended_results/project` and compare exact normalized exit code, stdout, and stderr for the archived command set.
+- **TST-017**: MUST verify every archive-backed scenario required by `REQ-042` and `REQ-043` has a committed expected-result fixture file before executing TypeScript output comparisons.
 
 ## 5. Observed Component Model
 

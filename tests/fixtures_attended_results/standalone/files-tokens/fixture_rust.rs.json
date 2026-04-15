@@ -1,0 +1,5 @@
+{
+  "code": 0,
+  "stdout": "  📄 fixture_rust.rs: 3,015 tokens, 12,093 chars\n\n📊 Pack Summary:\n────────────────\n  Total Files: 1 files\n Total Tokens: 3,015 tokens\n  Total Chars: 12,093 chars\n",
+  "stderr": ""
+}

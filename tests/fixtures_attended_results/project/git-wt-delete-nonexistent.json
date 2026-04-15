@@ -1,0 +1,5 @@
+{
+  "code": 1,
+  "stdout": "ERROR: Invalid worktree or branch name: nonexistent-wt-branch-xyz.\n",
+  "stderr": "ERROR: Invalid worktree or branch name: nonexistent-wt-branch-xyz.\n"
+}

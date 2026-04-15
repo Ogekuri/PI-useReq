@@ -1,0 +1,5 @@
+{
+  "code": 0,
+  "stdout": "# Static-Check(Dummy): <ROOT>/tests/fixtures/fixture_cpp.cpp\nResult: OK\n\n",
+  "stderr": ""
+}

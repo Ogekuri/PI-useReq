@@ -1,0 +1,5 @@
+{
+  "code": 0,
+  "stdout": "  📄 fixture_elixir.ex: 2,862 tokens, 10,763 chars\n\n📊 Pack Summary:\n────────────────\n  Total Files: 1 files\n Total Tokens: 2,862 tokens\n  Total Chars: 10,763 chars\n",
+  "stderr": ""
+}

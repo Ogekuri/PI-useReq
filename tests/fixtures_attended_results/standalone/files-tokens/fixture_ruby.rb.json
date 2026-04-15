@@ -1,0 +1,5 @@
+{
+  "code": 0,
+  "stdout": "  📄 fixture_ruby.rb: 2,591 tokens, 10,184 chars\n\n📊 Pack Summary:\n────────────────\n  Total Files: 1 files\n Total Tokens: 2,591 tokens\n  Total Chars: 10,184 chars\n",
+  "stderr": ""
+}

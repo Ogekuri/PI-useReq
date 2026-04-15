@@ -1,0 +1,5 @@
+{
+  "code": 1,
+  "stdout": "ERROR: Invalid worktree/branch name: bad name with spaces.\n",
+  "stderr": "ERROR: Invalid worktree/branch name: bad name with spaces.\n"
+}

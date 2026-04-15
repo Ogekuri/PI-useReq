@@ -1,0 +1,5 @@
+{
+  "code": 0,
+  "stdout": "# Static-Check(Pylance): <ROOT>/tests/fixtures/fixture_python.py\nResult: OK\n\n",
+  "stderr": ""
+}

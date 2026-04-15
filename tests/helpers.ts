@@ -67,6 +67,27 @@ export function runPythonCli(args: string[], cwd = ROOT, envOverrides?: NodeJS.P
   });
 }
 
+/**
+ * @brief Executes inline Python code with the oracle module search path.
+ * @details Invokes the oracle interpreter with `-c`, preserves `PYTHONPATH` for `usereq` imports, and returns the captured subprocess result. Runtime is dominated by child-process execution. Side effects are limited to subprocess creation.
+ * @param[in] code {string} Inline Python program.
+ * @param[in] cwd {string} Working directory for the child process.
+ * @param[in] envOverrides {NodeJS.ProcessEnv | undefined} Optional environment additions or overrides.
+ * @return {import("node:child_process").SpawnSyncReturns<string>} Captured process result.
+ */
+export function runPythonInline(code: string, cwd = ROOT, envOverrides?: NodeJS.ProcessEnv) {
+  assert.ok(fs.existsSync(ORACLE_SRC), `Python oracle source not found at ${ORACLE_SRC}`);
+  return spawnSync(PYTHON, ["-c", code], {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PYTHONPATH: ORACLE_SRC,
+      ...envOverrides,
+    },
+  });
+}
+
 export function createTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }

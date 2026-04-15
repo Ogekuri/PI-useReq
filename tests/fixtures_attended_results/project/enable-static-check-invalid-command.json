@@ -1,0 +1,5 @@
+{
+  "code": 1,
+  "stdout": "",
+  "stderr": "Error: --enable-static-check Command cmd 'nonexistent_tool_xyz_12345' is not an executable program on this system.\n"
+}

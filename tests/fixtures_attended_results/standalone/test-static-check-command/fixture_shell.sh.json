@@ -1,0 +1,5 @@
+{
+  "code": 1,
+  "stdout": "# Static-Check(Command[false]): <ROOT>/tests/fixtures/fixture_shell.sh\nResult: FAIL\nEvidence:\n\n\n",
+  "stderr": ""
+}
