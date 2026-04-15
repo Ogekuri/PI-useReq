@@ -1,0 +1,29 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { ensureHomeResources } from "../src/core/resources.js";
+import { getDefaultConfig } from "../src/core/config.js";
+import { renderPrompt } from "../src/core/prompts.js";
+
+test("embedded resources are copied under the user home pi-usereq resource root", () => {
+  const resourceRoot = ensureHomeResources();
+  assert.ok(fs.existsSync(path.join(resourceRoot, "prompts", "analyze.md")));
+  assert.ok(fs.existsSync(path.join(resourceRoot, "docs", "Requirements_Template.md")));
+  assert.ok(fs.existsSync(path.join(resourceRoot, "guidelines", "Google_Python_Style_Guide.md")));
+});
+
+test("prompt rendering replaces all dynamic placeholders and adapts req tool references", () => {
+  ensureHomeResources();
+  const projectBase = process.cwd();
+  const config = getDefaultConfig(projectBase);
+  config["src-dir"] = ["src", "scripts", ".github/workflows"];
+  config["tests-dir"] = "tests";
+  const rendered = renderPrompt("write", "Build a CLI parser", projectBase, config);
+  assert.match(rendered, /Build a CLI parser/);
+  assert.match(rendered, /req\/docs/);
+  assert.match(rendered, /`src\/`, `scripts\/`, `\.github\/workflows\/`/);
+  assert.match(rendered, /Build a CLI parser/);
+  assert.match(rendered, /`src\/`, `scripts\/`, `\.github\/workflows\/`/);
+  assert.doesNotMatch(rendered, /%%ARGS%%|%%DOC_PATH%%|%%GUIDELINES_FILES%%|%%SRC_PATHS%%|%%TEST_PATH%%/);
+});

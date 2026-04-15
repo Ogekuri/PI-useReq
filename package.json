@@ -1,0 +1,30 @@
+{
+  "name": "pi-usereq",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:watch": "node --import tsx --test --watch tests/**/*.test.ts",
+    "cli": "node --import tsx ./src/cli.ts"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@sinclair/typebox": "^0.34.49"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.3",
+    "js-tiktoken": "^1.0.21"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,6 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        ".req/.scripts/bash/": true,
+        ".scripts/powershell/": true
+    }
+}
