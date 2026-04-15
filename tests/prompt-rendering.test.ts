@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { ensureHomeResources } from "../src/core/resources.js";
 import { getDefaultConfig } from "../src/core/config.js";
@@ -26,4 +27,26 @@ test("prompt rendering replaces all dynamic placeholders and adapts req tool ref
   assert.match(rendered, /Build a CLI parser/);
   assert.match(rendered, /`src\/`, `scripts\/`, `\.github\/workflows\/`/);
   assert.doesNotMatch(rendered, /%%ARGS%%|%%DOC_PATH%%|%%GUIDELINES_FILES%%|%%SRC_PATHS%%|%%TEST_PATH%%/);
+});
+
+test("pi.dev-aware prompts inject manifest conformance rules when the manifest exists", () => {
+  ensureHomeResources();
+  const projectBase = process.cwd();
+  const config = getDefaultConfig(projectBase);
+  const rendered = renderPrompt("new", "Add pi integration guidance", projectBase, config);
+  assert.match(rendered, /docs\/pi\.dev\/agent-document-manifest\.json/);
+  assert.match(rendered, /Treat manifest document paths as relative to `docs\/pi\.dev\/`/);
+});
+
+test("pi.dev-aware prompts stay unchanged when the manifest is absent", () => {
+  ensureHomeResources();
+  const projectBase = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-prompts-"));
+  try {
+    const config = getDefaultConfig(projectBase);
+    const rendered = renderPrompt("new", "Add pi integration guidance", projectBase, config);
+    assert.doesNotMatch(rendered, /docs\/pi\.dev\/agent-document-manifest\.json/);
+    assert.doesNotMatch(rendered, /Treat manifest document paths as relative to `docs\/pi\.dev\/`/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
 });

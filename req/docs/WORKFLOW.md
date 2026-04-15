@@ -473,6 +473,8 @@
           - `homeRelative(...)`: render home-relative tokens [`src/core/utils.ts`]
             - `formatSubstitutedPath(...)`: normalize path separators [`src/core/utils.ts`]
         - `applyReplacements(...)`: substitute token values [`src/core/prompts.ts`]
+        - `injectPiDevConformanceBlock(...)`: add conditional pi.dev manifest guidance for prompt workflows [`src/core/prompts.ts`]
+          - `buildPiDevConformanceBlock(...)`: resolve manifest-gated pi.dev conformance rules [`src/core/prompts.ts`]
         - `adaptPromptForInternalTools(...)`: rewrite tool names for internal wrappers [`src/core/prompts.ts`]
     - `registerToolWrapperCommands(...)`: register command wrappers for tool-runner APIs and test static-check [`src/index.ts`]
       - `runToolCommand(...)`: execute named wrapper command [`src/index.ts`]

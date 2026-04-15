@@ -1,0 +1,291 @@
+---
+title: "PI-useReq Requirements"
+description: Software requirements specification
+version: "0.0.2"
+date: "2026-04-15"
+author: "OpenAI Codex"
+scope:
+  paths:
+    - "src/**/*.ts"
+    - "scripts/**"
+    - ".github/workflows/**"
+    - "tests/**/*.ts"
+  excludes:
+    - "node_modules/**"
+    - "dist/**"
+    - "build/**"
+    - "target/**"
+    - ".venv/**"
+visibility: "draft"
+tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
+---
+
+# PI-useReq Requirements
+
+## 1. Introduction
+
+### 1.1 Document Rules
+- This document MUST be written and maintained in English.
+- Requirement statements MUST use RFC 2119 keywords exclusively and MUST NOT use "shall".
+- Requirement bullets MUST use unique, stable IDs with prefixes limited to PRJ, CTN, DES, REQ, and TST.
+- Requirement IDs MUST NOT be renumbered, reused, or repurposed outside the dedicated renumbering workflow.
+- Each requirement MUST be atomic, single-sentence, and testable, with a target length of 35 words or fewer.
+- This document MUST describe observed implementation state, including limitations and partial behavior.
+- Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
+
+### 1.2 Project Scope
+PI-useReq is a TypeScript pi extension plus companion Node CLI for requirements-oriented prompt delivery, source summarization, static-check orchestration, git validation, and worktree lifecycle helpers. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` and `.github/workflows/` are empty in this revision.
+
+## 2. Project Requirements
+
+### 2.1 Project Functions
+- **PRJ-001**: MUST expose prompt commands that render bundled prompt templates with configuration-derived path substitutions and internal tool-reference adaptation.
+- **PRJ-002**: MUST expose CLI and agent-tool interfaces for token counting, references generation, compression, construct search, and static-check execution on explicit files or configured project sources.
+- **PRJ-003**: MUST provide an interactive pi configuration surface for docs path, tests path, source directories, static-check entries, and startup tool enablement.
+- **PRJ-004**: MUST provide git repository validation plus standardized worktree naming, creation, and deletion utilities using configured project and git paths.
+- **PRJ-005**: MUST provision bundled prompts, documentation templates, guidelines, model metadata, and editor settings into user-home pi-usereq resources.
+
+### 2.2 Project Constraints
+- **CTN-001**: MUST persist project configuration at `.pi/pi-usereq/config.json` with default `docs-dir=req/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
+- **CTN-002**: MUST collect project-wide source files through `git ls-files --cached --others --exclude-standard`; non-git project scans therefore fail instead of falling back to directory walking.
+- **CTN-003**: MUST limit project-wide source discovery to extensions listed in `STATIC_CHECK_EXT_TO_LANG`; analyzer-only aliases such as `.cc`, `.cxx`, `.hpp`, and `.exs` remain undiscoverable.
+- **CTN-004**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from project-wide static-check execution.
+- **CTN-005**: MUST declare an ECMAScript module package and TypeScript `NodeNext` module semantics for runtime and import resolution.
+- **CTN-006**: MUST type-check in strict `noEmit` mode and include both `src/**/*.ts` and `tests/**/*.ts` in the TypeScript program.
+- **CTN-007**: MUST declare `./src/index.ts` as the only pi extension entry in package metadata.
+- **CTN-008**: MUST expose package scripts for test, watch-mode test, and CLI execution through `node --import tsx`.
+
+## 3. Requirements
+
+### 3.1 Design and Implementation
+- **DES-001**: MUST implement the standalone executable in `src/cli.ts` as flag parsing plus dispatch to `tool-runner.ts` or `runStaticCheck`.
+- **DES-002**: MUST implement extension activation in `src/index.ts` by registering prompt commands, tool-wrapper commands, agent tools, configuration commands, and a `session_start` hook.
+- **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
+- **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
+- **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
+- **DES-006**: MUST format references, compressed files, and construct search results as markdown blocks headed by `@@@ <path> | <language>`.
+
+### 3.2 Functions
+- **REQ-001**: MUST recursively copy bundled non-hidden resources into `~/.pi/pi-usereq/resources` and overwrite existing destination files.
+- **REQ-002**: MUST replace `%%DOC_PATH%%`, `%%GUIDELINES_*%%`, `%%SRC_PATHS%%`, `%%TEST_PATH%%`, `%%PROJECT_BASE%%`, and `%%ARGS%%` tokens when rendering prompts.
+- **REQ-003**: MUST rewrite legacy `req --...` prompt text references to internal tool names such as `find tool` and `git-check tool`.
+- **REQ-004**: MUST register `req-<prompt>` commands for every bundled prompt name and send rendered prompt content as a user message.
+- **REQ-005**: MUST execute tool-wrapper commands through `TOOL_RUNNERS`, write non-empty combined stdout/stderr into the editor, and notify completion status from the tool exit code.
+- **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, and `src-dir`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
+- **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for the predefined startup tool set.
+- **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
+- **REQ-009**: MUST ensure home resources, apply configured startup tools, and publish `pi-usereq` status text during `session_start`.
+- **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters, and emit per-file metrics plus a pack summary for valid file inputs.
+- **REQ-011**: MUST generate file references by analyzing supported source files and emitting Markdown with file headers, imports, definitions, and a symbol index.
+- **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
+- **REQ-013**: MUST search explicit files by tag filter and name regex, then emit matching constructs with signature, line range, Doxygen fields, and comment-stripped code excerpts.
+- **REQ-014**: MUST make `references` scan configured `src-dir` files and prepend an ASCII tree of discovered repository-relative paths.
+- **REQ-015**: MUST make `compress` scan configured `src-dir` files and emit one compressed markdown block per supported file.
+- **REQ-016**: MUST make `find` scan configured `src-dir` files using the requested tag filter and regular expression.
+- **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` under the configured docs directory and fail when none exist.
+- **REQ-018**: MUST expose a `test-static-check` driver that dispatches `dummy`, `pylance`, `ruff`, or `command` checker subcommands directly.
+- **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
+- **REQ-020**: MUST parse static-check enable specs in `LANG=MODULE[,CMD[,PARAM...]]` format and normalize supported language and module names case-insensitively.
+- **REQ-021**: MUST reject static-check enable specs with missing `=`, missing module, unknown language, unknown module, or `Command` entries without `cmd`.
+- **REQ-022**: MUST resolve Python checker executables in this preference order: `<project>/.venv/bin/python`, `PI_USEREQ_PYTHON`, `python3`, `python`.
+- **REQ-023**: MUST require `Command`-module executables to exist on `PATH` before static-check execution.
+- **REQ-024**: MUST make `git-check` fail unless configured `git-path` exists, resolves inside a work tree, has no porcelain changes, and has a valid `HEAD`.
+- **REQ-025**: MUST make `docs-check` fail when `REQUIREMENTS.md`, `WORKFLOW.md`, or `REFERENCES.md` is missing and name the prompt command that should generate the missing file.
+- **REQ-026**: MUST make `git-wt-name` emit `useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
+- **REQ-027**: MUST make `git-wt-create` reject invalid names, create `../<wtName>` from the configured git root, and copy `.pi/pi-usereq` into the matching worktree base when present.
+- **REQ-028**: MUST make `git-wt-delete` remove the exact named worktree and/or branch when either exists and fail when neither exists.
+- **REQ-029**: MUST make `git-path` and `get-base-path` print configured `git-path` and `base-path` values.
+- **REQ-030**: MUST make extension project-config loading set `base-path` to current cwd and recompute `git-path` when current cwd is inside a repository.
+- **REQ-031**: MUST make `pi-usereq-show-config` write the current project configuration JSON to the editor.
+- **REQ-032**: MUST inject a pi.dev conformance block into rendered prompts when `docs/pi.dev/agent-document-manifest.json` exists under the project base.
+- **REQ-033**: MUST make that conformance block require manifest-guided document review before implementing or changing extension code that interfaces with pi CLI.
+- **REQ-034**: MUST make that conformance block require manifest-guided document review before validating, analyzing, or fixing extension code that interfaces with pi CLI.
+
+## 4. Test Requirements
+- **TST-001**: MUST verify extension activation registers every documented prompt command, tool-wrapper command, agent tool, configuration command, and `test-static-check` command.
+- **TST-002**: MUST verify resource provisioning copies bundled prompt, docs, and guideline files and prompt rendering replaces all dynamic placeholders.
+- **TST-003**: MUST verify standalone CLI outputs for `files-*` and `--test-static-check` match the Python oracle for every fixture file.
+- **TST-004**: MUST verify project-scan CLI outputs for `references`, `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
+- **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, and adds static-check entries through raw-spec and guided flows.
+- **TST-006**: MUST verify `session_start` activates configured startup tools and updates the `pi-usereq` status line.
+- **TST-007**: MUST verify `git-path` command output ignores stale stored `git-path` values and resolves the current repository root.
+- **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, and remove the named worktree as observable filesystem side effects.
+- **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
+- **TST-010**: MUST verify `tsconfig.json` declares `NodeNext`, `strict`, `noEmit`, and includes both `src/**/*.ts` and `tests/**/*.ts`.
+- **TST-011**: MUST verify pi.dev-aware prompt rendering injects manifest-driven conformance rules only when the pi.dev manifest exists under the project base.
+
+## 5. Observed Component Model
+
+### 5.1 Runtime Surfaces
+- `src/cli.ts` parses CLI flags, repairs config for project-scoped commands, and dispatches to `tool-runner.ts` or `runStaticCheck`.
+- `src/index.ts` activates the pi extension, registers commands and agent tools, and manages interactive menu/status behavior through `ctx.ui`.
+- `src/core/tool-runner.ts` orchestrates project file collection, markdown generation, compression, construct search, docs checks, git checks, and worktree lifecycle actions.
+- `src/core/source-analyzer.ts` defines `SourceElement`, language specs, extraction heuristics, Doxygen attachment, and Markdown rendering support.
+- `src/core/generate-markdown.ts`, `src/core/compress.ts`, and `src/core/find-constructs.ts` share analyzer and compressor logic to produce reusable Markdown outputs.
+- `src/core/static-check.ts` maps languages/extensions, parses enable specs, resolves inputs, and dispatches checker classes.
+- `src/core/config.ts`, `src/core/resources.ts`, and `src/core/prompts.ts` provide config persistence, home-resource synchronization, and prompt rendering.
+- `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
+
+### 5.2 Libraries and Runtime Dependencies
+- `@mariozechner/pi-coding-agent` provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
+- `@mariozechner/pi-ai` is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@mariozechner/pi-tui` is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@sinclair/typebox` provides runtime tool parameter schemas and is declared as a peer dependency evidenced by `src/index.ts`, `package.json`, and `package-lock.json`.
+- `js-tiktoken` provides token counting evidence in `src/core/token-counter.ts`, `package.json`, and `package-lock.json`.
+- `fast-glob` provides wildcard expansion for static-check inputs evidence in `src/core/static-check.ts`, `package.json`, and `package-lock.json`.
+- `tsx` is the manifest-declared TypeScript execution runner for tests and CLI scripts evidenced by `package.json` and `package-lock.json`.
+- `typescript` is the manifest-declared compiler and type-checker evidenced by `package.json`, `package-lock.json`, and `tsconfig.json`.
+- `git` CLI is a runtime dependency for repository checks, file discovery, and worktree lifecycle evidence in `src/core/tool-runner.ts`.
+- `bash` is a runtime dependency for `git-check` cleanliness validation evidence in `src/core/tool-runner.ts`.
+
+### 5.3 Packaging and Tooling Surface
+- `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, and `cli`.
+- `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
+- `package.json` declares version `0.0.0` while `package-lock.json` resolves the top-level package as version `0.1.0`; this manifest metadata is inconsistent in the current revision.
+
+## 6. Repository Structure
+
+### 6.1 Tree View
+```text
+.
+├── README.md
+├── LICENSE
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+├── src/
+│   ├── cli.ts
+│   ├── index.ts
+│   ├── core/
+│   │   ├── compress-files.ts
+│   │   ├── compress.ts
+│   │   ├── config.ts
+│   │   ├── doxygen-parser.ts
+│   │   ├── errors.ts
+│   │   ├── find-constructs.ts
+│   │   ├── generate-markdown.ts
+│   │   ├── pi-usereq-tools.ts
+│   │   ├── prompts.ts
+│   │   ├── resources.ts
+│   │   ├── source-analyzer.ts
+│   │   ├── static-check.ts
+│   │   ├── token-counter.ts
+│   │   ├── tool-runner.ts
+│   │   └── utils.ts
+│   └── resources/
+│       ├── common/{models.json,models-legacy.json}
+│       ├── docs/{Requirements_Template.md,HDT_Test_Authoring_Guide.md,Document_Source_Code_in_Doxygen_Style.md}
+│       ├── guidelines/{Google_Python_Style_Guide.md,Google_C++_Style_Guide.md}
+│       ├── prompts/{analyze.md,change.md,check.md,cover.md,create.md,fix.md,flowchart.md,implement.md,new.md,readme.md,recreate.md,refactor.md,references.md,renumber.md,workflow.md,write.md}
+│       └── vscode/settings.json
+├── tests/
+│   ├── extension-registration.test.ts
+│   ├── helpers.ts
+│   ├── oracle-project.test.ts
+│   ├── oracle-standalone.test.ts
+│   ├── prompt-rendering.test.ts
+│   └── fixtures/{fixture_c.c,fixture_cpp.cpp,fixture_csharp.cs,fixture_elixir.ex,fixture_go.go,fixture_haskell.hs,fixture_java.java,fixture_javascript.js,fixture_kotlin.kt,fixture_lua.lua,fixture_perl.pl,fixture_php.php,fixture_python.py,fixture_rust.rs,fixture_scala.scala,fixture_shell.sh,fixture_swift.swift,fixture_typescript.ts,fixture_zig.zig}
+├── req/docs/
+├── scripts/
+├── .github/
+│   ├── workflows/
+│   └── skills/{req-analyze,req-change,req-check,req-cover,req-create,req-fix,req-flowchart,req-implement,req-new,req-readme,req-recreate,req-references,req-refactor,req-renumber,req-workflow,req-write}/SKILL.md
+├── .pi/prompts/{req-analyze.prompt.md,req-change.prompt.md,req-check.prompt.md,req-cover.prompt.md,req-create.prompt.md,req-fix.prompt.md,req-flowchart.prompt.md,req-implement.prompt.md,req-new.prompt.md,req-readme.prompt.md,req-recreate.prompt.md,req-references.prompt.md,req-refactor.prompt.md,req-renumber.prompt.md,req-workflow.prompt.md,req-write.prompt.md}
+├── .req/docs/{Requirements_Template.md,HDT_Test_Authoring_Guide.md,Document_Source_Code_in_Doxygen_Style.md}
+├── .claude/commands/req/*.md
+├── .codex/skills/req-*/SKILL.md
+├── .gemini/commands/req/*.toml
+├── .kiro/agents/*.json
+├── .opencode/command/*.md
+└── .vscode/settings.json
+```
+
+## 7. Test Evidence Summary
+
+### 7.1 Covered Behaviors
+- `tests/extension-registration.test.ts` covers extension registration, config-menu persistence, startup-tool enablement, runtime `git-path` derivation, and static-check menu mutation flows.
+- `tests/prompt-rendering.test.ts` covers home-resource synchronization and placeholder replacement in rendered prompts.
+- `tests/oracle-standalone.test.ts` compares standalone `files-*` and `--test-static-check` outputs against the Python `usereq.cli` oracle across all fixture languages.
+- `tests/oracle-project.test.ts` compares project-scoped commands against the Python oracle on a temporary git repository and separately verifies worktree create/delete side effects.
+- Test business logic focuses on parity with the Python oracle, persistent config mutation, startup-tool activation, and worktree lifecycle correctness.
+
+## 8. Evidence Matrix
+
+### 8.1 PRJ and CTN Evidence
+| ID | Evidence |
+| --- | --- |
+| PRJ-001 | `src/index.ts` :: `registerPromptCommands` :: `pi.registerCommand(\`req-${promptName}\`, ...)`; `src/core/prompts.ts` :: `renderPrompt` :: `return adaptPromptForInternalTools(applyReplacements(prompt, replacements));` |
+| PRJ-002 | `src/index.ts` :: `TOOL_RUNNERS` and `registerAgentTools` :: tool names include `files-tokens`, `references`, `compress`, `find`, `static-check`, `git-check`, `docs-check`, `git-wt-*`. |
+| PRJ-003 | `src/index.ts` :: `configurePiUsereq` :: menu options include `Set docs-dir`, `Set tests-dir`, `Manage src-dir`, `Manage static-check`, `Manage startup tools`, `Reset defaults`, `Save and close`. |
+| PRJ-004 | `src/core/tool-runner.ts` :: `runGitCheck`, `runGitWtName`, `runGitWtCreate`, `runGitWtDelete` :: git validation and worktree helpers are exported and invoked by CLI/extension wrappers. |
+| PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,docs,guidelines,common,vscode}`. |
+| CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `req/docs`, `tests`, and `["src"]`. |
+| CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
+| CTN-003 | `src/core/tool-runner.ts` :: `SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG))`; `src/core/source-analyzer.ts` :: alias assignments `specs.cc = specs.cpp`, `specs.cxx = specs.cpp`, `specs.hpp = specs.cpp`, `specs.exs = specs.elixir`. |
+| CTN-004 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` :: defines `fixtureRoots` with `tests/fixtures` and `${testsDirRel}/fixtures`, then filters matching files out before execution. |
+| CTN-005 | `package.json` :: `"type": "module"`; `tsconfig.json` :: `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`. |
+| CTN-006 | `tsconfig.json` :: `"strict": true`, `"noEmit": true`, `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
+| CTN-007 | `package.json` :: `"pi": { "extensions": ["./src/index.ts"] }`. |
+| CTN-008 | `package.json` :: `"scripts"` :: `"test": "node --import tsx --test tests/**/*.test.ts"`, `"test:watch": ...`, `"cli": "node --import tsx ./src/cli.ts"`. |
+
+### 8.2 DES Evidence
+| ID | Evidence |
+| --- | --- |
+| DES-001 | `src/cli.ts` :: `parseArgs` and `main` :: parses flags then dispatches with branches such as `runReferences`, `runCompress`, `runFind`, `runProjectStaticCheck`, and `runStaticCheck`. |
+| DES-002 | `src/index.ts` :: `piUsereqExtension` :: calls `registerPromptCommands`, `registerToolWrapperCommands`, `registerAgentTools`, `registerConfigCommands`, then installs `pi.on("session_start", ...)`. |
+| DES-003 | `src/core/source-analyzer.ts` :: `class SourceElement`; `SourceAnalyzer.enrich` :: invokes `extractSignatures`, `detectHierarchy`, `extractVisibility`, `extractInheritance`, `extractBodyAnnotations`, and `extractDoxygenFields`. |
+| DES-004 | `src/core/static-check.ts` :: classes `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the implementation by module name. |
+| DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runReferences`, `runCompress`, `runFind`, `runProjectStaticCheck`, `runGitCheck`, `runDocsCheck`, `runGitWt*`, `runGitPath`, `runGetBasePath`. |
+| DES-006 | `src/core/compress-files.ts` :: `parts.push(\`@@@ ${outputPath} | ${language}\n> Lines: ...\`)`; `src/core/find-constructs.ts` :: `const header = \`@@@ ${filePath} | ${language}\``. |
+
+### 8.3 REQ Evidence
+| ID | Evidence |
+| --- | --- |
+| REQ-001 | `src/core/resources.ts` :: `copyDirectoryContents` :: skips dotfiles, recurses into directories, and uses `fs.copyFileSync(sourcePath, destinationPath)`. |
+| REQ-002 | `src/core/prompts.ts` :: `renderPrompt` :: replacements merge `buildPromptReplacementPaths(projectBase, config)` with `"%%ARGS%%": args`. |
+| REQ-003 | `src/core/prompts.ts` :: `TOOL_REFERENCE_REPLACEMENTS` and `adaptPromptForInternalTools` :: replaces ``req --find`` style text with `find tool` style text. |
+| REQ-004 | `src/index.ts` :: `registerPromptCommands` :: each handler runs `ensureHomeResources()`, renders the prompt, then executes `pi.sendUserMessage(content)`. |
+| REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
+| REQ-006 | `src/index.ts` :: `configurePiUsereq` :: edits docs/tests/src settings, invokes submenus, resets defaults, and persists with `saveProjectConfig`. |
+| REQ-007 | `src/index.ts` :: `configurePiUsereqToolsMenu` :: choices include `Show tool status`, `Toggle tool`, `Enable all`, `Disable all`, `Reset ... defaults`. |
+| REQ-008 | `src/index.ts` :: `configureStaticCheckMenu` :: supports guided language addition, raw-spec addition, language removal, and supported-language display. |
+| REQ-009 | `src/index.ts` :: `pi.on("session_start", ...)` :: calls `ensureHomeResources()`, `applyConfiguredPiUsereqTools`, and `ctx.ui.setStatus(...)`. |
+| REQ-010 | `src/core/token-counter.ts` :: `new TokenCounter("cl100k_base")`; `formatPackSummary`; `src/core/tool-runner.ts` :: `runFilesTokens` validates files and returns summary plus warnings. |
+| REQ-011 | `src/core/generate-markdown.ts` :: `generateMarkdown`; `src/core/source-analyzer.ts` :: `formatMarkdown` emits header, imports, definitions, and symbol index sections. |
+| REQ-012 | `src/core/compress.ts` :: `INDENT_SIGNIFICANT = new Set(["python", "haskell", "elixir"])`; `compressSource` drops comments, blank lines, and optionally prefixes line numbers. |
+| REQ-013 | `src/core/find-constructs.ts` :: `findConstructsInFiles` and `formatConstruct` :: filters by tags/regex and emits signature, lines, Doxygen bullets, and stripped code. |
+| REQ-014 | `src/core/tool-runner.ts` :: `runReferences` :: `formatFilesStructureMarkdown(files, base)` prepends `# Files Structure` plus ASCII tree before generated markdown. |
+| REQ-015 | `src/core/tool-runner.ts` :: `runCompress` :: collects configured project files then returns `compressFiles(files, enableLineNumbers, verbose, base)`. |
+| REQ-016 | `src/core/tool-runner.ts` :: `runFind` :: collects configured project files and executes `findConstructsInFiles(files, tagFilter, pattern, ...)`. |
+| REQ-017 | `src/core/tool-runner.ts` :: `runTokens` :: `canonicalNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"]` and fails if no canonical docs exist. |
+| REQ-018 | `src/cli.ts` :: `if (args.testStaticCheck) return runStaticCheck(args.testStaticCheck)`; `src/index.ts` :: registers `test-static-check`; `src/core/static-check.ts` :: `runStaticCheck` supports `dummy`, `pylance`, `ruff`, `command`. |
+| REQ-019 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: resolves extension via `STATIC_CHECK_EXT_TO_LANG`, iterates configured checkers, and calls `dispatchStaticCheckForFile(..., { failOnly: true })`. |
+| REQ-020 | `src/core/static-check.ts` :: `parseEnableStaticCheck` :: parses `LANG=MODULE[,CMD[,PARAM...]]`, canonicalizes language/module names, and builds `StaticCheckEntry`. |
+| REQ-021 | `src/core/static-check.ts` :: `parseEnableStaticCheck` :: explicit `ReqError` branches for missing `=`, unknown language, missing module, unknown module, and missing `Command` cmd. |
+| REQ-022 | `src/core/static-check.ts` :: `detectPythonExecutable` :: candidate order is project `.venv/bin/python`, `PI_USEREQ_PYTHON`, `python3`, then `python`. |
+| REQ-023 | `src/core/static-check.ts` :: `StaticCheckCommand` constructor :: `if (!findExecutable(cmd)) throw new ReqError(...)`. |
+| REQ-024 | `src/core/tool-runner.ts` :: `runGitCheck` :: bash command requires worktree membership, empty `git status --porcelain`, and symbolic or detached `HEAD`. |
+| REQ-025 | `src/core/tool-runner.ts` :: `runDocsCheck` :: maps missing docs files to `/req-write`, `/req-workflow`, and `/req-references` prompt guidance. |
+| REQ-026 | `src/core/tool-runner.ts` :: `runGitWtName` :: emits `useReq-${projectName}-${sanitizedBranch}-${executionId}` using timestamp components. |
+| REQ-027 | `src/core/tool-runner.ts` :: `runGitWtCreate` :: validates name, runs `git worktree add`, then copies `.pi/pi-usereq` into the worktree base directory. |
+| REQ-028 | `src/core/tool-runner.ts` :: `runGitWtDelete` :: checks branch/worktree existence, removes exact worktree path, deletes branch, and fails if neither exists. |
+| REQ-029 | `src/core/tool-runner.ts` :: `runGitPath` and `runGetBasePath` :: print configured path values with trailing newline. |
+| REQ-030 | `src/index.ts` :: `loadProjectConfig` :: sets `config["base-path"] = projectBase`; if inside git, sets resolved root, else deletes `git-path`. |
+| REQ-031 | `src/index.ts` :: `registerConfigCommands` :: `pi-usereq-show-config` writes `JSON.stringify(config, null, 2)` into the editor. |
+
+### 8.4 TST Evidence
+| ID | Evidence |
+| --- | --- |
+| TST-001 | `tests/extension-registration.test.ts` :: `extension registers all required prompt commands, tool wrappers, and agent tools` validates command and tool registration sets. |
+| TST-002 | `tests/prompt-rendering.test.ts` :: `embedded resources are copied ...` and `prompt rendering replaces all dynamic placeholders ...`. |
+| TST-003 | `tests/oracle-standalone.test.ts` :: `standalone command outputs match the Python oracle for every fixture` across `files-*` and `--test-static-check`. |
+| TST-004 | `tests/oracle-project.test.ts` :: `project-scan commands match the Python oracle on a git-backed fixture repository`. |
+| TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and both static-check menu addition tests. |
+| TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
+| TST-007 | `tests/extension-registration.test.ts` :: `git-path dependent commands derive the repository root at runtime`. |
+| TST-008 | `tests/oracle-project.test.ts` :: `git worktree create/delete wrappers produce expected worktree side effects`. |
+| TST-009 | `package.json` :: `"type": "module"`, `"pi": { "extensions": ["./src/index.ts"] }`, and `"scripts"` entries for `test`, `test:watch`, and `cli`. |
+| TST-010 | `tsconfig.json` :: `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"strict": true`, `"noEmit": true`, and `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
+
+## 9. Performance Notes
+No explicit performance optimizations identified.
