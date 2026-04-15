@@ -1,0 +1,6399 @@
+{
+  "schema_version": "1.0",
+  "manifest_type": "agent_document_manifest",
+  "generated_on": "2026-04-14",
+  "path_policy": {
+    "all_paths_relative": true,
+    "base_directory": ".",
+    "move_safe": true,
+    "note": "All document paths, related references, and routing targets remain relative so the whole documentation folder can be moved without rewriting the manifest."
+  },
+  "collections": {
+    "pods-docs": {
+      "description": "GPU pod orchestration, vLLM deployment recipes, and Pi planning documents.",
+      "preferred_when": [
+        "The query is about serving large models on GPU pods or specific vLLM flags.",
+        "The query mentions DataCrunch, Vast.ai, RunPod, H100/H200/B200 sizing, or model deployment commands."
+      ]
+    },
+    "coding-agent-docs": {
+      "description": "Pi coding-agent runtime, configuration, extension, SDK, TUI, protocol, and platform documentation.",
+      "preferred_when": [
+        "The query is about pi itself, its SDK, extensions, sessions, settings, keybindings, providers, or protocols.",
+        "The query mentions createAgentSession, pi.registerTool, models.json, auth.json, /tree, or --mode rpc/json."
+      ]
+    },
+    "mom-docs": {
+      "description": "Mom bot sandboxing, integration, events, and redesign architecture documents.",
+      "preferred_when": [
+        "The query is about Mom, Slack integration, event files, sandboxing, artifacts, or platform adapters.",
+        "The query mentions workspace/events, docker sandbox, v86, Socket Mode, or PlatformAdapter."
+      ]
+    }
+  },
+  "routing_rules": [
+    {
+      "if_query_mentions_any": [
+        "models.json",
+        "Ollama",
+        "LM Studio",
+        "compat.supportsDeveloperRole",
+        "modelOverrides"
+      ],
+      "prefer": "coding-agent-docs/models.md",
+      "avoid": [
+        "pods-docs/models.md"
+      ],
+      "why": "The coding-agent models doc is about declarative provider/model configuration, not GPU sizing."
+    },
+    {
+      "if_query_mentions_any": [
+        "GPU count",
+        "H100",
+        "H200",
+        "B200",
+        "tool-call-parser",
+        "served-model-name"
+      ],
+      "prefer": "pods-docs/models.md",
+      "avoid": [
+        "coding-agent-docs/models.md"
+      ],
+      "why": "The pods models doc is the hardware and vLLM-args matrix."
+    },
+    {
+      "if_query_mentions_any": [
+        "auth.json",
+        "/login",
+        "API key env vars",
+        "Bedrock",
+        "Azure OpenAI",
+        "Vertex AI"
+      ],
+      "prefer": "coding-agent-docs/providers.md",
+      "avoid": [
+        "coding-agent-docs/custom-provider.md"
+      ],
+      "why": "providers.md is the user-facing auth and credential-resolution reference."
+    },
+    {
+      "if_query_mentions_any": [
+        "pi.registerProvider",
+        "streamSimple",
+        "OAuthCredentials",
+        "custom streaming API"
+      ],
+      "prefer": "coding-agent-docs/custom-provider.md",
+      "avoid": [
+        "coding-agent-docs/providers.md"
+      ],
+      "why": "custom-provider.md is the extension-author guide for implementing providers."
+    },
+    {
+      "if_query_mentions_any": [
+        "stdin/stdout",
+        "JSONL commands",
+        "extension_ui_request",
+        "get_state",
+        "prompt command"
+      ],
+      "prefer": "coding-agent-docs/rpc.md",
+      "avoid": [
+        "coding-agent-docs/json.md"
+      ],
+      "why": "rpc.md defines the full bidirectional subprocess protocol."
+    },
+    {
+      "if_query_mentions_any": [
+        "pi --mode json",
+        "event stream only",
+        "stdout events"
+      ],
+      "prefer": "coding-agent-docs/json.md",
+      "avoid": [
+        "coding-agent-docs/rpc.md"
+      ],
+      "why": "json.md documents the simpler unidirectional event-stream mode."
+    },
+    {
+      "if_query_mentions_any": [
+        "session JSONL",
+        "SessionManager",
+        "entry types",
+        "buildSessionContext"
+      ],
+      "prefer": "coding-agent-docs/session.md",
+      "avoid": [
+        "coding-agent-docs/tree.md",
+        "coding-agent-docs/compaction.md"
+      ],
+      "why": "session.md is the persisted data-model reference."
+    },
+    {
+      "if_query_mentions_any": [
+        "/tree",
+        "navigateTree",
+        "branch switching",
+        "label timestamps"
+      ],
+      "prefer": "coding-agent-docs/tree.md",
+      "avoid": [
+        "coding-agent-docs/session.md"
+      ],
+      "why": "tree.md is the user-facing and API-facing branch-navigation guide."
+    },
+    {
+      "if_query_mentions_any": [
+        "compaction",
+        "keepRecentTokens",
+        "split turn",
+        "session_before_compact"
+      ],
+      "prefer": "coding-agent-docs/compaction.md",
+      "avoid": [
+        "coding-agent-docs/tree.md"
+      ],
+      "why": "compaction.md is the summarization and token-budget behavior reference."
+    },
+    {
+      "if_query_mentions_any": [
+        "Pi architecture",
+        "pods setup",
+        "persistent model cache",
+        "~/.pi/pods.json"
+      ],
+      "prefer": "pods-docs/plan.md",
+      "avoid": [
+        "pods-docs/implementation-plan.md"
+      ],
+      "why": "plan.md is the behavioral/product plan, not the file-by-file implementation checklist."
+    },
+    {
+      "if_query_mentions_any": [
+        "src/setup/generate-setup-script.ts",
+        "Package 1",
+        "commander",
+        "TypeScript modules"
+      ],
+      "prefer": "pods-docs/implementation-plan.md",
+      "avoid": [
+        "pods-docs/plan.md"
+      ],
+      "why": "implementation-plan.md is the engineering work-breakdown document."
+    },
+    {
+      "if_query_mentions_any": [
+        "workspace/events",
+        "immediate",
+        "one-shot",
+        "periodic",
+        "[SILENT]"
+      ],
+      "prefer": "mom-docs/events.md",
+      "avoid": [
+        "mom-docs/new.md"
+      ],
+      "why": "events.md is the dedicated event-system design."
+    },
+    {
+      "if_query_mentions_any": [
+        "PlatformAdapter",
+        "ChannelMessage",
+        "multi-platform",
+        "bubblewrap",
+        "invoke_tool"
+      ],
+      "prefer": "mom-docs/new.md",
+      "avoid": [
+        "mom-docs/events.md",
+        "mom-docs/slack-bot-minimal-guide.md"
+      ],
+      "why": "new.md is the broad multi-platform redesign proposal."
+    },
+    {
+      "if_query_mentions_any": [
+        "Docker sandbox",
+        "docker.sh",
+        "--sandbox=docker"
+      ],
+      "prefer": "mom-docs/sandbox.md",
+      "avoid": [
+        "mom-docs/v86.md"
+      ],
+      "why": "sandbox.md is the operational Docker guide; v86.md is an evaluation of an alternative sandbox."
+    },
+    {
+      "if_query_mentions_any": [
+        "v86",
+        "rootlessRelay",
+        "10.0.2.2",
+        "save_state"
+      ],
+      "prefer": "mom-docs/v86.md",
+      "avoid": [
+        "mom-docs/sandbox.md"
+      ],
+      "why": "v86.md is the VM/evaluator document."
+    }
+  ],
+  "document_count": 36,
+  "documents": [
+    {
+      "id": "pods/kimi-k2",
+      "title": "Kimi-K2 Deployment Guide",
+      "aliases": [
+        "kimi-k2",
+        "Kimi K2",
+        "moonshotai/Kimi-K2-Instruct"
+      ],
+      "doc_type": "deployment-guide",
+      "audience": [
+        "GPU pod operator",
+        "vLLM/SGLang deployer"
+      ],
+      "summary": "Detailed deployment recipes for Kimi-K2 across vLLM, SGLang, KTransformers, and TensorRT-LLM, including multi-node serving and tool-calling setup.",
+      "primary_topics": [
+        "Kimi-K2",
+        "vLLM",
+        "SGLang",
+        "TensorRT-LLM",
+        "KTransformers",
+        "multi-node inference"
+      ],
+      "strong_terms": [
+        "--tool-call-parser kimi_k2",
+        "--enable-auto-tool-choice",
+        "tensor-parallel-size 16",
+        "data parallel + expert parallel",
+        "mpirun",
+        "model_type kimi_k2"
+      ],
+      "distinctive_markers": [
+        "Minimum 16 GPUs for FP8 + 128k context on H200/H20",
+        "Reuses DeepSeekV3CausalLM but sets model_type to kimi_k2",
+        "Includes TensorRT-LLM docker + passwordless ssh setup"
+      ],
+      "question_patterns": [
+        "How do I deploy Kimi-K2 on vLLM or SGLang?",
+        "What flags are required for Kimi-K2 tool calling?",
+        "How do I serve Kimi-K2 across multiple nodes with TensorRT-LLM?"
+      ],
+      "confusable_with": [
+        {
+          "path": "pods-docs/models.md",
+          "difference": "That file is a compact model matrix; this file is the full Kimi-K2 deployment guide."
+        },
+        {
+          "path": "pods-docs/qwen3-coder.md",
+          "difference": "That guide is for Qwen3-Coder, not Kimi-K2."
+        }
+      ],
+      "path": "pods-docs/kimi-k2.md",
+      "collection": "pods-docs",
+      "line_count": 197,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Kimi-K2 Deployment Guide"
+        },
+        {
+          "level": 2,
+          "text": "vLLM Deployment"
+        },
+        {
+          "level": 3,
+          "text": "Tensor Parallelism"
+        },
+        {
+          "level": 1,
+          "text": "start ray on node 0 and node 1"
+        },
+        {
+          "level": 1,
+          "text": "node 0:"
+        },
+        {
+          "level": 3,
+          "text": "Data Parallelism + Expert Parallelism"
+        },
+        {
+          "level": 1,
+          "text": "node 0"
+        },
+        {
+          "level": 1,
+          "text": "node 1"
+        },
+        {
+          "level": 2,
+          "text": "SGLang Deployment"
+        },
+        {
+          "level": 3,
+          "text": "Tensor Parallelism"
+        },
+        {
+          "level": 1,
+          "text": "Node 0"
+        },
+        {
+          "level": 1,
+          "text": "Node 1"
+        },
+        {
+          "level": 3,
+          "text": "Data Parallelism + Expert Parallelism"
+        },
+        {
+          "level": 1,
+          "text": "for prefill node"
+        },
+        {
+          "level": 1,
+          "text": "for decode node"
+        },
+        {
+          "level": 1,
+          "text": "pdlb"
+        },
+        {
+          "level": 2,
+          "text": "KTransformers Deployment"
+        },
+        {
+          "level": 2,
+          "text": "TensorRT-LLM Deployment"
+        },
+        {
+          "level": 3,
+          "text": "Prerequisite"
+        },
+        {
+          "level": 3,
+          "text": "Multi-node Serving"
+        },
+        {
+          "level": 4,
+          "text": "mpirun"
+        },
+        {
+          "level": 1,
+          "text": "use host network"
+        },
+        {
+          "level": 1,
+          "text": "host1"
+        },
+        {
+          "level": 1,
+          "text": "host2"
+        },
+        {
+          "level": 1,
+          "text": "modify /etc/ssh/sshd_config"
+        },
+        {
+          "level": 1,
+          "text": "modify /etc/ssh/sshd_config, change default port 22 to another unused port"
+        },
+        {
+          "level": 1,
+          "text": "modify /etc/ssh"
+        },
+        {
+          "level": 1,
+          "text": "on host1"
+        },
+        {
+          "level": 1,
+          "text": "on host2"
+        },
+        {
+          "level": 1,
+          "text": "restart ssh service on host1 and host2"
+        },
+        {
+          "level": 2,
+          "text": "Others"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "pods/gpt-oss",
+      "title": "gpt-oss vLLM Usage Guide",
+      "aliases": [
+        "gpt-oss",
+        "gpt-oss-20b",
+        "gpt-oss-120b"
+      ],
+      "doc_type": "deployment-guide",
+      "audience": [
+        "vLLM deployer",
+        "OpenAI-compatible model operator"
+      ],
+      "summary": "Hardware-specific vLLM guide for OpenAI gpt-oss models, covering install, serving on NVIDIA and AMD, /v1/responses tool use, evaluation, limitations, and troubleshooting.",
+      "primary_topics": [
+        "gpt-oss",
+        "vLLM",
+        "Responses API",
+        "tool use",
+        "NVIDIA H100/H200/B200",
+        "AMD ROCm"
+      ],
+      "strong_terms": [
+        "vllm==0.10.1+gptoss",
+        "--async-scheduling",
+        "/v1/responses",
+        "openai-harmony",
+        "EXA_API_KEY",
+        "PYTHON_EXECUTION_BACKEND=UV"
+      ],
+      "distinctive_markers": [
+        "Only guide in this set centered on built-in tools through /v1/responses",
+        "Covers Blackwell env vars for TRTLLM attention and FlashInfer MoE",
+        "Includes reproduced GPQA/AIME25 evaluation tables"
+      ],
+      "question_patterns": [
+        "How do I run gpt-oss on H100, B200, or AMD in vLLM?",
+        "How does gpt-oss tool use work via /v1/responses?",
+        "What are the known limitations or OOM settings for gpt-oss-120b?"
+      ],
+      "confusable_with": [
+        {
+          "path": "pods-docs/models.md",
+          "difference": "That file summarizes recommended configs; this file explains gpt-oss deployment and usage in detail."
+        },
+        {
+          "path": "coding-agent-docs/models.md",
+          "difference": "That file configures custom models/providers for pi; this file is about serving gpt-oss with vLLM."
+        }
+      ],
+      "path": "pods-docs/gpt-oss.md",
+      "collection": "pods-docs",
+      "line_count": 233,
+      "headings": [
+        {
+          "level": 2,
+          "text": "`gpt-oss` vLLM Usage Guide"
+        },
+        {
+          "level": 2,
+          "text": "Quickstart"
+        },
+        {
+          "level": 3,
+          "text": "Installation"
+        },
+        {
+          "level": 3,
+          "text": "H100 & H200"
+        },
+        {
+          "level": 1,
+          "text": "openai/gpt-oss-20b should run in single GPU"
+        },
+        {
+          "level": 1,
+          "text": "gpt-oss-120b will fit in a single H100/H200, but scaling it to higher TP sizes can help with throughput"
+        },
+        {
+          "level": 3,
+          "text": "B200"
+        },
+        {
+          "level": 1,
+          "text": "All 3 of these are required"
+        },
+        {
+          "level": 1,
+          "text": "Pick only one out of the two."
+        },
+        {
+          "level": 1,
+          "text": "mxfp8 activation for MoE. faster, but higher risk for accuracy."
+        },
+        {
+          "level": 1,
+          "text": "bf16 activation for MoE. matching reference precision."
+        },
+        {
+          "level": 1,
+          "text": "openai/gpt-oss-20b"
+        },
+        {
+          "level": 1,
+          "text": "gpt-oss-120b"
+        },
+        {
+          "level": 3,
+          "text": "AMD"
+        },
+        {
+          "level": 1,
+          "text": "MoE preshuffle, fusion and Triton GEMM flags"
+        },
+        {
+          "level": 2,
+          "text": "Usage"
+        },
+        {
+          "level": 3,
+          "text": "Tool Use"
+        },
+        {
+          "level": 2,
+          "text": "Accuracy Evaluation Panels"
+        },
+        {
+          "level": 1,
+          "text": "Example deployment on 8xH100"
+        },
+        {
+          "level": 2,
+          "text": "Known Limitations"
+        },
+        {
+          "level": 2,
+          "text": "Troubleshooting"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "pods/models-matrix",
+      "title": "Pods Model Compatibility Matrix",
+      "aliases": [
+        "pods models",
+        "Pi supported models",
+        "model hardware matrix"
+      ],
+      "doc_type": "reference-matrix",
+      "audience": [
+        "Pi CLI designer",
+        "GPU pod operator"
+      ],
+      "summary": "Compact reference matrix for Qwen-Coder, GPT-OSS, GLM-4.5, and Kimi, listing Hugging Face IDs, hardware requirements, vLLM flags, env vars, and operational notes.",
+      "primary_topics": [
+        "supported models",
+        "hardware sizing",
+        "vLLM flags",
+        "H100/H200/B200",
+        "Pi model presets"
+      ],
+      "strong_terms": [
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+        "openai/gpt-oss-120b",
+        "zai-org/GLM-4.5",
+        "moonshotai/Kimi-K2-Instruct",
+        "tool-call-parser",
+        "reasoning-parser glm45"
+      ],
+      "distinctive_markers": [
+        "Only document organized as four model family checklists",
+        "Acts as the condensed lookup table backing Pi model support decisions"
+      ],
+      "question_patterns": [
+        "Which models should Pi support out of the box and with what flags?",
+        "What GPU counts are recommended for Qwen, GPT-OSS, GLM, or Kimi?",
+        "What is the shortest matrix of hardware and vLLM args by model family?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/models.md",
+          "difference": "That file is about ~/.pi/agent/models.json for custom providers; this file is about GPU deployment presets."
+        },
+        {
+          "path": "pods-docs/plan.md",
+          "difference": "That file explains Pi architecture and workflow; this one is only the model matrix."
+        }
+      ],
+      "path": "pods-docs/models.md",
+      "collection": "pods-docs",
+      "line_count": 116,
+      "headings": [
+        {
+          "level": 3,
+          "text": "Qwen-Coder"
+        },
+        {
+          "level": 3,
+          "text": "GPT-OSS"
+        },
+        {
+          "level": 3,
+          "text": "GLM-4.5"
+        },
+        {
+          "level": 3,
+          "text": "Kimi"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "pods/pi-plan",
+      "title": "Pi Pod Orchestration Plan",
+      "aliases": [
+        "Pi plan",
+        "pod plan",
+        "Pi pods architecture"
+      ],
+      "doc_type": "product-plan",
+      "audience": [
+        "tool architect",
+        "CLI designer"
+      ],
+      "summary": "High-level functional plan for Pi: registering ephemeral GPU pods, caching models on persistent volumes, starting and stopping vLLM instances over SSH, and testing models with basic tools.",
+      "primary_topics": [
+        "Pi CLI",
+        "pods",
+        "SSH orchestration",
+        "model caching",
+        "local JSON state",
+        "OpenAI-compatible endpoints"
+      ],
+      "strong_terms": [
+        "pi pods setup",
+        "pi start",
+        "~/.pi/pods.json",
+        "PI_API_KEY",
+        "HF_TOKEN",
+        "prompt tool testing"
+      ],
+      "distinctive_markers": [
+        "Defines pods as ephemeral compute and volumes as persistent model cache",
+        "Explains round-robin GPU assignment and local-only state tracking"
+      ],
+      "question_patterns": [
+        "What is Pi supposed to do for pod setup and model serving?",
+        "How does Pi store pod/model state and interact with remote pods?",
+        "What commands are planned for pods, models, and prompt testing?"
+      ],
+      "confusable_with": [
+        {
+          "path": "pods-docs/implementation-plan.md",
+          "difference": "That file decomposes implementation into TypeScript packages and source files; this file is the higher-level product/architecture plan."
+        },
+        {
+          "path": "pods-docs/models.md",
+          "difference": "That file is just the supported-model matrix."
+        }
+      ],
+      "path": "pods-docs/plan.md",
+      "collection": "pods-docs",
+      "line_count": 166,
+      "headings": [
+        {
+          "level": 2,
+          "text": "Pi"
+        },
+        {
+          "level": 2,
+          "text": "Usage"
+        },
+        {
+          "level": 3,
+          "text": "Pods"
+        },
+        {
+          "level": 3,
+          "text": "Models"
+        },
+        {
+          "level": 2,
+          "text": "Pod management"
+        },
+        {
+          "level": 3,
+          "text": "Pod setup"
+        },
+        {
+          "level": 3,
+          "text": "Model caching"
+        },
+        {
+          "level": 3,
+          "text": "Multi-pod management"
+        },
+        {
+          "level": 2,
+          "text": "Model deployment"
+        },
+        {
+          "level": 3,
+          "text": "Architecture"
+        },
+        {
+          "level": 3,
+          "text": "Starting models"
+        },
+        {
+          "level": 3,
+          "text": "Managing models"
+        },
+        {
+          "level": 3,
+          "text": "Error handling"
+        },
+        {
+          "level": 3,
+          "text": "Testing models"
+        },
+        {
+          "level": 2,
+          "text": "Models"
+        }
+      ],
+      "relative_links": [
+        "./models.md"
+      ]
+    },
+    {
+      "id": "pods/qwen3-coder",
+      "title": "Qwen3-Coder Usage Guide",
+      "aliases": [
+        "Qwen3-Coder",
+        "Qwen coder guide",
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+      ],
+      "doc_type": "deployment-guide",
+      "audience": [
+        "vLLM deployer",
+        "coding-model operator"
+      ],
+      "summary": "Focused serving guide for Qwen3-Coder on vLLM, especially 480B BF16 and FP8 deployments on 8x H200/H20, with benchmark results, tool-calling flags, and FP8 tensor-parallel caveats.",
+      "primary_topics": [
+        "Qwen3-Coder",
+        "vLLM",
+        "BF16 vs FP8",
+        "DeepGEMM",
+        "tool calling",
+        "benchmarking"
+      ],
+      "strong_terms": [
+        "--tool-call-parser qwen3_coder",
+        "VLLM_USE_DEEP_GEMM=1",
+        "--data-parallel-size 8",
+        "EvalPlus",
+        "tensor-parallel issue",
+        "HumanEval+/MBPP+"
+      ],
+      "distinctive_markers": [
+        "Includes specific Qwen3 MoE FP8 weight-quantization error trace",
+        "Only guide here with EvalPlus pass@1 numbers for Qwen3-Coder"
+      ],
+      "question_patterns": [
+        "How do I launch Qwen3-Coder on 8x H200/H20 with vLLM?",
+        "Why does Qwen3-Coder FP8 fail under tensor parallelism?",
+        "Which flags enable Qwen3-Coder tool calling and DeepGEMM?"
+      ],
+      "confusable_with": [
+        {
+          "path": "pods-docs/models.md",
+          "difference": "That file summarizes Qwen configurations; this file gives the full Qwen3-Coder serving and benchmarking guide."
+        },
+        {
+          "path": "pods-docs/kimi-k2.md",
+          "difference": "That guide is for Kimi-K2, not Qwen3-Coder."
+        }
+      ],
+      "path": "pods-docs/qwen3-coder.md",
+      "collection": "pods-docs",
+      "line_count": 132,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Qwen3-Coder Usage Guide"
+        },
+        {
+          "level": 2,
+          "text": "Installing vLLM"
+        },
+        {
+          "level": 2,
+          "text": "Launching Qwen3-Coder with vLLM"
+        },
+        {
+          "level": 3,
+          "text": "Serving on 8xH200 (or H20) GPUs (141GB × 8)"
+        },
+        {
+          "level": 2,
+          "text": "Performance Metrics"
+        },
+        {
+          "level": 3,
+          "text": "Evaluation"
+        },
+        {
+          "level": 3,
+          "text": "Benchmarking"
+        },
+        {
+          "level": 2,
+          "text": "Using Tips"
+        },
+        {
+          "level": 3,
+          "text": "BF16 Models"
+        },
+        {
+          "level": 3,
+          "text": "FP8 Models"
+        },
+        {
+          "level": 3,
+          "text": "Tool Calling"
+        },
+        {
+          "level": 2,
+          "text": "Roadmap"
+        },
+        {
+          "level": 2,
+          "text": "Additional Resources"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "pods/implementation-plan",
+      "title": "Implementation Plan",
+      "aliases": [
+        "Pi implementation plan",
+        "package breakdown",
+        "TypeScript implementation plan"
+      ],
+      "doc_type": "implementation-plan",
+      "audience": [
+        "TypeScript implementer",
+        "maintainer"
+      ],
+      "summary": "Concrete implementation breakdown for Pi into packages and source files: setup-script generation, config store, SSH executor, pod/model commands, prompt testing, CLI entrypoint, and test strategy.",
+      "primary_topics": [
+        "TypeScript modules",
+        "commander CLI",
+        "config store",
+        "SSH executor",
+        "model lifecycle",
+        "testing strategy"
+      ],
+      "strong_terms": [
+        "src/setup/generate-setup-script.ts",
+        "src/config/store.ts",
+        "src/ssh/executor.ts",
+        "src/commands/start.ts",
+        "src/prompt/tools.ts",
+        "commander"
+      ],
+      "distinctive_markers": [
+        "Organized as Package 1..8 with file-level implementation checklist",
+        "Only doc in this set listing npm dependencies for the Pi implementation"
+      ],
+      "question_patterns": [
+        "How should Pi be implemented in TypeScript module by module?",
+        "What source files and packages are planned for Pi?",
+        "What dependencies and testing strategy does the Pi implementation use?"
+      ],
+      "confusable_with": [
+        {
+          "path": "pods-docs/plan.md",
+          "difference": "That file describes behavior and architecture; this file breaks implementation into packages and filenames."
+        }
+      ],
+      "path": "pods-docs/implementation-plan.md",
+      "collection": "pods-docs",
+      "line_count": 183,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Implementation Plan"
+        },
+        {
+          "level": 2,
+          "text": "Core Principles"
+        },
+        {
+          "level": 2,
+          "text": "Package 1: Pod Setup Script Generation"
+        },
+        {
+          "level": 2,
+          "text": "Package 2: Config Management"
+        },
+        {
+          "level": 2,
+          "text": "Package 3: SSH Executor"
+        },
+        {
+          "level": 2,
+          "text": "Package 4: Pod Commands"
+        },
+        {
+          "level": 2,
+          "text": "Package 5: Model Management"
+        },
+        {
+          "level": 2,
+          "text": "Package 6: Model Commands"
+        },
+        {
+          "level": 2,
+          "text": "Package 7: Model Testing"
+        },
+        {
+          "level": 2,
+          "text": "Package 8: CLI Entry Point"
+        },
+        {
+          "level": 2,
+          "text": "Testing Strategy"
+        },
+        {
+          "level": 2,
+          "text": "Dependencies"
+        },
+        {
+          "level": 2,
+          "text": "Build & Distribution"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "pods/glm-4.5",
+      "title": "GLM-4.5",
+      "aliases": [
+        "GLM-4.5",
+        "GLM-4.5-Air",
+        "zai-org/GLM-4.5",
+        "gml-4.5"
+      ],
+      "doc_type": "model-guide",
+      "audience": [
+        "model deployer",
+        "agent-model evaluator"
+      ],
+      "summary": "Vendor-style overview for GLM-4.5 and GLM-4.5-Air models, including downloads, system requirements for inference/fine-tuning, and quick-start examples for transformers, vLLM, and SGLang.",
+      "primary_topics": [
+        "GLM-4.5",
+        "GLM-4.5-Air",
+        "downloads",
+        "inference requirements",
+        "vLLM",
+        "SGLang"
+      ],
+      "strong_terms": [
+        "tool-call-parser glm45",
+        "reasoning-parser glm45",
+        "thinking mode enabled by default",
+        "--cpu-offload-gb 16",
+        "speculative-algorithm EAGLE",
+        "128K context"
+      ],
+      "distinctive_markers": [
+        "Only document with both inference and fine-tuning hardware tables for GLM-4.5",
+        "Explains disabling thinking via chat_template_kwargs.enable_thinking=False"
+      ],
+      "question_patterns": [
+        "What are the official requirements and quick-start commands for GLM-4.5?",
+        "How do I run GLM-4.5 or GLM-4.5-Air with tool and reasoning parsers?",
+        "What GPU counts are needed for full 128K context on GLM-4.5?"
+      ],
+      "confusable_with": [
+        {
+          "path": "pods-docs/models.md",
+          "difference": "That file is a compact preset matrix; this file is the fuller GLM-4.5 product and deployment guide."
+        }
+      ],
+      "path": "pods-docs/gml-4.5.md",
+      "collection": "pods-docs",
+      "line_count": 189,
+      "headings": [
+        {
+          "level": 1,
+          "text": "GLM-4.5"
+        },
+        {
+          "level": 2,
+          "text": "Model Introduction"
+        },
+        {
+          "level": 2,
+          "text": "Model Downloads"
+        },
+        {
+          "level": 2,
+          "text": "System Requirements"
+        },
+        {
+          "level": 3,
+          "text": "Inference"
+        },
+        {
+          "level": 3,
+          "text": "Fine-tuning"
+        },
+        {
+          "level": 2,
+          "text": "Quick Start"
+        },
+        {
+          "level": 3,
+          "text": "transformers"
+        },
+        {
+          "level": 3,
+          "text": "vLLM"
+        },
+        {
+          "level": 3,
+          "text": "SGLang"
+        },
+        {
+          "level": 3,
+          "text": "Request Parameter Instructions"
+        }
+      ],
+      "relative_links": [
+        "./README_zh.md",
+        "resources/bench.png"
+      ]
+    },
+    {
+      "id": "coding/json-mode",
+      "title": "JSON Event Stream Mode",
+      "aliases": [
+        "json mode",
+        "pi --mode json",
+        "event stream mode"
+      ],
+      "doc_type": "protocol-reference",
+      "audience": [
+        "integrator",
+        "automation author"
+      ],
+      "summary": "Reference for pi --mode json, which emits session headers and AgentSession events as JSONL to stdout without the bidirectional command protocol of RPC mode.",
+      "primary_topics": [
+        "JSON mode",
+        "AgentSessionEvent",
+        "event stream",
+        "JSONL output"
+      ],
+      "strong_terms": [
+        "pi --mode json",
+        "session header",
+        "message_update",
+        "tool_execution_end",
+        "queue_update",
+        "compaction_end"
+      ],
+      "distinctive_markers": [
+        "Unidirectional stdout event stream only",
+        "Shortest protocol doc; no stdin command definitions"
+      ],
+      "question_patterns": [
+        "How does pi --mode json format its stdout events?",
+        "What event types appear in JSON mode?",
+        "What is the difference between JSON mode output and RPC mode?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/rpc.md",
+          "difference": "RPC mode is bidirectional and command-driven; JSON mode only streams events."
+        }
+      ],
+      "path": "coding-agent-docs/json.md",
+      "collection": "coding-agent-docs",
+      "line_count": 82,
+      "headings": [
+        {
+          "level": 1,
+          "text": "JSON Event Stream Mode"
+        },
+        {
+          "level": 2,
+          "text": "Event Types"
+        },
+        {
+          "level": 2,
+          "text": "Message Types"
+        },
+        {
+          "level": 2,
+          "text": "Output Format"
+        },
+        {
+          "level": 2,
+          "text": "Example"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/prompt-templates",
+      "title": "Prompt Templates",
+      "aliases": [
+        "prompt templates",
+        "/template commands",
+        "prompts/*.md"
+      ],
+      "doc_type": "feature-guide",
+      "audience": [
+        "pi user",
+        "package author"
+      ],
+      "summary": "Explains how Markdown prompt templates are discovered, formatted, parameterized, and invoked with slash commands such as /review or /component.",
+      "primary_topics": [
+        "slash prompts",
+        "template discovery",
+        "Markdown snippets",
+        "arguments"
+      ],
+      "strong_terms": [
+        "/review",
+        "$1",
+        "$@",
+        "${@:N}",
+        "--no-prompt-templates",
+        ".pi/prompts"
+      ],
+      "distinctive_markers": [
+        "Uses filename as slash-command name",
+        "Supports positional argument slicing in Markdown"
+      ],
+      "question_patterns": [
+        "How do prompt templates work in pi?",
+        "Where should I put reusable slash-command prompts?",
+        "How do template arguments like $1 or $@ expand?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/skills.md",
+          "difference": "Skills are on-demand capability packages; prompt templates are simple Markdown expansions."
+        },
+        {
+          "path": "coding-agent-docs/packages.md",
+          "difference": "That file explains packaging/sharing resources; this one explains template behavior itself."
+        }
+      ],
+      "path": "coding-agent-docs/prompt-templates.md",
+      "collection": "coding-agent-docs",
+      "line_count": 67,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Prompt Templates"
+        },
+        {
+          "level": 2,
+          "text": "Locations"
+        },
+        {
+          "level": 2,
+          "text": "Format"
+        },
+        {
+          "level": 2,
+          "text": "Usage"
+        },
+        {
+          "level": 2,
+          "text": "Arguments"
+        },
+        {
+          "level": 2,
+          "text": "Loading Rules"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/termux",
+      "title": "Termux (Android) Setup",
+      "aliases": [
+        "Termux",
+        "Android setup",
+        "termux-api"
+      ],
+      "doc_type": "platform-setup",
+      "audience": [
+        "Android user"
+      ],
+      "summary": "Android-specific setup guide for running pi in Termux, including install steps, Termux:API clipboard integration, a suggested AGENTS.md, and common limitations.",
+      "primary_topics": [
+        "Termux",
+        "Android",
+        "clipboard",
+        "AGENTS.md",
+        "storage permissions"
+      ],
+      "strong_terms": [
+        "pkg install nodejs termux-api git",
+        "termux-clipboard-set",
+        "termux-setup-storage",
+        "/data/data/com.termux/files/home",
+        "Termux:API"
+      ],
+      "distinctive_markers": [
+        "Includes a full AGENTS.md template describing Android/Termux environment commands",
+        "Explicitly notes no image clipboard support on Termux"
+      ],
+      "question_patterns": [
+        "How do I install and run pi on Android via Termux?",
+        "How does clipboard support work in Termux?",
+        "What AGENTS.md hints should the agent have in a Termux environment?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/windows.md",
+          "difference": "That file covers Windows bash shell setup; this one is Android/Termux specific."
+        },
+        {
+          "path": "coding-agent-docs/terminal-setup.md",
+          "difference": "That file configures desktop terminals; this one is a full Android platform setup guide."
+        }
+      ],
+      "path": "coding-agent-docs/termux.md",
+      "collection": "coding-agent-docs",
+      "line_count": 127,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Termux (Android) Setup"
+        },
+        {
+          "level": 2,
+          "text": "Prerequisites"
+        },
+        {
+          "level": 2,
+          "text": "Installation"
+        },
+        {
+          "level": 1,
+          "text": "Update packages"
+        },
+        {
+          "level": 1,
+          "text": "Install dependencies"
+        },
+        {
+          "level": 1,
+          "text": "Install pi"
+        },
+        {
+          "level": 1,
+          "text": "Create config directory"
+        },
+        {
+          "level": 1,
+          "text": "Run pi"
+        },
+        {
+          "level": 2,
+          "text": "Clipboard Support"
+        },
+        {
+          "level": 2,
+          "text": "Example AGENTS.md for Termux"
+        },
+        {
+          "level": 1,
+          "text": "Agent Environment: Termux on Android"
+        },
+        {
+          "level": 2,
+          "text": "Location"
+        },
+        {
+          "level": 2,
+          "text": "Opening URLs"
+        },
+        {
+          "level": 2,
+          "text": "Opening Files"
+        },
+        {
+          "level": 2,
+          "text": "Clipboard"
+        },
+        {
+          "level": 2,
+          "text": "Notifications"
+        },
+        {
+          "level": 2,
+          "text": "Device Info"
+        },
+        {
+          "level": 2,
+          "text": "Sharing"
+        },
+        {
+          "level": 2,
+          "text": "Other Useful Commands"
+        },
+        {
+          "level": 2,
+          "text": "Notes"
+        },
+        {
+          "level": 2,
+          "text": "Limitations"
+        },
+        {
+          "level": 2,
+          "text": "Troubleshooting"
+        },
+        {
+          "level": 3,
+          "text": "Clipboard not working"
+        },
+        {
+          "level": 3,
+          "text": "Permission denied for shared storage"
+        },
+        {
+          "level": 3,
+          "text": "Node.js installation issues"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/terminal-setup",
+      "title": "Terminal Setup",
+      "aliases": [
+        "kitty keyboard protocol",
+        "terminal key setup",
+        "Shift+Enter setup"
+      ],
+      "doc_type": "terminal-config-guide",
+      "audience": [
+        "interactive pi user"
+      ],
+      "summary": "Terminal-specific configuration guide for reliable modified-key handling in pi, especially Shift+Enter and Alt+Enter, across Kitty, Ghostty, WezTerm, VS Code, Windows Terminal, and others.",
+      "primary_topics": [
+        "Kitty keyboard protocol",
+        "terminal configuration",
+        "Shift+Enter",
+        "modified keys"
+      ],
+      "strong_terms": [
+        "enable_kitty_keyboard = true",
+        "workbench.action.terminal.sendSequence",
+        "sendInput",
+        "PI_HARDWARE_CURSOR=1",
+        "Ghostty keybind",
+        "Windows Terminal actions"
+      ],
+      "distinctive_markers": [
+        "Only doc comparing terminal emulators for key-escape support",
+        "Explains why old Ghostty Shift+Enter remaps break pi key detection"
+      ],
+      "question_patterns": [
+        "How do I make Shift+Enter work in pi in my terminal?",
+        "Which terminal settings are required for pi keybindings?",
+        "Why are modified Enter keys not detected correctly?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/tmux.md",
+          "difference": "tmux.md fixes modified keys inside tmux; this file configures terminal emulators themselves."
+        },
+        {
+          "path": "coding-agent-docs/keybindings.md",
+          "difference": "That file changes logical keybindings; this file changes terminal transport of key events."
+        }
+      ],
+      "path": "coding-agent-docs/terminal-setup.md",
+      "collection": "coding-agent-docs",
+      "line_count": 106,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Terminal Setup"
+        },
+        {
+          "level": 2,
+          "text": "Kitty, iTerm2"
+        },
+        {
+          "level": 2,
+          "text": "Ghostty"
+        },
+        {
+          "level": 2,
+          "text": "WezTerm"
+        },
+        {
+          "level": 2,
+          "text": "VS Code (Integrated Terminal)"
+        },
+        {
+          "level": 2,
+          "text": "Windows Terminal"
+        },
+        {
+          "level": 2,
+          "text": "xfce4-terminal, terminator"
+        },
+        {
+          "level": 2,
+          "text": "IntelliJ IDEA (Integrated Terminal)"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/themes",
+      "title": "Themes",
+      "aliases": [
+        "theme JSON",
+        "custom theme",
+        "theme-schema.json"
+      ],
+      "doc_type": "customization-reference",
+      "audience": [
+        "theme author",
+        "UI customizer"
+      ],
+      "summary": "Defines the JSON format for pi TUI themes, discovery locations, 51 required color tokens, supported color value formats, and hot-reload behavior.",
+      "primary_topics": [
+        "themes",
+        "TUI colors",
+        "theme schema",
+        "color tokens",
+        "customization"
+      ],
+      "strong_terms": [
+        "51 required tokens",
+        "$schema",
+        "vars",
+        "colors",
+        "export.pageBg",
+        "dark/light"
+      ],
+      "distinctive_markers": [
+        "Enumerates all core UI, markdown, syntax, thinking, and bash-mode color tokens",
+        "Explains automatic hot reload of the active custom theme file"
+      ],
+      "question_patterns": [
+        "How do I create a custom theme for pi?",
+        "What color tokens are required by the pi theme format?",
+        "Where are themes discovered and how are they selected?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/tui.md",
+          "difference": "tui.md explains component APIs and UI patterns; this file only defines theme data and color semantics."
+        }
+      ],
+      "path": "coding-agent-docs/themes.md",
+      "collection": "coding-agent-docs",
+      "line_count": 295,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Themes"
+        },
+        {
+          "level": 2,
+          "text": "Table of Contents"
+        },
+        {
+          "level": 2,
+          "text": "Locations"
+        },
+        {
+          "level": 2,
+          "text": "Selecting a Theme"
+        },
+        {
+          "level": 2,
+          "text": "Creating a Custom Theme"
+        },
+        {
+          "level": 2,
+          "text": "Theme Format"
+        },
+        {
+          "level": 2,
+          "text": "Color Tokens"
+        },
+        {
+          "level": 3,
+          "text": "Core UI (11 colors)"
+        },
+        {
+          "level": 3,
+          "text": "Backgrounds & Content (11 colors)"
+        },
+        {
+          "level": 3,
+          "text": "Markdown (10 colors)"
+        },
+        {
+          "level": 3,
+          "text": "Tool Diffs (3 colors)"
+        },
+        {
+          "level": 3,
+          "text": "Syntax Highlighting (9 colors)"
+        },
+        {
+          "level": 3,
+          "text": "Thinking Level Borders (6 colors)"
+        },
+        {
+          "level": 3,
+          "text": "Bash Mode (1 color)"
+        },
+        {
+          "level": 3,
+          "text": "HTML Export (optional)"
+        },
+        {
+          "level": 2,
+          "text": "Color Values"
+        },
+        {
+          "level": 3,
+          "text": "256-Color Palette"
+        },
+        {
+          "level": 3,
+          "text": "Terminal Compatibility"
+        },
+        {
+          "level": 2,
+          "text": "Tips"
+        },
+        {
+          "level": 2,
+          "text": "Examples"
+        }
+      ],
+      "relative_links": [
+        "../src/modes/interactive/theme/dark.json",
+        "../src/modes/interactive/theme/light.json"
+      ]
+    },
+    {
+      "id": "coding/extensions",
+      "title": "Extensions",
+      "aliases": [
+        "pi extensions",
+        "ExtensionAPI",
+        "pi.registerTool",
+        "pi.on"
+      ],
+      "doc_type": "extension-system-reference",
+      "audience": [
+        "extension author",
+        "advanced integrator"
+      ],
+      "summary": "Comprehensive reference for pi extensions: discovery, lifecycle events, ExtensionContext, commands, tools, state persistence, custom rendering, custom UI, dynamic tool activation, and runtime behavior.",
+      "primary_topics": [
+        "extensions",
+        "events",
+        "custom tools",
+        "commands",
+        "custom UI",
+        "state management"
+      ],
+      "strong_terms": [
+        "pi.on",
+        "pi.registerTool",
+        "pi.registerCommand",
+        "ctx.ui",
+        "session_before_compact",
+        "withFileMutationQueue"
+      ],
+      "distinctive_markers": [
+        "Largest extension API reference in the repo",
+        "Covers both event hooks and advanced tool/UI rendering behavior"
+      ],
+      "question_patterns": [
+        "How do I write a pi extension with events, commands, or tools?",
+        "What can ExtensionContext and ctx.ui do?",
+        "How do I override built-in tools or register dynamic custom tools?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/custom-provider.md",
+          "difference": "That file is a focused subset for model providers; this file is the general extension platform reference."
+        },
+        {
+          "path": "coding-agent-docs/sdk.md",
+          "difference": "sdk.md is for embedding pi programmatically; this file is for runtime extension modules loaded by pi."
+        }
+      ],
+      "path": "coding-agent-docs/extensions.md",
+      "collection": "coding-agent-docs",
+      "line_count": 2262,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Extensions"
+        },
+        {
+          "level": 2,
+          "text": "Table of Contents"
+        },
+        {
+          "level": 2,
+          "text": "Quick Start"
+        },
+        {
+          "level": 2,
+          "text": "Extension Locations"
+        },
+        {
+          "level": 2,
+          "text": "Available Imports"
+        },
+        {
+          "level": 2,
+          "text": "Writing an Extension"
+        },
+        {
+          "level": 3,
+          "text": "Extension Styles"
+        },
+        {
+          "level": 2,
+          "text": "Events"
+        },
+        {
+          "level": 3,
+          "text": "Lifecycle Overview"
+        },
+        {
+          "level": 3,
+          "text": "Resource Events"
+        },
+        {
+          "level": 4,
+          "text": "resources_discover"
+        },
+        {
+          "level": 3,
+          "text": "Session Events"
+        },
+        {
+          "level": 4,
+          "text": "session_start"
+        },
+        {
+          "level": 4,
+          "text": "session_before_switch"
+        },
+        {
+          "level": 4,
+          "text": "session_before_fork"
+        },
+        {
+          "level": 4,
+          "text": "session_before_compact / session_compact"
+        },
+        {
+          "level": 4,
+          "text": "session_before_tree / session_tree"
+        },
+        {
+          "level": 4,
+          "text": "session_shutdown"
+        },
+        {
+          "level": 3,
+          "text": "Agent Events"
+        },
+        {
+          "level": 4,
+          "text": "before_agent_start"
+        },
+        {
+          "level": 4,
+          "text": "agent_start / agent_end"
+        },
+        {
+          "level": 4,
+          "text": "turn_start / turn_end"
+        },
+        {
+          "level": 4,
+          "text": "message_start / message_update / message_end"
+        },
+        {
+          "level": 4,
+          "text": "tool_execution_start / tool_execution_update / tool_execution_end"
+        },
+        {
+          "level": 4,
+          "text": "context"
+        },
+        {
+          "level": 4,
+          "text": "before_provider_request"
+        },
+        {
+          "level": 3,
+          "text": "Model Events"
+        },
+        {
+          "level": 4,
+          "text": "model_select"
+        },
+        {
+          "level": 3,
+          "text": "Tool Events"
+        },
+        {
+          "level": 4,
+          "text": "tool_call"
+        },
+        {
+          "level": 4,
+          "text": "Typing custom tool input"
+        },
+        {
+          "level": 4,
+          "text": "tool_result"
+        },
+        {
+          "level": 3,
+          "text": "User Bash Events"
+        },
+        {
+          "level": 4,
+          "text": "user_bash"
+        },
+        {
+          "level": 3,
+          "text": "Input Events"
+        },
+        {
+          "level": 4,
+          "text": "input"
+        },
+        {
+          "level": 2,
+          "text": "ExtensionContext"
+        },
+        {
+          "level": 3,
+          "text": "ctx.ui"
+        },
+        {
+          "level": 3,
+          "text": "ctx.hasUI"
+        },
+        {
+          "level": 3,
+          "text": "ctx.cwd"
+        },
+        {
+          "level": 3,
+          "text": "ctx.sessionManager"
+        },
+        {
+          "level": 3,
+          "text": "ctx.modelRegistry / ctx.model"
+        },
+        {
+          "level": 3,
+          "text": "ctx.signal"
+        },
+        {
+          "level": 3,
+          "text": "ctx.isIdle() / ctx.abort() / ctx.hasPendingMessages()"
+        },
+        {
+          "level": 3,
+          "text": "ctx.shutdown()"
+        },
+        {
+          "level": 3,
+          "text": "ctx.getContextUsage()"
+        },
+        {
+          "level": 3,
+          "text": "ctx.compact()"
+        },
+        {
+          "level": 3,
+          "text": "ctx.getSystemPrompt()"
+        },
+        {
+          "level": 2,
+          "text": "ExtensionCommandContext"
+        },
+        {
+          "level": 3,
+          "text": "ctx.waitForIdle()"
+        },
+        {
+          "level": 3,
+          "text": "ctx.newSession(options?)"
+        },
+        {
+          "level": 3,
+          "text": "ctx.fork(entryId)"
+        },
+        {
+          "level": 3,
+          "text": "ctx.navigateTree(targetId, options?)"
+        },
+        {
+          "level": 3,
+          "text": "ctx.switchSession(sessionPath)"
+        },
+        {
+          "level": 3,
+          "text": "ctx.reload()"
+        },
+        {
+          "level": 2,
+          "text": "ExtensionAPI Methods"
+        },
+        {
+          "level": 3,
+          "text": "pi.on(event, handler)"
+        },
+        {
+          "level": 3,
+          "text": "pi.registerTool(definition)"
+        },
+        {
+          "level": 3,
+          "text": "pi.sendMessage(message, options?)"
+        },
+        {
+          "level": 3,
+          "text": "pi.sendUserMessage(content, options?)"
+        },
+        {
+          "level": 3,
+          "text": "pi.appendEntry(customType, data?)"
+        },
+        {
+          "level": 3,
+          "text": "pi.setSessionName(name)"
+        },
+        {
+          "level": 3,
+          "text": "pi.getSessionName()"
+        },
+        {
+          "level": 3,
+          "text": "pi.setLabel(entryId, label)"
+        },
+        {
+          "level": 3,
+          "text": "pi.registerCommand(name, options)"
+        },
+        {
+          "level": 3,
+          "text": "pi.getCommands()"
+        },
+        {
+          "level": 3,
+          "text": "pi.registerMessageRenderer(customType, renderer)"
+        },
+        {
+          "level": 3,
+          "text": "pi.registerShortcut(shortcut, options)"
+        },
+        {
+          "level": 3,
+          "text": "pi.registerFlag(name, options)"
+        },
+        {
+          "level": 3,
+          "text": "pi.exec(command, args, options?)"
+        },
+        {
+          "level": 3,
+          "text": "pi.getActiveTools() / pi.getAllTools() / pi.setActiveTools(names)"
+        },
+        {
+          "level": 3,
+          "text": "pi.setModel(model)"
+        },
+        {
+          "level": 3,
+          "text": "pi.getThinkingLevel() / pi.setThinkingLevel(level)"
+        },
+        {
+          "level": 3,
+          "text": "pi.events"
+        },
+        {
+          "level": 3,
+          "text": "pi.registerProvider(name, config)"
+        },
+        {
+          "level": 3,
+          "text": "pi.unregisterProvider(name)"
+        },
+        {
+          "level": 2,
+          "text": "State Management"
+        },
+        {
+          "level": 2,
+          "text": "Custom Tools"
+        },
+        {
+          "level": 3,
+          "text": "Tool Definition"
+        },
+        {
+          "level": 3,
+          "text": "Overriding Built-in Tools"
+        },
+        {
+          "level": 1,
+          "text": "Extension's read tool replaces built-in read"
+        },
+        {
+          "level": 1,
+          "text": "No built-in tools, only extension tools"
+        },
+        {
+          "level": 3,
+          "text": "Remote Execution"
+        },
+        {
+          "level": 3,
+          "text": "Output Truncation"
+        },
+        {
+          "level": 3,
+          "text": "Multiple Tools"
+        },
+        {
+          "level": 3,
+          "text": "Custom Rendering"
+        },
+        {
+          "level": 4,
+          "text": "renderCall"
+        },
+        {
+          "level": 4,
+          "text": "renderResult"
+        },
+        {
+          "level": 4,
+          "text": "Keybinding Hints"
+        },
+        {
+          "level": 4,
+          "text": "Best Practices"
+        },
+        {
+          "level": 4,
+          "text": "Fallback"
+        },
+        {
+          "level": 2,
+          "text": "Custom UI"
+        },
+        {
+          "level": 3,
+          "text": "Dialogs"
+        },
+        {
+          "level": 4,
+          "text": "Timed Dialogs with Countdown"
+        },
+        {
+          "level": 4,
+          "text": "Manual Dismissal with AbortSignal"
+        },
+        {
+          "level": 3,
+          "text": "Widgets, Status, and Footer"
+        },
+        {
+          "level": 3,
+          "text": "Custom Components"
+        },
+        {
+          "level": 4,
+          "text": "Overlay Mode (Experimental)"
+        },
+        {
+          "level": 3,
+          "text": "Custom Editor"
+        },
+        {
+          "level": 3,
+          "text": "Message Rendering"
+        },
+        {
+          "level": 3,
+          "text": "Theme Colors"
+        },
+        {
+          "level": 2,
+          "text": "Error Handling"
+        },
+        {
+          "level": 2,
+          "text": "Mode Behavior"
+        },
+        {
+          "level": 2,
+          "text": "Examples Reference"
+        }
+      ],
+      "relative_links": [
+        "../examples/extensions/",
+        "packages.md",
+        "session.md",
+        "compaction.md",
+        "tree.md",
+        "../examples/extensions/input-transform.ts",
+        "rpc.md#extension-ui-protocol",
+        "../examples/extensions/dynamic-tools.ts",
+        "../examples/extensions/send-user-message.ts",
+        "keybindings.md",
+        "models.md",
+        "custom-provider.md",
+        "../examples/extensions/tool-override.ts",
+        "../examples/extensions/ssh.ts",
+        "../examples/extensions/truncated-tool.ts",
+        "tui.md",
+        "../examples/extensions/timed-confirm.ts",
+        "../examples/extensions/overlay-qa-tests.ts",
+        "themes.md",
+        "rpc.md",
+        "json.md"
+      ]
+    },
+    {
+      "id": "coding/development",
+      "title": "Development",
+      "aliases": [
+        "pi development",
+        "pi-mono setup",
+        "forking and rebranding"
+      ],
+      "doc_type": "developer-guide",
+      "audience": [
+        "core contributor",
+        "fork maintainer"
+      ],
+      "summary": "Short developer guide for cloning and building pi-mono, rebranding via package.json, using config.ts for path resolution, debugging, testing, and package layout.",
+      "primary_topics": [
+        "pi-mono",
+        "build/test",
+        "rebranding",
+        "debugging",
+        "project structure"
+      ],
+      "strong_terms": [
+        "pi-test.sh",
+        "piConfig",
+        "configDir",
+        "src/config.ts",
+        "/debug",
+        "packages/ai"
+      ],
+      "distinctive_markers": [
+        "Only doc that instructs maintainers to avoid __dirname and use src/config.ts for assets",
+        "Focuses on repo development rather than runtime usage"
+      ],
+      "question_patterns": [
+        "How do I build and test pi from source?",
+        "How do I fork or rebrand pi?",
+        "Where is the debug log and what is the monorepo structure?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/sdk.md",
+          "difference": "sdk.md is for programmatic embedding; this file is for developing pi itself."
+        }
+      ],
+      "path": "coding-agent-docs/development.md",
+      "collection": "coding-agent-docs",
+      "line_count": 71,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Development"
+        },
+        {
+          "level": 2,
+          "text": "Setup"
+        },
+        {
+          "level": 2,
+          "text": "Forking / Rebranding"
+        },
+        {
+          "level": 2,
+          "text": "Path Resolution"
+        },
+        {
+          "level": 2,
+          "text": "Debug Command"
+        },
+        {
+          "level": 2,
+          "text": "Testing"
+        },
+        {
+          "level": 2,
+          "text": "Project Structure"
+        }
+      ],
+      "relative_links": [
+        "../../../AGENTS.md"
+      ]
+    },
+    {
+      "id": "coding/custom-models",
+      "title": "Custom Models",
+      "aliases": [
+        "models.json",
+        "custom providers",
+        "Ollama",
+        "LM Studio",
+        "vLLM provider config"
+      ],
+      "doc_type": "configuration-reference",
+      "audience": [
+        "pi user",
+        "local model integrator"
+      ],
+      "summary": "Reference for ~/.pi/agent/models.json, covering custom providers/models, supported APIs, auth/header value resolution, compat flags, built-in provider overrides, and per-model routing overrides.",
+      "primary_topics": [
+        "models.json",
+        "custom providers",
+        "OpenAI compatibility",
+        "compat flags",
+        "provider/model overrides"
+      ],
+      "strong_terms": [
+        "providers",
+        "baseUrl",
+        "apiKey",
+        "compat.supportsDeveloperRole",
+        "modelOverrides",
+        "openai-completions"
+      ],
+      "distinctive_markers": [
+        "Only config doc centered on models.json rather than auth.json or extensions",
+        "Explains provider-level and model-level OpenAI compatibility shims"
+      ],
+      "question_patterns": [
+        "How do I add Ollama, LM Studio, or vLLM to pi via models.json?",
+        "How do compat flags like supportsDeveloperRole or thinkingFormat work?",
+        "How do I override a built-in provider or specific built-in model?"
+      ],
+      "confusable_with": [
+        {
+          "path": "pods-docs/models.md",
+          "difference": "pods-docs/models.md is a GPU deployment matrix; this file configures custom providers/models for pi."
+        },
+        {
+          "path": "coding-agent-docs/providers.md",
+          "difference": "providers.md covers credential sources and built-in providers; this file defines custom models/providers in models.json."
+        },
+        {
+          "path": "coding-agent-docs/custom-provider.md",
+          "difference": "custom-provider.md is for implementing providers via extensions, not declarative models.json config."
+        }
+      ],
+      "path": "coding-agent-docs/models.md",
+      "collection": "coding-agent-docs",
+      "line_count": 392,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Custom Models"
+        },
+        {
+          "level": 2,
+          "text": "Table of Contents"
+        },
+        {
+          "level": 2,
+          "text": "Minimal Example"
+        },
+        {
+          "level": 2,
+          "text": "Full Example"
+        },
+        {
+          "level": 2,
+          "text": "Google AI Studio Example"
+        },
+        {
+          "level": 2,
+          "text": "Supported APIs"
+        },
+        {
+          "level": 2,
+          "text": "Provider Configuration"
+        },
+        {
+          "level": 3,
+          "text": "Value Resolution"
+        },
+        {
+          "level": 3,
+          "text": "Custom Headers"
+        },
+        {
+          "level": 2,
+          "text": "Model Configuration"
+        },
+        {
+          "level": 2,
+          "text": "Overriding Built-in Providers"
+        },
+        {
+          "level": 2,
+          "text": "Per-model Overrides"
+        },
+        {
+          "level": 2,
+          "text": "OpenAI Compatibility"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/sdk",
+      "title": "SDK",
+      "aliases": [
+        "createAgentSession",
+        "AgentSessionRuntime",
+        "SDK integration"
+      ],
+      "doc_type": "sdk-reference",
+      "audience": [
+        "Node.js integrator",
+        "tool builder"
+      ],
+      "summary": "Programmatic SDK reference for embedding pi in-process using createAgentSession and AgentSessionRuntime, with auth/model registries, resource loading, tools, extensions, sessions, and run modes.",
+      "primary_topics": [
+        "SDK",
+        "createAgentSession",
+        "AgentSessionRuntime",
+        "ResourceLoader",
+        "run modes"
+      ],
+      "strong_terms": [
+        "createAgentSession",
+        "createAgentSessionRuntime",
+        "DefaultResourceLoader",
+        "AuthStorage",
+        "ModelRegistry",
+        "runRpcMode"
+      ],
+      "distinctive_markers": [
+        "Primary doc for in-process Node.js integration instead of spawning pi",
+        "Shows how the same runtime powers interactive, print, and RPC modes"
+      ],
+      "question_patterns": [
+        "How do I embed pi in a Node.js or TypeScript application?",
+        "How do AgentSession and AgentSessionRuntime differ?",
+        "How do I configure tools, resource loading, auth, or run modes through the SDK?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/rpc.md",
+          "difference": "rpc.md documents the subprocess protocol; this file documents the in-process SDK API."
+        },
+        {
+          "path": "coding-agent-docs/extensions.md",
+          "difference": "extensions.md explains extension modules; this file shows how to host sessions programmatically."
+        }
+      ],
+      "path": "coding-agent-docs/sdk.md",
+      "collection": "coding-agent-docs",
+      "line_count": 1124,
+      "headings": [
+        {
+          "level": 1,
+          "text": "SDK"
+        },
+        {
+          "level": 2,
+          "text": "Quick Start"
+        },
+        {
+          "level": 2,
+          "text": "Installation"
+        },
+        {
+          "level": 2,
+          "text": "Core Concepts"
+        },
+        {
+          "level": 3,
+          "text": "createAgentSession()"
+        },
+        {
+          "level": 3,
+          "text": "AgentSession"
+        },
+        {
+          "level": 3,
+          "text": "createAgentSessionRuntime() and AgentSessionRuntime"
+        },
+        {
+          "level": 3,
+          "text": "Prompting and Message Queueing"
+        },
+        {
+          "level": 3,
+          "text": "Agent and AgentState"
+        },
+        {
+          "level": 3,
+          "text": "Events"
+        },
+        {
+          "level": 2,
+          "text": "Options Reference"
+        },
+        {
+          "level": 3,
+          "text": "Directories"
+        },
+        {
+          "level": 3,
+          "text": "Model"
+        },
+        {
+          "level": 3,
+          "text": "API Keys and OAuth"
+        },
+        {
+          "level": 3,
+          "text": "System Prompt"
+        },
+        {
+          "level": 3,
+          "text": "Tools"
+        },
+        {
+          "level": 4,
+          "text": "Tools with Custom cwd"
+        },
+        {
+          "level": 3,
+          "text": "Custom Tools"
+        },
+        {
+          "level": 3,
+          "text": "Extensions"
+        },
+        {
+          "level": 3,
+          "text": "Skills"
+        },
+        {
+          "level": 3,
+          "text": "Context Files"
+        },
+        {
+          "level": 3,
+          "text": "Slash Commands"
+        },
+        {
+          "level": 3,
+          "text": "Session Management"
+        },
+        {
+          "level": 3,
+          "text": "Settings Management"
+        },
+        {
+          "level": 2,
+          "text": "ResourceLoader"
+        },
+        {
+          "level": 2,
+          "text": "Return Value"
+        },
+        {
+          "level": 2,
+          "text": "Complete Example"
+        },
+        {
+          "level": 2,
+          "text": "Run Modes"
+        },
+        {
+          "level": 3,
+          "text": "InteractiveMode"
+        },
+        {
+          "level": 3,
+          "text": "runPrintMode"
+        },
+        {
+          "level": 3,
+          "text": "runRpcMode"
+        },
+        {
+          "level": 2,
+          "text": "RPC Mode Alternative"
+        },
+        {
+          "level": 2,
+          "text": "Exports"
+        }
+      ],
+      "relative_links": [
+        "../examples/sdk/",
+        "../examples/sdk/02-custom-model.ts",
+        "../examples/sdk/09-api-keys-and-oauth.ts",
+        "../examples/sdk/03-custom-prompt.ts",
+        "../examples/sdk/05-tools.ts",
+        "extensions.md",
+        "../examples/sdk/06-extensions.ts",
+        "../examples/sdk/04-skills.ts",
+        "../examples/sdk/07-context-files.ts",
+        "../examples/sdk/08-prompt-templates.ts",
+        "../examples/sdk/11-sessions.ts",
+        "session.md",
+        "../examples/sdk/10-settings.ts",
+        "rpc.md"
+      ]
+    },
+    {
+      "id": "coding/packages",
+      "title": "Pi Packages",
+      "aliases": [
+        "pi packages",
+        "package manifest",
+        "pi install"
+      ],
+      "doc_type": "packaging-guide",
+      "audience": [
+        "package author",
+        "resource curator"
+      ],
+      "summary": "Guide for packaging and distributing pi extensions, skills, prompts, and themes through npm, git, or local paths, including package structure, dependencies, filtering, and scope resolution.",
+      "primary_topics": [
+        "packages",
+        "npm",
+        "git",
+        "resource bundles",
+        "manifest",
+        "filtering"
+      ],
+      "strong_terms": [
+        "pi install",
+        "pi remove",
+        "pi update",
+        "keywords: [\"pi-package\"]",
+        "bundledDependencies",
+        "pi.extensions"
+      ],
+      "distinctive_markers": [
+        "Only doc about installing resource bundles from npm/git/local paths",
+        "Covers package-gallery metadata and package-resource filtering"
+      ],
+      "question_patterns": [
+        "How do I create or install a pi package?",
+        "How are extensions, skills, prompts, and themes bundled in package.json?",
+        "How do package filters and project-vs-global scope work?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/extensions.md",
+          "difference": "extensions.md explains authoring extension code; this file explains bundling and distributing resources."
+        },
+        {
+          "path": "coding-agent-docs/skills.md",
+          "difference": "skills.md explains the skill format; this file explains packaging skills together with other resources."
+        }
+      ],
+      "path": "coding-agent-docs/packages.md",
+      "collection": "coding-agent-docs",
+      "line_count": 218,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Pi Packages"
+        },
+        {
+          "level": 2,
+          "text": "Table of Contents"
+        },
+        {
+          "level": 2,
+          "text": "Install and Manage"
+        },
+        {
+          "level": 2,
+          "text": "Package Sources"
+        },
+        {
+          "level": 3,
+          "text": "npm"
+        },
+        {
+          "level": 3,
+          "text": "git"
+        },
+        {
+          "level": 1,
+          "text": "git@host:path shorthand (requires git: prefix)"
+        },
+        {
+          "level": 1,
+          "text": "ssh:// protocol format"
+        },
+        {
+          "level": 1,
+          "text": "With version ref"
+        },
+        {
+          "level": 3,
+          "text": "Local Paths"
+        },
+        {
+          "level": 2,
+          "text": "Creating a Pi Package"
+        },
+        {
+          "level": 3,
+          "text": "Gallery Metadata"
+        },
+        {
+          "level": 2,
+          "text": "Package Structure"
+        },
+        {
+          "level": 3,
+          "text": "Convention Directories"
+        },
+        {
+          "level": 2,
+          "text": "Dependencies"
+        },
+        {
+          "level": 2,
+          "text": "Package Filtering"
+        },
+        {
+          "level": 2,
+          "text": "Enable and Disable Resources"
+        },
+        {
+          "level": 2,
+          "text": "Scope and Deduplication"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/skills",
+      "title": "Skills",
+      "aliases": [
+        "Agent Skills",
+        "SKILL.md",
+        "/skill:name"
+      ],
+      "doc_type": "capability-format-reference",
+      "audience": [
+        "skill author",
+        "pi user"
+      ],
+      "summary": "Reference for the Agent Skills model in pi: discovery rules, SKILL.md structure, frontmatter validation, command invocation, and interoperability with skills from other harnesses.",
+      "primary_topics": [
+        "skills",
+        "Agent Skills standard",
+        "SKILL.md",
+        "discovery",
+        "skill commands"
+      ],
+      "strong_terms": [
+        "SKILL.md",
+        "name",
+        "description",
+        "/skill:brave-search",
+        "~/.agents/skills/",
+        "enableSkillCommands"
+      ],
+      "distinctive_markers": [
+        "Only doc anchored on the Agent Skills standard and SKILL.md frontmatter rules",
+        "Explains progressive disclosure: skill descriptions in prompt, full skill loaded on demand"
+      ],
+      "question_patterns": [
+        "How do skills work in pi and where are they discovered?",
+        "What must go into SKILL.md frontmatter?",
+        "How do I use or import skills from Claude Code or Codex directories?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/prompt-templates.md",
+          "difference": "Prompt templates are lightweight text expansions; skills are structured on-demand capability packages."
+        },
+        {
+          "path": "coding-agent-docs/packages.md",
+          "difference": "packages.md explains how to distribute skills; this file defines the skill format and runtime behavior."
+        }
+      ],
+      "path": "coding-agent-docs/skills.md",
+      "collection": "coding-agent-docs",
+      "line_count": 232,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Skills"
+        },
+        {
+          "level": 2,
+          "text": "Table of Contents"
+        },
+        {
+          "level": 2,
+          "text": "Locations"
+        },
+        {
+          "level": 3,
+          "text": "Using Skills from Other Harnesses"
+        },
+        {
+          "level": 2,
+          "text": "How Skills Work"
+        },
+        {
+          "level": 2,
+          "text": "Skill Commands"
+        },
+        {
+          "level": 2,
+          "text": "Skill Structure"
+        },
+        {
+          "level": 3,
+          "text": "SKILL.md Format"
+        },
+        {
+          "level": 1,
+          "text": "My Skill"
+        },
+        {
+          "level": 2,
+          "text": "Setup"
+        },
+        {
+          "level": 2,
+          "text": "Usage"
+        },
+        {
+          "level": 2,
+          "text": "Frontmatter"
+        },
+        {
+          "level": 3,
+          "text": "Name Rules"
+        },
+        {
+          "level": 3,
+          "text": "Description Best Practices"
+        },
+        {
+          "level": 2,
+          "text": "Validation"
+        },
+        {
+          "level": 2,
+          "text": "Example"
+        },
+        {
+          "level": 1,
+          "text": "Brave Search"
+        },
+        {
+          "level": 2,
+          "text": "Setup"
+        },
+        {
+          "level": 2,
+          "text": "Search"
+        },
+        {
+          "level": 2,
+          "text": "Extract Page Content"
+        },
+        {
+          "level": 2,
+          "text": "Skill Repositories"
+        }
+      ],
+      "relative_links": [
+        "references/REFERENCE.md"
+      ]
+    },
+    {
+      "id": "coding/compaction",
+      "title": "Compaction & Branch Summarization",
+      "aliases": [
+        "compaction",
+        "branch summarization",
+        "session_before_compact"
+      ],
+      "doc_type": "internal-behavior-reference",
+      "audience": [
+        "advanced user",
+        "extension author",
+        "maintainer"
+      ],
+      "summary": "Deep explanation of how pi summarizes long conversations and abandoned branches, including trigger rules, cut points, split turns, summary formats, file tracking, and extension interception hooks.",
+      "primary_topics": [
+        "compaction",
+        "branch summary",
+        "token budgets",
+        "summary format",
+        "extension hooks"
+      ],
+      "strong_terms": [
+        "keepRecentTokens",
+        "reserveTokens",
+        "firstKeptEntryId",
+        "split turn",
+        "session_before_compact",
+        "serializeConversation"
+      ],
+      "distinctive_markers": [
+        "Explains both automatic context compaction and /tree branch summaries in one place",
+        "Contains the canonical summary markdown schema with <read-files> and <modified-files> blocks"
+      ],
+      "question_patterns": [
+        "When does pi auto-compact and how does it choose what to summarize?",
+        "How are branch summaries generated and stored?",
+        "How can an extension override compaction or branch summarization?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/tree.md",
+          "difference": "tree.md explains navigation UX and hook flow; this file explains summarization algorithms and data structures."
+        },
+        {
+          "path": "coding-agent-docs/session.md",
+          "difference": "session.md defines session file entries; this file explains how compaction/summary entries are produced and used."
+        }
+      ],
+      "path": "coding-agent-docs/compaction.md",
+      "collection": "coding-agent-docs",
+      "line_count": 394,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Compaction & Branch Summarization"
+        },
+        {
+          "level": 2,
+          "text": "Overview"
+        },
+        {
+          "level": 2,
+          "text": "Compaction"
+        },
+        {
+          "level": 3,
+          "text": "When It Triggers"
+        },
+        {
+          "level": 3,
+          "text": "How It Works"
+        },
+        {
+          "level": 3,
+          "text": "Split Turns"
+        },
+        {
+          "level": 3,
+          "text": "Cut Point Rules"
+        },
+        {
+          "level": 3,
+          "text": "CompactionEntry Structure"
+        },
+        {
+          "level": 2,
+          "text": "Branch Summarization"
+        },
+        {
+          "level": 3,
+          "text": "When It Triggers"
+        },
+        {
+          "level": 3,
+          "text": "How It Works"
+        },
+        {
+          "level": 3,
+          "text": "Cumulative File Tracking"
+        },
+        {
+          "level": 3,
+          "text": "BranchSummaryEntry Structure"
+        },
+        {
+          "level": 2,
+          "text": "Summary Format"
+        },
+        {
+          "level": 2,
+          "text": "Goal"
+        },
+        {
+          "level": 2,
+          "text": "Constraints & Preferences"
+        },
+        {
+          "level": 2,
+          "text": "Progress"
+        },
+        {
+          "level": 3,
+          "text": "Done"
+        },
+        {
+          "level": 3,
+          "text": "In Progress"
+        },
+        {
+          "level": 3,
+          "text": "Blocked"
+        },
+        {
+          "level": 2,
+          "text": "Key Decisions"
+        },
+        {
+          "level": 2,
+          "text": "Next Steps"
+        },
+        {
+          "level": 2,
+          "text": "Critical Context"
+        },
+        {
+          "level": 3,
+          "text": "Message Serialization"
+        },
+        {
+          "level": 2,
+          "text": "Custom Summarization via Extensions"
+        },
+        {
+          "level": 3,
+          "text": "session_before_compact"
+        },
+        {
+          "level": 4,
+          "text": "Converting Messages to Text"
+        },
+        {
+          "level": 3,
+          "text": "session_before_tree"
+        },
+        {
+          "level": 2,
+          "text": "Settings"
+        }
+      ],
+      "relative_links": [
+        "../examples/extensions/custom-compaction.ts"
+      ]
+    },
+    {
+      "id": "coding/settings",
+      "title": "Settings",
+      "aliases": [
+        "settings.json",
+        "global and project settings",
+        "pi settings"
+      ],
+      "doc_type": "configuration-reference",
+      "audience": [
+        "pi user",
+        "integrator"
+      ],
+      "summary": "Exhaustive settings.json reference for pi, including model defaults, UI behavior, compaction, retry, transport, shell, sessions, resource loading, and project override semantics.",
+      "primary_topics": [
+        "settings.json",
+        "global vs project config",
+        "compaction settings",
+        "retry settings",
+        "resource paths"
+      ],
+      "strong_terms": [
+        "defaultProvider",
+        "defaultModel",
+        "compaction.keepRecentTokens",
+        "retry.maxDelayMs",
+        "enabledModels",
+        "packages"
+      ],
+      "distinctive_markers": [
+        "Canonical listing of all supported settings keys",
+        "Explains nested project-overrides merge behavior"
+      ],
+      "question_patterns": [
+        "What settings can I put in ~/.pi/agent/settings.json or .pi/settings.json?",
+        "How do project settings override global settings?",
+        "Which keys control compaction, retries, UI, shell behavior, or resource discovery?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/providers.md",
+          "difference": "providers.md focuses on auth/provider credentials; this file covers the full settings schema."
+        },
+        {
+          "path": "coding-agent-docs/keybindings.md",
+          "difference": "keybindings.md is the keyboard mapping file, not the broader settings.json schema."
+        }
+      ],
+      "path": "coding-agent-docs/settings.md",
+      "collection": "coding-agent-docs",
+      "line_count": 247,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Settings"
+        },
+        {
+          "level": 2,
+          "text": "All Settings"
+        },
+        {
+          "level": 3,
+          "text": "Model & Thinking"
+        },
+        {
+          "level": 4,
+          "text": "thinkingBudgets"
+        },
+        {
+          "level": 3,
+          "text": "UI & Display"
+        },
+        {
+          "level": 3,
+          "text": "Compaction"
+        },
+        {
+          "level": 3,
+          "text": "Branch Summary"
+        },
+        {
+          "level": 3,
+          "text": "Retry"
+        },
+        {
+          "level": 3,
+          "text": "Message Delivery"
+        },
+        {
+          "level": 3,
+          "text": "Terminal & Images"
+        },
+        {
+          "level": 3,
+          "text": "Shell"
+        },
+        {
+          "level": 3,
+          "text": "Sessions"
+        },
+        {
+          "level": 3,
+          "text": "Model Cycling"
+        },
+        {
+          "level": 3,
+          "text": "Markdown"
+        },
+        {
+          "level": 3,
+          "text": "Resources"
+        },
+        {
+          "level": 4,
+          "text": "packages"
+        },
+        {
+          "level": 2,
+          "text": "Example"
+        },
+        {
+          "level": 2,
+          "text": "Project Overrides"
+        }
+      ],
+      "relative_links": [
+        "packages.md"
+      ]
+    },
+    {
+      "id": "coding/providers",
+      "title": "Providers",
+      "aliases": [
+        "providers",
+        "auth.json",
+        "API keys",
+        "OAuth providers"
+      ],
+      "doc_type": "provider-auth-reference",
+      "audience": [
+        "pi user",
+        "ops integrator"
+      ],
+      "summary": "User-facing reference for authenticating built-in providers and cloud backends in pi via subscriptions, auth.json, environment variables, Azure OpenAI, Bedrock, Vertex AI, and custom-provider entry points.",
+      "primary_topics": [
+        "providers",
+        "auth.json",
+        "API keys",
+        "OAuth",
+        "Azure OpenAI",
+        "Bedrock",
+        "Vertex AI"
+      ],
+      "strong_terms": [
+        "ANTHROPIC_API_KEY",
+        "~/.pi/agent/auth.json",
+        "/login",
+        "AWS_BEDROCK_FORCE_CACHE",
+        "AZURE_OPENAI_BASE_URL",
+        "GOOGLE_CLOUD_PROJECT"
+      ],
+      "distinctive_markers": [
+        "Only doc centered on credential resolution order and provider auth sources",
+        "Bridges subscription providers, API-key providers, and cloud-specific env vars"
+      ],
+      "question_patterns": [
+        "How do I authenticate pi with Anthropic, OpenAI, Gemini, Bedrock, or Azure?",
+        "What is stored in auth.json and how are keys resolved?",
+        "When should I use models.json vs extension-based custom providers?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/custom-provider.md",
+          "difference": "custom-provider.md is for implementing providers in extensions; this file is for configuring/authenticating providers as a user."
+        },
+        {
+          "path": "coding-agent-docs/models.md",
+          "difference": "models.md declares custom model/provider endpoints; this file explains credentials and built-in provider behavior."
+        }
+      ],
+      "path": "coding-agent-docs/providers.md",
+      "collection": "coding-agent-docs",
+      "line_count": 195,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Providers"
+        },
+        {
+          "level": 2,
+          "text": "Table of Contents"
+        },
+        {
+          "level": 2,
+          "text": "Subscriptions"
+        },
+        {
+          "level": 3,
+          "text": "GitHub Copilot"
+        },
+        {
+          "level": 3,
+          "text": "Google Providers"
+        },
+        {
+          "level": 3,
+          "text": "OpenAI Codex"
+        },
+        {
+          "level": 2,
+          "text": "API Keys"
+        },
+        {
+          "level": 3,
+          "text": "Environment Variables or Auth File"
+        },
+        {
+          "level": 4,
+          "text": "Auth File"
+        },
+        {
+          "level": 3,
+          "text": "Key Resolution"
+        },
+        {
+          "level": 2,
+          "text": "Cloud Providers"
+        },
+        {
+          "level": 3,
+          "text": "Azure OpenAI"
+        },
+        {
+          "level": 1,
+          "text": "or use resource name instead of base URL"
+        },
+        {
+          "level": 1,
+          "text": "Optional"
+        },
+        {
+          "level": 3,
+          "text": "Amazon Bedrock"
+        },
+        {
+          "level": 1,
+          "text": "Option 1: AWS Profile"
+        },
+        {
+          "level": 1,
+          "text": "Option 2: IAM Keys"
+        },
+        {
+          "level": 1,
+          "text": "Option 3: Bearer Token"
+        },
+        {
+          "level": 1,
+          "text": "Optional region (defaults to us-east-1)"
+        },
+        {
+          "level": 1,
+          "text": "Set the URL for the Bedrock proxy (standard AWS SDK env var)"
+        },
+        {
+          "level": 1,
+          "text": "Set if your proxy does not require authentication"
+        },
+        {
+          "level": 1,
+          "text": "Set if your proxy only supports HTTP/1.1"
+        },
+        {
+          "level": 3,
+          "text": "Google Vertex AI"
+        },
+        {
+          "level": 2,
+          "text": "Custom Providers"
+        },
+        {
+          "level": 2,
+          "text": "Resolution Order"
+        }
+      ],
+      "relative_links": [
+        "models.md",
+        "custom-provider.md",
+        "../examples/extensions/custom-provider-gitlab-duo/"
+      ]
+    },
+    {
+      "id": "coding/windows",
+      "title": "Windows Setup",
+      "aliases": [
+        "Windows setup",
+        "shellPath",
+        "Git Bash"
+      ],
+      "doc_type": "platform-setup",
+      "audience": [
+        "Windows user"
+      ],
+      "summary": "Minimal Windows-specific note that pi requires a bash shell, lists discovery order for bash.exe, and shows how to set a custom shellPath.",
+      "primary_topics": [
+        "Windows",
+        "bash.exe",
+        "shellPath"
+      ],
+      "strong_terms": [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "shellPath",
+        "Cygwin",
+        "MSYS2",
+        "WSL"
+      ],
+      "distinctive_markers": [
+        "Shortest platform doc in the set",
+        "Focuses only on locating a usable bash shell on Windows"
+      ],
+      "question_patterns": [
+        "What shell does pi need on Windows?",
+        "How do I point pi to Git Bash or Cygwin bash.exe?",
+        "What is the shellPath setting for Windows?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/terminal-setup.md",
+          "difference": "terminal-setup.md covers keyboard protocol and key forwarding; this file only covers finding a bash shell on Windows."
+        }
+      ],
+      "path": "coding-agent-docs/windows.md",
+      "collection": "coding-agent-docs",
+      "line_count": 17,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Windows Setup"
+        },
+        {
+          "level": 2,
+          "text": "Custom Shell Path"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/tui",
+      "title": "TUI Components",
+      "aliases": [
+        "TUI components",
+        "@mariozechner/pi-tui",
+        "custom components"
+      ],
+      "doc_type": "ui-component-reference",
+      "audience": [
+        "extension author",
+        "UI developer"
+      ],
+      "summary": "Reference for the pi TUI component model: component/focusable interfaces, overlays, built-ins, theming, invalidation, performance, and copy-paste patterns for dialogs, loaders, settings lists, footers, and custom editors.",
+      "primary_topics": [
+        "TUI components",
+        "overlays",
+        "custom editor",
+        "theming",
+        "render/invalidate"
+      ],
+      "strong_terms": [
+        "Component.render(width)",
+        "Focusable",
+        "CURSOR_MARKER",
+        "ctx.ui.custom",
+        "SelectList",
+        "BorderedLoader"
+      ],
+      "distinctive_markers": [
+        "Primary source for building interactive terminal UI components",
+        "Contains detailed patterns for overlays, settings UIs, and modal editors"
+      ],
+      "question_patterns": [
+        "How do I build a custom TUI component or overlay for pi?",
+        "How do focusable components and IME cursor positioning work?",
+        "What built-in TUI components and UI patterns should I reuse?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/themes.md",
+          "difference": "themes.md defines color JSON files; this file defines component APIs and rendering patterns."
+        },
+        {
+          "path": "coding-agent-docs/extensions.md",
+          "difference": "extensions.md tells you how to invoke custom UI from extensions; this file defines the underlying TUI component system."
+        }
+      ],
+      "path": "coding-agent-docs/tui.md",
+      "collection": "coding-agent-docs",
+      "line_count": 887,
+      "headings": [
+        {
+          "level": 1,
+          "text": "TUI Components"
+        },
+        {
+          "level": 2,
+          "text": "Component Interface"
+        },
+        {
+          "level": 2,
+          "text": "Focusable Interface (IME Support)"
+        },
+        {
+          "level": 3,
+          "text": "Container Components with Embedded Inputs"
+        },
+        {
+          "level": 2,
+          "text": "Using Components"
+        },
+        {
+          "level": 2,
+          "text": "Overlays"
+        },
+        {
+          "level": 3,
+          "text": "Overlay Lifecycle"
+        },
+        {
+          "level": 2,
+          "text": "Built-in Components"
+        },
+        {
+          "level": 3,
+          "text": "Text"
+        },
+        {
+          "level": 3,
+          "text": "Box"
+        },
+        {
+          "level": 3,
+          "text": "Container"
+        },
+        {
+          "level": 3,
+          "text": "Spacer"
+        },
+        {
+          "level": 3,
+          "text": "Markdown"
+        },
+        {
+          "level": 3,
+          "text": "Image"
+        },
+        {
+          "level": 2,
+          "text": "Keyboard Input"
+        },
+        {
+          "level": 2,
+          "text": "Line Width"
+        },
+        {
+          "level": 2,
+          "text": "Creating Custom Components"
+        },
+        {
+          "level": 2,
+          "text": "Theming"
+        },
+        {
+          "level": 2,
+          "text": "Debug logging"
+        },
+        {
+          "level": 2,
+          "text": "Performance"
+        },
+        {
+          "level": 2,
+          "text": "Invalidation and Theme Changes"
+        },
+        {
+          "level": 3,
+          "text": "The Problem"
+        },
+        {
+          "level": 3,
+          "text": "The Solution"
+        },
+        {
+          "level": 3,
+          "text": "Pattern: Rebuild on Invalidate"
+        },
+        {
+          "level": 3,
+          "text": "When This Matters"
+        },
+        {
+          "level": 2,
+          "text": "Common Patterns"
+        },
+        {
+          "level": 3,
+          "text": "Pattern 1: Selection Dialog (SelectList)"
+        },
+        {
+          "level": 3,
+          "text": "Pattern 2: Async Operation with Cancel (BorderedLoader)"
+        },
+        {
+          "level": 3,
+          "text": "Pattern 3: Settings/Toggles (SettingsList)"
+        },
+        {
+          "level": 3,
+          "text": "Pattern 4: Persistent Status Indicator"
+        },
+        {
+          "level": 3,
+          "text": "Pattern 5: Widgets Above/Below Editor"
+        },
+        {
+          "level": 3,
+          "text": "Pattern 6: Custom Footer"
+        },
+        {
+          "level": 3,
+          "text": "Pattern 7: Custom Editor (vim mode, etc.)"
+        },
+        {
+          "level": 2,
+          "text": "Key Rules"
+        },
+        {
+          "level": 2,
+          "text": "Examples"
+        }
+      ],
+      "relative_links": [
+        "../examples/extensions/overlay-qa-tests.ts",
+        "../examples/extensions/preset.ts",
+        "../examples/extensions/tools.ts",
+        "../examples/extensions/qna.ts",
+        "../examples/extensions/handoff.ts",
+        "../examples/extensions/status-line.ts",
+        "../examples/extensions/plan-mode.ts",
+        "../examples/extensions/custom-footer.ts",
+        "../examples/extensions/modal-editor.ts",
+        "../examples/extensions/snake.ts",
+        "../examples/extensions/todo.ts"
+      ]
+    },
+    {
+      "id": "coding/session-format",
+      "title": "Session File Format",
+      "aliases": [
+        "session JSONL",
+        "SessionManager",
+        "session format"
+      ],
+      "doc_type": "data-format-reference",
+      "audience": [
+        "integrator",
+        "extension author",
+        "maintainer"
+      ],
+      "summary": "Canonical JSONL session format for pi, including versions, entry/message types, tree structure, context-building rules, and SessionManager APIs for session persistence and navigation.",
+      "primary_topics": [
+        "session files",
+        "JSONL",
+        "SessionManager",
+        "entry types",
+        "message types",
+        "tree structure"
+      ],
+      "strong_terms": [
+        "type: session",
+        "custom_message",
+        "branch_summary",
+        "compaction",
+        "buildSessionContext()",
+        "SessionManager.create"
+      ],
+      "distinctive_markers": [
+        "Defines the exact persisted schema for all session entries",
+        "Explains how compaction and branch-summary entries are rehydrated into LLM context"
+      ],
+      "question_patterns": [
+        "What does a pi session JSONL file look like?",
+        "What entry types and message roles exist in sessions?",
+        "How do I parse or manipulate sessions through SessionManager?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/tree.md",
+          "difference": "tree.md explains the /tree navigation UX; this file defines the stored session data model and APIs."
+        },
+        {
+          "path": "coding-agent-docs/compaction.md",
+          "difference": "compaction.md explains summarization behavior; this file defines the resulting entry types and context reconstruction."
+        }
+      ],
+      "path": "coding-agent-docs/session.md",
+      "collection": "coding-agent-docs",
+      "line_count": 412,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Session File Format"
+        },
+        {
+          "level": 2,
+          "text": "File Location"
+        },
+        {
+          "level": 2,
+          "text": "Deleting Sessions"
+        },
+        {
+          "level": 2,
+          "text": "Session Version"
+        },
+        {
+          "level": 2,
+          "text": "Source Files"
+        },
+        {
+          "level": 2,
+          "text": "Message Types"
+        },
+        {
+          "level": 3,
+          "text": "Content Blocks"
+        },
+        {
+          "level": 3,
+          "text": "Base Message Types (from pi-ai)"
+        },
+        {
+          "level": 3,
+          "text": "Extended Message Types (from pi-coding-agent)"
+        },
+        {
+          "level": 3,
+          "text": "AgentMessage Union"
+        },
+        {
+          "level": 2,
+          "text": "Entry Base"
+        },
+        {
+          "level": 2,
+          "text": "Entry Types"
+        },
+        {
+          "level": 3,
+          "text": "SessionHeader"
+        },
+        {
+          "level": 3,
+          "text": "SessionMessageEntry"
+        },
+        {
+          "level": 3,
+          "text": "ModelChangeEntry"
+        },
+        {
+          "level": 3,
+          "text": "ThinkingLevelChangeEntry"
+        },
+        {
+          "level": 3,
+          "text": "CompactionEntry"
+        },
+        {
+          "level": 3,
+          "text": "BranchSummaryEntry"
+        },
+        {
+          "level": 3,
+          "text": "CustomEntry"
+        },
+        {
+          "level": 3,
+          "text": "CustomMessageEntry"
+        },
+        {
+          "level": 3,
+          "text": "LabelEntry"
+        },
+        {
+          "level": 3,
+          "text": "SessionInfoEntry"
+        },
+        {
+          "level": 2,
+          "text": "Tree Structure"
+        },
+        {
+          "level": 2,
+          "text": "Context Building"
+        },
+        {
+          "level": 2,
+          "text": "Parsing Example"
+        },
+        {
+          "level": 2,
+          "text": "SessionManager API"
+        },
+        {
+          "level": 3,
+          "text": "Static Creation Methods"
+        },
+        {
+          "level": 3,
+          "text": "Static Listing Methods"
+        },
+        {
+          "level": 3,
+          "text": "Instance Methods - Session Management"
+        },
+        {
+          "level": 3,
+          "text": "Instance Methods - Appending (all return entry ID)"
+        },
+        {
+          "level": 3,
+          "text": "Instance Methods - Tree Navigation"
+        },
+        {
+          "level": 3,
+          "text": "Instance Methods - Context & Info"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/rpc",
+      "title": "RPC Mode",
+      "aliases": [
+        "RPC mode",
+        "pi --mode rpc",
+        "extension UI protocol"
+      ],
+      "doc_type": "protocol-reference",
+      "audience": [
+        "subprocess integrator",
+        "IDE author"
+      ],
+      "summary": "Full bidirectional JSONL protocol for running pi headlessly over stdin/stdout, including commands, responses, streamed events, bash execution, session control, and the extension UI sub-protocol.",
+      "primary_topics": [
+        "RPC mode",
+        "commands",
+        "events",
+        "stdin/stdout protocol",
+        "extension UI",
+        "example clients"
+      ],
+      "strong_terms": [
+        "pi --mode rpc",
+        "prompt",
+        "get_state",
+        "bash",
+        "extension_ui_request",
+        "extension_ui_response"
+      ],
+      "distinctive_markers": [
+        "Most complete external control surface for pi over subprocess I/O",
+        "Includes explicit framing rules and example Python/Node JSONL clients"
+      ],
+      "question_patterns": [
+        "How do I control pi over a subprocess JSON protocol?",
+        "What commands and events exist in RPC mode?",
+        "How does extension UI work over RPC?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/json.md",
+          "difference": "json.md is a simple stdout event stream; this file defines a full request/response protocol."
+        },
+        {
+          "path": "coding-agent-docs/sdk.md",
+          "difference": "sdk.md is for in-process integration in Node.js; this file is for out-of-process control via stdin/stdout."
+        }
+      ],
+      "path": "coding-agent-docs/rpc.md",
+      "collection": "coding-agent-docs",
+      "line_count": 1377,
+      "headings": [
+        {
+          "level": 1,
+          "text": "RPC Mode"
+        },
+        {
+          "level": 2,
+          "text": "Starting RPC Mode"
+        },
+        {
+          "level": 2,
+          "text": "Protocol Overview"
+        },
+        {
+          "level": 3,
+          "text": "Framing"
+        },
+        {
+          "level": 2,
+          "text": "Commands"
+        },
+        {
+          "level": 3,
+          "text": "Prompting"
+        },
+        {
+          "level": 4,
+          "text": "prompt"
+        },
+        {
+          "level": 4,
+          "text": "steer"
+        },
+        {
+          "level": 4,
+          "text": "follow_up"
+        },
+        {
+          "level": 4,
+          "text": "abort"
+        },
+        {
+          "level": 4,
+          "text": "new_session"
+        },
+        {
+          "level": 3,
+          "text": "State"
+        },
+        {
+          "level": 4,
+          "text": "get_state"
+        },
+        {
+          "level": 4,
+          "text": "get_messages"
+        },
+        {
+          "level": 3,
+          "text": "Model"
+        },
+        {
+          "level": 4,
+          "text": "set_model"
+        },
+        {
+          "level": 4,
+          "text": "cycle_model"
+        },
+        {
+          "level": 4,
+          "text": "get_available_models"
+        },
+        {
+          "level": 3,
+          "text": "Thinking"
+        },
+        {
+          "level": 4,
+          "text": "set_thinking_level"
+        },
+        {
+          "level": 4,
+          "text": "cycle_thinking_level"
+        },
+        {
+          "level": 3,
+          "text": "Queue Modes"
+        },
+        {
+          "level": 4,
+          "text": "set_steering_mode"
+        },
+        {
+          "level": 4,
+          "text": "set_follow_up_mode"
+        },
+        {
+          "level": 3,
+          "text": "Compaction"
+        },
+        {
+          "level": 4,
+          "text": "compact"
+        },
+        {
+          "level": 4,
+          "text": "set_auto_compaction"
+        },
+        {
+          "level": 3,
+          "text": "Retry"
+        },
+        {
+          "level": 4,
+          "text": "set_auto_retry"
+        },
+        {
+          "level": 4,
+          "text": "abort_retry"
+        },
+        {
+          "level": 3,
+          "text": "Bash"
+        },
+        {
+          "level": 4,
+          "text": "bash"
+        },
+        {
+          "level": 4,
+          "text": "abort_bash"
+        },
+        {
+          "level": 3,
+          "text": "Session"
+        },
+        {
+          "level": 4,
+          "text": "get_session_stats"
+        },
+        {
+          "level": 4,
+          "text": "export_html"
+        },
+        {
+          "level": 4,
+          "text": "switch_session"
+        },
+        {
+          "level": 4,
+          "text": "fork"
+        },
+        {
+          "level": 4,
+          "text": "get_fork_messages"
+        },
+        {
+          "level": 4,
+          "text": "get_last_assistant_text"
+        },
+        {
+          "level": 4,
+          "text": "set_session_name"
+        },
+        {
+          "level": 3,
+          "text": "Commands"
+        },
+        {
+          "level": 4,
+          "text": "get_commands"
+        },
+        {
+          "level": 2,
+          "text": "Events"
+        },
+        {
+          "level": 3,
+          "text": "Event Types"
+        },
+        {
+          "level": 3,
+          "text": "agent_start"
+        },
+        {
+          "level": 3,
+          "text": "agent_end"
+        },
+        {
+          "level": 3,
+          "text": "turn_start / turn_end"
+        },
+        {
+          "level": 3,
+          "text": "message_start / message_end"
+        },
+        {
+          "level": 3,
+          "text": "message_update (Streaming)"
+        },
+        {
+          "level": 3,
+          "text": "tool_execution_start / tool_execution_update / tool_execution_end"
+        },
+        {
+          "level": 3,
+          "text": "queue_update"
+        },
+        {
+          "level": 3,
+          "text": "compaction_start / compaction_end"
+        },
+        {
+          "level": 3,
+          "text": "auto_retry_start / auto_retry_end"
+        },
+        {
+          "level": 3,
+          "text": "extension_error"
+        },
+        {
+          "level": 2,
+          "text": "Extension UI Protocol"
+        },
+        {
+          "level": 3,
+          "text": "Extension UI Requests (stdout)"
+        },
+        {
+          "level": 4,
+          "text": "select"
+        },
+        {
+          "level": 4,
+          "text": "confirm"
+        },
+        {
+          "level": 4,
+          "text": "input"
+        },
+        {
+          "level": 4,
+          "text": "editor"
+        },
+        {
+          "level": 4,
+          "text": "notify"
+        },
+        {
+          "level": 4,
+          "text": "setStatus"
+        },
+        {
+          "level": 4,
+          "text": "setWidget"
+        },
+        {
+          "level": 4,
+          "text": "setTitle"
+        },
+        {
+          "level": 4,
+          "text": "set_editor_text"
+        },
+        {
+          "level": 3,
+          "text": "Extension UI Responses (stdin)"
+        },
+        {
+          "level": 4,
+          "text": "Value response (select, input, editor)"
+        },
+        {
+          "level": 4,
+          "text": "Confirmation response (confirm)"
+        },
+        {
+          "level": 4,
+          "text": "Cancellation response (any dialog)"
+        },
+        {
+          "level": 2,
+          "text": "Error Handling"
+        },
+        {
+          "level": 2,
+          "text": "Types"
+        },
+        {
+          "level": 3,
+          "text": "Model"
+        },
+        {
+          "level": 3,
+          "text": "UserMessage"
+        },
+        {
+          "level": 3,
+          "text": "AssistantMessage"
+        },
+        {
+          "level": 3,
+          "text": "ToolResultMessage"
+        },
+        {
+          "level": 3,
+          "text": "BashExecutionMessage"
+        },
+        {
+          "level": 3,
+          "text": "Attachment"
+        },
+        {
+          "level": 2,
+          "text": "Example: Basic Client (Python)"
+        },
+        {
+          "level": 1,
+          "text": "Send prompt"
+        },
+        {
+          "level": 1,
+          "text": "Process events"
+        },
+        {
+          "level": 2,
+          "text": "Example: Interactive Client (Node.js)"
+        }
+      ],
+      "relative_links": [
+        "../src/core/agent-session.ts",
+        "../src/modes/rpc/rpc-client.ts",
+        "../../ai/src/types.ts",
+        "../../agent/src/types.ts",
+        "../src/core/messages.ts",
+        "../src/modes/rpc/rpc-types.ts",
+        "../test/rpc-example.ts",
+        "../examples/rpc-extension-ui.ts",
+        "../examples/extensions/rpc-demo.ts"
+      ]
+    },
+    {
+      "id": "coding/keybindings",
+      "title": "Keybindings",
+      "aliases": [
+        "keybindings.json",
+        "keyboard shortcuts",
+        "namespaced key ids"
+      ],
+      "doc_type": "configuration-reference",
+      "audience": [
+        "interactive pi user",
+        "extension author"
+      ],
+      "summary": "Reference for customizable keyboard shortcuts in ~/.pi/agent/keybindings.json, including key syntax, namespaced action IDs, defaults, and sample Emacs/Vim mappings.",
+      "primary_topics": [
+        "keybindings",
+        "shortcut customization",
+        "action IDs",
+        "editor keys"
+      ],
+      "strong_terms": [
+        "tui.input.newLine",
+        "app.model.select",
+        "app.tree.foldOrUp",
+        "modifier+key",
+        "ctrl+j",
+        "keybindings.json"
+      ],
+      "distinctive_markers": [
+        "Enumerates every built-in action ID and default shortcut",
+        "Notes automatic migration from old non-namespaced IDs"
+      ],
+      "question_patterns": [
+        "How do I customize pi keyboard shortcuts?",
+        "What are the names of keybinding action IDs?",
+        "How do I get Emacs-style or Vim-style keybindings in pi?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/terminal-setup.md",
+          "difference": "terminal-setup.md is about getting terminals to transmit modified keys correctly; this file remaps actions after key events arrive."
+        },
+        {
+          "path": "coding-agent-docs/tmux.md",
+          "difference": "tmux.md addresses tmux key transport issues; this file defines logical action bindings."
+        }
+      ],
+      "path": "coding-agent-docs/keybindings.md",
+      "collection": "coding-agent-docs",
+      "line_count": 175,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Keybindings"
+        },
+        {
+          "level": 2,
+          "text": "Key Format"
+        },
+        {
+          "level": 2,
+          "text": "All Actions"
+        },
+        {
+          "level": 3,
+          "text": "TUI Editor Cursor Movement"
+        },
+        {
+          "level": 3,
+          "text": "TUI Editor Deletion"
+        },
+        {
+          "level": 3,
+          "text": "TUI Input"
+        },
+        {
+          "level": 3,
+          "text": "TUI Kill Ring"
+        },
+        {
+          "level": 3,
+          "text": "TUI Clipboard and Selection"
+        },
+        {
+          "level": 3,
+          "text": "Application"
+        },
+        {
+          "level": 3,
+          "text": "Sessions"
+        },
+        {
+          "level": 3,
+          "text": "Models and Thinking"
+        },
+        {
+          "level": 3,
+          "text": "Display and Message Queue"
+        },
+        {
+          "level": 3,
+          "text": "Tree Navigation"
+        },
+        {
+          "level": 2,
+          "text": "Custom Configuration"
+        },
+        {
+          "level": 3,
+          "text": "Emacs Example"
+        },
+        {
+          "level": 3,
+          "text": "Vim Example"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/tree-navigation",
+      "title": "Session Tree Navigation",
+      "aliases": [
+        "/tree",
+        "navigateTree",
+        "branch switching"
+      ],
+      "doc_type": "feature-reference",
+      "audience": [
+        "interactive pi user",
+        "extension author"
+      ],
+      "summary": "Explains the /tree command for navigating session history in place, including controls, selection behavior, branch summarization options, navigateTree API semantics, and hook events.",
+      "primary_topics": [
+        "session tree",
+        "/tree",
+        "navigateTree",
+        "branch summary",
+        "labels"
+      ],
+      "strong_terms": [
+        "session_before_tree",
+        "session_tree",
+        "branchWithSummary",
+        "Shift+L",
+        "Shift+T",
+        "editorText"
+      ],
+      "distinctive_markers": [
+        "Focused on in-place branch navigation instead of creating a new session file",
+        "Explains the three summarization choices offered during branch switching"
+      ],
+      "question_patterns": [
+        "How does /tree work and what happens when I select a node?",
+        "How does branch summarization during tree navigation behave?",
+        "How can an extension intercept or customize tree navigation?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/session.md",
+          "difference": "session.md defines the underlying session tree data; this file explains the /tree feature and UX."
+        },
+        {
+          "path": "coding-agent-docs/compaction.md",
+          "difference": "compaction.md explains summary generation internals; this file explains when and why summaries are attached during navigation."
+        }
+      ],
+      "path": "coding-agent-docs/tree.md",
+      "collection": "coding-agent-docs",
+      "line_count": 231,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Session Tree Navigation"
+        },
+        {
+          "level": 2,
+          "text": "Overview"
+        },
+        {
+          "level": 3,
+          "text": "Comparison with `/fork`"
+        },
+        {
+          "level": 2,
+          "text": "Tree UI"
+        },
+        {
+          "level": 3,
+          "text": "Controls"
+        },
+        {
+          "level": 3,
+          "text": "Display"
+        },
+        {
+          "level": 2,
+          "text": "Selection Behavior"
+        },
+        {
+          "level": 3,
+          "text": "User Message or Custom Message"
+        },
+        {
+          "level": 3,
+          "text": "Non-User Message (assistant, compaction, etc.)"
+        },
+        {
+          "level": 3,
+          "text": "Selecting Root User Message"
+        },
+        {
+          "level": 2,
+          "text": "Branch Summarization"
+        },
+        {
+          "level": 3,
+          "text": "What Gets Summarized"
+        },
+        {
+          "level": 3,
+          "text": "Summary Storage"
+        },
+        {
+          "level": 2,
+          "text": "Implementation"
+        },
+        {
+          "level": 3,
+          "text": "AgentSession.navigateTree()"
+        },
+        {
+          "level": 3,
+          "text": "SessionManager"
+        },
+        {
+          "level": 3,
+          "text": "InteractiveMode"
+        },
+        {
+          "level": 2,
+          "text": "Hook Events"
+        },
+        {
+          "level": 3,
+          "text": "`session_before_tree`"
+        },
+        {
+          "level": 3,
+          "text": "`session_tree`"
+        },
+        {
+          "level": 3,
+          "text": "Example: Custom Summarizer"
+        },
+        {
+          "level": 2,
+          "text": "Error Handling"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/tmux",
+      "title": "tmux Setup",
+      "aliases": [
+        "tmux setup",
+        "csi-u",
+        "extended-keys"
+      ],
+      "doc_type": "terminal-config-guide",
+      "audience": [
+        "tmux user"
+      ],
+      "summary": "Explains the tmux configuration needed for pi to distinguish modified Enter keys, especially enabling extended keys and the recommended csi-u format.",
+      "primary_topics": [
+        "tmux",
+        "extended-keys",
+        "csi-u",
+        "modified Enter"
+      ],
+      "strong_terms": [
+        "set -g extended-keys on",
+        "set -g extended-keys-format csi-u",
+        "Ctrl+Enter",
+        "Shift+Enter",
+        "tmux 3.2+"
+      ],
+      "distinctive_markers": [
+        "Sole doc focused on tmux rather than terminal emulators",
+        "Shows exact escape sequence differences between legacy, xterm modifyOtherKeys, and csi-u"
+      ],
+      "question_patterns": [
+        "Why do Shift+Enter and Ctrl+Enter not work in pi inside tmux?",
+        "What tmux config should I add for extended keys?",
+        "What is csi-u and why is it recommended for pi?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/terminal-setup.md",
+          "difference": "terminal-setup.md configures emulators like Ghostty or WezTerm; this file specifically configures tmux."
+        }
+      ],
+      "path": "coding-agent-docs/tmux.md",
+      "collection": "coding-agent-docs",
+      "line_count": 61,
+      "headings": [
+        {
+          "level": 1,
+          "text": "tmux Setup"
+        },
+        {
+          "level": 2,
+          "text": "Recommended Configuration"
+        },
+        {
+          "level": 2,
+          "text": "Why `csi-u` Is Recommended"
+        },
+        {
+          "level": 2,
+          "text": "What This Fixes"
+        },
+        {
+          "level": 2,
+          "text": "Requirements"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "coding/custom-provider",
+      "title": "Custom Providers",
+      "aliases": [
+        "registerProvider",
+        "streamSimple",
+        "provider extension"
+      ],
+      "doc_type": "extension-subsystem-reference",
+      "audience": [
+        "extension author",
+        "provider implementer"
+      ],
+      "summary": "Focused extension guide for registering or overriding model providers via pi.registerProvider(), including OAuth, custom streaming implementations, provider/model config types, and testing advice.",
+      "primary_topics": [
+        "custom providers",
+        "pi.registerProvider",
+        "OAuth",
+        "streamSimple",
+        "provider config"
+      ],
+      "strong_terms": [
+        "pi.registerProvider",
+        "pi.unregisterProvider",
+        "streamSimple",
+        "OAuthCredentials",
+        "ProviderConfig",
+        "ProviderModelConfig"
+      ],
+      "distinctive_markers": [
+        "Provider-implementation subset of the extension system",
+        "Includes a generic assistant-message event stream pattern for non-standard APIs"
+      ],
+      "question_patterns": [
+        "How do I implement a new provider or proxy in a pi extension?",
+        "How do OAuth login and refresh work for custom providers?",
+        "How do I stream a non-standard LLM API into pi?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/providers.md",
+          "difference": "providers.md is user-facing auth/config for built-in providers; this file is for extension authors implementing provider behavior."
+        },
+        {
+          "path": "coding-agent-docs/models.md",
+          "difference": "models.md is declarative models.json config; this file is imperative provider implementation via extensions."
+        }
+      ],
+      "path": "coding-agent-docs/custom-provider.md",
+      "collection": "coding-agent-docs",
+      "line_count": 596,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Custom Providers"
+        },
+        {
+          "level": 2,
+          "text": "Example Extensions"
+        },
+        {
+          "level": 2,
+          "text": "Table of Contents"
+        },
+        {
+          "level": 2,
+          "text": "Quick Reference"
+        },
+        {
+          "level": 2,
+          "text": "Override Existing Provider"
+        },
+        {
+          "level": 2,
+          "text": "Register New Provider"
+        },
+        {
+          "level": 2,
+          "text": "Unregister Provider"
+        },
+        {
+          "level": 3,
+          "text": "API Types"
+        },
+        {
+          "level": 3,
+          "text": "Auth Header"
+        },
+        {
+          "level": 2,
+          "text": "OAuth Support"
+        },
+        {
+          "level": 3,
+          "text": "OAuthLoginCallbacks"
+        },
+        {
+          "level": 3,
+          "text": "OAuthCredentials"
+        },
+        {
+          "level": 2,
+          "text": "Custom Streaming API"
+        },
+        {
+          "level": 3,
+          "text": "Stream Pattern"
+        },
+        {
+          "level": 3,
+          "text": "Event Types"
+        },
+        {
+          "level": 3,
+          "text": "Content Blocks"
+        },
+        {
+          "level": 3,
+          "text": "Tool Calls"
+        },
+        {
+          "level": 3,
+          "text": "Usage and Cost"
+        },
+        {
+          "level": 3,
+          "text": "Registration"
+        },
+        {
+          "level": 2,
+          "text": "Testing Your Implementation"
+        },
+        {
+          "level": 2,
+          "text": "Config Reference"
+        },
+        {
+          "level": 2,
+          "text": "Model Definition Reference"
+        }
+      ],
+      "relative_links": [
+        "../examples/extensions/custom-provider-anthropic/",
+        "../examples/extensions/custom-provider-gitlab-duo/",
+        "../examples/extensions/custom-provider-qwen-cli/"
+      ]
+    },
+    {
+      "id": "coding/shell-aliases",
+      "title": "Shell Aliases",
+      "aliases": [
+        "shell aliases",
+        "shellCommandPrefix",
+        "expand_aliases"
+      ],
+      "doc_type": "configuration-note",
+      "audience": [
+        "pi user"
+      ],
+      "summary": "Tiny configuration note explaining that pi runs bash non-interactively and showing how to enable alias expansion through shellCommandPrefix.",
+      "primary_topics": [
+        "aliases",
+        "shellCommandPrefix",
+        "bash -c"
+      ],
+      "strong_terms": [
+        "shopt -s expand_aliases",
+        "shellCommandPrefix",
+        "grep ^alias",
+        "~/.zshrc"
+      ],
+      "distinctive_markers": [
+        "Single-purpose note about enabling shell aliases"
+      ],
+      "question_patterns": [
+        "Why are my shell aliases not working in pi bash commands?",
+        "How do I make pi expand aliases from .zshrc or .bashrc?",
+        "What does shellCommandPrefix do?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/settings.md",
+          "difference": "settings.md documents the setting broadly; this file is the specific alias-expansion recipe."
+        }
+      ],
+      "path": "coding-agent-docs/shell-aliases.md",
+      "collection": "coding-agent-docs",
+      "line_count": 13,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Shell Aliases"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "mom/docker-sandbox",
+      "title": "Mom Docker Sandbox",
+      "aliases": [
+        "Mom sandbox",
+        "docker sandbox",
+        "mom --sandbox=docker"
+      ],
+      "doc_type": "sandbox-guide",
+      "audience": [
+        "Mom operator"
+      ],
+      "summary": "Explains how Mom can execute tools inside a persistent Docker container instead of on the host, including docker.sh commands, security model, persistence, and operational tradeoffs.",
+      "primary_topics": [
+        "Mom",
+        "Docker sandbox",
+        "tool isolation",
+        "security",
+        "docker.sh"
+      ],
+      "strong_terms": [
+        "mom --sandbox=docker:mom-sandbox",
+        "./docker.sh create",
+        "/workspace",
+        "apk add github-cli git curl",
+        "--sandbox=host"
+      ],
+      "distinctive_markers": [
+        "Treats the container as Mom's personal persistent computer",
+        "Explicit host-vs-container execution model for bash/read/write/edit tools"
+      ],
+      "question_patterns": [
+        "How do I run Mom in a Docker sandbox?",
+        "What does the Mom sandbox isolate and persist?",
+        "What are the security tradeoffs of host mode vs docker mode?"
+      ],
+      "confusable_with": [
+        {
+          "path": "mom-docs/v86.md",
+          "difference": "v86.md evaluates a JS/WASM VM sandbox; this file describes the practical Docker sandbox currently envisioned."
+        },
+        {
+          "path": "mom-docs/new.md",
+          "difference": "new.md is the broader redesign architecture; this file is narrowly about sandbox execution mode."
+        }
+      ],
+      "path": "mom-docs/sandbox.md",
+      "collection": "mom-docs",
+      "line_count": 153,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Mom Docker Sandbox"
+        },
+        {
+          "level": 2,
+          "text": "Overview"
+        },
+        {
+          "level": 2,
+          "text": "Why Docker?"
+        },
+        {
+          "level": 2,
+          "text": "Quick Start"
+        },
+        {
+          "level": 1,
+          "text": "1. Create and start the container"
+        },
+        {
+          "level": 1,
+          "text": "2. Run mom with Docker sandbox"
+        },
+        {
+          "level": 2,
+          "text": "How It Works"
+        },
+        {
+          "level": 2,
+          "text": "Container Setup"
+        },
+        {
+          "level": 2,
+          "text": "Mom Manages Her Own Computer"
+        },
+        {
+          "level": 3,
+          "text": "Example Flow"
+        },
+        {
+          "level": 2,
+          "text": "Persistence"
+        },
+        {
+          "level": 2,
+          "text": "CLI Options"
+        },
+        {
+          "level": 1,
+          "text": "Run on host (default, no isolation)"
+        },
+        {
+          "level": 1,
+          "text": "Run with Docker sandbox"
+        },
+        {
+          "level": 1,
+          "text": "Explicit host mode"
+        },
+        {
+          "level": 2,
+          "text": "Security Considerations"
+        },
+        {
+          "level": 2,
+          "text": "Troubleshooting"
+        },
+        {
+          "level": 3,
+          "text": "Container not running"
+        },
+        {
+          "level": 3,
+          "text": "Reset container"
+        },
+        {
+          "level": 3,
+          "text": "Missing tools"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "mom/artifacts-server",
+      "title": "Artifacts Server",
+      "aliases": [
+        "artifacts server",
+        "Cloudflare Tunnel",
+        "live reload"
+      ],
+      "doc_type": "utility-guide",
+      "audience": [
+        "Mom operator",
+        "prototype sharer"
+      ],
+      "summary": "Step-by-step guide for a Node.js artifacts server that serves HTML/JS/CSS from /workspace/artifacts via Cloudflare Tunnel, injects live reload through WebSocket, and watches files recursively.",
+      "primary_topics": [
+        "artifacts server",
+        "Express",
+        "WebSocket live reload",
+        "Cloudflare Tunnel",
+        "static file sharing"
+      ],
+      "strong_terms": [
+        "/workspace/artifacts",
+        "?ws=true",
+        "cloudflared tunnel --url http://localhost:8080",
+        "chokidar",
+        "start-server.sh"
+      ],
+      "distinctive_markers": [
+        "Contains a full server.js and startup-script implementation",
+        "Explains why full /index.html paths are needed for live-reload injection"
+      ],
+      "question_patterns": [
+        "How do I let Mom publish and live-reload HTML artifacts over a public URL?",
+        "How does the artifacts server inject WebSocket live reload?",
+        "What directory layout should artifacts use under /workspace/artifacts/files/?"
+      ],
+      "confusable_with": [
+        {
+          "path": "mom-docs/slack-bot-minimal-guide.md",
+          "difference": "That file is about Slack connectivity; this file is about serving generated artifacts on the web."
+        }
+      ],
+      "path": "mom-docs/artifacts-server.md",
+      "collection": "mom-docs",
+      "line_count": 475,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Artifacts Server"
+        },
+        {
+          "level": 2,
+          "text": "What is it?"
+        },
+        {
+          "level": 2,
+          "text": "Installation"
+        },
+        {
+          "level": 3,
+          "text": "1. Install Dependencies"
+        },
+        {
+          "level": 3,
+          "text": "2. Create Server"
+        },
+        {
+          "level": 3,
+          "text": "3. Create Startup Script"
+        },
+        {
+          "level": 1,
+          "text": "Start Node.js server in background"
+        },
+        {
+          "level": 1,
+          "text": "Wait for server to be ready"
+        },
+        {
+          "level": 1,
+          "text": "Start cloudflare tunnel"
+        },
+        {
+          "level": 1,
+          "text": "Wait for tunnel to establish"
+        },
+        {
+          "level": 1,
+          "text": "Extract and display public URL"
+        },
+        {
+          "level": 1,
+          "text": "Keep script running"
+        },
+        {
+          "level": 2,
+          "text": "Directory Structure"
+        },
+        {
+          "level": 2,
+          "text": "Usage"
+        },
+        {
+          "level": 3,
+          "text": "Starting the Server"
+        },
+        {
+          "level": 3,
+          "text": "Creating Artifacts"
+        },
+        {
+          "level": 3,
+          "text": "Live Reload"
+        },
+        {
+          "level": 2,
+          "text": "How It Works"
+        },
+        {
+          "level": 2,
+          "text": "Troubleshooting"
+        },
+        {
+          "level": 2,
+          "text": "Example Session"
+        },
+        {
+          "level": 2,
+          "text": "Technical Notes"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "mom/slack-bot-minimal",
+      "title": "Minimal Slack Bot Setup (No Web Server, WebSocket Only)",
+      "aliases": [
+        "Slack Socket Mode",
+        "minimal Slack bot",
+        "xoxb/xapp guide"
+      ],
+      "doc_type": "integration-guide",
+      "audience": [
+        "Slack bot implementer"
+      ],
+      "summary": "Practical Slack Socket Mode setup for a Node.js agent without a web server, covering required scopes and tokens, event subscriptions, and minimal working code using @slack/socket-mode and @slack/web-api.",
+      "primary_topics": [
+        "Slack",
+        "Socket Mode",
+        "bot tokens",
+        "event subscriptions",
+        "Node.js"
+      ],
+      "strong_terms": [
+        "xoxb-",
+        "xapp-",
+        "@slack/socket-mode",
+        "@slack/web-api",
+        "app_mention",
+        "await ack()"
+      ],
+      "distinctive_markers": [
+        "Centered on the no-HTTP, WebSocket-only Slack setup",
+        "Lists a concrete set of bot scopes and direct code examples"
+      ],
+      "question_patterns": [
+        "How do I connect a Node.js agent to Slack without running a web server?",
+        "Which Slack tokens, scopes, and events are needed for Socket Mode?",
+        "What does a minimal Slack bot loop with SocketModeClient look like?"
+      ],
+      "confusable_with": [
+        {
+          "path": "mom-docs/new.md",
+          "difference": "new.md proposes a platform-agnostic architecture; this file is the concrete Slack-only setup guide."
+        },
+        {
+          "path": "mom-docs/events.md",
+          "difference": "events.md is about Mom wake-up events in workspace/events, not Slack event subscriptions."
+        }
+      ],
+      "path": "mom-docs/slack-bot-minimal-guide.md",
+      "collection": "mom-docs",
+      "line_count": 399,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Minimal Slack Bot Setup (No Web Server, WebSocket Only)"
+        },
+        {
+          "level": 2,
+          "text": "1. Dependencies"
+        },
+        {
+          "level": 2,
+          "text": "2. Get Your Tokens"
+        },
+        {
+          "level": 3,
+          "text": "A. Bot Token (`xoxb-...`)"
+        },
+        {
+          "level": 3,
+          "text": "B. App-Level Token (`xapp-...`)"
+        },
+        {
+          "level": 2,
+          "text": "3. Enable Socket Mode"
+        },
+        {
+          "level": 2,
+          "text": "4. Enable Direct Messages"
+        },
+        {
+          "level": 2,
+          "text": "5. Subscribe to Events"
+        },
+        {
+          "level": 2,
+          "text": "6. Store Tokens"
+        },
+        {
+          "level": 2,
+          "text": "7. Minimal Working Code"
+        },
+        {
+          "level": 2,
+          "text": "8. Listen to ALL Events (Not Just Mentions)"
+        },
+        {
+          "level": 2,
+          "text": "9. Common Operations"
+        },
+        {
+          "level": 3,
+          "text": "Send a message"
+        },
+        {
+          "level": 3,
+          "text": "Send a DM"
+        },
+        {
+          "level": 3,
+          "text": "List channels"
+        },
+        {
+          "level": 3,
+          "text": "Get channel members"
+        },
+        {
+          "level": 3,
+          "text": "Get user info"
+        },
+        {
+          "level": 3,
+          "text": "Join a channel"
+        },
+        {
+          "level": 3,
+          "text": "Upload a file"
+        },
+        {
+          "level": 2,
+          "text": "10. Complete Example with Your Agent"
+        },
+        {
+          "level": 2,
+          "text": "11. Available Event Types"
+        },
+        {
+          "level": 2,
+          "text": "12. Advantages of Socket Mode"
+        },
+        {
+          "level": 2,
+          "text": "13. Disadvantages"
+        },
+        {
+          "level": 2,
+          "text": "Important Notes"
+        },
+        {
+          "level": 2,
+          "text": "Troubleshooting"
+        },
+        {
+          "level": 3,
+          "text": "\"invalid_auth\" error"
+        },
+        {
+          "level": 3,
+          "text": "\"missing_scope\" error"
+        },
+        {
+          "level": 3,
+          "text": "Not receiving events"
+        },
+        {
+          "level": 3,
+          "text": "Bot doesn't respond to mentions"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "mom/events-system",
+      "title": "Events System",
+      "aliases": [
+        "workspace/events",
+        "immediate events",
+        "one-shot events",
+        "periodic events"
+      ],
+      "doc_type": "system-design",
+      "audience": [
+        "Mom implementer",
+        "automation author"
+      ],
+      "summary": "Design for Mom's wake-up/event subsystem based on JSON files in workspace/events, supporting immediate, one-shot, and periodic cron-driven events with queue integration and silent completion.",
+      "primary_topics": [
+        "events",
+        "workspace/events",
+        "cron scheduling",
+        "queue integration",
+        "silent completion"
+      ],
+      "strong_terms": [
+        "type: immediate",
+        "type: one-shot",
+        "type: periodic",
+        "croner",
+        "[EVENT:filename:type:schedule]",
+        "[SILENT]"
+      ],
+      "distinctive_markers": [
+        "Only doc that defines Mom event-file formats and execution semantics",
+        "Includes a system-prompt section teaching Mom how to create and manage event files"
+      ],
+      "question_patterns": [
+        "How do scheduled or immediate events work for Mom?",
+        "What JSON schema should event files in /workspace/events use?",
+        "How are periodic events, queue limits, and silent completion handled?"
+      ],
+      "confusable_with": [
+        {
+          "path": "mom-docs/new.md",
+          "difference": "new.md includes redesign notes and a brief events section; this file is the dedicated detailed event-system design."
+        },
+        {
+          "path": "mom-docs/slack-bot-minimal-guide.md",
+          "difference": "That file describes Slack event subscriptions; this file describes Mom's own filesystem-triggered events."
+        }
+      ],
+      "path": "mom-docs/events.md",
+      "collection": "mom-docs",
+      "line_count": 307,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Events System"
+        },
+        {
+          "level": 2,
+          "text": "Event Types"
+        },
+        {
+          "level": 3,
+          "text": "Immediate"
+        },
+        {
+          "level": 3,
+          "text": "One-Shot"
+        },
+        {
+          "level": 3,
+          "text": "Periodic"
+        },
+        {
+          "level": 4,
+          "text": "Cron Format"
+        },
+        {
+          "level": 2,
+          "text": "Timezone Handling"
+        },
+        {
+          "level": 2,
+          "text": "Harness Behavior"
+        },
+        {
+          "level": 3,
+          "text": "Startup"
+        },
+        {
+          "level": 3,
+          "text": "File System Watching"
+        },
+        {
+          "level": 3,
+          "text": "Parse Errors"
+        },
+        {
+          "level": 3,
+          "text": "Execution Errors"
+        },
+        {
+          "level": 2,
+          "text": "Queue Integration"
+        },
+        {
+          "level": 2,
+          "text": "Event Execution"
+        },
+        {
+          "level": 2,
+          "text": "Silent Completion"
+        },
+        {
+          "level": 2,
+          "text": "File Naming"
+        },
+        {
+          "level": 2,
+          "text": "Implementation"
+        },
+        {
+          "level": 3,
+          "text": "Files"
+        },
+        {
+          "level": 3,
+          "text": "Key Components"
+        },
+        {
+          "level": 3,
+          "text": "Dependencies"
+        },
+        {
+          "level": 2,
+          "text": "System Prompt Section"
+        },
+        {
+          "level": 2,
+          "text": "Events"
+        },
+        {
+          "level": 3,
+          "text": "Event Types"
+        },
+        {
+          "level": 3,
+          "text": "Cron Format"
+        },
+        {
+          "level": 3,
+          "text": "Timezones"
+        },
+        {
+          "level": 3,
+          "text": "Creating Events"
+        },
+        {
+          "level": 3,
+          "text": "Managing Events"
+        },
+        {
+          "level": 3,
+          "text": "When Events Trigger"
+        },
+        {
+          "level": 3,
+          "text": "Debouncing"
+        },
+        {
+          "level": 1,
+          "text": "Creates event per email — will flood the queue"
+        },
+        {
+          "level": 1,
+          "text": "Debounce: flag file + single delayed event"
+        },
+        {
+          "level": 3,
+          "text": "Limits"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "mom/v86-evaluation",
+      "title": "v86 Sandbox Evaluation",
+      "aliases": [
+        "v86",
+        "rootlessRelay",
+        "WebAssembly sandbox",
+        "10.0.2.2"
+      ],
+      "doc_type": "evaluation-report",
+      "audience": [
+        "sandbox architect",
+        "Mom implementer"
+      ],
+      "summary": "Technical evaluation of using v86 as a sandboxed Linux execution environment for Mom, including networking through rootlessRelay, Alpine image build, state save/restore, and host-access patches.",
+      "primary_topics": [
+        "v86",
+        "WebAssembly VM",
+        "rootlessRelay",
+        "Alpine Linux",
+        "sandbox evaluation"
+      ],
+      "strong_terms": [
+        "relay.js patches",
+        "10.0.2.2",
+        "serial0_send",
+        "save_state",
+        "restore_state",
+        "udhcpc -i eth0"
+      ],
+      "distinctive_markers": [
+        "Only doc centered on a JS/WASM x86 emulator rather than Docker",
+        "Provides exact rootlessRelay patches for gateway-to-localhost access"
+      ],
+      "question_patterns": [
+        "Can Mom run inside a v86 WebAssembly VM sandbox?",
+        "How does networking and host access work with rootlessRelay and v86?",
+        "What is the boot/restore workflow and performance profile of the v86 sandbox?"
+      ],
+      "confusable_with": [
+        {
+          "path": "mom-docs/sandbox.md",
+          "difference": "sandbox.md is the Docker-based practical sandbox guide; this file is an evaluation of a v86 VM-based alternative."
+        }
+      ],
+      "path": "mom-docs/v86.md",
+      "collection": "mom-docs",
+      "line_count": 319,
+      "headings": [
+        {
+          "level": 1,
+          "text": "v86 Sandbox Evaluation"
+        },
+        {
+          "level": 2,
+          "text": "Overview"
+        },
+        {
+          "level": 2,
+          "text": "Key Findings"
+        },
+        {
+          "level": 3,
+          "text": "What Works"
+        },
+        {
+          "level": 3,
+          "text": "What Doesn't Work"
+        },
+        {
+          "level": 2,
+          "text": "Architecture"
+        },
+        {
+          "level": 2,
+          "text": "Components & Sizes"
+        },
+        {
+          "level": 2,
+          "text": "Installation"
+        },
+        {
+          "level": 2,
+          "text": "Building the Alpine Image"
+        },
+        {
+          "level": 1,
+          "text": "Edit Dockerfile to add packages:"
+        },
+        {
+          "level": 1,
+          "text": "ENV ADDPKGS=nodejs,npm,python3,git,curl"
+        },
+        {
+          "level": 2,
+          "text": "Network Relay Setup"
+        },
+        {
+          "level": 3,
+          "text": "Required Patches for Host Access"
+        },
+        {
+          "level": 3,
+          "text": "Starting the Relay"
+        },
+        {
+          "level": 1,
+          "text": "Listens on ws://127.0.0.1:8086/"
+        },
+        {
+          "level": 2,
+          "text": "Basic Usage"
+        },
+        {
+          "level": 2,
+          "text": "Communication Methods"
+        },
+        {
+          "level": 3,
+          "text": "1. Serial Console (stdin/stdout)"
+        },
+        {
+          "level": 3,
+          "text": "2. 9p Filesystem (file I/O)"
+        },
+        {
+          "level": 3,
+          "text": "3. Network (TCP to host services)"
+        },
+        {
+          "level": 1,
+          "text": "Inside VM"
+        },
+        {
+          "level": 2,
+          "text": "State Save/Restore"
+        },
+        {
+          "level": 2,
+          "text": "Network Setup Inside VM"
+        },
+        {
+          "level": 2,
+          "text": "Performance"
+        },
+        {
+          "level": 2,
+          "text": "Typical Workflow for Mom"
+        },
+        {
+          "level": 2,
+          "text": "Alternative: fetch Backend (No Relay Needed)"
+        },
+        {
+          "level": 2,
+          "text": "Files Reference"
+        },
+        {
+          "level": 2,
+          "text": "Resources"
+        }
+      ],
+      "relative_links": []
+    },
+    {
+      "id": "mom/redesign-multi-platform",
+      "title": "Mom Redesign: Multi-Platform Chat Support",
+      "aliases": [
+        "Mom redesign",
+        "multi-platform chat support",
+        "PlatformAdapter",
+        "ChannelMessage"
+      ],
+      "doc_type": "architecture-redesign",
+      "audience": [
+        "Mom architect",
+        "platform adapter implementer"
+      ],
+      "summary": "Large redesign proposal for making Mom platform-agnostic across Slack, Discord, and others, with unified channel storage, adapter interfaces, test strategy, host-side custom tools, and channel isolation ideas.",
+      "primary_topics": [
+        "multi-platform architecture",
+        "PlatformAdapter",
+        "MomAgent",
+        "ChannelMessage",
+        "custom host-side tools",
+        "bubblewrap isolation"
+      ],
+      "strong_terms": [
+        "PlatformAdapter",
+        "ChannelMessage",
+        "MomAgent.handleMessage",
+        "channels/<adapter>/<channelId>/",
+        "invoke_tool",
+        "bubblewrap"
+      ],
+      "distinctive_markers": [
+        "Broadest Mom architecture document in the set",
+        "Combines adapter abstraction, storage redesign, custom tools, and events into a single future-state design"
+      ],
+      "question_patterns": [
+        "How should Mom be redesigned to support Slack, Discord, and other chat platforms?",
+        "What interfaces should adapters, agents, and channel storage expose?",
+        "How do host-side custom tools and per-channel isolation fit into the redesign?"
+      ],
+      "confusable_with": [
+        {
+          "path": "mom-docs/events.md",
+          "difference": "events.md is the focused event system design; this file is the broader platform-agnostic redesign."
+        },
+        {
+          "path": "mom-docs/slack-bot-minimal-guide.md",
+          "difference": "That file is a concrete Slack-only integration; this one is the future multi-platform architecture."
+        }
+      ],
+      "path": "mom-docs/new.md",
+      "collection": "mom-docs",
+      "line_count": 970,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Mom Redesign: Multi-Platform Chat Support"
+        },
+        {
+          "level": 2,
+          "text": "Goals"
+        },
+        {
+          "level": 2,
+          "text": "Current Architecture Problems"
+        },
+        {
+          "level": 2,
+          "text": "Proposed Architecture"
+        },
+        {
+          "level": 2,
+          "text": "Key Interfaces"
+        },
+        {
+          "level": 3,
+          "text": "1. ChannelMessage (Unified Message Format)"
+        },
+        {
+          "level": 3,
+          "text": "2. PlatformAdapter"
+        },
+        {
+          "level": 3,
+          "text": "3. MomAgent"
+        },
+        {
+          "level": 2,
+          "text": "Event Handling"
+        },
+        {
+          "level": 2,
+          "text": "Storage Format"
+        },
+        {
+          "level": 3,
+          "text": "log.jsonl (Channel History)"
+        },
+        {
+          "level": 3,
+          "text": "context.jsonl (LLM Context)"
+        },
+        {
+          "level": 2,
+          "text": "Directory Structure"
+        },
+        {
+          "level": 3,
+          "text": "Channel Isolation via Bubblewrap (Linux/Docker)"
+        },
+        {
+          "level": 2,
+          "text": "System Prompt Changes"
+        },
+        {
+          "level": 2,
+          "text": "Text Formatting"
+        },
+        {
+          "level": 2,
+          "text": "Users"
+        },
+        {
+          "level": 2,
+          "text": "Channels"
+        },
+        {
+          "level": 2,
+          "text": "Testing Strategy"
+        },
+        {
+          "level": 3,
+          "text": "1. Agent Tests (with temp Docker container)"
+        },
+        {
+          "level": 3,
+          "text": "2. Adapter Tests (no agent)"
+        },
+        {
+          "level": 3,
+          "text": "3. Integration Tests"
+        },
+        {
+          "level": 2,
+          "text": "Migration Path"
+        },
+        {
+          "level": 2,
+          "text": "Decisions"
+        },
+        {
+          "level": 2,
+          "text": "File Structure"
+        },
+        {
+          "level": 2,
+          "text": "Custom Tools (Host-Side Execution)"
+        },
+        {
+          "level": 3,
+          "text": "Architecture"
+        },
+        {
+          "level": 3,
+          "text": "Custom Tool Interface"
+        },
+        {
+          "level": 3,
+          "text": "MomCustomTool Type"
+        },
+        {
+          "level": 3,
+          "text": "Tool Discovery and Loading"
+        },
+        {
+          "level": 3,
+          "text": "The invoke_tool Agent Tool"
+        },
+        {
+          "level": 3,
+          "text": "System Prompt Integration"
+        },
+        {
+          "level": 3,
+          "text": "Example: Gmail Tool"
+        },
+        {
+          "level": 3,
+          "text": "Security Considerations"
+        },
+        {
+          "level": 3,
+          "text": "Loading"
+        },
+        {
+          "level": 2,
+          "text": "Events System"
+        },
+        {
+          "level": 3,
+          "text": "Format"
+        },
+        {
+          "level": 3,
+          "text": "Running"
+        },
+        {
+          "level": 2,
+          "text": "Summary"
+        }
+      ],
+      "relative_links": []
+    }
+  ],
+  "indices": {
+    "by_id": {
+      "pods/kimi-k2": "pods-docs/kimi-k2.md",
+      "pods/gpt-oss": "pods-docs/gpt-oss.md",
+      "pods/models-matrix": "pods-docs/models.md",
+      "pods/pi-plan": "pods-docs/plan.md",
+      "pods/qwen3-coder": "pods-docs/qwen3-coder.md",
+      "pods/implementation-plan": "pods-docs/implementation-plan.md",
+      "pods/glm-4.5": "pods-docs/gml-4.5.md",
+      "coding/json-mode": "coding-agent-docs/json.md",
+      "coding/prompt-templates": "coding-agent-docs/prompt-templates.md",
+      "coding/termux": "coding-agent-docs/termux.md",
+      "coding/terminal-setup": "coding-agent-docs/terminal-setup.md",
+      "coding/themes": "coding-agent-docs/themes.md",
+      "coding/extensions": "coding-agent-docs/extensions.md",
+      "coding/development": "coding-agent-docs/development.md",
+      "coding/custom-models": "coding-agent-docs/models.md",
+      "coding/sdk": "coding-agent-docs/sdk.md",
+      "coding/packages": "coding-agent-docs/packages.md",
+      "coding/skills": "coding-agent-docs/skills.md",
+      "coding/compaction": "coding-agent-docs/compaction.md",
+      "coding/settings": "coding-agent-docs/settings.md",
+      "coding/providers": "coding-agent-docs/providers.md",
+      "coding/windows": "coding-agent-docs/windows.md",
+      "coding/tui": "coding-agent-docs/tui.md",
+      "coding/session-format": "coding-agent-docs/session.md",
+      "coding/rpc": "coding-agent-docs/rpc.md",
+      "coding/keybindings": "coding-agent-docs/keybindings.md",
+      "coding/tree-navigation": "coding-agent-docs/tree.md",
+      "coding/tmux": "coding-agent-docs/tmux.md",
+      "coding/custom-provider": "coding-agent-docs/custom-provider.md",
+      "coding/shell-aliases": "coding-agent-docs/shell-aliases.md",
+      "mom/docker-sandbox": "mom-docs/sandbox.md",
+      "mom/artifacts-server": "mom-docs/artifacts-server.md",
+      "mom/slack-bot-minimal": "mom-docs/slack-bot-minimal-guide.md",
+      "mom/events-system": "mom-docs/events.md",
+      "mom/v86-evaluation": "mom-docs/v86.md",
+      "mom/redesign-multi-platform": "mom-docs/new.md"
+    },
+    "by_path": {
+      "pods-docs/kimi-k2.md": "pods/kimi-k2",
+      "pods-docs/gpt-oss.md": "pods/gpt-oss",
+      "pods-docs/models.md": "pods/models-matrix",
+      "pods-docs/plan.md": "pods/pi-plan",
+      "pods-docs/qwen3-coder.md": "pods/qwen3-coder",
+      "pods-docs/implementation-plan.md": "pods/implementation-plan",
+      "pods-docs/gml-4.5.md": "pods/glm-4.5",
+      "coding-agent-docs/json.md": "coding/json-mode",
+      "coding-agent-docs/prompt-templates.md": "coding/prompt-templates",
+      "coding-agent-docs/termux.md": "coding/termux",
+      "coding-agent-docs/terminal-setup.md": "coding/terminal-setup",
+      "coding-agent-docs/themes.md": "coding/themes",
+      "coding-agent-docs/extensions.md": "coding/extensions",
+      "coding-agent-docs/development.md": "coding/development",
+      "coding-agent-docs/models.md": "coding/custom-models",
+      "coding-agent-docs/sdk.md": "coding/sdk",
+      "coding-agent-docs/packages.md": "coding/packages",
+      "coding-agent-docs/skills.md": "coding/skills",
+      "coding-agent-docs/compaction.md": "coding/compaction",
+      "coding-agent-docs/settings.md": "coding/settings",
+      "coding-agent-docs/providers.md": "coding/providers",
+      "coding-agent-docs/windows.md": "coding/windows",
+      "coding-agent-docs/tui.md": "coding/tui",
+      "coding-agent-docs/session.md": "coding/session-format",
+      "coding-agent-docs/rpc.md": "coding/rpc",
+      "coding-agent-docs/keybindings.md": "coding/keybindings",
+      "coding-agent-docs/tree.md": "coding/tree-navigation",
+      "coding-agent-docs/tmux.md": "coding/tmux",
+      "coding-agent-docs/custom-provider.md": "coding/custom-provider",
+      "coding-agent-docs/shell-aliases.md": "coding/shell-aliases",
+      "mom-docs/sandbox.md": "mom/docker-sandbox",
+      "mom-docs/artifacts-server.md": "mom/artifacts-server",
+      "mom-docs/slack-bot-minimal-guide.md": "mom/slack-bot-minimal",
+      "mom-docs/events.md": "mom/events-system",
+      "mom-docs/v86.md": "mom/v86-evaluation",
+      "mom-docs/new.md": "mom/redesign-multi-platform"
+    },
+    "by_collection": {
+      "pods-docs": [
+        "pods/kimi-k2",
+        "pods/gpt-oss",
+        "pods/models-matrix",
+        "pods/pi-plan",
+        "pods/qwen3-coder",
+        "pods/implementation-plan",
+        "pods/glm-4.5"
+      ],
+      "coding-agent-docs": [
+        "coding/json-mode",
+        "coding/prompt-templates",
+        "coding/termux",
+        "coding/terminal-setup",
+        "coding/themes",
+        "coding/extensions",
+        "coding/development",
+        "coding/custom-models",
+        "coding/sdk",
+        "coding/packages",
+        "coding/skills",
+        "coding/compaction",
+        "coding/settings",
+        "coding/providers",
+        "coding/windows",
+        "coding/tui",
+        "coding/session-format",
+        "coding/rpc",
+        "coding/keybindings",
+        "coding/tree-navigation",
+        "coding/tmux",
+        "coding/custom-provider",
+        "coding/shell-aliases"
+      ],
+      "mom-docs": [
+        "mom/docker-sandbox",
+        "mom/artifacts-server",
+        "mom/slack-bot-minimal",
+        "mom/events-system",
+        "mom/v86-evaluation",
+        "mom/redesign-multi-platform"
+      ]
+    },
+    "by_alias": {
+      "/skill:name": [
+        "coding/skills"
+      ],
+      "/template commands": [
+        "coding/prompt-templates"
+      ],
+      "/tree": [
+        "coding/tree-navigation"
+      ],
+      "10.0.2.2": [
+        "mom/v86-evaluation"
+      ],
+      "@mariozechner/pi-tui": [
+        "coding/tui"
+      ],
+      "agent skills": [
+        "coding/skills"
+      ],
+      "agentsessionruntime": [
+        "coding/sdk"
+      ],
+      "android setup": [
+        "coding/termux"
+      ],
+      "api keys": [
+        "coding/providers"
+      ],
+      "artifacts server": [
+        "mom/artifacts-server"
+      ],
+      "artifacts-server": [
+        "mom/artifacts-server"
+      ],
+      "auth.json": [
+        "coding/providers"
+      ],
+      "branch summarization": [
+        "coding/compaction"
+      ],
+      "branch switching": [
+        "coding/tree-navigation"
+      ],
+      "channelmessage": [
+        "mom/redesign-multi-platform"
+      ],
+      "cloudflare tunnel": [
+        "mom/artifacts-server"
+      ],
+      "coding-agent-docs/compaction.md": [
+        "coding/compaction"
+      ],
+      "coding-agent-docs/custom-provider.md": [
+        "coding/custom-provider"
+      ],
+      "coding-agent-docs/development.md": [
+        "coding/development"
+      ],
+      "coding-agent-docs/extensions.md": [
+        "coding/extensions"
+      ],
+      "coding-agent-docs/json.md": [
+        "coding/json-mode"
+      ],
+      "coding-agent-docs/keybindings.md": [
+        "coding/keybindings"
+      ],
+      "coding-agent-docs/models.md": [
+        "coding/custom-models"
+      ],
+      "coding-agent-docs/packages.md": [
+        "coding/packages"
+      ],
+      "coding-agent-docs/prompt-templates.md": [
+        "coding/prompt-templates"
+      ],
+      "coding-agent-docs/providers.md": [
+        "coding/providers"
+      ],
+      "coding-agent-docs/rpc.md": [
+        "coding/rpc"
+      ],
+      "coding-agent-docs/sdk.md": [
+        "coding/sdk"
+      ],
+      "coding-agent-docs/session.md": [
+        "coding/session-format"
+      ],
+      "coding-agent-docs/settings.md": [
+        "coding/settings"
+      ],
+      "coding-agent-docs/shell-aliases.md": [
+        "coding/shell-aliases"
+      ],
+      "coding-agent-docs/skills.md": [
+        "coding/skills"
+      ],
+      "coding-agent-docs/terminal-setup.md": [
+        "coding/terminal-setup"
+      ],
+      "coding-agent-docs/termux.md": [
+        "coding/termux"
+      ],
+      "coding-agent-docs/themes.md": [
+        "coding/themes"
+      ],
+      "coding-agent-docs/tmux.md": [
+        "coding/tmux"
+      ],
+      "coding-agent-docs/tree.md": [
+        "coding/tree-navigation"
+      ],
+      "coding-agent-docs/tui.md": [
+        "coding/tui"
+      ],
+      "coding-agent-docs/windows.md": [
+        "coding/windows"
+      ],
+      "coding/compaction": [
+        "coding/compaction"
+      ],
+      "coding/custom-models": [
+        "coding/custom-models"
+      ],
+      "coding/custom-provider": [
+        "coding/custom-provider"
+      ],
+      "coding/development": [
+        "coding/development"
+      ],
+      "coding/extensions": [
+        "coding/extensions"
+      ],
+      "coding/json-mode": [
+        "coding/json-mode"
+      ],
+      "coding/keybindings": [
+        "coding/keybindings"
+      ],
+      "coding/packages": [
+        "coding/packages"
+      ],
+      "coding/prompt-templates": [
+        "coding/prompt-templates"
+      ],
+      "coding/providers": [
+        "coding/providers"
+      ],
+      "coding/rpc": [
+        "coding/rpc"
+      ],
+      "coding/sdk": [
+        "coding/sdk"
+      ],
+      "coding/session-format": [
+        "coding/session-format"
+      ],
+      "coding/settings": [
+        "coding/settings"
+      ],
+      "coding/shell-aliases": [
+        "coding/shell-aliases"
+      ],
+      "coding/skills": [
+        "coding/skills"
+      ],
+      "coding/terminal-setup": [
+        "coding/terminal-setup"
+      ],
+      "coding/termux": [
+        "coding/termux"
+      ],
+      "coding/themes": [
+        "coding/themes"
+      ],
+      "coding/tmux": [
+        "coding/tmux"
+      ],
+      "coding/tree-navigation": [
+        "coding/tree-navigation"
+      ],
+      "coding/tui": [
+        "coding/tui"
+      ],
+      "coding/windows": [
+        "coding/windows"
+      ],
+      "compaction": [
+        "coding/compaction"
+      ],
+      "compaction & branch summarization": [
+        "coding/compaction"
+      ],
+      "createagentsession": [
+        "coding/sdk"
+      ],
+      "csi-u": [
+        "coding/tmux"
+      ],
+      "custom components": [
+        "coding/tui"
+      ],
+      "custom models": [
+        "coding/custom-models"
+      ],
+      "custom providers": [
+        "coding/custom-models",
+        "coding/custom-provider"
+      ],
+      "custom theme": [
+        "coding/themes"
+      ],
+      "custom-provider": [
+        "coding/custom-provider"
+      ],
+      "development": [
+        "coding/development"
+      ],
+      "docker sandbox": [
+        "mom/docker-sandbox"
+      ],
+      "event stream mode": [
+        "coding/json-mode"
+      ],
+      "events": [
+        "mom/events-system"
+      ],
+      "events system": [
+        "mom/events-system"
+      ],
+      "expand_aliases": [
+        "coding/shell-aliases"
+      ],
+      "extended-keys": [
+        "coding/tmux"
+      ],
+      "extension ui protocol": [
+        "coding/rpc"
+      ],
+      "extensionapi": [
+        "coding/extensions"
+      ],
+      "extensions": [
+        "coding/extensions"
+      ],
+      "forking and rebranding": [
+        "coding/development"
+      ],
+      "git bash": [
+        "coding/windows"
+      ],
+      "glm-4.5": [
+        "pods/glm-4.5"
+      ],
+      "glm-4.5-air": [
+        "pods/glm-4.5"
+      ],
+      "global and project settings": [
+        "coding/settings"
+      ],
+      "gml-4.5": [
+        "pods/glm-4.5"
+      ],
+      "gpt-oss": [
+        "pods/gpt-oss"
+      ],
+      "gpt-oss vllm usage guide": [
+        "pods/gpt-oss"
+      ],
+      "gpt-oss-120b": [
+        "pods/gpt-oss"
+      ],
+      "gpt-oss-20b": [
+        "pods/gpt-oss"
+      ],
+      "immediate events": [
+        "mom/events-system"
+      ],
+      "implementation plan": [
+        "pods/implementation-plan"
+      ],
+      "implementation-plan": [
+        "pods/implementation-plan"
+      ],
+      "json": [
+        "coding/json-mode"
+      ],
+      "json event stream mode": [
+        "coding/json-mode"
+      ],
+      "json mode": [
+        "coding/json-mode"
+      ],
+      "keybindings": [
+        "coding/keybindings"
+      ],
+      "keybindings.json": [
+        "coding/keybindings"
+      ],
+      "keyboard shortcuts": [
+        "coding/keybindings"
+      ],
+      "kimi k2": [
+        "pods/kimi-k2"
+      ],
+      "kimi-k2": [
+        "pods/kimi-k2"
+      ],
+      "kimi-k2 deployment guide": [
+        "pods/kimi-k2"
+      ],
+      "kitty keyboard protocol": [
+        "coding/terminal-setup"
+      ],
+      "live reload": [
+        "mom/artifacts-server"
+      ],
+      "lm studio": [
+        "coding/custom-models"
+      ],
+      "minimal slack bot": [
+        "mom/slack-bot-minimal"
+      ],
+      "minimal slack bot setup (no web server, websocket only)": [
+        "mom/slack-bot-minimal"
+      ],
+      "model hardware matrix": [
+        "pods/models-matrix"
+      ],
+      "models": [
+        "pods/models-matrix",
+        "coding/custom-models"
+      ],
+      "models.json": [
+        "coding/custom-models"
+      ],
+      "mom --sandbox=docker": [
+        "mom/docker-sandbox"
+      ],
+      "mom docker sandbox": [
+        "mom/docker-sandbox"
+      ],
+      "mom redesign": [
+        "mom/redesign-multi-platform"
+      ],
+      "mom redesign: multi-platform chat support": [
+        "mom/redesign-multi-platform"
+      ],
+      "mom sandbox": [
+        "mom/docker-sandbox"
+      ],
+      "mom-docs/artifacts-server.md": [
+        "mom/artifacts-server"
+      ],
+      "mom-docs/events.md": [
+        "mom/events-system"
+      ],
+      "mom-docs/new.md": [
+        "mom/redesign-multi-platform"
+      ],
+      "mom-docs/sandbox.md": [
+        "mom/docker-sandbox"
+      ],
+      "mom-docs/slack-bot-minimal-guide.md": [
+        "mom/slack-bot-minimal"
+      ],
+      "mom-docs/v86.md": [
+        "mom/v86-evaluation"
+      ],
+      "mom/artifacts-server": [
+        "mom/artifacts-server"
+      ],
+      "mom/docker-sandbox": [
+        "mom/docker-sandbox"
+      ],
+      "mom/events-system": [
+        "mom/events-system"
+      ],
+      "mom/redesign-multi-platform": [
+        "mom/redesign-multi-platform"
+      ],
+      "mom/slack-bot-minimal": [
+        "mom/slack-bot-minimal"
+      ],
+      "mom/v86-evaluation": [
+        "mom/v86-evaluation"
+      ],
+      "moonshotai/kimi-k2-instruct": [
+        "pods/kimi-k2"
+      ],
+      "multi-platform chat support": [
+        "mom/redesign-multi-platform"
+      ],
+      "namespaced key ids": [
+        "coding/keybindings"
+      ],
+      "navigatetree": [
+        "coding/tree-navigation"
+      ],
+      "new": [
+        "mom/redesign-multi-platform"
+      ],
+      "oauth providers": [
+        "coding/providers"
+      ],
+      "ollama": [
+        "coding/custom-models"
+      ],
+      "one-shot events": [
+        "mom/events-system"
+      ],
+      "package breakdown": [
+        "pods/implementation-plan"
+      ],
+      "package manifest": [
+        "coding/packages"
+      ],
+      "packages": [
+        "coding/packages"
+      ],
+      "periodic events": [
+        "mom/events-system"
+      ],
+      "pi --mode json": [
+        "coding/json-mode"
+      ],
+      "pi --mode rpc": [
+        "coding/rpc"
+      ],
+      "pi development": [
+        "coding/development"
+      ],
+      "pi extensions": [
+        "coding/extensions"
+      ],
+      "pi implementation plan": [
+        "pods/implementation-plan"
+      ],
+      "pi install": [
+        "coding/packages"
+      ],
+      "pi packages": [
+        "coding/packages"
+      ],
+      "pi plan": [
+        "pods/pi-plan"
+      ],
+      "pi pod orchestration plan": [
+        "pods/pi-plan"
+      ],
+      "pi pods architecture": [
+        "pods/pi-plan"
+      ],
+      "pi settings": [
+        "coding/settings"
+      ],
+      "pi supported models": [
+        "pods/models-matrix"
+      ],
+      "pi-mono setup": [
+        "coding/development"
+      ],
+      "pi.on": [
+        "coding/extensions"
+      ],
+      "pi.registertool": [
+        "coding/extensions"
+      ],
+      "plan": [
+        "pods/pi-plan"
+      ],
+      "platformadapter": [
+        "mom/redesign-multi-platform"
+      ],
+      "pod plan": [
+        "pods/pi-plan"
+      ],
+      "pods model compatibility matrix": [
+        "pods/models-matrix"
+      ],
+      "pods models": [
+        "pods/models-matrix"
+      ],
+      "pods-docs/gml-4.5.md": [
+        "pods/glm-4.5"
+      ],
+      "pods-docs/gpt-oss.md": [
+        "pods/gpt-oss"
+      ],
+      "pods-docs/implementation-plan.md": [
+        "pods/implementation-plan"
+      ],
+      "pods-docs/kimi-k2.md": [
+        "pods/kimi-k2"
+      ],
+      "pods-docs/models.md": [
+        "pods/models-matrix"
+      ],
+      "pods-docs/plan.md": [
+        "pods/pi-plan"
+      ],
+      "pods-docs/qwen3-coder.md": [
+        "pods/qwen3-coder"
+      ],
+      "pods/glm-4.5": [
+        "pods/glm-4.5"
+      ],
+      "pods/gpt-oss": [
+        "pods/gpt-oss"
+      ],
+      "pods/implementation-plan": [
+        "pods/implementation-plan"
+      ],
+      "pods/kimi-k2": [
+        "pods/kimi-k2"
+      ],
+      "pods/models-matrix": [
+        "pods/models-matrix"
+      ],
+      "pods/pi-plan": [
+        "pods/pi-plan"
+      ],
+      "pods/qwen3-coder": [
+        "pods/qwen3-coder"
+      ],
+      "prompt templates": [
+        "coding/prompt-templates"
+      ],
+      "prompt-templates": [
+        "coding/prompt-templates"
+      ],
+      "prompts/*.md": [
+        "coding/prompt-templates"
+      ],
+      "provider extension": [
+        "coding/custom-provider"
+      ],
+      "providers": [
+        "coding/providers"
+      ],
+      "qwen coder guide": [
+        "pods/qwen3-coder"
+      ],
+      "qwen/qwen3-coder-480b-a35b-instruct": [
+        "pods/qwen3-coder"
+      ],
+      "qwen3-coder": [
+        "pods/qwen3-coder"
+      ],
+      "qwen3-coder usage guide": [
+        "pods/qwen3-coder"
+      ],
+      "registerprovider": [
+        "coding/custom-provider"
+      ],
+      "rootlessrelay": [
+        "mom/v86-evaluation"
+      ],
+      "rpc": [
+        "coding/rpc"
+      ],
+      "rpc mode": [
+        "coding/rpc"
+      ],
+      "sandbox": [
+        "mom/docker-sandbox"
+      ],
+      "sdk": [
+        "coding/sdk"
+      ],
+      "sdk integration": [
+        "coding/sdk"
+      ],
+      "session": [
+        "coding/session-format"
+      ],
+      "session file format": [
+        "coding/session-format"
+      ],
+      "session format": [
+        "coding/session-format"
+      ],
+      "session jsonl": [
+        "coding/session-format"
+      ],
+      "session tree navigation": [
+        "coding/tree-navigation"
+      ],
+      "session_before_compact": [
+        "coding/compaction"
+      ],
+      "sessionmanager": [
+        "coding/session-format"
+      ],
+      "settings": [
+        "coding/settings"
+      ],
+      "settings.json": [
+        "coding/settings"
+      ],
+      "shell aliases": [
+        "coding/shell-aliases"
+      ],
+      "shell-aliases": [
+        "coding/shell-aliases"
+      ],
+      "shellcommandprefix": [
+        "coding/shell-aliases"
+      ],
+      "shellpath": [
+        "coding/windows"
+      ],
+      "shift+enter setup": [
+        "coding/terminal-setup"
+      ],
+      "skill.md": [
+        "coding/skills"
+      ],
+      "skills": [
+        "coding/skills"
+      ],
+      "slack socket mode": [
+        "mom/slack-bot-minimal"
+      ],
+      "slack-bot-minimal-guide": [
+        "mom/slack-bot-minimal"
+      ],
+      "streamsimple": [
+        "coding/custom-provider"
+      ],
+      "terminal key setup": [
+        "coding/terminal-setup"
+      ],
+      "terminal setup": [
+        "coding/terminal-setup"
+      ],
+      "terminal-setup": [
+        "coding/terminal-setup"
+      ],
+      "termux": [
+        "coding/termux"
+      ],
+      "termux (android) setup": [
+        "coding/termux"
+      ],
+      "termux-api": [
+        "coding/termux"
+      ],
+      "theme json": [
+        "coding/themes"
+      ],
+      "theme-schema.json": [
+        "coding/themes"
+      ],
+      "themes": [
+        "coding/themes"
+      ],
+      "tmux": [
+        "coding/tmux"
+      ],
+      "tmux setup": [
+        "coding/tmux"
+      ],
+      "tree": [
+        "coding/tree-navigation"
+      ],
+      "tui": [
+        "coding/tui"
+      ],
+      "tui components": [
+        "coding/tui"
+      ],
+      "typescript implementation plan": [
+        "pods/implementation-plan"
+      ],
+      "v86": [
+        "mom/v86-evaluation"
+      ],
+      "v86 sandbox evaluation": [
+        "mom/v86-evaluation"
+      ],
+      "vllm provider config": [
+        "coding/custom-models"
+      ],
+      "webassembly sandbox": [
+        "mom/v86-evaluation"
+      ],
+      "windows": [
+        "coding/windows"
+      ],
+      "windows setup": [
+        "coding/windows"
+      ],
+      "workspace/events": [
+        "mom/events-system"
+      ],
+      "xoxb/xapp guide": [
+        "mom/slack-bot-minimal"
+      ],
+      "zai-org/glm-4.5": [
+        "pods/glm-4.5"
+      ]
+    }
+  }
+}
