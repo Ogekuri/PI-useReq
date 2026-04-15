@@ -7,13 +7,41 @@ import { PI_USEREQ_STARTUP_TOOL_NAMES } from "../src/core/pi-usereq-tools.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
 import { createTempDir, initFixtureRepo } from "./helpers.js";
 
+/**
+ * @brief Describes one fake extension command registration captured during tests.
+ * @details Mirrors the minimal command shape consumed by this suite so assertions can inspect descriptions and invoke handlers deterministically. The alias is compile-time only and introduces no runtime side effects.
+ */
 type RegisteredCommand = { description?: string; handler: (args: string, ctx: any) => Promise<void> | void };
-type RegisteredTool = { name: string; description?: string; parameters?: unknown; sourceInfo?: Record<string, unknown> };
 
+/**
+ * @brief Describes one fake extension tool registration captured during tests.
+ * @details Mirrors the minimal custom-tool definition surface used by the suite, including the optional execute callback required for direct tool invocation assertions. The alias is compile-time only and introduces no runtime side effects.
+ */
+type RegisteredTool = {
+  name: string;
+  description?: string;
+  parameters?: unknown;
+  sourceInfo?: Record<string, unknown>;
+  execute?: (toolCallId: string, params: any, signal?: AbortSignal, onUpdate?: unknown, ctx?: any) => Promise<any> | any;
+};
+
+/**
+ * @brief Represents the fake pi runtime returned by `createFakePi`.
+ * @details Captures registered commands, tools, event handlers, and active-tool state for deterministic extension-registration assertions. The alias is compile-time only and introduces no runtime side effects.
+ */
 type FakePi = ReturnType<typeof createFakePi>;
 
+/**
+ * @brief Describes the scripted UI responses consumed by `createFakeCtx`.
+ * @details Supplies queued select and input values so interactive command tests remain deterministic and free from real TUI dependencies. The alias is compile-time only and introduces no runtime side effects.
+ */
 type FakeCtxPlan = { selects: string[]; inputs?: string[] };
 
+/**
+ * @brief Creates a fake pi runtime that records command and tool registrations.
+ * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, event dispatch, and active-tool mutation. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
+ * @return {FakePi} Fake extension runtime.
+ */
 function createFakePi() {
   const commands = new Map<string, RegisteredCommand>();
   const tools: RegisteredTool[] = [];
@@ -64,6 +92,13 @@ function createFakePi() {
   } as any;
 }
 
+/**
+ * @brief Creates a fake extension command context with scripted UI interactions.
+ * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, and `setEditorText` behaviors backed by in-memory state so menu-oriented tests can assert side effects without a real UI. Runtime is O(1) plus queued interaction count. Side effects are limited to in-memory state mutation.
+ * @param[in] cwd {string} Working directory exposed to command handlers.
+ * @param[in] plan {FakeCtxPlan} Scripted select and input responses.
+ * @return {any} Fake command context compatible with the tested handlers.
+ */
 function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }) {
   const selects = [...plan.selects];
   const inputs = [...(plan.inputs ?? [])];
@@ -99,7 +134,34 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }) {
   };
 }
 
-test("extension registers all required prompt commands, tool wrappers, and agent tools", () => {
+/**
+ * @brief Executes one registered fake tool while temporarily overriding `process.cwd()`.
+ * @details Locates the named tool, validates the presence of its execute callback, switches the process working directory for the duration of the call, invokes the tool, and restores the previous cwd in a `finally` block. Runtime is dominated by the delegated tool logic. Side effects transiently mutate process cwd.
+ * @param[in] pi {FakePi} Fake extension runtime containing registered tools.
+ * @param[in] toolName {string} Registered tool name.
+ * @param[in] cwd {string} Working directory to expose to tool code through `process.cwd()`.
+ * @param[in] params {Record<string, unknown>} Tool parameter object.
+ * @return {Promise<any>} Tool execution result payload.
+ */
+async function executeRegisteredTool(
+  pi: FakePi,
+  toolName: string,
+  cwd: string,
+  params: Record<string, unknown> = {},
+): Promise<any> {
+  const tool = pi.tools.find((candidate) => candidate.name === toolName);
+  assert.ok(tool, `missing tool ${toolName}`);
+  assert.ok(tool.execute, `missing execute handler for tool ${toolName}`);
+  const previousCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    return await tool.execute!("tool-call-id", params, undefined, undefined, { cwd });
+  } finally {
+    process.chdir(previousCwd);
+  }
+}
+
+test("extension registers prompt and config commands while exposing tool capabilities only as tools", () => {
   const pi = createFakePi();
   piUsereqExtension(pi);
 
@@ -123,6 +185,11 @@ test("extension registers all required prompt commands, tool wrappers, and agent
     "req-renumber",
     "req-workflow",
     "req-write",
+  ]) {
+    assert.ok(commandNames.includes(name), `missing command ${name}`);
+  }
+
+  for (const name of [
     "git-path",
     "get-base-path",
     "files-tokens",
@@ -142,7 +209,7 @@ test("extension registers all required prompt commands, tool wrappers, and agent
     "git-wt-delete",
     "test-static-check",
   ]) {
-    assert.ok(commandNames.includes(name), `missing command ${name}`);
+    assert.ok(!commandNames.includes(name), `unexpected command ${name}`);
   }
 
   const toolNames = pi.tools.map((tool: RegisteredTool) => tool.name).sort();
@@ -225,22 +292,22 @@ test("configuration menu can disable pi-usereq startup tools", async () => {
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
 
-test("git-path dependent commands derive the repository root at runtime", async () => {
+test("git-path tool derives the repository root at runtime", async () => {
   const { projectBase } = initFixtureRepo();
-  const configPath = path.join(projectBase, ".pi", "pi-usereq", "config.json");
-  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  config["git-path"] = "/tmp/wrong-git-root";
-  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  try {
+    const configPath = path.join(projectBase, ".pi", "pi-usereq", "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    config["git-path"] = "/tmp/wrong-git-root";
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 
-  const pi = createFakePi();
-  piUsereqExtension(pi);
-  const command = pi.commands.get("git-path");
-  assert.ok(command);
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "git-path", projectBase);
 
-  const ctx = createFakeCtx(projectBase);
-  await command!.handler("", ctx);
-
-  assert.equal(ctx.__state.editorText.trim(), projectBase);
+    assert.equal(result.content?.[0]?.text, projectBase);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
 });
 
 test("static-check exposes the supported programming languages", () => {

@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Registers the pi-usereq extension commands, tools, and configuration UI.
- * @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, wrapped command handlers, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
+ * @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
  */
 
 /**
@@ -52,15 +52,8 @@ import {
   STATIC_CHECK_MODULES,
   getSupportedStaticCheckLanguageSupport,
   parseEnableStaticCheck,
-  runStaticCheck,
 } from "./core/static-check.js";
 import { shellSplit } from "./core/utils.js";
-
-/**
- * @brief Represents a wrapped tool-runner function exposed through the extension.
- * @details Each runner receives the resolved project base, effective config, and shell-split arguments, then returns a normalized `ToolResult`. The alias is compile-time only and adds no runtime cost.
- */
-type CommandRunner = (projectBase: string, config: UseReqConfig, args: string[]) => ToolResult;
 
 /**
  * @brief Lists bundled prompt commands exposed by the extension.
@@ -85,29 +78,6 @@ const PROMPT_NAMES = [
   "write",
 ] as const;
 
-/**
- * @brief Maps extension command names to tool-runner dispatch functions.
- * @details Provides the single source of truth for wrapper command registration and execution. Lookup complexity is O(1) by tool name.
- */
-const TOOL_RUNNERS: Record<string, CommandRunner> = {
-  "git-path": (projectBase, config) => runGitPath(projectBase, config),
-  "get-base-path": (projectBase, config) => runGetBasePath(projectBase, config),
-  "files-tokens": (_projectBase, _config, args) => runFilesTokens(args),
-  "files-references": (_projectBase, _config, args) => runFilesReferences(args, process.cwd()),
-  "files-compress": (_projectBase, _config, args) => runFilesCompress(args, process.cwd(), false),
-  "files-find": (_projectBase, _config, args) => runFilesFind(args, false),
-  references: (projectBase, config) => runReferences(projectBase, config),
-  compress: (projectBase, config) => runCompress(projectBase, config, false),
-  find: (projectBase, config, args) => runFind(projectBase, args[0] ?? "", args[1] ?? "", config, false),
-  tokens: (projectBase, config) => runTokens(projectBase, config),
-  "files-static-check": (projectBase, config, args) => runFilesStaticCheck(args, projectBase, config),
-  "static-check": (projectBase, config) => runProjectStaticCheck(projectBase, config),
-  "git-check": (projectBase, config) => runGitCheck(projectBase, config),
-  "docs-check": (projectBase, config) => runDocsCheck(projectBase, config),
-  "git-wt-name": (projectBase, config) => runGitWtName(projectBase, config),
-  "git-wt-create": (projectBase, config, args) => runGitWtCreate(projectBase, args[0] ?? "", config),
-  "git-wt-delete": (projectBase, config, args) => runGitWtDelete(projectBase, args[0] ?? "", config),
-};
 
 /**
  * @brief Resolves the effective project base from a working directory.
@@ -163,25 +133,6 @@ function formatResultForEditor(result: ToolResult): string {
   return parts.join(parts.length > 1 ? "\n\n" : "");
 }
 
-/**
- * @brief Presents a tool result in the extension UI.
- * @details Writes the formatted result into the editor when non-empty and emits an info or error notification based on the exit code. Runtime is O(n) in displayed text size. Side effects include UI editor and notification updates.
- * @param[in] ctx {ExtensionCommandContext} Active command context.
- * @param[in] result {ToolResult} Tool result payload.
- * @param[in] label {string} Human-readable operation label.
- * @return {void} No return value.
- */
-function showToolResult(ctx: ExtensionCommandContext, result: ToolResult, label: string): void {
-  const content = formatResultForEditor(result);
-  if (content) {
-    ctx.ui.setEditorText(content);
-  }
-  if (result.code === 0) {
-    ctx.ui.notify(`${label} completed`, "info");
-  } else {
-    ctx.ui.notify(`${label} failed`, "error");
-  }
-}
 
 /**
  * @brief Returns the registered pi-usereq startup tools.
@@ -293,26 +244,6 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
   return `${lines.join("\n")}\n`;
 }
 
-/**
- * @brief Executes one wrapped tool command from extension command handlers.
- * @details Resolves the registered runner, loads project config for the current cwd, shell-splits the raw argument string, executes the tool, and presents the result in the UI. Runtime is O(n) in argument length plus delegated tool cost. Side effects include UI updates and delegated tool side effects.
- * @param[in] name {string} Registered wrapper command name.
- * @param[in] rawArgs {string} Raw command argument string.
- * @param[in] ctx {ExtensionCommandContext} Active command context.
- * @return {Promise<void>} Promise resolved after UI presentation completes.
- */
-async function runToolCommand(name: string, rawArgs: string, ctx: ExtensionCommandContext): Promise<void> {
-  const runner = TOOL_RUNNERS[name];
-  if (!runner) {
-    ctx.ui.notify(`Unknown tool wrapper: ${name}`, "error");
-    return;
-  }
-  const projectBase = getProjectBase(ctx.cwd);
-  const config = loadProjectConfig(ctx.cwd);
-  const args = shellSplit(rawArgs);
-  const result = runner(projectBase, config, args);
-  showToolResult(ctx, result, name);
-}
 
 /**
  * @brief Registers bundled prompt commands with the extension.
@@ -335,54 +266,13 @@ function registerPromptCommands(pi: ExtensionAPI): void {
   });
 }
 
-/**
- * @brief Registers command wrappers around tool-runner functions.
- * @details Creates one extension command per entry in `TOOL_RUNNERS` and also registers the standalone static-check test driver. Runtime is O(t) for registration. Side effects include command registration.
- * @param[in] pi {ExtensionAPI} Active extension API instance.
- * @return {void} No return value.
- */
-function registerToolWrapperCommands(pi: ExtensionAPI): void {
-  Object.keys(TOOL_RUNNERS).forEach((name) => {
-    pi.registerCommand(name, {
-      description: `Run pi-usereq tool ${name}`,
-      handler: async (args, ctx) => {
-        await runToolCommand(name, args, ctx);
-      },
-    });
-  });
-
-  pi.registerCommand("test-static-check", {
-    description: "Run pi-usereq static-check test driver",
-    handler: async (args, ctx) => {
-      const argv = shellSplit(args);
-      const result: ToolResult = { stdout: "", stderr: "", code: 0 };
-      try {
-        const previousWrite = process.stdout.write.bind(process.stdout);
-        let captured = "";
-        (process.stdout.write as unknown as (chunk: string | Uint8Array) => boolean) = ((chunk: string | Uint8Array) => {
-          captured += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-          return true;
-        }) as unknown as typeof process.stdout.write;
-        try {
-          result.code = runStaticCheck(argv);
-        } finally {
-          process.stdout.write = previousWrite;
-        }
-        result.stdout = captured;
-      } catch (error) {
-        result.code = (error as { code?: number }).code ?? 1;
-        result.stderr = error instanceof Error ? error.message : String(error);
-      }
-      showToolResult(ctx, result, "test-static-check");
-    },
-  });
-}
 
 /**
  * @brief Registers pi-usereq agent tools exposed to the model.
- * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations and UI-aware result formatting. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
+ * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
+ * @satisfies REQ-005, REQ-044, REQ-045
  */
 function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
@@ -1018,14 +908,14 @@ function registerConfigCommands(pi: ExtensionAPI): void {
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Ensures bundled resources exist, registers commands and tools, and installs a `session_start` hook that applies configured startup tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, and active-tool changes.
+ * @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured startup tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   ensureHomeResources();
   registerPromptCommands(pi);
-  registerToolWrapperCommands(pi);
   registerAgentTools(pi);
   registerConfigCommands(pi);
   pi.on("session_start", async (_event, ctx) => {
