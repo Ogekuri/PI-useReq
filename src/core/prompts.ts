@@ -1,8 +1,18 @@
+/**
+ * @file
+ * @brief Renders bundled pi-usereq prompts for the current project context.
+ * @details Applies placeholder substitution, legacy tool-name rewrites, and conditional pi.dev conformance guidance before prompt text is sent to the agent. Runtime is linear in prompt size plus replacement count. Side effects are limited to filesystem reads used for manifest checks and bundled prompt loading.
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 import { buildPromptReplacementPaths, type UseReqConfig } from "./config.js";
 import { readBundledPrompt } from "./resources.js";
 
+/**
+ * @brief Defines regex rewrites from legacy CLI spellings to internal tool names.
+ * @details The ordered replacement table converts historical `req --...` references into names exposed by the extension runtime. Application cost is O(p*r) where p is pattern count and r is prompt length.
+ */
 const TOOL_REFERENCE_REPLACEMENTS: Array<[RegExp, string]> = [
   [/`req --find`/g, "`find` tool"],
   [/`req --files-find`/g, "`files-find` tool"],
@@ -34,6 +44,10 @@ const TOOL_REFERENCE_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\breq --get-base-path\b/g, "get-base-path tool"],
 ];
 
+/**
+ * @brief Lists prompt names that may require pi.dev manifest conformance rules.
+ * @details Only prompts that inspect or mutate source code receive the conditional conformance block. Membership checks are O(1) through the set representation.
+ */
 const PI_DEV_AWARE_PROMPT_NAMES = new Set<string>([
   "analyze",
   "change",
@@ -46,8 +60,20 @@ const PI_DEV_AWARE_PROMPT_NAMES = new Set<string>([
   "recreate",
   "refactor",
 ]);
+/**
+ * @brief Stores the repository-relative pi.dev manifest path used in prompt guidance.
+ * @details The constant lets rendered prompts cite the authoritative documentation manifest with a deterministic path. Lookup complexity is O(1).
+ */
 const PI_DEV_MANIFEST_PROMPT_PATH = "docs/pi.dev/agent-document-manifest.json";
+/**
+ * @brief Stores the repository-relative base directory for pi.dev documentation.
+ * @details Prompt guidance uses this path when instructing agents how to resolve manifest references. Lookup complexity is O(1).
+ */
 const PI_DEV_DOCS_PROMPT_PATH = "docs/pi.dev";
+/**
+ * @brief Defines the injected pi.dev conformance guidance block.
+ * @details The block instructs downstream agents to read the manifest and referenced documentation before changing pi.dev-integrated code. Construction happens once at module load. Access complexity is O(1).
+ */
 const PI_DEV_CONFORMANCE_BLOCK = [
   "- If the task touches extension code that interfaces with pi CLI or pi.dev APIs, "
     + `read \`${PI_DEV_MANIFEST_PROMPT_PATH}\` and every document path it `

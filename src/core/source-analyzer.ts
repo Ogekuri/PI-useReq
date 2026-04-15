@@ -1,8 +1,18 @@
+/**
+ * @file
+ * @brief Analyzes source files into language-agnostic structural elements and markdown references.
+ * @details Defines the language-spec registry, source-element model, structural analyzer, Doxygen association logic, and markdown rendering helpers used by compression, reference generation, and construct search tools. Runtime is generally linear in source size plus language-pattern count. Side effects are limited to filesystem reads.
+ */
+
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { formatDoxygenFieldsAsMarkdown, parseDoxygenComment } from "./doxygen-parser.js";
 
+/**
+ * @brief Enumerates the normalized source-element kinds emitted by the analyzer.
+ * @details The enum lets language-specific regex matches collapse into a shared symbol taxonomy for downstream markdown generation and construct filtering. Access complexity is O(1).
+ */
 export enum ElementType {
   FUNCTION = "FUNCTION",
   METHOD = "METHOD",
@@ -31,6 +41,10 @@ export enum ElementType {
   TYPEDEF = "TYPEDEF",
 }
 
+/**
+ * @brief Represents one analyzed source element or comment block.
+ * @details Stores location metadata, extracted source text, normalized naming/signature data, hierarchy information, attached Doxygen fields, and body annotations used by downstream renderers. Instance initialization is O(1) aside from object assignment.
+ */
 export class SourceElement {
   elementType: ElementType;
   lineStart: number;
@@ -47,6 +61,11 @@ export class SourceElement {
   exitPoints: Array<[number, string]> = [];
   doxygenFields: Record<string, string[]> = {};
 
+  /**
+   * @brief Initializes a source-element record.
+   * @details Copies caller-provided metadata, ensures required fields are assigned explicitly, and restores default arrays/maps for optional enrichment fields. Runtime is O(k) in the number of provided properties. Mutates instance fields only.
+   * @param[in] init {Partial<SourceElement> & Pick<SourceElement, "elementType" | "lineStart" | "lineEnd" | "extract">} Initial field set.
+   */
   constructor(init: Partial<SourceElement> & Pick<SourceElement, "elementType" | "lineStart" | "lineEnd" | "extract">) {
     Object.assign(this, init);
     this.elementType = init.elementType;
@@ -59,6 +78,11 @@ export class SourceElement {
     this.doxygenFields = init.doxygenFields ?? {};
   }
 
+  /**
+   * @brief Returns the normalized public type label for the element.
+   * @details Collapses both single-line and multi-line comment variants into the shared `COMMENT` label while leaving all other element types unchanged. Runtime is O(1). No side effects occur.
+   * @return {string} Normalized type label.
+   */
   get typeLabel(): string {
     switch (this.elementType) {
       case ElementType.COMMENT_SINGLE:
@@ -70,6 +94,10 @@ export class SourceElement {
   }
 }
 
+/**
+ * @brief Describes language-specific parsing behavior for the source analyzer.
+ * @details Each spec defines comment syntax, string delimiters, and ordered regex patterns mapping source lines to `ElementType` values. The interface is compile-time only and introduces no runtime cost.
+ */
 export interface LanguageSpec {
   name: string;
   singleComment?: string;
@@ -79,10 +107,21 @@ export interface LanguageSpec {
   patterns: Array<[ElementType, RegExp]>;
 }
 
+/**
+ * @brief Creates a regular expression from a raw pattern string.
+ * @details Wraps `new RegExp(...)` to keep the language-spec table compact and visually uniform. Runtime is O(1) relative to call-site complexity. No side effects occur.
+ * @param[in] pattern {string} Raw regular-expression pattern.
+ * @return {RegExp} Constructed regular expression.
+ */
 function re(pattern: string): RegExp {
   return new RegExp(pattern);
 }
 
+/**
+ * @brief Builds the analyzer language-spec registry.
+ * @details Materializes comment syntax, string delimiters, and ordered construct-detection regexes for all supported languages and aliases. Runtime is O(l) in the number of language definitions. No side effects occur.
+ * @return {Record<string, LanguageSpec>} Language-spec map keyed by canonical names and aliases.
+ */
 export function buildLanguageSpecs(): Record<string, LanguageSpec> {
   const specs: Record<string, LanguageSpec> = {};
 
@@ -445,15 +484,39 @@ export function buildLanguageSpecs(): Record<string, LanguageSpec> {
   return specs;
 }
 
+/**
+ * @brief Performs language-aware structural analysis and metadata enrichment on source files.
+ * @details Parses files into `SourceElement` records, derives signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields, then exposes the enriched element list to higher-level renderers. Runtime is generally O(n * p) where n is line count and p is pattern count for the selected language. Side effects are limited to filesystem reads.
+ */
 export class SourceAnalyzer {
   specs: Record<string, LanguageSpec>;
+  /**
+   * @brief Matches explicit early-exit statements inside analyzed bodies.
+   * @details The regex captures return-like constructs that downstream markdown renderers should surface as exit annotations. Evaluation cost is linear in line length.
+   */
   private static readonly EXIT_PATTERNS_RETURN = /^\s*(return\b.*|yield\b.*|raise\b.*|throw\b.*|panic!\(.*)/;
+  /**
+   * @brief Matches process-terminating calls that imply control-flow exit.
+   * @details The regex captures common runtime termination APIs used as implicit exits in body-annotation rendering. Evaluation cost is linear in line length.
+   */
   private static readonly EXIT_PATTERNS_IMPLICIT = /^\s*(sys\.exit\(.*|os\._exit\(.*|exit\(.*|process\.exit\(.*)/;
 
+  /**
+   * @brief Initializes a source analyzer with the full language-spec registry.
+   * @details Builds the language-spec map eagerly so later analysis passes can perform O(1) spec lookups. Construction cost is O(l) in supported-language count. Mutates instance fields only.
+   */
   constructor() {
     this.specs = buildLanguageSpecs();
   }
 
+  /**
+   * @brief Parses a source file into raw source-element records.
+   * @details Loads the file, tokenizes comments and definitions line-by-line using the selected language spec, computes approximate block spans, and returns extracted elements without higher-level enrichment. Runtime is O(n * p) where n is line count and p is pattern count. Side effects are limited to filesystem reads.
+   * @param[in] filePath {string} Source file path.
+   * @param[in] language {string} Canonical language identifier or alias.
+   * @return {SourceElement[]} Raw analyzed elements.
+   * @throws {Error} Throws when the requested language is unsupported.
+   */
   analyze(filePath: string, language: string): SourceElement[] {
     const normalizedLanguage = language.toLowerCase().trim().replace(/^\./, "");
     const spec = this.specs[normalizedLanguage];
@@ -586,6 +649,14 @@ export class SourceAnalyzer {
     return elements;
   }
 
+  /**
+   * @brief Enriches raw analyzed elements with derived metadata.
+   * @details Normalizes names, computes signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen associations. When `filePath` is omitted, body-level annotation extraction is skipped. Runtime is O(n log n) plus file-read cost for annotation extraction. Side effects are limited to filesystem reads.
+   * @param[in] elements {SourceElement[]} Raw analyzed elements.
+   * @param[in] language {string} Canonical language identifier or alias.
+   * @param[in] filePath {string | undefined} Optional source file path for body-comment extraction.
+   * @return {SourceElement[]} The same array instance after in-place enrichment.
+   */
   enrich(elements: SourceElement[], language: string, filePath?: string): SourceElement[] {
     const normalizedLanguage = language.toLowerCase().trim().replace(/^\./, "");
     this.cleanNames(elements, normalizedLanguage);
@@ -600,6 +671,13 @@ export class SourceAnalyzer {
     return elements;
   }
 
+  /**
+   * @brief Refines element names using the primary language patterns.
+   * @details Replays the matching regex against each element's first extracted line and stores the most specific non-empty capture group as the normalized name. Runtime is O(n * p). Side effect: mutates `element.name` in place.
+   * @param[in,out] elements {SourceElement[]} Elements to normalize.
+   * @param[in] language {string} Canonical language identifier.
+   * @return {void} No return value.
+   */
   private cleanNames(elements: SourceElement[], language: string): void {
     const spec = this.specs[language];
     if (!spec) return;
@@ -622,6 +700,12 @@ export class SourceAnalyzer {
     }
   }
 
+  /**
+   * @brief Derives single-line signatures for non-comment elements.
+   * @details Uses the first extracted line, trims structural suffixes such as trailing `{`, `:`, or `;`, and stores the result as `element.signature`. Runtime is O(n). Side effect: mutates `element.signature`.
+   * @param[in,out] elements {SourceElement[]} Elements to enrich.
+   * @return {void} No return value.
+   */
   private extractSignatures(elements: SourceElement[]): void {
     const skipTypes = new Set([ElementType.COMMENT_SINGLE, ElementType.COMMENT_MULTI, ElementType.IMPORT, ElementType.DECORATOR]);
     for (const element of elements) {
@@ -637,6 +721,12 @@ export class SourceAnalyzer {
     }
   }
 
+  /**
+   * @brief Assigns one-level parent relationships for nested elements.
+   * @details Treats classes, structs, modules, interfaces, and similar containers as parents, then attaches each contained non-container element to the nearest enclosing container. Runtime is O(n * c) where c is container count. Side effect: mutates `parentName` and `depth`.
+   * @param[in,out] elements {SourceElement[]} Elements to enrich.
+   * @return {void} No return value.
+   */
   private detectHierarchy(elements: SourceElement[]): void {
     const containerTypes = new Set([
       ElementType.CLASS,
@@ -670,6 +760,13 @@ export class SourceAnalyzer {
     }
   }
 
+  /**
+   * @brief Derives visibility metadata for applicable elements.
+   * @details Computes a per-element visibility code from the first signature line using language-specific heuristics. Runtime is O(n). Side effect: mutates `element.visibility` when a visibility code is derivable.
+   * @param[in,out] elements {SourceElement[]} Elements to enrich.
+   * @param[in] language {string} Canonical language identifier.
+   * @return {void} No return value.
+   */
   private extractVisibility(elements: SourceElement[], language: string): void {
     for (const element of elements) {
       if ([ElementType.COMMENT_SINGLE, ElementType.COMMENT_MULTI, ElementType.IMPORT].includes(element.elementType)) continue;
@@ -681,6 +778,14 @@ export class SourceAnalyzer {
     }
   }
 
+  /**
+   * @brief Infers visibility from a signature and language rules.
+   * @details Applies language-specific heuristics such as naming conventions, access modifiers, and `pub` markers to return a compact visibility code. Runtime is O(n) in signature length. No side effects occur.
+   * @param[in] signature {string} First-line signature text.
+   * @param[in] name {string | undefined} Normalized element name.
+   * @param[in] language {string} Canonical language identifier.
+   * @return {string | undefined} Visibility code such as `pub`, `priv`, `prot`, or `undefined` when unavailable.
+   */
   private parseVisibility(signature: string, name: string | undefined, language: string): string | undefined {
     if (["python", "py"].includes(language)) {
       if (name?.startsWith("__") && !name.endsWith("__")) return "priv";
@@ -714,6 +819,13 @@ export class SourceAnalyzer {
     return undefined;
   }
 
+  /**
+   * @brief Derives inheritance metadata for class-like elements.
+   * @details Inspects the first line of classes, structs, and interfaces and stores parsed inheritance text when the language-specific parser can extract it. Runtime is O(n). Side effect: mutates `element.inherits`.
+   * @param[in,out] elements {SourceElement[]} Elements to enrich.
+   * @param[in] language {string} Canonical language identifier.
+   * @return {void} No return value.
+   */
   private extractInheritance(elements: SourceElement[], language: string): void {
     for (const element of elements) {
       if (![ElementType.CLASS, ElementType.STRUCT, ElementType.INTERFACE].includes(element.elementType)) continue;
@@ -725,6 +837,13 @@ export class SourceAnalyzer {
     }
   }
 
+  /**
+   * @brief Parses inheritance syntax from one declaration line.
+   * @details Supports language-specific `extends`, `implements`, `:`, and subclass forms, returning a compact textual summary when present. Runtime is O(n) in line length. No side effects occur.
+   * @param[in] firstLine {string} First line of the declaration.
+   * @param[in] language {string} Canonical language identifier.
+   * @return {string | undefined} Parsed inheritance summary, or `undefined` when absent or unsupported.
+   */
   private parseInheritance(firstLine: string, language: string): string | undefined {
     let match: RegExpExecArray | null = null;
     if (["python", "py"].includes(language)) {
@@ -754,6 +873,14 @@ export class SourceAnalyzer {
     return undefined;
   }
 
+  /**
+   * @brief Extracts body comments and exit points for multi-line elements.
+   * @details Reads the full file, scans each eligible element body for standalone and inline comments plus explicit or implicit exit statements, and stores the results on the element. Runtime is O(total body lines). Side effects are limited to filesystem reads and in-place element mutation.
+   * @param[in,out] elements {SourceElement[]} Elements to enrich.
+   * @param[in] language {string} Canonical language identifier.
+   * @param[in] filePath {string} Source file path.
+   * @return {void} No return value.
+   */
   private extractBodyAnnotations(elements: SourceElement[], language: string, filePath: string): void {
     const spec = this.specs[language];
     if (!spec) return;
@@ -843,6 +970,12 @@ export class SourceAnalyzer {
     }
   }
 
+  /**
+   * @brief Associates parsed Doxygen comments with analyzed elements.
+   * @details Searches inline postfix comments, nearby preceding comments, and selected following postfix comments while excluding file-level comments, then stores the parsed Doxygen field map on each element. Runtime is O(n^2) in the worst case due to proximity scans across comments and elements. Side effect: mutates `element.doxygenFields`.
+   * @param[in,out] elements {SourceElement[]} Elements to enrich.
+   * @return {void} No return value.
+   */
   private extractDoxygenFields(elements: SourceElement[]): void {
     const commentElements = elements.filter((element) => [ElementType.COMMENT_SINGLE, ElementType.COMMENT_MULTI].includes(element.elementType));
     const nonCommentElements = elements.filter((element) => ![ElementType.COMMENT_SINGLE, ElementType.COMMENT_MULTI].includes(element.elementType));
@@ -933,10 +1066,23 @@ export class SourceAnalyzer {
     }
   }
 
+  /**
+   * @brief Tests whether a comment uses postfix-Doxygen marker syntax.
+   * @details Matches comment prefixes such as `//!`, `/*!`, `#!`, and similar forms used for same-line documentation attachment. Runtime is O(n) in comment length. No side effects occur.
+   * @param[in] commentText {string} Raw comment text.
+   * @return {boolean} `true` when the comment looks like postfix Doxygen.
+   */
   private isPostfixDoxygenComment(commentText: string): boolean {
     return !!commentText && /^\s*(?:#|\/\/+|--|\/\*+|;+)!?</.test(commentText);
   }
 
+  /**
+   * @brief Removes language comment markers from one comment line.
+   * @details Strips known single-line prefixes and leading/trailing delimiter characters so body-annotation rendering receives semantic text only. Runtime is O(n). No side effects occur.
+   * @param[in] text {string} Raw comment line.
+   * @param[in] spec {LanguageSpec} Active language specification.
+   * @return {string} Cleaned comment payload.
+   */
   private cleanCommentLine(text: string, spec: LanguageSpec): string {
     let value = text.trim();
     for (const prefix of ["///", "//!", "//", "#!", "##", "#", "--", ";;"]) {
@@ -949,6 +1095,14 @@ export class SourceAnalyzer {
     return value;
   }
 
+  /**
+   * @brief Tests whether a character position falls inside a string literal for the active language.
+   * @details Scans the line left-to-right while tracking escaped characters and active delimiters defined by the language spec. Runtime is O(n) in inspected prefix length. No side effects occur.
+   * @param[in] line {string} Source line to inspect.
+   * @param[in] pos {number} Zero-based character position.
+   * @param[in] spec {LanguageSpec} Active language specification.
+   * @return {boolean} `true` when the position is inside a string literal.
+   */
   private inStringContext(line: string, pos: number, spec: LanguageSpec): boolean {
     let inString = false;
     let currentDelimiter: string | undefined;
@@ -981,6 +1135,13 @@ export class SourceAnalyzer {
     return inString;
   }
 
+  /**
+   * @brief Locates the first real single-line comment marker in a line.
+   * @details Scans the line while respecting active string delimiters so comment markers inside strings are ignored. Runtime is O(n) in line length. No side effects occur.
+   * @param[in] line {string} Source line to inspect.
+   * @param[in] spec {LanguageSpec} Active language specification.
+   * @return {number | undefined} Zero-based comment index, or `undefined` when absent.
+   */
   private findComment(line: string, spec: LanguageSpec): number | undefined {
     if (!spec.singleComment) return undefined;
     let inString = false;
@@ -1011,6 +1172,15 @@ export class SourceAnalyzer {
     return undefined;
   }
 
+  /**
+   * @brief Estimates the inclusive end line for a block-like construct.
+   * @details Uses language-specific indentation, brace, or `end` heuristics to bound multi-line definitions without a full parser. Runtime is O(k) where k is the scanned lookahead window. No side effects occur.
+   * @param[in] lines {string[]} Full file lines.
+   * @param[in] startIndex {number} Zero-based starting line index.
+   * @param[in] language {string} Canonical language identifier.
+   * @param[in] firstLine {string} First source line of the construct.
+   * @return {number} One-based inclusive end line.
+   */
   private findBlockEnd(lines: string[], startIndex: number, language: string, firstLine: string): number {
     if (["python", "py"].includes(language)) {
       const indent = firstLine.length - firstLine.trimStart().length;
@@ -1081,10 +1251,22 @@ export class SourceAnalyzer {
   }
 }
 
+/**
+ * @brief Formats one element location for markdown output.
+ * @details Returns either a single-line `Lx` token or an inclusive line-range token `Lx-y`. Runtime is O(1). No side effects occur.
+ * @param[in] element {SourceElement} Source element.
+ * @return {string} Markdown location token.
+ */
 function mdLoc(element: SourceElement): string {
   return element.lineStart === element.lineEnd ? `L${element.lineStart}` : `L${element.lineStart}-${element.lineEnd}`;
 }
 
+/**
+ * @brief Maps an element type to its compact markdown kind code.
+ * @details Converts `ElementType` values into the abbreviated tokens used by reference markdown and symbol indexes. Runtime is O(1). No side effects occur.
+ * @param[in] element {SourceElement} Source element.
+ * @return {string} Compact kind code.
+ */
 function mdKind(element: SourceElement): string {
   const mapping: Record<ElementType, string> = {
     [ElementType.FUNCTION]: "fn",
@@ -1116,6 +1298,13 @@ function mdKind(element: SourceElement): string {
   return mapping[element.elementType] ?? "unk";
 }
 
+/**
+ * @brief Extracts normalized plain text from a comment element.
+ * @details Removes comment markers, drops language-specific block delimiters, joins lines with spaces, and optionally truncates the result. Runtime is O(n) in comment length. No side effects occur.
+ * @param[in] commentElement {SourceElement} Comment element.
+ * @param[in] maxLength {number} Optional maximum output length, where `0` disables truncation.
+ * @return {string} Cleaned comment text.
+ */
 function extractCommentText(commentElement: SourceElement, maxLength = 0): string {
   const lines = commentElement.extract.split("\n");
   const cleaned: string[] = [];
@@ -1139,6 +1328,12 @@ function extractCommentText(commentElement: SourceElement, maxLength = 0): strin
   return text;
 }
 
+/**
+ * @brief Extracts cleaned individual lines from a comment element.
+ * @details Removes comment markers and delimiter-only lines while preserving line granularity for markdown rendering. Runtime is O(n) in comment length. No side effects occur.
+ * @param[in] commentElement {SourceElement} Comment element.
+ * @return {string[]} Cleaned comment lines.
+ */
 function extractCommentLines(commentElement: SourceElement): string[] {
   return commentElement.extract
     .split("\n")
@@ -1156,6 +1351,12 @@ function extractCommentLines(commentElement: SourceElement): string[] {
     .filter((line) => !!line && !line.startsWith("=begin") && !line.startsWith("=end"));
 }
 
+/**
+ * @brief Builds lookup structures linking comments to definitions and file descriptions.
+ * @details Sorts elements, associates nearby non-inline comments with following definitions, collects standalone comments, and derives a compact file description from early comment text. Runtime is O(n log n). No side effects occur.
+ * @param[in] elements {SourceElement[]} Analyzed source elements.
+ * @return {[Record<number, SourceElement[]>, SourceElement[], string]} Attached-comment map, standalone comments, and file description.
+ */
 function buildCommentMaps(elements: SourceElement[]): [Record<number, SourceElement[]>, SourceElement[], string] {
   const sorted = [...elements].sort((a, b) => a.lineStart - b.lineStart);
   const definitionTypes = new Set(Object.values(ElementType).filter((value) => ![ElementType.COMMENT_SINGLE, ElementType.COMMENT_MULTI, ElementType.IMPORT, ElementType.DECORATOR].includes(value as ElementType)) as ElementType[]);
@@ -1198,6 +1399,13 @@ function buildCommentMaps(elements: SourceElement[]): [Record<number, SourceElem
   return [docForDef, standaloneComments, fileDescription];
 }
 
+/**
+ * @brief Merges Doxygen field values into one accumulator map.
+ * @details Appends values for matching tags without deduplication so relative source order is preserved. Runtime is O(v) in appended value count. Side effect: mutates `baseFields`.
+ * @param[in,out] baseFields {Record<string, string[]>} Mutable destination field map.
+ * @param[in] extraFields {Record<string, string[]>} Source field map.
+ * @return {Record<string, string[]>} The mutated destination map.
+ */
 function mergeDoxygenFields(baseFields: Record<string, string[]>, extraFields: Record<string, string[]>): Record<string, string[]> {
   Object.entries(extraFields).forEach(([tag, values]) => {
     baseFields[tag] ??= [];
@@ -1206,6 +1414,12 @@ function mergeDoxygenFields(baseFields: Record<string, string[]>, extraFields: R
   return baseFields;
 }
 
+/**
+ * @brief Aggregates all Doxygen fields associated with one element.
+ * @details Starts with directly attached fields and then merges early body comments from the first three body lines when they parse as Doxygen. Runtime is O(c) in considered comment count. No external state is mutated.
+ * @param[in] element {SourceElement} Source element.
+ * @return {Record<string, string[]>} Aggregated Doxygen field map.
+ */
 export function collectElementDoxygenFields(element: SourceElement): Record<string, string[]> {
   const aggregate: Record<string, string[]> = {};
   if (element.doxygenFields) {
@@ -1222,6 +1436,12 @@ export function collectElementDoxygenFields(element: SourceElement): Record<stri
   return aggregate;
 }
 
+/**
+ * @brief Collects the first file-level Doxygen field map from analyzed elements.
+ * @details Scans non-inline comment elements in source order for an `@file` tag and returns the parsed Doxygen map from the first matching comment. Runtime is O(n). No side effects occur.
+ * @param[in] elements {SourceElement[]} Analyzed source elements.
+ * @return {Record<string, string[]>} Parsed file-level Doxygen field map, or an empty map when absent.
+ */
 export function collectFileLevelDoxygenFields(elements: SourceElement[]): Record<string, string[]> {
   const fileTagPattern = /(?<!\w)(?:@|\\)file\b/;
   const commentElements = elements
@@ -1235,6 +1455,17 @@ export function collectFileLevelDoxygenFields(elements: SourceElement[]): Record
   return {};
 }
 
+/**
+ * @brief Renders analyzed source elements as the repository reference-markdown format.
+ * @details Builds file metadata, imports, top-level definitions, child elements, comments, and a symbol index while incorporating Doxygen fields and optional legacy annotations. Runtime is O(n log n) in element count. No side effects occur.
+ * @param[in] elements {SourceElement[]} Enriched source elements.
+ * @param[in] filePath {string} Display file path.
+ * @param[in] language {string} Canonical analyzer language identifier.
+ * @param[in] specName {string} Human-readable language name.
+ * @param[in] totalLines {number} Total source-line count.
+ * @param[in] includeLegacyAnnotations {boolean} When `true`, include non-Doxygen comment annotations.
+ * @return {string} Rendered markdown document for the file.
+ */
 export function formatMarkdown(
   elements: SourceElement[],
   filePath: string,
@@ -1452,6 +1683,15 @@ export function formatMarkdown(
   return out.join(os.EOL);
 }
 
+/**
+ * @brief Renders body comments and exit-point annotations for one element.
+ * @details Merges comment and exit maps, skips excluded line ranges, and emits normalized markdown lines that summarize body-level annotations. Runtime is O(a log a) in annotation count. No side effects occur.
+ * @param[in,out] out {string[]} Markdown output buffer.
+ * @param[in] element {SourceElement} Source element whose body annotations should be rendered.
+ * @param[in] indent {string} Prefix applied to each rendered annotation line.
+ * @param[in] excludeRanges {ReadonlyArray<readonly [number, number]> | undefined} Optional line ranges to suppress.
+ * @return {void} No return value.
+ */
 function renderBodyAnnotations(
   out: string[],
   element: SourceElement,

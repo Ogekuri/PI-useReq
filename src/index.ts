@@ -1,3 +1,13 @@
+/**
+ * @file
+ * @brief Registers the pi-usereq extension commands, tools, and configuration UI.
+ * @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, wrapped command handlers, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
+ */
+
+/**
+ * @brief Declares the extension version string.
+ * @details The value is exported for external inspection and packaging metadata alignment. Access complexity is O(1).
+ */
 export const VERSION = "0.0.0"
 
 import path from "node:path";
@@ -46,8 +56,16 @@ import {
 } from "./core/static-check.js";
 import { shellSplit } from "./core/utils.js";
 
+/**
+ * @brief Represents a wrapped tool-runner function exposed through the extension.
+ * @details Each runner receives the resolved project base, effective config, and shell-split arguments, then returns a normalized `ToolResult`. The alias is compile-time only and adds no runtime cost.
+ */
 type CommandRunner = (projectBase: string, config: UseReqConfig, args: string[]) => ToolResult;
 
+/**
+ * @brief Lists bundled prompt commands exposed by the extension.
+ * @details Each entry maps to a `req-<name>` command that renders a bundled prompt and sends it to the active session. Access complexity is O(1).
+ */
 const PROMPT_NAMES = [
   "analyze",
   "change",
@@ -67,6 +85,10 @@ const PROMPT_NAMES = [
   "write",
 ] as const;
 
+/**
+ * @brief Maps extension command names to tool-runner dispatch functions.
+ * @details Provides the single source of truth for wrapper command registration and execution. Lookup complexity is O(1) by tool name.
+ */
 const TOOL_RUNNERS: Record<string, CommandRunner> = {
   "git-path": (projectBase, config) => runGitPath(projectBase, config),
   "get-base-path": (projectBase, config) => runGetBasePath(projectBase, config),
@@ -87,10 +109,22 @@ const TOOL_RUNNERS: Record<string, CommandRunner> = {
   "git-wt-delete": (projectBase, config, args) => runGitWtDelete(projectBase, args[0] ?? "", config),
 };
 
+/**
+ * @brief Resolves the effective project base from a working directory.
+ * @details Normalizes the provided cwd into an absolute path without consulting configuration. Time complexity is O(1). No I/O side effects occur.
+ * @param[in] cwd {string} Current working directory.
+ * @return {string} Absolute project base path.
+ */
 function getProjectBase(cwd: string): string {
   return path.resolve(cwd);
 }
 
+/**
+ * @brief Loads project configuration and refreshes derived path metadata for the extension runtime.
+ * @details Resolves the project base, loads persisted config, updates `base-path`, refreshes `git-path` when the project is inside a repository, and removes stale git metadata otherwise. Runtime is dominated by config I/O and git detection. Side effects are limited to filesystem reads and git subprocess execution.
+ * @param[in] cwd {string} Current working directory.
+ * @return {UseReqConfig} Effective project configuration.
+ */
 function loadProjectConfig(cwd: string): UseReqConfig {
   const projectBase = getProjectBase(cwd);
   const config = loadConfig(projectBase);
@@ -103,12 +137,25 @@ function loadProjectConfig(cwd: string): UseReqConfig {
   return config;
 }
 
+/**
+ * @brief Persists project configuration from the extension runtime.
+ * @details Recomputes `base-path` from the current working directory and delegates persistence to `saveConfig`. Runtime is O(n) in config size. Side effects include config-file writes.
+ * @param[in] cwd {string} Current working directory.
+ * @param[in] config {UseReqConfig} Configuration to persist.
+ * @return {void} No return value.
+ */
 function saveProjectConfig(cwd: string, config: UseReqConfig): void {
   const projectBase = getProjectBase(cwd);
   config["base-path"] = projectBase;
   saveConfig(projectBase, config);
 }
 
+/**
+ * @brief Formats a tool result for editor display.
+ * @details Trims trailing whitespace on stdout and stderr independently, then joins non-empty sections with a blank line. Runtime is O(n) in emitted text size. No side effects occur.
+ * @param[in] result {ToolResult} Tool result payload.
+ * @return {string} Editor-ready textual representation.
+ */
 function formatResultForEditor(result: ToolResult): string {
   const parts: string[] = [];
   if (result.stdout) parts.push(result.stdout.trimEnd());
@@ -116,6 +163,14 @@ function formatResultForEditor(result: ToolResult): string {
   return parts.join(parts.length > 1 ? "\n\n" : "");
 }
 
+/**
+ * @brief Presents a tool result in the extension UI.
+ * @details Writes the formatted result into the editor when non-empty and emits an info or error notification based on the exit code. Runtime is O(n) in displayed text size. Side effects include UI editor and notification updates.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] result {ToolResult} Tool result payload.
+ * @param[in] label {string} Human-readable operation label.
+ * @return {void} No return value.
+ */
 function showToolResult(ctx: ExtensionCommandContext, result: ToolResult, label: string): void {
   const content = formatResultForEditor(result);
   if (content) {
@@ -128,18 +183,37 @@ function showToolResult(ctx: ExtensionCommandContext, result: ToolResult, label:
   }
 }
 
+/**
+ * @brief Returns the registered pi-usereq startup tools.
+ * @details Filters all known extension tools against the canonical startup-tool set and sorts them by name. Runtime is O(t log t) in registered tool count. No external state is mutated.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {ToolInfo[]} Sorted startup-tool descriptors.
+ */
 function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[] {
   return pi.getAllTools()
     .filter((tool) => PI_USEREQ_STARTUP_TOOL_SET.has(tool.name))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
+/**
+ * @brief Normalizes and returns the configured enabled startup tools.
+ * @details Reuses repository normalization rules, updates the config object in place, and returns the normalized array. Runtime is O(n) in configured tool count. Side effect: mutates `config["enabled-tools"]`.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {string[]} Normalized enabled tool names.
+ */
 function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[] {
   const enabledTools = normalizeEnabledPiUsereqTools(config["enabled-tools"]);
   config["enabled-tools"] = [...enabledTools];
   return enabledTools;
 }
 
+/**
+ * @brief Applies the configured startup-tool enablement to the active session.
+ * @details Preserves non-pi-usereq active tools, removes all pi-usereq startup tools, then re-adds only those configured and currently registered. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {void} No return value.
+ */
 function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void {
   const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
   const allTools = pi.getAllTools();
@@ -158,16 +232,38 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
   pi.setActiveTools(allTools.map((tool) => tool.name).filter((toolName) => nextActive.has(toolName)));
 }
 
+/**
+ * @brief Replaces the configured startup-tool selection and applies it immediately.
+ * @details Normalizes the requested tool names, stores them in config, and synchronizes the active tool set with runtime registration state. Runtime is O(n + t). Side effect: mutates config and active tools.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @param[in] enabledTools {string[]} Requested enabled tool names.
+ * @return {void} No return value.
+ */
 function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void {
   config["enabled-tools"] = normalizeEnabledPiUsereqTools(enabledTools);
   applyConfiguredPiUsereqTools(pi, config);
 }
 
+/**
+ * @brief Formats one startup-tool label for selection menus.
+ * @details Prefixes the tool name with a checkmark or cross depending on whether the tool is configured as enabled. Runtime is O(1). No side effects occur.
+ * @param[in] tool {ToolInfo} Tool descriptor.
+ * @param[in] enabled {boolean} Enablement state.
+ * @return {string} Menu label.
+ */
 function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string {
   const marker = enabled ? "✓" : "✗";
   return `${marker} ${tool.name}`;
 }
 
+/**
+ * @brief Renders a textual reference for startup-tool configuration and runtime state.
+ * @details Lists every startup tool with configured enablement, runtime activation, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Multiline tool-status report.
+ */
 function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string {
   const tools = getPiUsereqStartupTools(pi);
   const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
@@ -197,6 +293,14 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * @brief Executes one wrapped tool command from extension command handlers.
+ * @details Resolves the registered runner, loads project config for the current cwd, shell-splits the raw argument string, executes the tool, and presents the result in the UI. Runtime is O(n) in argument length plus delegated tool cost. Side effects include UI updates and delegated tool side effects.
+ * @param[in] name {string} Registered wrapper command name.
+ * @param[in] rawArgs {string} Raw command argument string.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @return {Promise<void>} Promise resolved after UI presentation completes.
+ */
 async function runToolCommand(name: string, rawArgs: string, ctx: ExtensionCommandContext): Promise<void> {
   const runner = TOOL_RUNNERS[name];
   if (!runner) {
@@ -210,6 +314,12 @@ async function runToolCommand(name: string, rawArgs: string, ctx: ExtensionComma
   showToolResult(ctx, result, name);
 }
 
+/**
+ * @brief Registers bundled prompt commands with the extension.
+ * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and sends it as a user message. Runtime is O(p) for registration; handler cost depends on prompt rendering. Side effects include command registration and message dispatch during execution.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {void} No return value.
+ */
 function registerPromptCommands(pi: ExtensionAPI): void {
   PROMPT_NAMES.forEach((promptName) => {
     pi.registerCommand(`req-${promptName}`, {
@@ -225,6 +335,12 @@ function registerPromptCommands(pi: ExtensionAPI): void {
   });
 }
 
+/**
+ * @brief Registers command wrappers around tool-runner functions.
+ * @details Creates one extension command per entry in `TOOL_RUNNERS` and also registers the standalone static-check test driver. Runtime is O(t) for registration. Side effects include command registration.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {void} No return value.
+ */
 function registerToolWrapperCommands(pi: ExtensionAPI): void {
   Object.keys(TOOL_RUNNERS).forEach((name) => {
     pi.registerCommand(name, {
@@ -262,6 +378,12 @@ function registerToolWrapperCommands(pi: ExtensionAPI): void {
   });
 }
 
+/**
+ * @brief Registers pi-usereq agent tools exposed to the model.
+ * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations and UI-aware result formatting. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {void} No return value.
+ */
 function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "git-path",
@@ -530,6 +652,14 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 }
 
+/**
+ * @brief Runs the interactive startup-tool configuration menu.
+ * @details Synchronizes active tools with persisted config, renders overview/toggle actions, and updates configuration state in response to UI selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {Promise<void>} Promise resolved when the menu closes.
+ */
 async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   applyConfiguredPiUsereqTools(pi, config);
   while (true) {
@@ -596,6 +726,12 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
   }
 }
 
+/**
+ * @brief Formats one static-check configuration entry for UI display.
+ * @details Renders command-backed entries as `Command(cmd args...)` and all other modules as `Module(args...)`. Runtime is O(n) in parameter count. No side effects occur.
+ * @param[in] entry {StaticCheckEntry} Static-check configuration entry.
+ * @return {string} Human-readable entry summary.
+ */
 function formatStaticCheckEntry(entry: StaticCheckEntry): string {
   const params = Array.isArray(entry.params) && entry.params.length > 0 ? ` ${entry.params.join(" ")}` : "";
   if (entry.module === "Command") {
@@ -604,6 +740,12 @@ function formatStaticCheckEntry(entry: StaticCheckEntry): string {
   return `${entry.module}${params ? `(${entry.params!.join(" ")})` : ""}`;
 }
 
+/**
+ * @brief Summarizes configured static-check languages.
+ * @details Keeps only languages with at least one configured checker, sorts them, and emits a compact `Language (count)` list. Runtime is O(l log l). No side effects occur.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Compact summary string or `(none)`.
+ */
 function formatStaticCheckLanguagesSummary(config: UseReqConfig): string {
   const languages = Object.entries(config["static-check"])
     .filter(([, entries]) => Array.isArray(entries) && entries.length > 0)
@@ -612,11 +754,25 @@ function formatStaticCheckLanguagesSummary(config: UseReqConfig): string {
   return languages.join(", ") || "(none)";
 }
 
+/**
+ * @brief Builds one static-check language selection label.
+ * @details Includes the language name, supported extensions, and the number of configured checkers with singular/plural handling. Runtime is O(n) in extension count. No side effects occur.
+ * @param[in] language {string} Canonical language name.
+ * @param[in] extensions {string[]} Supported file extensions.
+ * @param[in] configuredCount {number} Number of configured checkers for the language.
+ * @return {string} Menu label.
+ */
 function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string {
   const suffix = configuredCount === 1 ? "checker" : "checkers";
   return `${language} [${extensions.join(", ")}] (${configuredCount} ${suffix})`;
 }
 
+/**
+ * @brief Renders the static-check configuration reference view.
+ * @details Produces a markdown-like summary containing configured entries, supported languages, supported modules, and example specifications. Runtime is O(l log l). No side effects occur.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Reference text for the editor view.
+ */
 function renderStaticCheckReference(config: UseReqConfig): string {
   const lines = ["# Static-check configuration", "", `Configured languages: ${formatStaticCheckLanguagesSummary(config)}`, ""];
   const configuredLanguages = Object.entries(config["static-check"])
@@ -640,6 +796,13 @@ function renderStaticCheckReference(config: UseReqConfig): string {
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * @brief Runs the interactive static-check configuration menu.
+ * @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {Promise<void>} Promise resolved when the menu closes.
+ */
 async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   while (true) {
     const staticChoice = await ctx.ui.select("static-check", [
@@ -749,6 +912,13 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
   }
 }
 
+/**
+ * @brief Runs the top-level pi-usereq configuration menu.
+ * @details Loads project config, exposes docs/test/source/tool/static-check configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
+ */
 async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
   let config = loadProjectConfig(ctx.cwd);
   const projectBase = getProjectBase(ctx.cwd);
@@ -823,6 +993,12 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
   }
 }
 
+/**
+ * @brief Registers configuration-management commands.
+ * @details Adds commands for opening the interactive configuration menu and showing the current config JSON in the editor. Runtime is O(1) for registration. Side effects include command registration.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {void} No return value.
+ */
 function registerConfigCommands(pi: ExtensionAPI): void {
   pi.registerCommand("pi-usereq", {
     description: "Open the pi-usereq configuration menu",
@@ -840,6 +1016,12 @@ function registerConfigCommands(pi: ExtensionAPI): void {
   });
 }
 
+/**
+ * @brief Registers the complete pi-usereq extension.
+ * @details Ensures bundled resources exist, registers commands and tools, and installs a `session_start` hook that applies configured startup tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, and active-tool changes.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {void} No return value.
+ */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   ensureHomeResources();
   registerPromptCommands(pi);

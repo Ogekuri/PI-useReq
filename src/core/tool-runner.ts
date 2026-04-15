@@ -1,3 +1,9 @@
+/**
+ * @file
+ * @brief Implements the executable back-end for all pi-usereq CLI and extension tools.
+ * @details Centralizes project discovery, git helpers, source-file collection, documentation generation, compression, construct lookup, static-check dispatch, and worktree lifecycle operations. Runtime depends on the selected command and may include filesystem reads, config writes, process spawning, and git mutations.
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -10,19 +16,48 @@ import { findConstructsInFiles } from "./find-constructs.js";
 import { STATIC_CHECK_EXT_TO_LANG, dispatchStaticCheckForFile } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 
+/**
+ * @brief Represents the normalized output contract for a tool invocation.
+ * @details Every tool emits stdout, stderr, and a numeric exit code so CLI and extension front-ends can handle results uniformly. The interface is compile-time only and adds no runtime cost.
+ */
 export interface ToolResult {
   stdout: string;
   stderr: string;
   code: number;
 }
 
+/**
+ * @brief Lists directory names excluded during source-file collection.
+ * @details The set is currently empty but remains configurable as a centralized filter point for future exclusions. Membership checks are O(1).
+ */
 export const EXCLUDED_DIRS = new Set<string>();
+/**
+ * @brief Lists source-file extensions accepted by collection and tool workflows.
+ * @details Derived from static-check language support so every collected source file can be mapped to a canonical language. Membership checks are O(1).
+ */
 export const SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG));
 
+/**
+ * @brief Creates a successful tool result payload.
+ * @details Wraps stdout and stderr text with exit code `0`. Runtime is O(1). No side effects occur.
+ * @param[in] stdout {string} Standard-output text.
+ * @param[in] stderr {string} Standard-error text.
+ * @return {ToolResult} Successful result object.
+ */
 function ok(stdout = "", stderr = ""): ToolResult {
   return { stdout, stderr, code: 0 };
 }
 
+/**
+ * @brief Throws a `ReqError` populated with tool-result stream content.
+ * @details Creates a structured failure object, attaches optional stdout and stderr payloads, and throws immediately. Runtime is O(1). Side effect: throws an exception.
+ * @param[in] message {string} Primary failure message.
+ * @param[in] code {number} Exit code to attach. Defaults to `1`.
+ * @param[in] stdout {string} Optional stdout payload.
+ * @param[in] stderr {string} Optional stderr payload. Defaults to `message` when omitted.
+ * @return {never} This function never returns.
+ * @throws {ReqError} Always throws.
+ */
 function fail(message: string, code = 1, stdout = "", stderr = ""): never {
   const error = new ReqError(message, code);
   (error as ReqError & { stdout?: string; stderr?: string }).stdout = stdout;
@@ -30,6 +65,13 @@ function fail(message: string, code = 1, stdout = "", stderr = ""): never {
   throw error;
 }
 
+/**
+ * @brief Executes a subprocess synchronously and captures its output.
+ * @details Delegates to `spawnSync`, passes through an optional working directory, and forces UTF-8 decoding. Runtime is dominated by external process execution. Side effects include process spawning.
+ * @param[in] command {string[]} Executable plus argument vector.
+ * @param[in] options {{ cwd?: string }} Optional process-spawn settings.
+ * @return {ReturnType<typeof spawnSync>} Captured subprocess result.
+ */
 function runCapture(command: string[], options: { cwd?: string } = {}) {
   return spawnSync(command[0]!, command.slice(1), {
     cwd: options.cwd,
@@ -37,11 +79,24 @@ function runCapture(command: string[], options: { cwd?: string } = {}) {
   });
 }
 
+/**
+ * @brief Tests whether a path is inside a git work tree.
+ * @details Runs `git rev-parse --is-inside-work-tree` in the target directory and returns `true` only for a successful `true` response. Runtime is dominated by git invocation. Side effects include process spawning.
+ * @param[in] targetPath {string} Directory to test.
+ * @return {boolean} `true` when the path is inside a git repository.
+ */
 export function isInsideGitRepo(targetPath: string): boolean {
   const result = runCapture(["git", "rev-parse", "--is-inside-work-tree"], { cwd: targetPath });
   return result.status === 0 && result.stdout.trim() === "true";
 }
 
+/**
+ * @brief Resolves the git repository root for a target path.
+ * @details Runs `git rev-parse --show-toplevel` and normalizes the result to an absolute path. Runtime is dominated by git invocation. Side effects include process spawning.
+ * @param[in] targetPath {string} Directory inside the repository.
+ * @return {string} Absolute git root path.
+ * @throws {ReqError} Throws when the path is not inside a git repository.
+ */
 export function resolveGitRoot(targetPath: string): string {
   const result = runCapture(["git", "rev-parse", "--show-toplevel"], { cwd: targetPath });
   if (result.error || result.status !== 0) {
@@ -50,15 +105,35 @@ export function resolveGitRoot(targetPath: string): string {
   return path.resolve(result.stdout.trim());
 }
 
+/**
+ * @brief Rewrites a branch name into a filesystem-safe token.
+ * @details Replaces characters invalid for worktree directory and branch-name generation with `-`. Runtime is O(n). No side effects occur.
+ * @param[in] branch {string} Raw branch name.
+ * @return {string} Sanitized token.
+ */
 export function sanitizeBranchName(branch: string): string {
   return branch.replace(/[<>:"/\\|?*\x00-\x1f\s~^{}\[\]]/g, "-");
 }
 
+/**
+ * @brief Validates a requested worktree or branch name.
+ * @details Rejects empty names, dot-path markers, whitespace, and filesystem-invalid characters. Runtime is O(n). No side effects occur.
+ * @param[in] wtName {string} Candidate worktree name.
+ * @return {boolean} `true` when the name is acceptable for worktree creation.
+ */
 export function validateWtName(wtName: string): boolean {
   if (!wtName || wtName === "." || wtName === "..") return false;
   return !/[<>:"/\\|?*\x00-\x1f\s]/.test(wtName);
 }
 
+/**
+ * @brief Collects tracked and untracked source files from configured source directories.
+ * @details Uses `git ls-files` to enumerate candidate files, filters them by configured source roots, excluded directories, and supported extensions, and returns sorted absolute paths. Runtime is O(n log n) in collected file count plus git execution cost. Side effects include process spawning.
+ * @param[in] srcDirs {string[]} Configured source-directory roots.
+ * @param[in] projectBase {string} Absolute project root.
+ * @return {string[]} Sorted absolute source-file paths.
+ * @throws {ReqError} Throws when `git ls-files` fails.
+ */
 export function collectSourceFiles(srcDirs: string[], projectBase: string): string[] {
   const result = runCapture(
     ["git", "-C", projectBase, "ls-files", "--cached", "--others", "--exclude-standard"],
@@ -88,6 +163,12 @@ export function collectSourceFiles(srcDirs: string[], projectBase: string): stri
   return [...collected].sort();
 }
 
+/**
+ * @brief Builds an ASCII tree from relative file paths.
+ * @details Materializes a nested object tree and renders it using box-drawing characters for markdown display. Runtime is O(n log n) in path count due to sorting. No side effects occur.
+ * @param[in] paths {string[]} Relative POSIX-style file paths.
+ * @return {string} Rendered ASCII tree.
+ */
 function buildAsciiTree(paths: string[]): string {
   const tree: Record<string, Record<string, unknown> | null> = {};
   for (const relPath of [...paths].sort()) {
@@ -118,11 +199,25 @@ function buildAsciiTree(paths: string[]): string {
   return lines.join("\n");
 }
 
+/**
+ * @brief Formats the collected file structure as markdown.
+ * @details Converts absolute file paths to project-relative POSIX paths, renders an ASCII tree, and wraps the result in a fenced markdown block. Runtime is O(n log n) in file count. No side effects occur.
+ * @param[in] files {string[]} Absolute file paths.
+ * @param[in] projectBase {string} Absolute project root.
+ * @return {string} Markdown section describing the file structure.
+ */
 function formatFilesStructureMarkdown(files: string[], projectBase: string): string {
   const relativePaths = files.map((filePath) => path.relative(projectBase, filePath).split(path.sep).join("/"));
   return `# Files Structure\n\`\`\`\n${buildAsciiTree(relativePaths)}\n\`\`\``;
 }
 
+/**
+ * @brief Resolves and validates the project base directory.
+ * @details Uses the supplied path or the current working directory, normalizes it to an absolute path, and verifies that it exists. Runtime is O(1) plus one filesystem existence check. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string | undefined} Optional project-root override.
+ * @return {string} Absolute validated project root.
+ * @throws {ReqError} Throws when the resolved path does not exist.
+ */
 export function resolveProjectBase(projectBase?: string): string {
   const base = projectBase ? path.resolve(projectBase) : process.cwd();
   if (!fs.existsSync(base)) {
@@ -131,6 +226,14 @@ export function resolveProjectBase(projectBase?: string): string {
   return base;
 }
 
+/**
+ * @brief Resolves the project base and effective source-directory list.
+ * @details Loads configuration when not supplied, validates that at least one source directory exists in config, and returns both the absolute base path and source-directory array. Runtime is O(s). Side effects are limited to config reads.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {[string, string[]]} Tuple of absolute project base and configured source directories.
+ * @throws {ReqError} Throws when no source directories are configured.
+ */
 export function resolveProjectSrcDirs(projectBase: string, config?: UseReqConfig): [string, string[]] {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -141,6 +244,12 @@ export function resolveProjectSrcDirs(projectBase: string, config?: UseReqConfig
   return [base, srcDirs];
 }
 
+/**
+ * @brief Loads project configuration and refreshes derived path metadata.
+ * @details Resolves the base path, loads config, updates `base-path`, refreshes `git-path` when inside a repository, saves the repaired config, and returns it. Runtime is dominated by config I/O and git detection. Side effects include config writes and git subprocess execution.
+ * @param[in] projectBase {string} Candidate project root.
+ * @return {UseReqConfig} Repaired effective configuration.
+ */
 export function loadAndRepairConfig(projectBase: string): UseReqConfig {
   const base = resolveProjectBase(projectBase);
   const config = loadConfig(base);
@@ -152,6 +261,13 @@ export function loadAndRepairConfig(projectBase: string): UseReqConfig {
   return config;
 }
 
+/**
+ * @brief Counts tokens and characters for explicit files.
+ * @details Filters missing files into stderr warnings, counts metrics for valid files, and returns a formatted summary. Runtime is O(F + S). Side effects are limited to filesystem reads.
+ * @param[in] files {string[]} Explicit file paths.
+ * @return {ToolResult} Tool result containing the formatted summary and warnings.
+ * @throws {ReqError} Throws when no valid files are provided.
+ */
 export function runFilesTokens(files: string[]): ToolResult {
   const validFiles: string[] = [];
   const stderrLines: string[] = [];
@@ -166,14 +282,40 @@ export function runFilesTokens(files: string[]): ToolResult {
   return ok(`${formatPackSummary(countFilesMetrics(validFiles))}\n`, stderrLines.join("\n"));
 }
 
+/**
+ * @brief Generates reference markdown for explicit files.
+ * @details Delegates to `generateMarkdown` using the caller working directory as the relative-output base by default. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @param[in] files {string[]} Explicit file paths.
+ * @param[in] cwd {string} Base directory for relative output formatting. Defaults to `process.cwd()`.
+ * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
+ * @return {ToolResult} Successful tool result containing rendered markdown.
+ */
 export function runFilesReferences(files: string[], cwd = process.cwd(), verbose = false): ToolResult {
   return ok(`${generateMarkdown(files, verbose, cwd)}\n`);
 }
 
+/**
+ * @brief Compresses explicit files into compact source excerpts.
+ * @details Delegates to `compressFiles` using the caller working directory as the relative-output base by default. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @param[in] files {string[]} Explicit file paths.
+ * @param[in] cwd {string} Base directory for relative output formatting. Defaults to `process.cwd()`.
+ * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers.
+ * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
+ * @return {ToolResult} Successful tool result containing compressed output.
+ */
 export function runFilesCompress(files: string[], cwd = process.cwd(), enableLineNumbers = false, verbose = false): ToolResult {
   return ok(`${compressFiles(files, enableLineNumbers, verbose, cwd)}\n`);
 }
 
+/**
+ * @brief Finds named constructs in explicit files.
+ * @details Expects `[TAG, PATTERN, ...FILES]`, validates minimum arity, and delegates to `findConstructsInFiles`. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
+ * @param[in] argsList {string[]} Positional argument list containing tag filter, regex pattern, and files.
+ * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers in excerpts.
+ * @param[in] verbose {boolean} When `true`, emit diagnostics to stderr.
+ * @return {ToolResult} Successful tool result containing construct markdown.
+ * @throws {ReqError} Throws when required arguments are missing.
+ */
 export function runFilesFind(argsList: string[], enableLineNumbers = false, verbose = false): ToolResult {
   if (argsList.length < 3) {
     fail("Error: --files-find requires at least TAG, PATTERN, and one FILE.", 1);
@@ -182,6 +324,15 @@ export function runFilesFind(argsList: string[], enableLineNumbers = false, verb
   return ok(`${findConstructsInFiles(files, tagFilter!, pattern!, enableLineNumbers, verbose)}\n`);
 }
 
+/**
+ * @brief Generates project-wide reference markdown for configured source directories.
+ * @details Resolves the project base, collects source files, renders the file tree, and appends analyzer-generated markdown for all collected files. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
+ * @return {ToolResult} Successful tool result containing file-tree and reference markdown.
+ * @throws {ReqError} Throws when no source files are found.
+ */
 export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult {
   const [base, srcDirs] = resolveProjectSrcDirs(projectBase, config);
   const files = collectSourceFiles(srcDirs, base);
@@ -190,6 +341,16 @@ export function runReferences(projectBase: string, config?: UseReqConfig, verbos
   return ok(`${formatFilesStructureMarkdown(files, base)}\n\n${markdown}\n`);
 }
 
+/**
+ * @brief Compresses all source files from configured source directories.
+ * @details Resolves the project base, collects source files, and delegates to `compressFiles`. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers.
+ * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
+ * @return {ToolResult} Successful tool result containing compressed output.
+ * @throws {ReqError} Throws when no source files are found.
+ */
 export function runCompress(projectBase: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult {
   const [base, srcDirs] = resolveProjectSrcDirs(projectBase, config);
   const files = collectSourceFiles(srcDirs, base);
@@ -197,6 +358,18 @@ export function runCompress(projectBase: string, config?: UseReqConfig, enableLi
   return ok(`${compressFiles(files, enableLineNumbers, verbose, base)}\n`);
 }
 
+/**
+ * @brief Finds named constructs across configured project source files.
+ * @details Resolves the project base, collects source files, delegates to `findConstructsInFiles`, and converts thrown search errors into structured `ReqError` failures. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] tagFilter {string} Pipe-delimited tag filter.
+ * @param[in] pattern {string} Regular expression applied to construct names.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers in excerpts.
+ * @param[in] verbose {boolean} When `true`, emit diagnostics to stderr.
+ * @return {ToolResult} Successful tool result containing construct markdown.
+ * @throws {ReqError} Throws when no source files are found or the search fails.
+ */
 export function runFind(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult {
   const [base, srcDirs] = resolveProjectSrcDirs(projectBase, config);
   const files = collectSourceFiles(srcDirs, base);
@@ -208,6 +381,14 @@ export function runFind(projectBase: string, tagFilter: string, pattern: string,
   }
 }
 
+/**
+ * @brief Counts tokens for canonical documentation files.
+ * @details Loads the configured docs directory, selects `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` when present, and delegates to `runFilesTokens`. Runtime is O(F + S). Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Tool result containing documentation token metrics.
+ * @throws {ReqError} Throws when no canonical docs files exist.
+ */
 export function runTokens(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -219,6 +400,14 @@ export function runTokens(projectBase: string, config?: UseReqConfig): ToolResul
   return runFilesTokens(files);
 }
 
+/**
+ * @brief Runs configured static checks for explicit files.
+ * @details Loads the effective static-check config, groups checks by file extension language, captures checker stdout for each configured entry, and aggregates stderr warnings for invalid paths. Runtime is O(F * C) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
+ * @param[in] files {string[]} Explicit file paths.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Aggregated static-check result.
+ */
 export function runFilesStaticCheck(files: string[], projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -257,6 +446,14 @@ export function runFilesStaticCheck(files: string[], projectBase: string, config
   return { stdout, stderr, code: overall };
 }
 
+/**
+ * @brief Runs configured static checks for project source and test directories.
+ * @details Collects source and test files, excludes fixture roots, and delegates to `runFilesStaticCheck`. Runtime is O(F * C) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Aggregated static-check result.
+ * @throws {ReqError} Throws when no source files are found.
+ */
 export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -272,6 +469,14 @@ export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig
   return runFilesStaticCheck(files, base, effectiveConfig);
 }
 
+/**
+ * @brief Verifies that the configured repository is clean and has a valid HEAD.
+ * @details Executes a shell pipeline that checks work-tree status, rejects uncommitted changes, and verifies either a symbolic ref or detached HEAD hash exists. Runtime is dominated by git execution. Side effects include process spawning.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Successful empty result when the repository state is valid.
+ * @throws {ReqError} Throws when `git-path` is missing or repository status is unclear.
+ */
 export function runGitCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -285,6 +490,14 @@ export function runGitCheck(projectBase: string, config?: UseReqConfig): ToolRes
   return ok();
 }
 
+/**
+ * @brief Verifies that canonical documentation files exist.
+ * @details Checks the configured docs directory for `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, and throws a guided error for the first missing file. Runtime is O(1) plus filesystem existence checks. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Successful empty result when all canonical docs exist.
+ * @throws {ReqError} Throws when `git-path` metadata is invalid or a required doc file is missing.
+ */
 export function runDocsCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -305,6 +518,14 @@ export function runDocsCheck(projectBase: string, config?: UseReqConfig): ToolRe
   return ok();
 }
 
+/**
+ * @brief Generates the standardized worktree name for the configured repository.
+ * @details Combines the repository basename, sanitized current branch, and a timestamp-based execution identifier into a deterministic `useReq-...` name. Runtime is O(1) plus git execution cost. Side effects include process spawning.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Successful result containing the generated worktree name and trailing newline.
+ * @throws {ReqError} Throws when `git-path` is missing or invalid.
+ */
 export function runGitWtName(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -321,6 +542,14 @@ export function runGitWtName(projectBase: string, config?: UseReqConfig): ToolRe
   return ok(`useReq-${projectName}-${sanitizedBranch}-${executionId}\n`);
 }
 
+/**
+ * @brief Tests whether a git worktree exists at an exact filesystem path.
+ * @details Parses `git worktree list --porcelain` output and compares normalized paths for exact equality. Runtime is O(n) in reported worktree count plus git execution cost. Side effects include process spawning.
+ * @param[in] gitPath {string} Git root used to query worktrees.
+ * @param[in] targetPath {string} Candidate worktree path.
+ * @return {boolean} `true` when a worktree exists at the exact target path.
+ * @throws {ReqError} Throws when the worktree list cannot be queried.
+ */
 function worktreePathExistsExact(gitPath: string, targetPath: string): boolean {
   const result = runCapture(["git", "worktree", "list", "--porcelain"], { cwd: gitPath });
   if (result.error || result.status !== 0) fail("Error: unable to query git worktree list.", 3);
@@ -328,6 +557,15 @@ function worktreePathExistsExact(gitPath: string, targetPath: string): boolean {
   return result.stdout.split(/\r?\n/).some((line) => line.startsWith("worktree ") && path.resolve(line.slice("worktree ".length).trim()) === normalizedTarget);
 }
 
+/**
+ * @brief Rolls back a partially created worktree and branch.
+ * @details Forces worktree removal and branch deletion, then throws if either rollback action fails. Runtime is dominated by git execution. Side effects include destructive git mutations.
+ * @param[in] gitPath {string} Git root path.
+ * @param[in] wtPath {string} Worktree path to remove.
+ * @param[in] wtName {string} Branch name to delete.
+ * @return {void} No return value.
+ * @throws {ReqError} Throws when rollback cannot be completed.
+ */
 function rollbackWorktreeCreate(gitPath: string, wtPath: string, wtName: string): void {
   const removeResult = runCapture(["git", "worktree", "remove", wtPath, "--force"], { cwd: gitPath });
   const branchResult = runCapture(["git", "branch", "-D", wtName], { cwd: gitPath });
@@ -336,6 +574,15 @@ function rollbackWorktreeCreate(gitPath: string, wtPath: string, wtName: string)
   }
 }
 
+/**
+ * @brief Creates a dedicated git worktree and copies pi-usereq metadata into it.
+ * @details Validates the requested name, resolves base and git roots, creates the worktree and branch, then mirrors the `.pi/pi-usereq` directory into the corresponding path inside the new worktree. Runtime is dominated by git and filesystem operations. Side effects include worktree creation, branch creation, directory creation, and file copying.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] wtName {string} Requested worktree and branch name.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Successful empty result when creation completes.
+ * @throws {ReqError} Throws for invalid names, missing git metadata, git failures, or copy finalization failures.
+ */
 export function runGitWtCreate(projectBase: string, wtName: string, config?: UseReqConfig): ToolResult {
   if (!validateWtName(wtName)) {
     const message = `ERROR: Invalid worktree/branch name: ${wtName}.`;
@@ -375,6 +622,15 @@ export function runGitWtCreate(projectBase: string, wtName: string, config?: Use
   return ok();
 }
 
+/**
+ * @brief Deletes a dedicated git worktree and its branch.
+ * @details Verifies that either the worktree path or branch exists, removes the worktree when present, deletes the branch when present, and fails atomically when either delete step reports an error. Runtime is dominated by git execution. Side effects include destructive git mutations.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] wtName {string} Exact worktree and branch name.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Successful empty result when deletion completes.
+ * @throws {ReqError} Throws when git metadata is missing, the target does not exist, or removal fails.
+ */
 export function runGitWtDelete(projectBase: string, wtName: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
@@ -412,12 +668,26 @@ export function runGitWtDelete(projectBase: string, wtName: string, config?: Use
   return ok();
 }
 
+/**
+ * @brief Returns the configured git root path.
+ * @details Resolves the effective configuration and writes the stored `git-path` followed by a newline. Runtime is O(1) plus config-load cost. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Successful result containing the configured git path or an empty line.
+ */
 export function runGitPath(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
   return ok(`${effectiveConfig["git-path"] ?? ""}\n`);
 }
 
+/**
+ * @brief Returns the configured project base path.
+ * @details Resolves the effective configuration and writes the stored `base-path`, falling back to the resolved base when absent. Runtime is O(1) plus config-load cost. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @return {ToolResult} Successful result containing the base path and trailing newline.
+ */
 export function runGetBasePath(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);

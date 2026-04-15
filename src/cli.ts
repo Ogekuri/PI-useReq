@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+/**
+ * @file
+ * @brief Implements the standalone pi-usereq command-line entry point.
+ * @details Parses CLI flags, resolves project configuration, dispatches tool-runner operations, and converts thrown `ReqError` instances into process-style stdout, stderr, and exit codes. Runtime is dominated by the selected subcommand. Side effects include stdout/stderr writes and any filesystem or git operations performed by delegated commands.
+ */
+
 import process from "node:process";
 import { ReqError } from "./core/errors.js";
 import { loadConfig } from "./core/config.js";
@@ -24,6 +30,10 @@ import {
 } from "./core/tool-runner.js";
 import { runStaticCheck } from "./core/static-check.js";
 
+/**
+ * @brief Represents the parsed CLI flag state for one invocation.
+ * @details The interface captures every supported command and option in a normalized shape consumed by `main`. It is compile-time only and introduces no runtime cost.
+ */
 interface ParsedArgs {
   base?: string;
   here?: boolean;
@@ -48,6 +58,12 @@ interface ParsedArgs {
   testStaticCheck?: string[];
 }
 
+/**
+ * @brief Parses raw CLI tokens into a normalized argument object.
+ * @details Performs a single left-to-right scan, supports options with variable-length value tails, and records only the last occurrence of scalar flags. Runtime is O(n) in argument count. No external state is mutated.
+ * @param[in] argv {string[]} Raw CLI arguments excluding the executable and script path.
+ * @return {ParsedArgs} Parsed flag object.
+ */
 function parseArgs(argv: string[]): ParsedArgs {
   const parsed: ParsedArgs = {};
   const takeUntilOption = (start: number): [string[], number] => {
@@ -166,21 +182,46 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
+/**
+ * @brief Writes text to stdout when non-empty.
+ * @details Avoids emitting zero-length writes so callers can compose result output safely. Runtime is O(n) in text length. Side effect: writes to `process.stdout`.
+ * @param[in] text {string} Text to emit.
+ * @return {void} No return value.
+ */
 function writeStdout(text: string): void {
   if (text) process.stdout.write(text);
 }
 
+/**
+ * @brief Writes text to stderr and ensures a trailing newline.
+ * @details Skips empty input, appends a newline when necessary, and emits the final text to `process.stderr`. Runtime is O(n) in text length. Side effect: writes to `process.stderr`.
+ * @param[in] text {string} Text to emit.
+ * @return {void} No return value.
+ */
 function writeStderr(text: string): void {
   if (!text) return;
   process.stderr.write(text.endsWith("\n") ? text : `${text}\n`);
 }
 
+/**
+ * @brief Emits a tool result object to process streams.
+ * @details Writes stdout first, then stderr, and returns the embedded exit code without modification. Runtime is O(n) in total emitted text size. Side effects are stdout/stderr writes.
+ * @param[in] result {{ stdout: string; stderr: string; code: number }} Command result payload.
+ * @return {number} Exit code to propagate from the invoked command.
+ */
 function writeResult(result: { stdout: string; stderr: string; code: number }): number {
   writeStdout(result.stdout);
   writeStderr(result.stderr);
   return result.code;
 }
 
+/**
+ * @brief Executes one pi-usereq CLI invocation.
+ * @details Parses arguments, enforces mutually exclusive project-selection rules, repairs config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config repair writes and stdout/stderr output.
+ * @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
+ * @return {number} Process exit code for the invocation.
+ * @throws {ReqError} Internally catches `ReqError` and returns its code; other errors are coerced into exit code `1` with stderr output.
+ */
 export function main(argv = process.argv.slice(2)): number {
   try {
     if (argv.length === 0) {
