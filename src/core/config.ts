@@ -23,12 +23,13 @@ export interface StaticCheckEntry {
 
 /**
  * @brief Defines the persisted pi-usereq project configuration schema.
- * @details Captures documentation paths, source/test directory selection, static-check configuration, enabled startup tools, and git/base-path metadata. The interface is compile-time only and introduces no runtime side effects.
+ * @details Captures documentation paths, source/test directory selection, prompt-session reset policy, static-check configuration, enabled startup tools, and git/base-path metadata. The interface is compile-time only and introduces no runtime side effects.
  */
 export interface UseReqConfig {
   "docs-dir": string;
   "tests-dir": string;
   "src-dir": string[];
+  "reset-context": boolean;
   "static-check": Record<string, StaticCheckEntry[]>;
   "enabled-tools": string[];
   "base-path"?: string;
@@ -50,6 +51,12 @@ export const DEFAULT_TESTS_DIR = "tests";
  * @details The array seeds newly created configs and repairs invalid persisted source selections. Access complexity is O(1).
  */
 export const DEFAULT_SRC_DIRS = ["src"];
+/**
+ * @brief Defines the default prompt-session reset policy for `req-*` commands.
+ * @details `true` makes prompt commands start from a `/new`-equivalent session reset before delivering the rendered prompt. Access complexity is O(1).
+ * @satisfies CTN-001, REQ-066, REQ-067, REQ-068
+ */
+export const DEFAULT_RESET_CONTEXT = true;
 /**
  * @brief Defines the fixed configuration namespace under `.pi`.
  * @details Shared by config and resource helpers to keep all pi-usereq artifacts in a deterministic directory tree. Access complexity is O(1).
@@ -77,7 +84,7 @@ export function getHomeResourceRoot(): string {
 
 /**
  * @brief Builds the default project configuration.
- * @details Populates canonical docs/test/source directories, enables the default startup tool set, and records the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
+ * @details Populates canonical docs/test/source directories, enables prompt-session reset plus the default startup tool set, and records the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
  */
@@ -86,6 +93,7 @@ export function getDefaultConfig(projectBase: string): UseReqConfig {
     "docs-dir": DEFAULT_DOCS_DIR,
     "tests-dir": DEFAULT_TESTS_DIR,
     "src-dir": [...DEFAULT_SRC_DIRS],
+    "reset-context": DEFAULT_RESET_CONTEXT,
     "static-check": {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
     "base-path": projectBase,
@@ -94,7 +102,7 @@ export function getDefaultConfig(projectBase: string): UseReqConfig {
 
 /**
  * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates core field shapes, applies fallbacks, and normalizes enabled tool names. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates core field shapes, applies fallbacks for directory and reset fields, and normalizes enabled tool names. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
@@ -121,6 +129,7 @@ export function loadConfig(projectBase: string): UseReqConfig {
   const srcDir = Array.isArray(data["src-dir"]) && data["src-dir"].every((item) => typeof item === "string" && item.trim())
     ? (data["src-dir"] as string[])
     : [...DEFAULT_SRC_DIRS];
+  const resetContext = typeof data["reset-context"] === "boolean" ? data["reset-context"] : DEFAULT_RESET_CONTEXT;
   const staticCheck = typeof data["static-check"] === "object" && data["static-check"] !== null
     ? (data["static-check"] as Record<string, StaticCheckEntry[]>)
     : {};
@@ -132,6 +141,7 @@ export function loadConfig(projectBase: string): UseReqConfig {
     "docs-dir": docsDir,
     "tests-dir": testsDir,
     "src-dir": srcDir,
+    "reset-context": resetContext,
     "static-check": staticCheck,
     "enabled-tools": enabledTools,
     "base-path": basePath,

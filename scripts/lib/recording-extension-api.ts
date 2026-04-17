@@ -61,8 +61,8 @@ export interface RecordingToolSnapshot {
 }
 
 /**
- * @brief Describes one recorded `pi.sendUserMessage(...)` payload.
- * @details Preserves serialized content and optional delivery metadata so prompt-command replay can be inspected without a live SDK session. The interface is compile-time only and introduces no runtime cost.
+ * @brief Describes one recorded prompt-delivery payload.
+ * @details Preserves serialized content and optional delivery metadata for direct `pi.sendUserMessage(...)` calls and user messages appended during offline new-session setup. The interface is compile-time only and introduces no runtime cost.
  */
 export interface RecordedUserMessage {
   content: JsonValue;
@@ -188,6 +188,28 @@ function toJsonValue(value: unknown): JsonValue | undefined {
 }
 
 /**
+ * @brief Normalizes `SessionManager.appendMessage(...)` payloads into recorder user-message content.
+ * @details Collapses single- or multi-part text arrays into one string so reset-session prompt delivery remains comparable with `pi.sendUserMessage(...)` snapshots; non-text payloads remain JSON-compatible. Runtime is O(n) in content size. No external state is mutated.
+ * @param[in] message {unknown} Session-manager message payload supplied during `ctx.newSession(...setup)`.
+ * @return {JsonValue} Normalized user-message content.
+ */
+function normalizeSessionUserMessageContent(message: unknown): JsonValue {
+  if (!message || typeof message !== "object") {
+    return toJsonValue(message) ?? null;
+  }
+  const content = (message as { content?: unknown }).content;
+  if (
+    Array.isArray(content)
+    && content.every((item) => item && typeof item === "object" && (item as { type?: unknown }).type === "text")
+  ) {
+    return content
+      .map((item) => (typeof (item as { text?: unknown }).text === "string" ? (item as { text: string }).text : ""))
+      .join("");
+  }
+  return toJsonValue(content ?? null) ?? null;
+}
+
+/**
  * @brief Builds synthesized provenance metadata for offline registrations.
  * @details Normalizes the extension path and derives project-scoped extension source metadata that approximates the official runtime provenance contract. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] extensionPath {string} Absolute extension entry path.
@@ -237,8 +259,8 @@ function buildBuiltinToolDefinition(name: string): RecordingToolDefinition & { s
 }
 
 /**
- * @brief Records UI activity for one offline command context.
- * @details Exposes the subset of `ctx.ui` methods consumed by the extension, dequeues scripted responses for interactive handlers, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI operation. Side effects are limited to in-memory state mutation.
+ * @brief Records UI activity and session-control side effects for one offline command context.
+ * @details Exposes the subset of `ctx.ui` plus command-only session APIs consumed by the extension, dequeues scripted responses for interactive handlers, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI or session-control operation plus delegated setup cost. Side effects are limited to in-memory state mutation.
  */
 export class RecordingCommandContext {
   /**
@@ -267,18 +289,25 @@ export class RecordingCommandContext {
   private readonly editorTexts: string[] = [];
   private readonly selectCalls: RecordingSelectCall[] = [];
   private readonly inputCalls: RecordingInputCall[] = [];
+  /**
+   * @brief Stores the callback used to record user messages appended during new-session setup.
+   * @details The callback normalizes `/new`-equivalent prompt delivery into the shared recorder snapshot without mutating real session state. Access complexity is O(1).
+   */
+  private readonly recordSessionUserMessage: (content: JsonValue) => void;
 
   /**
    * @brief Initializes a recording command context.
-   * @details Copies scripted response queues so callers can reuse input arrays safely across replays, then binds a stable `ui` adapter over the recorder methods. Runtime is O(s + i) in queued select and input count. Side effects are limited to instance initialization.
+   * @details Copies scripted response queues so callers can reuse input arrays safely across replays, stores the user-message recorder used by `ctx.newSession(...setup)`, then binds a stable `ui` adapter over the recorder methods. Runtime is O(s + i) in queued select and input count. Side effects are limited to instance initialization.
    * @param[in] cwd {string} Working directory exposed through `ctx.cwd`.
    * @param[in] plan {RecordingUiPlan | undefined} Optional scripted UI responses.
+   * @param[in] recordSessionUserMessage {(content: JsonValue) => void | undefined} Optional recorder for user messages appended during new-session setup.
    * @return {RecordingCommandContext} New context instance.
    */
-  public constructor(cwd: string, plan?: RecordingUiPlan) {
+  public constructor(cwd: string, plan?: RecordingUiPlan, recordSessionUserMessage?: (content: JsonValue) => void) {
     this.cwd = cwd;
     this.selectQueue = [...(plan?.selects ?? [])];
     this.inputQueue = [...(plan?.inputs ?? [])];
+    this.recordSessionUserMessage = recordSessionUserMessage ?? (() => undefined);
     this.ui = {
       select: async (title: string, items: string[]) => this.recordSelect(title, items),
       input: async (title: string, placeholder?: string) => this.recordInput(title, placeholder),
@@ -286,6 +315,39 @@ export class RecordingCommandContext {
       setStatus: (key: string, value?: string) => this.recordStatus(key, value),
       setEditorText: (value: string) => this.recordEditorText(value),
     };
+  }
+
+  /**
+   * @brief Simulates `ctx.waitForIdle()` for offline command replay.
+   * @details Offline command replay executes handlers synchronously with no concurrent agent stream, so the recorder resolves immediately. Runtime is O(1). No external state is mutated.
+   * @return {Promise<void>} Already-resolved promise.
+   */
+  public async waitForIdle(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
+   * @brief Simulates `ctx.newSession(...)` for offline command replay.
+   * @details Executes the optional setup callback against a minimal session-manager stub that records appended user messages, thereby preserving `/new`-equivalent prompt delivery evidence without switching real sessions. Runtime is O(n) in setup work. Side effects are limited to in-memory user-message recording.
+   * @param[in] options {{ parentSession?: string; setup?: (sessionManager: { appendMessage: (message: unknown) => string }) => Promise<void> } | undefined} Optional new-session options.
+   * @return {Promise<{ cancelled: boolean }>} Deterministic non-cancelled result.
+   */
+  public async newSession(options?: {
+    parentSession?: string;
+    setup?: (sessionManager: { appendMessage: (message: unknown) => string }) => Promise<void>;
+  }): Promise<{ cancelled: boolean }> {
+    void options?.parentSession;
+    if (options?.setup) {
+      await options.setup({
+        appendMessage: (message: unknown): string => {
+          if ((message as { role?: unknown })?.role === "user") {
+            this.recordSessionUserMessage(normalizeSessionUserMessageContent(message));
+          }
+          return "recorded-entry";
+        },
+      });
+    }
+    return { cancelled: false };
   }
 
   /**
@@ -529,6 +591,17 @@ export class RecordingExtensionAPI {
   }
 
   /**
+   * @brief Appends one normalized user-message snapshot.
+   * @details Centralizes storage for direct `pi.sendUserMessage(...)` calls and `/new`-session setup injections so replay reports expose one stable user-message inventory. Runtime is O(1). Side effects mutate recorder state.
+   * @param[in] content {JsonValue} Normalized user-message content.
+   * @param[in] options {JsonValue | undefined} Optional normalized delivery metadata.
+   * @return {void} No return value.
+   */
+  private appendRecordedUserMessage(content: JsonValue, options?: JsonValue): void {
+    this.sentUserMessages.push({ content, options });
+  }
+
+  /**
    * @brief Records one user message injected by the extension.
    * @details Serializes the content payload plus optional delivery metadata into a deterministic JSON-compatible structure. Runtime is O(n) in payload size. Side effects mutate recorder state.
    * @param[in] content {unknown} Message content accepted by `pi.sendUserMessage(...)`.
@@ -537,10 +610,18 @@ export class RecordingExtensionAPI {
    * @satisfies REQ-046
    */
   public sendUserMessage(content: unknown, options?: unknown): void {
-    this.sentUserMessages.push({
-      content: toJsonValue(content) ?? null,
-      options: toJsonValue(options),
-    });
+    this.appendRecordedUserMessage(toJsonValue(content) ?? null, toJsonValue(options));
+  }
+
+  /**
+   * @brief Records one user message appended during offline new-session setup.
+   * @details Captures `/new`-equivalent prompt delivery performed through `ctx.newSession(...setup)` so command replay reports preserve the rendered prompt payload even when no direct `pi.sendUserMessage(...)` call occurs. Runtime is O(1). Side effects mutate recorder state.
+   * @param[in] content {JsonValue} Normalized user-message content.
+   * @return {void} No return value.
+   * @satisfies REQ-054, REQ-067
+   */
+  public recordSessionUserMessage(content: JsonValue): void {
+    this.appendRecordedUserMessage(content);
   }
 
   /**

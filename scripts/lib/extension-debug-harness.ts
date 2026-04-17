@@ -305,7 +305,11 @@ export async function replaySessionStart(
   uiPlan?: RecordingUiPlan,
 ): Promise<SessionStartReport> {
   const registration = await registerExtensionOffline(cwd, extensionPath);
-  const context = new RecordingCommandContext(registration.paths.cwd, uiPlan);
+  const context = new RecordingCommandContext(
+    registration.paths.cwd,
+    uiPlan,
+    (content) => registration.api.recordSessionUserMessage(content),
+  );
   const payload = eventPayload ?? { reason: "startup" };
   const replay = await withProcessCwd(registration.paths.cwd, async () => {
     for (const handler of registration.api.getEventHandlers("session_start")) {
@@ -354,7 +358,11 @@ export async function replayCommand(
   if (!command) {
     throw new ReqError(`Error: command not registered: ${commandName}`, 1);
   }
-  const context = new RecordingCommandContext(registration.paths.cwd, uiPlan);
+  const context = new RecordingCommandContext(
+    registration.paths.cwd,
+    uiPlan,
+    (content) => registration.api.recordSessionUserMessage(content),
+  );
   const replay = await withProcessCwd(registration.paths.cwd, async () => {
     await command.handler(commandArgs, context);
     return undefined;
@@ -403,7 +411,11 @@ export async function replayTool(
   if (typeof tool.execute !== "function") {
     throw new ReqError(`Error: tool has no execute handler: ${toolName}`, 1);
   }
-  const context = new RecordingCommandContext(registration.paths.cwd, uiPlan);
+  const context = new RecordingCommandContext(
+    registration.paths.cwd,
+    uiPlan,
+    (content) => registration.api.recordSessionUserMessage(content),
+  );
   const updates: JsonValue[] = [];
   const replay = await withProcessCwd(registration.paths.cwd, async () => {
     const toolResult = await tool.execute!(

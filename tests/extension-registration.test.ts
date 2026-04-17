@@ -32,7 +32,7 @@ type RegisteredTool = {
 
 /**
  * @brief Represents the fake pi runtime returned by `createFakePi`.
- * @details Captures registered commands, tools, event handlers, and active-tool state for deterministic extension-registration assertions. The alias is compile-time only and introduces no runtime side effects.
+ * @details Captures registered commands, tools, event handlers, active-tool state, and prompt-delivery payloads for deterministic extension-registration assertions. The alias is compile-time only and introduces no runtime side effects.
  */
 type FakePi = ReturnType<typeof createFakePi>;
 
@@ -43,13 +43,35 @@ type FakePi = ReturnType<typeof createFakePi>;
 type FakeCtxPlan = { selects: string[]; inputs?: string[] };
 
 /**
+ * @brief Extracts text content from a recorded session-manager user message.
+ * @details Collapses text-part arrays appended during fake `ctx.newSession(...setup)` execution into one comparable string. Non-text payloads yield an empty string. Runtime is O(n) in part count. No external state is mutated.
+ * @param[in] message {unknown} Session-manager message payload.
+ * @return {string} Collapsed text content.
+ */
+function extractSessionMessageText(message: unknown): string {
+  if (!message || typeof message !== "object") {
+    return "";
+  }
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .map((item) => (item && typeof item === "object" && typeof (item as { text?: unknown }).text === "string"
+      ? (item as { text: string }).text
+      : ""))
+    .join("");
+}
+
+/**
  * @brief Creates a fake pi runtime that records command and tool registrations.
- * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, event dispatch, and active-tool mutation. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
+ * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, event dispatch, active-tool mutation, and prompt delivery. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
  * @return {FakePi} Fake extension runtime.
  */
 function createFakePi() {
   const commands = new Map<string, RegisteredCommand>();
   const tools: RegisteredTool[] = [];
+  const sentUserMessages: Array<{ content: unknown; options?: unknown }> = [];
   const eventHandlers = new Map<string, Array<(event: any, ctx: any) => Promise<void> | void>>();
   const embeddedToolNames = new Set<string>(PI_USEREQ_EMBEDDED_TOOL_NAMES);
   const builtinTools: RegisteredTool[] = PI_USEREQ_EMBEDDED_TOOL_NAMES.map((name) => ({
@@ -82,6 +104,7 @@ function createFakePi() {
   return {
     commands,
     tools,
+    sentUserMessages,
     eventHandlers,
     getActiveTools() {
       return [...activeTools];
@@ -117,13 +140,15 @@ function createFakePi() {
         activeTools = [...activeTools, definition.name];
       }
     },
-    sendUserMessage() {},
+    sendUserMessage(content: unknown, options?: unknown) {
+      sentUserMessages.push({ content, options });
+    },
   } as any;
 }
 
 /**
  * @brief Creates a fake extension command context with scripted UI interactions.
- * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, and `setEditorText` behaviors backed by in-memory state so menu-oriented tests can assert side effects without a real UI. Runtime is O(1) plus queued interaction count. Side effects are limited to in-memory state mutation.
+ * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, and `newSession` behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
  * @param[in] cwd {string} Working directory exposed to command handlers.
  * @param[in] plan {FakeCtxPlan} Scripted select and input responses.
  * @return {any} Fake command context compatible with the tested handlers.
@@ -135,10 +160,34 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }) {
     editorText: "",
     statuses: new Map<string, string>(),
     notifications: [] as Array<{ message: string; level: string }>,
+    waitForIdleCalls: 0,
+    newSessions: [] as Array<{ messages: string[] }>,
   };
   return {
     cwd,
     __state: state,
+    async waitForIdle() {
+      state.waitForIdleCalls += 1;
+    },
+    async newSession(options?: {
+      parentSession?: string;
+      setup?: (sessionManager: { appendMessage: (message: unknown) => string }) => Promise<void>;
+    }) {
+      void options?.parentSession;
+      const session = { messages: [] as string[] };
+      if (options?.setup) {
+        await options.setup({
+          appendMessage(message: unknown) {
+            if ((message as { role?: unknown })?.role === "user") {
+              session.messages.push(extractSessionMessageText(message));
+            }
+            return "recorded-entry";
+          },
+        });
+      }
+      state.newSessions.push(session);
+      return { cancelled: false };
+    },
     ui: {
       async select(_title: string, _items: string[]) {
         return selects.shift();
@@ -276,6 +325,64 @@ test("configuration menu saves updated docs-dir in project config", async () => 
   await command!.handler("", createFakeCtx(cwd, { selects: ["Set docs-dir", "Save and close"], inputs: ["docs/custom"] }));
   const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
   assert.equal(config["docs-dir"], "docs/custom");
+});
+
+test("configuration menu can toggle reset-context", async () => {
+  const cwd = createTempDir("pi-usereq-menu-reset-");
+  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+
+  await command!.handler("", createFakeCtx(cwd, { selects: ["Toggle reset-context (true)", "Save and close"] }));
+  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  assert.equal(config["reset-context"], false);
+});
+
+test("prompt commands reset context by default before prompt delivery", async () => {
+  const cwd = createTempDir("pi-usereq-prompt-reset-");
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("req-analyze");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd);
+
+  await command!.handler("Inspect src/index.ts for prompt coverage", ctx);
+
+  assert.equal(ctx.__state.waitForIdleCalls, 1);
+  assert.deepEqual(ctx.__state.newSessions.map((session) => session.messages.length), [1]);
+  assert.match(ctx.__state.newSessions[0]!.messages[0] ?? "", /Inspect src\/index\.ts for prompt coverage/);
+  assert.equal(pi.sentUserMessages.length, 0);
+});
+
+test("prompt commands reuse the current session when reset-context is false", async () => {
+  const cwd = createTempDir("pi-usereq-prompt-current-");
+  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.writeFileSync(
+    path.join(cwd, ".pi", "pi-usereq", "config.json"),
+    `${JSON.stringify({
+      "docs-dir": "req/docs",
+      "tests-dir": "tests",
+      "src-dir": ["src"],
+      "reset-context": false,
+      "static-check": {},
+      "enabled-tools": [],
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("req-analyze");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd);
+
+  await command!.handler("Inspect src/index.ts for prompt coverage", ctx);
+
+  assert.equal(ctx.__state.waitForIdleCalls, 0);
+  assert.equal(ctx.__state.newSessions.length, 0);
+  assert.equal(pi.sentUserMessages.length, 1);
+  assert.match(String(pi.sentUserMessages[0]?.content), /Inspect src\/index\.ts for prompt coverage/);
 });
 
 test("session_start applies configured pi-usereq startup tools", async () => {

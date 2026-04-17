@@ -565,6 +565,14 @@
         - `getProjectBase(...)`: resolve command project base [`src/index.ts`]
         - `loadProjectConfig(...)`: load command runtime config [`src/index.ts`]
         - `renderPrompt(...)`: render prompt-command payloads [`src/core/prompts.ts`]
+        - `deliverPromptCommand(...)`: dispatch prompt replay according to `reset-context` [`src/index.ts`]
+          - `buildPromptSessionMessage(...)`: build the first user message for reset-session prompt delivery [`src/index.ts`]
+          - `RecordingCommandContext.waitForIdle(...)`: resolve the offline idle gate before session replacement [`scripts/lib/recording-extension-api.ts`]
+          - `RecordingCommandContext.newSession(...)`: emulate `/new`-equivalent prompt-session replacement [`scripts/lib/recording-extension-api.ts`]
+            - `normalizeSessionUserMessageContent(...)`: collapse appended user-message content for replay snapshots [`scripts/lib/recording-extension-api.ts`]
+            - `RecordingExtensionAPI.recordSessionUserMessage(...)`: append reset-session prompt payload to the replay snapshot [`scripts/lib/recording-extension-api.ts`]
+              - `RecordingExtensionAPI.appendRecordedUserMessage(...)`: centralize replay user-message storage [`scripts/lib/recording-extension-api.ts`]
+          - External boundary: `pi.sendUserMessage(...)` when `reset-context` is `false`.
         - `configurePiUsereq(...)`: execute the interactive configuration menu [`src/index.ts`]
           - `saveProjectConfig(...)`: persist menu updates on save-and-close [`src/index.ts`]
     - `replayTool(...)`: replay a recorded tool execute handler and capture content/details [`scripts/lib/extension-debug-harness.ts`]
@@ -665,6 +673,9 @@
         - `injectPiDevConformanceBlock(...)`: add conditional pi.dev manifest guidance for prompt workflows [`src/core/prompts.ts`]
           - `buildPiDevConformanceBlock(...)`: resolve manifest-gated pi.dev conformance rules [`src/core/prompts.ts`]
         - `adaptPromptForInternalTools(...)`: rewrite tool names for internal wrappers [`src/core/prompts.ts`]
+      - `deliverPromptCommand(...)`: dispatch the rendered prompt according to `reset-context` [`src/index.ts`]
+        - `buildPromptSessionMessage(...)`: build the first user message for reset-session prompt delivery [`src/index.ts`]
+        - External boundaries: `ctx.waitForIdle(...)` plus `ctx.newSession(...)` on the reset path; `pi.sendUserMessage(...)` on the current-session path.
     - `registerAgentTools(...)`: register structured pi tools whose execute callbacks reuse internal runner families [`src/index.ts`]
       - `ensureHomeResources(...)`: refresh home resource cache for executes that need bundled assets [`src/core/resources.ts`]
         - `getBundledResourceRoot(...)`: resolve packaged resource root [`src/core/resources.ts`]
@@ -780,7 +791,7 @@
         - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
       - `getPiUsereqStartupTools(...)`: enumerate configurable tools from runtime inventory [`src/index.ts`]
 - External Boundaries:
-  - pi ExtensionAPI for command registration, tool registration, session events, active-tool mutation, editor updates, notifications, selections, and text input.
+  - pi ExtensionAPI plus command-context session controls for command registration, tool registration, session events, `/new`-equivalent session replacement, active-tool mutation, editor updates, notifications, selections, and text input.
   - Filesystem access for home resource cache, bundled prompt reads, and project config persistence.
   - Git and static-check subprocesses reused through the same tool-runner and static-check functions documented under `PROC:main`.
 

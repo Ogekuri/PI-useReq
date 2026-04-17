@@ -134,6 +134,48 @@ function formatResultForEditor(result: ToolResult): string {
   return parts.join(parts.length > 1 ? "\n\n" : "");
 }
 
+/**
+ * @brief Builds the first user-message payload for a reset prompt session.
+ * @details Creates the timestamped session entry appended during `ctx.newSession(...)` so `req-*` commands seed the cleared session with the rendered prompt content. Runtime is O(n) in prompt length. No external state is mutated.
+ * @param[in] content {string} Rendered prompt markdown.
+ * @return {{ role: "user"; content: Array<{ type: "text"; text: string }>; timestamp: number }} Session-manager user message payload.
+ * @satisfies REQ-067
+ */
+function buildPromptSessionMessage(content: string): {
+  role: "user";
+  content: Array<{ type: "text"; text: string }>;
+  timestamp: number;
+} {
+  return {
+    role: "user",
+    content: [{ type: "text", text: content }],
+    timestamp: Date.now(),
+  };
+}
+
+/**
+ * @brief Delivers one rendered prompt according to the configured reset policy.
+ * @details When `reset-context` is `true`, waits for idle and uses `ctx.newSession(...)` to create a `/new`-equivalent session seeded with the rendered prompt as the first user message. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement or message dispatch.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] content {string} Rendered prompt markdown.
+ * @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
+ * @satisfies REQ-067, REQ-068
+ */
+async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void> {
+  if (!config["reset-context"]) {
+    pi.sendUserMessage(content);
+    return;
+  }
+
+  await ctx.waitForIdle();
+  await ctx.newSession({
+    setup: async (sessionManager) => {
+      sessionManager.appendMessage(buildPromptSessionMessage(content));
+    },
+  });
+}
 
 /**
  * @brief Returns the configurable active-tool inventory visible to the extension.
@@ -266,9 +308,10 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
 
 /**
  * @brief Registers bundled prompt commands with the extension.
- * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and sends it as a user message. Runtime is O(p) for registration; handler cost depends on prompt rendering. Side effects include command registration and message dispatch during execution.
+ * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and dispatches it either into a `/new`-equivalent reset session or the current session based on `reset-context`. Runtime is O(p) for registration; handler cost depends on prompt rendering plus optional session replacement. Side effects include command registration, session replacement, and message dispatch during execution.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
+ * @satisfies REQ-004, REQ-067, REQ-068
  */
 function registerPromptCommands(pi: ExtensionAPI): void {
   PROMPT_NAMES.forEach((promptName) => {
@@ -279,7 +322,7 @@ function registerPromptCommands(pi: ExtensionAPI): void {
         const projectBase = getProjectBase(ctx.cwd);
         const config = loadProjectConfig(ctx.cwd);
         const content = renderPrompt(promptName, args, projectBase, config);
-        pi.sendUserMessage(content);
+        await deliverPromptCommand(pi, ctx, config, content);
       },
     });
   });
@@ -824,10 +867,11 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/active-tool/static-check configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
+ * @satisfies REQ-006, REQ-066
  */
 async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
   let config = loadProjectConfig(ctx.cwd);
@@ -843,10 +887,11 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
 
   while (true) {
     const choice = await ctx.ui.select("pi-usereq", [
-      `Overview: docs=${config["docs-dir"]}, tests=${config["tests-dir"]}, src=${config["src-dir"].join(", ")}, tools=${getConfiguredEnabledPiUsereqTools(config).length}`,
+      `Overview: docs=${config["docs-dir"]}, tests=${config["tests-dir"]}, src=${config["src-dir"].join(", ")}, reset-context=${config["reset-context"]}, tools=${getConfiguredEnabledPiUsereqTools(config).length}`,
       "Set docs-dir",
       "Set tests-dir",
       "Manage src-dir",
+      `Toggle reset-context (${config["reset-context"]})`,
       "Manage static-check",
       "Manage active tools",
       "Reset defaults",
@@ -884,6 +929,10 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
           if (config["src-dir"].length === 0) config["src-dir"] = ["src"];
         }
       }
+      continue;
+    }
+    if (choice.startsWith("Toggle reset-context")) {
+      config["reset-context"] = !config["reset-context"];
       continue;
     }
     if (choice === "Manage static-check") {
@@ -928,10 +977,10 @@ function registerConfigCommands(pi: ExtensionAPI): void {
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured active tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, and active-tool changes.
+ * @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured active tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   ensureHomeResources();
