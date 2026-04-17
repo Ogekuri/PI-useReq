@@ -13,6 +13,13 @@
     - `main(...)` [`scripts/req-debug.sh`]
   - Parent Process: none
   - Threads: no explicit threads detected
+- ID: `PROC:tool-args-to-params`
+  - Type: Process
+  - Role: Tool-argument normalization helper that converts wrapper `--args` text into debug-harness `--params` JSON.
+  - Entrypoints:
+    - `main(...)` [`scripts/tool-args-to-params.ts`]
+  - Parent Process: `PROC:req-debug`
+  - Threads: no explicit threads detected
 - ID: `PROC:debug-ext`
   - Type: Process
   - Role: Standalone extension debug-harness dispatcher for offline registration inspection, handler replay, and SDK parity smoke execution.
@@ -474,17 +481,38 @@
   - Threads: no explicit threads detected.
   - Startup invariant: script body resolves `TSX_BIN` through `resolve_tsx_binary(...)` before invoking `main(...)`.
 - Internal Call-Trace Tree:
-  - `main(...)`: parse wrapper subcommand, normalize prompt and tool convenience aliases, and delegate to the TypeScript harness [`scripts/req-debug.sh`]
+  - `main(...)`: parse wrapper subcommand, normalize prompt and tool convenience aliases, rewrite tool `--args` when requested, and delegate to the TypeScript harness [`scripts/req-debug.sh`]
     - `print_usage(...)`: render wrapper usage text for help and empty invocation [`scripts/req-debug.sh`]
     - `require_value(...)`: validate required command, prompt, tool, or raw operands [`scripts/req-debug.sh`]
-    - `contains_exact_option(...)`: detect forwarded `--args` or `--params` tokens [`scripts/req-debug.sh`]
+    - `contains_exact_option(...)`: detect forwarded `--args` or `--params` tokens for command and prompt replay [`scripts/req-debug.sh`]
     - `contains_long_option(...)`: detect explicit long options before inferring positional payloads [`scripts/req-debug.sh`]
     - `normalize_prompt_name(...)`: map bare prompt aliases to registered `req-*` command names [`scripts/req-debug.sh`]
+    - `forward_tool_subcommand(...)`: normalize wrapper tool forwarding and rewrite `--args` into `--params` JSON when present [`scripts/req-debug.sh`]
+      - `build_tool_params_json(...)`: spawn the tool-argument converter and capture serialized JSON params [`scripts/req-debug.sh`]
     - `run_debug_extension(...)`: enter repository root, apply default `--cwd` and `--extension`, and spawn the TypeScript harness [`scripts/req-debug.sh`]
 - External Boundaries:
   - Bash shell argument expansion, stdout, and stderr handling.
   - `git rev-parse`, `ln -s`, and resolved `tsx` executable lookup triggered by `resolve_tsx_binary(...)` during startup.
-  - Child-process execution of `scripts/debug-extension.ts`.
+  - Child-process execution of `scripts/tool-args-to-params.ts` and `scripts/debug-extension.ts`.
+
+### `PROC:tool-args-to-params`
+- Entrypoints:
+  - `main(...)`: tool-argument conversion runtime root [`scripts/tool-args-to-params.ts`]
+- Lifecycle/trigger:
+  - Start trigger: `PROC:req-debug` executes `scripts/tool-args-to-params.ts` for tool subcommands that pass wrapper `--args`.
+  - Stop trigger: returns numeric exit code after one conversion path or caught `ReqError`.
+  - Looping model: single-pass argument parse followed by one conversion decision.
+  - Threads: no explicit threads detected.
+- Internal Call-Trace Tree:
+  - `main(...)`: parse argv, convert wrapper tool args text into JSON params, and serialize the result [`scripts/tool-args-to-params.ts`]
+    - `parseCliArgs(...)`: map converter CLI options into one normalized request [`scripts/tool-args-to-params.ts`]
+    - `buildToolParamsFromArgsText(...)`: tokenize wrapper args text and map it to one tool-parameter object [`scripts/tool-args-to-params.ts`]
+      - `shellSplit(...)`: split shell-style text into ordered tokens [`src/core/utils.ts`]
+      - `takeBooleanFlag(...)`: remove supported boolean flags while preserving positional order [`scripts/tool-args-to-params.ts`]
+    - `writeStdout(...)`: emit serialized JSON params or usage text [`scripts/tool-args-to-params.ts`]
+    - `writeStderr(...)`: emit conversion diagnostics on error paths [`scripts/tool-args-to-params.ts`]
+- External Boundaries:
+  - Node process APIs for argv, stdout, stderr, and exit code.
 
 ### `PROC:debug-ext`
 - Entrypoints:
@@ -757,9 +785,13 @@
   - Git and static-check subprocesses reused through the same tool-runner and static-check functions documented under `PROC:main`.
 
 ## Communication Edges
+- `PROC:req-debug` -> `PROC:tool-args-to-params`
+  - Mechanism: child-process spawn through resolved `tsx` executable.
+  - Endpoint/channel: CLI argv plus captured stdout/stderr.
+  - Payload/data-shape: wrapper tool name plus raw `--args` text, returned as one serialized JSON params object [`scripts/req-debug.sh`, `scripts/tool-args-to-params.ts`]
 - `PROC:req-debug` -> `PROC:debug-ext`
   - Mechanism: child-process spawn through resolved `tsx` executable.
   - Endpoint/channel: CLI argv plus inherited stdout/stderr.
-  - Payload/data-shape: wrapper-normalized subcommand and forwarded debug-harness options with default `--cwd` and `--extension` values [`scripts/req-debug.sh`, `scripts/debug-extension.ts`]
+  - Payload/data-shape: wrapper-normalized subcommand and forwarded debug-harness options with default `--cwd` and `--extension` values, including rewritten tool `--params` JSON when `--args` was supplied [`scripts/req-debug.sh`, `scripts/debug-extension.ts`]
 - Internal thread communication edges: none.
-- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:debug-ext`, and `PROC:pi-host` are alternative runtime entry modes over shared modules; only `PROC:req-debug` directly spawns `PROC:debug-ext`.
+- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, and `PROC:pi-host` are alternative runtime entry modes over shared modules; only `PROC:req-debug` directly spawns `PROC:tool-args-to-params` and `PROC:debug-ext`.

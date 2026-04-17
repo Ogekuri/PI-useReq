@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @file
 # @brief Provides a bash wrapper for the standalone extension debug harness.
-# @details Resolves repository-local execution paths, preserves the caller working directory as the default debug target, exposes convenience subcommands for registration inspection plus prompt and tool replay, resolves a repository-visible `tsx` runner, materializes a shared `node_modules` symlink for worktrees when required, and delegates execution to `scripts/debug-extension.ts`. Runtime is O(n) in CLI argument count plus delegated harness cost. Side effects include spawning one Node process and temporarily changing the wrapper subshell cwd to the repository root.
+# @details Resolves repository-local execution paths, preserves the caller working directory as the default debug target, exposes convenience subcommands for registration inspection plus prompt and tool replay, resolves a repository-visible `tsx` runner, materializes a shared `node_modules` symlink for worktrees when required, converts tool `--args` text into `--params` JSON when requested, and delegates execution to `scripts/debug-extension.ts`. Runtime is O(n) in CLI argument count plus delegated harness cost. Side effects include spawning Node subprocesses and temporarily changing the wrapper subshell cwd to the repository root.
 
 set -euo pipefail
 
@@ -64,7 +64,7 @@ readonly TSX_BIN="$(resolve_tsx_binary)"
 # @brief Prints the wrapper usage contract.
 # @details Emits subcommand semantics, override rules, and concrete examples covering registrations, session replay, prompt replay, tool replay, and raw pass-through. Runtime is O(1). Side effect: writes to stdout.
 # @return {void} No return value.
-# @satisfies REQ-061, REQ-062
+# @satisfies REQ-061, REQ-062, REQ-065
 print_usage() {
   cat <<EOF
 Usage: ./scripts/req-debug.sh <subcommand> [options]
@@ -78,7 +78,7 @@ Subcommands:
       Replay one registered command.
   prompt <name> [--args <text> | debug-extension options...]
       Replay one req-* prompt command; bare names are auto-prefixed.
-  tool <name> [--params <json> | debug-extension options...]
+  tool <name> [--args <text> | --params <json> | debug-extension options...]
       Replay one registered tool; defaults params to {}.
   sdk [debug-extension options...]
       Run sdk-smoke parity inspection.
@@ -96,7 +96,7 @@ Examples:
   ./scripts/req-debug.sh inspect --format pretty
   ./scripts/req-debug.sh session --format json
   ./scripts/req-debug.sh prompt analyze --args "Inspect prompt rendering"
-  ./scripts/req-debug.sh tool git-check --format pretty
+  ./scripts/req-debug.sh tool files-find --args 'FUNCTION ^run src/index.ts --enable-line-numbers'
   ./scripts/req-debug.sh raw command --name req-analyze --args "Review REQ-004"
 EOF
 }
@@ -158,6 +158,90 @@ run_debug_extension() {
   )
 }
 
+# @brief Converts wrapper tool `--args` text into a JSON `--params` payload.
+# @details Executes the repository-local TypeScript converter so shell callers can reuse the same structured tool-parameter mapping as the debug interface without hand-writing JSON. Runtime is dominated by the helper subprocess. Side effects include spawning one subprocess.
+# @param[in] tool_name {string} Registered tool name.
+# @param[in] args_text {string} Raw wrapper `--args` payload.
+# @return {string} JSON object serialized on stdout.
+# @satisfies REQ-065
+build_tool_params_json() {
+  local tool_name="$1"
+  local args_text="${2-}"
+  (
+    cd -- "${REPO_ROOT}"
+    "${TSX_BIN}" ./scripts/tool-args-to-params.ts --name "${tool_name}" --args "${args_text}"
+  )
+}
+
+# @brief Replays one tool subcommand with wrapper-level `--args` normalization.
+# @details Preserves direct `--params` passthrough, rewrites wrapper `--args` values into JSON `--params` payloads, forwards unrelated debug-harness options unchanged, and keeps the legacy single-positional-JSON shortcut. Runtime is O(n) in forwarded argument count plus delegated subprocess cost. Side effects include stdout/stderr writes and subprocess execution.
+# @param[in] tool_name {string} Registered tool name.
+# @param[in] ... {string[]} Forwarded wrapper tokens after the tool name.
+# @return {int} Exit status propagated from the delegated harness or local validation.
+# @satisfies REQ-060, REQ-062, REQ-065
+forward_tool_subcommand() {
+  local tool_name="$1"
+  shift
+  local -a forwarded=()
+  local saw_args=0
+  local saw_params=0
+  local option_value=""
+  local tool_params_json=""
+
+  if [[ $# -eq 0 ]]; then
+    run_debug_extension tool --name "${tool_name}" --params '{}'
+    return 0
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --args)
+        if [[ ${saw_params} -eq 1 ]]; then
+          printf 'Error: tool subcommand cannot combine --args with --params.\n' >&2
+          return 1
+        fi
+        saw_args=1
+        option_value="${2-}"
+        tool_params_json="$(build_tool_params_json "${tool_name}" "${option_value}")" || return 1
+        forwarded+=("--params" "${tool_params_json}")
+        if [[ $# -ge 2 ]]; then
+          shift 2
+        else
+          shift
+        fi
+        ;;
+      --params)
+        if [[ ${saw_args} -eq 1 ]]; then
+          printf 'Error: tool subcommand cannot combine --args with --params.\n' >&2
+          return 1
+        fi
+        saw_params=1
+        forwarded+=("$1")
+        if [[ $# -ge 2 ]]; then
+          forwarded+=("$2")
+          shift 2
+        else
+          forwarded+=("")
+          shift
+        fi
+        ;;
+      *)
+        forwarded+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if [[ ${saw_args} -eq 1 || ${saw_params} -eq 1 ]] || contains_long_option "${forwarded[@]}"; then
+    run_debug_extension tool --name "${tool_name}" "${forwarded[@]}"
+  elif [[ ${#forwarded[@]} -eq 1 ]]; then
+    run_debug_extension tool --name "${tool_name}" --params "${forwarded[0]}"
+  else
+    printf 'Error: tool JSON must be one shell argument or use --args/--params.\n' >&2
+    return 1
+  fi
+}
+
 # @brief Validates that one required subcommand operand is present.
 # @details Emits a deterministic stderr error when the caller omits a required positional name such as a command or tool identifier. Runtime is O(1). Side effect: writes to stderr on failure.
 # @param[in] label {string} Human-readable operand label.
@@ -174,10 +258,10 @@ require_value() {
 }
 
 # @brief Dispatches wrapper subcommands to the standalone TypeScript harness.
-# @details Implements the convenience grammar documented by `print_usage`, including session and SDK aliases, prompt-name normalization, default tool params, and raw pass-through mode. Runtime is O(n) in wrapper argument count plus delegated harness cost. Side effects include stdout/stderr writes and subprocess execution.
+# @details Implements the convenience grammar documented by `print_usage`, including session and SDK aliases, prompt-name normalization, tool `--args` to `--params` rewriting, default tool params, and raw pass-through mode. Runtime is O(n) in wrapper argument count plus delegated harness cost. Side effects include stdout/stderr writes and subprocess execution.
 # @param[in] ... {string[]} Wrapper CLI arguments excluding the script path.
 # @return {int} Exit status propagated from the delegated harness or local validation.
-# @satisfies REQ-060, REQ-061, REQ-062
+# @satisfies REQ-060, REQ-061, REQ-062, REQ-065
 main() {
   local subcommand="${1-}"
   if [[ $# -eq 0 ]]; then
@@ -226,16 +310,7 @@ main() {
       local tool_name="${1-}"
       require_value "tool name" "${tool_name}" || return 1
       shift
-      if [[ $# -eq 0 ]]; then
-        run_debug_extension tool --name "${tool_name}" --params '{}'
-      elif contains_exact_option --params "$@" || contains_long_option "$@"; then
-        run_debug_extension tool --name "${tool_name}" "$@"
-      elif [[ $# -eq 1 ]]; then
-        run_debug_extension tool --name "${tool_name}" --params "$1"
-      else
-        printf 'Error: tool JSON must be one shell argument or use --params.\n' >&2
-        return 1
-      fi
+      forward_tool_subcommand "${tool_name}" "$@"
       ;;
     sdk)
       run_debug_extension sdk-smoke "$@"

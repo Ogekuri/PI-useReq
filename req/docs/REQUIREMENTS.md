@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.8"
+version: "0.0.9"
 date: "2026-04-17"
 author: "OpenAI Codex"
 scope:
@@ -95,6 +95,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-060**: MUST provide `scripts/req-debug.sh` as a bash wrapper for `scripts/debug-extension.ts`.
 - **REQ-061**: MUST make `scripts/req-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
 - **REQ-062**: MUST make `scripts/req-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
+- **REQ-065**: MUST make `scripts/req-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
 - **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, and `src-dir`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
 - **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for configurable custom and embedded pi CLI active tools.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `grep`, and `ls`.
@@ -157,6 +158,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-018**: MUST verify offline harness inspection and session-start replay capture registered commands, registered tools, event handlers, active tools, statuses, notifications, editor text, and sent user messages.
 - **TST-019**: MUST verify offline harness command and tool replay invoke registered handlers, preserve requested cwd semantics, and capture prompt payloads, tool results, and UI side effects.
 - **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, and `package.json` declares the `debug:ext*` harness scripts.
+- **TST-021**: MUST verify `scripts/req-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
 
 ## 5. Observed Component Model
 

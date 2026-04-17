@@ -7,7 +7,8 @@
 │   │   ├── extension-debug-harness.ts
 │   │   ├── recording-extension-api.ts
 │   │   └── sdk-smoke.ts
-│   └── req-debug.sh
+│   ├── req-debug.sh
+│   └── tool-args-to-params.ts
 └── src
     ├── cli.ts
     ├── core
@@ -623,7 +624,7 @@ import { replaySessionStart, resolveHarnessPaths, type OfflineContractSnapshot }
 
 ---
 
-# req-debug.sh | Shell | 255L | 13 symbols | 0 imports | 51 comments
+# req-debug.sh | Shell | 330L | 15 symbols | 0 imports | 63 comments
 > Path: `scripts/req-debug.sh`
 
 ## Definitions
@@ -652,7 +653,7 @@ import { replaySessionStart, resolveHarnessPaths, type OfflineContractSnapshot }
 - @brief Prints the wrapper usage contract.
 - @details Emits subcommand semantics, override rules, and concrete examples covering registrations, session replay, prompt replay, tool replay, and raw pass-through. Runtime is O(1). Side effect: writes to stdout.
 - @return {void} No return value.
-- @satisfies REQ-061, REQ-062
+- @satisfies REQ-061, REQ-062, REQ-065
 - fn `contains_exact_option() {` (L109)
 - @brief Tests whether one exact option token is present in an argument list.
 - @details Performs a linear scan over forwarded tokens and returns success when any token equals the requested option string. Runtime is O(n) in argument count. No external state is mutated.
@@ -676,18 +677,32 @@ import { replaySessionStart, resolveHarnessPaths, type OfflineContractSnapshot }
 - @param[in] ... {string[]} Debug-harness CLI tokens beginning with the target subcommand.
 - @return {int} Exit status produced by the delegated Node process.
 - @satisfies REQ-060, REQ-062
-- fn `require_value() {` (L166)
+- fn `build_tool_params_json() {` (L167)
+- @brief Converts wrapper tool `--args` text into a JSON `--params` payload.
+- @details Executes the repository-local TypeScript converter so shell callers can reuse the same structured tool-parameter mapping as the debug interface without hand-writing JSON. Runtime is dominated by the helper subprocess. Side effects include spawning one subprocess.
+- @param[in] tool_name {string} Registered tool name.
+- @param[in] args_text {string} Raw wrapper `--args` payload.
+- @return {string} JSON object serialized on stdout.
+- @satisfies REQ-065
+- fn `forward_tool_subcommand() {` (L182)
+- @brief Replays one tool subcommand with wrapper-level `--args` normalization.
+- @details Preserves direct `--params` passthrough, rewrites wrapper `--args` values into JSON `--params` payloads, forwards unrelated debug-harness options unchanged, and keeps the legacy single-positional-JSON shortcut. Runtime is O(n) in forwarded argument count plus delegated subprocess cost. Side effects include stdout/stderr writes and subprocess execution.
+- @param[in] tool_name {string} Registered tool name.
+- @param[in] ... {string[]} Forwarded wrapper tokens after the tool name.
+- @return {int} Exit status propagated from the delegated harness or local validation.
+- @satisfies REQ-060, REQ-062, REQ-065
+- fn `require_value() {` (L250)
 - @brief Validates that one required subcommand operand is present.
 - @details Emits a deterministic stderr error when the caller omits a required positional name such as a command or tool identifier. Runtime is O(1). Side effect: writes to stderr on failure.
 - @param[in] label {string} Human-readable operand label.
 - @param[in] value {string} Operand value.
 - @return {int} Shell status `0` when the operand exists; `1` otherwise.
-- fn `main() {` (L181)
+- fn `main() {` (L265)
 - @brief Dispatches wrapper subcommands to the standalone TypeScript harness.
-- @details Implements the convenience grammar documented by `print_usage`, including session and SDK aliases, prompt-name normalization, default tool params, and raw pass-through mode. Runtime is O(n) in wrapper argument count plus delegated harness cost. Side effects include stdout/stderr writes and subprocess execution.
+- @details Implements the convenience grammar documented by `print_usage`, including session and SDK aliases, prompt-name normalization, tool `--args` to `--params` rewriting, default tool params, and raw pass-through mode. Runtime is O(n) in wrapper argument count plus delegated harness cost. Side effects include stdout/stderr writes and subprocess execution.
 - @param[in] ... {string[]} Wrapper CLI arguments excluding the script path.
 - @return {int} Exit status propagated from the delegated harness or local validation.
-- @satisfies REQ-060, REQ-061, REQ-062
+- @satisfies REQ-060, REQ-061, REQ-062, REQ-065
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
@@ -702,8 +717,84 @@ import { replaySessionStart, resolveHarnessPaths, type OfflineContractSnapshot }
 |`contains_long_option`|fn||125|contains_long_option()|
 |`normalize_prompt_name`|fn||140|normalize_prompt_name()|
 |`run_debug_extension`|fn||154|run_debug_extension()|
-|`require_value`|fn||166|require_value()|
-|`main`|fn||181|main()|
+|`build_tool_params_json`|fn||167|build_tool_params_json()|
+|`forward_tool_subcommand`|fn||182|forward_tool_subcommand()|
+|`require_value`|fn||250|require_value()|
+|`main`|fn||265|main()|
+
+
+---
+
+# tool-args-to-params.ts | TypeScript | 208L | 7 symbols | 3 imports | 9 comments
+> Path: `scripts/tool-args-to-params.ts`
+- @brief Converts req-debug tool `--args` text into the JSON object expected by `--params`.
+- @details Parses the wrapper-only tool-argument grammar, tokenizes shell-style text without invoking a shell, validates the argument shape for the current registered tool set, and emits one compact JSON object for `scripts/req-debug.sh`. Runtime is O(n) in argument length. Side effects are limited to stdout and stderr writes.
+
+## Imports
+```
+import process from "node:process";
+import { ReqError } from "../src/core/errors.js";
+import { shellSplit } from "../src/core/utils.js";
+```
+
+## Definitions
+
+### iface `interface ParsedToolArgsCli` (L15-19)
+- @brief Describes the normalized CLI request consumed by the tool-argument converter.
+- @details Captures the target tool name, raw `--args` text, and help-mode state for the standalone converter entrypoint. The interface is compile-time only and introduces no runtime side effects.
+
+### fn `function parseCliArgs(argv: string[]): ParsedToolArgsCli` (L39-66)
+- @brief Parses CLI flags for the standalone tool-argument converter.
+- @details Performs one left-to-right scan, records the last `--name` and `--args` values, and ignores unrelated tokens so the wrapper can compose deterministic invocations. Runtime is O(n) in argument count. No external state is mutated.
+- @param[in] argv {string[]} Raw CLI arguments excluding executable and script path.
+- @return {ParsedToolArgsCli} Parsed converter request.
+
+### fn `function takeBooleanFlag(tokens: string[], flag: string): { tokens: string[]; present: boolean }` (L75-86)
+- @brief Removes one boolean flag from a shell-token array.
+- @details Preserves token order for all non-matching items and reports whether the requested flag appeared at least once. Runtime is O(n) in token count. No external state is mutated.
+- @param[in] tokens {string[]} Tokenized `--args` payload.
+- @param[in] flag {string} Flag token to remove.
+- @return {{ tokens: string[]; present: boolean }} Remaining tokens plus presence marker.
+
+### fn `export function buildToolParamsFromArgsText(toolName: string, argsText: string): Record<string, unknown>` (L97-152)
+- @brief Converts one req-debug tool `--args` string into a tool-parameter object.
+- @details Tokenizes shell-style text with `shellSplit`, applies tool-specific positional and flag mappings, and rejects unsupported or structurally incomplete argument layouts before wrapper forwarding. Runtime is O(n) in token count. No external state is mutated.
+- @param[in] toolName {string} Registered tool name selected by `scripts/req-debug.sh`.
+- @param[in] argsText {string} Raw wrapper `--args` payload.
+- @return {Record<string, unknown>} JSON-serializable tool-parameter object compatible with `--params`.
+- @throws {ReqError} Throws when the selected tool has no supported `--args` mapping or when the token layout is invalid.
+- @satisfies REQ-065
+
+### fn `function writeStdout(text: string): void` (L160-164)
+- @brief Writes non-empty text to stdout.
+- @details Skips zero-length payloads so callers can compose CLI output without duplicate blank writes. Runtime is O(n) in text length. Side effects are limited to stdout writes.
+- @param[in] text {string} Text payload.
+- @return {void} No return value.
+
+### fn `function writeStderr(text: string): void` (L172-177)
+- @brief Writes non-empty text to stderr with a trailing newline.
+- @details Appends a newline when absent and suppresses zero-length payloads. Runtime is O(n) in text length. Side effects are limited to stderr writes.
+- @param[in] text {string} Text payload.
+- @return {void} No return value.
+
+### fn `export async function main(argv = process.argv.slice(2)): Promise<number>` (L187-202)
+- @brief Executes one standalone tool-argument conversion request.
+- @details Parses converter CLI flags, validates the presence of `--name`, transforms wrapper `--args` text into a JSON object, and writes the serialized payload for shell consumption while converting `ReqError` failures into stderr plus exit codes. Runtime is O(n) in argument length. Side effects are limited to stdout and stderr writes.
+- @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
+- @return {Promise<number>} Process exit code.
+- @throws {ReqError} Internally catches `ReqError` and returns its exit code.
+- @satisfies REQ-065
+
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`ParsedToolArgsCli`|iface||15-19|interface ParsedToolArgsCli|
+|`parseCliArgs`|fn||39-66|function parseCliArgs(argv: string[]): ParsedToolArgsCli|
+|`takeBooleanFlag`|fn||75-86|function takeBooleanFlag(tokens: string[], flag: string):...|
+|`buildToolParamsFromArgsText`|fn||97-152|export function buildToolParamsFromArgsText(toolName: str...|
+|`writeStdout`|fn||160-164|function writeStdout(text: string): void|
+|`writeStderr`|fn||172-177|function writeStderr(text: string): void|
+|`main`|fn||187-202|export async function main(argv = process.argv.slice(2)):...|
 
 
 ---
