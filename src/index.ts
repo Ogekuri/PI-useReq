@@ -22,6 +22,7 @@ import {
 } from "./core/config.js";
 import {
   PI_USEREQ_STARTUP_TOOL_SET,
+  isPiUsereqEmbeddedToolName,
   normalizeEnabledPiUsereqTools,
 } from "./core/pi-usereq-tools.js";
 import { renderPrompt } from "./core/prompts.js";
@@ -135,19 +136,21 @@ function formatResultForEditor(result: ToolResult): string {
 
 
 /**
- * @brief Returns the registered pi-usereq startup tools.
- * @details Filters all known extension tools against the canonical startup-tool set and sorts them by name. Runtime is O(t log t) in registered tool count. No external state is mutated.
+ * @brief Returns the configurable active-tool inventory visible to the extension.
+ * @details Filters runtime tools against the canonical configurable-tool set, thereby combining extension-owned tools with supported embedded pi CLI tools. Output order is sorted by tool name. Runtime is O(t log t). No external state is mutated.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
- * @return {ToolInfo[]} Sorted startup-tool descriptors.
+ * @return {ToolInfo[]} Sorted configurable tool descriptors.
+ * @satisfies REQ-007, REQ-063
  */
 function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[] {
   return pi.getAllTools()
     .filter((tool) => PI_USEREQ_STARTUP_TOOL_SET.has(tool.name))
+    .filter((tool) => !isPiUsereqEmbeddedToolName(tool.name) || tool.sourceInfo?.source === "builtin")
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 /**
- * @brief Normalizes and returns the configured enabled startup tools.
+ * @brief Normalizes and returns the configured enabled active tools.
  * @details Reuses repository normalization rules, updates the config object in place, and returns the normalized array. Runtime is O(n) in configured tool count. Side effect: mutates `config["enabled-tools"]`.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {string[]} Normalized enabled tool names.
@@ -159,23 +162,38 @@ function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[] {
 }
 
 /**
- * @brief Applies the configured startup-tool enablement to the active session.
- * @details Preserves non-pi-usereq active tools, removes all pi-usereq startup tools, then re-adds only those configured and currently registered. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
+ * @brief Classifies one configurable tool as embedded or extension-owned.
+ * @details Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated.
+ * @param[in] tool {ToolInfo} Runtime tool descriptor.
+ * @return {"builtin" | "extension"} Stable tool-kind label.
+ */
+function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension" {
+  if (tool.sourceInfo?.source === "builtin" && isPiUsereqEmbeddedToolName(tool.name)) {
+    return "builtin";
+  }
+  return "extension";
+}
+
+/**
+ * @brief Applies the configured active-tool enablement to the current session.
+ * @details Preserves non-configurable active tools, removes every configurable tool from the active set, then re-adds only configured tools that exist in the current runtime inventory. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {void} No return value.
+ * @satisfies REQ-009, REQ-064
  */
 function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void {
   const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
   const allTools = pi.getAllTools();
+  const configurableTools = getPiUsereqStartupTools(pi);
   const allToolNames = new Set(allTools.map((tool) => tool.name));
   const nextActive = new Set(pi.getActiveTools().filter((toolName) => allToolNames.has(toolName)));
 
-  for (const toolName of PI_USEREQ_STARTUP_TOOL_SET) {
-    nextActive.delete(toolName);
+  for (const tool of configurableTools) {
+    nextActive.delete(tool.name);
   }
-  for (const tool of allTools) {
-    if (PI_USEREQ_STARTUP_TOOL_SET.has(tool.name) && enabledTools.has(tool.name)) {
+  for (const tool of configurableTools) {
+    if (enabledTools.has(tool.name)) {
       nextActive.add(tool.name);
     }
   }
@@ -184,7 +202,7 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
 }
 
 /**
- * @brief Replaces the configured startup-tool selection and applies it immediately.
+ * @brief Replaces the configured active-tool selection and applies it immediately.
  * @details Normalizes the requested tool names, stores them in config, and synchronizes the active tool set with runtime registration state. Runtime is O(n + t). Side effect: mutates config and active tools.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
@@ -197,20 +215,20 @@ function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enab
 }
 
 /**
- * @brief Formats one startup-tool label for selection menus.
- * @details Prefixes the tool name with a checkmark or cross depending on whether the tool is configured as enabled. Runtime is O(1). No side effects occur.
+ * @brief Formats one configurable-tool label for selection menus.
+ * @details Prefixes the tool name with a checkmark or cross and appends a stable builtin-versus-extension marker derived from runtime metadata. Runtime is O(1). No side effects occur.
  * @param[in] tool {ToolInfo} Tool descriptor.
  * @param[in] enabled {boolean} Enablement state.
  * @return {string} Menu label.
  */
 function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string {
   const marker = enabled ? "✓" : "✗";
-  return `${marker} ${tool.name}`;
+  return `${marker} ${tool.name} [${getPiUsereqToolKind(tool)}]`;
 }
 
 /**
- * @brief Renders a textual reference for startup-tool configuration and runtime state.
- * @details Lists every startup tool with configured enablement, runtime activation, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
+ * @brief Renders a textual reference for configurable-tool configuration and runtime state.
+ * @details Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {string} Multiline tool-status report.
@@ -220,7 +238,7 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
   const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
   const activeTools = new Set(pi.getActiveTools());
   const lines = [
-    "# pi-usereq startup tools",
+    "# configurable active tools",
     "",
     `Configured enabled tools: ${enabledTools.size}/${tools.length}`,
     `Currently active tools: ${tools.filter((tool) => activeTools.has(tool.name)).length}/${tools.length}`,
@@ -233,6 +251,7 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
     const active = activeTools.has(tool.name) ? "active" : "inactive";
     const source = tool.sourceInfo ? `${tool.sourceInfo.source}:${tool.sourceInfo.path}` : "unknown";
     lines.push(`- ${tool.name}`);
+    lines.push(`  kind: ${getPiUsereqToolKind(tool)}`);
     lines.push(`  configured: ${configured}`);
     lines.push(`  runtime: ${active}`);
     lines.push(`  source: ${source}`);
@@ -543,25 +562,26 @@ function registerAgentTools(pi: ExtensionAPI): void {
 }
 
 /**
- * @brief Runs the interactive startup-tool configuration menu.
- * @details Synchronizes active tools with persisted config, renders overview/toggle actions, and updates configuration state in response to UI selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
+ * @brief Runs the interactive active-tool configuration menu.
+ * @details Synchronizes runtime active tools with persisted config, renders overview and mutation actions, and updates configuration state in response to UI selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
+ * @satisfies REQ-007, REQ-063, REQ-064
  */
 async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   applyConfiguredPiUsereqTools(pi, config);
   while (true) {
     const tools = getPiUsereqStartupTools(pi);
     const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
-    const choice = await ctx.ui.select("pi-usereq tools", [
+    const choice = await ctx.ui.select("Active tools", [
       `Overview: ${enabledTools.size}/${tools.length} enabled`,
       "Show tool status",
       "Toggle tool",
-      "Enable all pi-usereq tools",
-      "Disable all pi-usereq tools",
-      "Reset pi-usereq tool defaults",
+      "Enable all configurable tools",
+      "Disable all configurable tools",
+      "Reset configurable-tool defaults",
       "Back",
     ]);
 
@@ -574,27 +594,27 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
       continue;
     }
 
-    if (choice === "Enable all pi-usereq tools") {
+    if (choice === "Enable all configurable tools") {
       setConfiguredPiUsereqTools(pi, config, tools.map((tool) => tool.name));
-      ctx.ui.notify("Enabled all pi-usereq startup tools", "info");
+      ctx.ui.notify("Enabled all configurable active tools", "info");
       continue;
     }
 
-    if (choice === "Disable all pi-usereq tools") {
+    if (choice === "Disable all configurable tools") {
       setConfiguredPiUsereqTools(pi, config, []);
-      ctx.ui.notify("Disabled all pi-usereq startup tools", "info");
+      ctx.ui.notify("Disabled all configurable active tools", "info");
       continue;
     }
 
-    if (choice === "Reset pi-usereq tool defaults") {
+    if (choice === "Reset configurable-tool defaults") {
       setConfiguredPiUsereqTools(pi, config, normalizeEnabledPiUsereqTools(undefined));
-      ctx.ui.notify("Restored default pi-usereq startup tools", "info");
+      ctx.ui.notify("Restored default configurable active tools", "info");
       continue;
     }
 
     if (choice === "Toggle tool") {
       const toolLabels = tools.map((tool) => formatPiUsereqToolLabel(tool, enabledTools.has(tool.name)));
-      const selectedToolLabel = await ctx.ui.select("Toggle pi-usereq tool", [...toolLabels, "Back"]);
+      const selectedToolLabel = await ctx.ui.select("Toggle active tool", [...toolLabels, "Back"]);
       if (!selectedToolLabel || selectedToolLabel === "Back") {
         continue;
       }
@@ -804,7 +824,7 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/tool/static-check configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/active-tool/static-check configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
@@ -828,7 +848,7 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
       "Set tests-dir",
       "Manage src-dir",
       "Manage static-check",
-      "Manage startup tools",
+      "Manage active tools",
       "Reset defaults",
       "Save and close",
     ]);
@@ -870,7 +890,7 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
       await configureStaticCheckMenu(ctx, config);
       continue;
     }
-    if (choice === "Manage startup tools") {
+    if (choice === "Manage active tools") {
       await configurePiUsereqToolsMenu(pi, ctx, config);
       continue;
     }
@@ -908,7 +928,7 @@ function registerConfigCommands(pi: ExtensionAPI): void {
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured startup tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, and active-tool changes.
+ * @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured active tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045

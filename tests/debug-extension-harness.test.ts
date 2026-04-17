@@ -176,13 +176,13 @@ test("replayCommand captures interactive UI side effects", async () => {
       projectBase,
       undefined,
       {
-        selects: ["Manage startup tools", "Disable all pi-usereq tools", "Back", "Save and close"],
+        selects: ["Manage active tools", "Disable all configurable tools", "Back", "Save and close"],
         inputs: [],
       },
     );
 
     assert.deepEqual(report.activeTools, []);
-    assert.ok(report.ui.notifications.some((entry) => entry.message === "Disabled all pi-usereq startup tools"));
+    assert.ok(report.ui.notifications.some((entry) => entry.message === "Disabled all configurable active tools"));
     assert.match(report.ui.statuses["pi-usereq"] ?? "", /tools:0/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });

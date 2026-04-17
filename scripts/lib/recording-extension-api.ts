@@ -5,6 +5,10 @@
  */
 
 import path from "node:path";
+import {
+  PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES,
+  PI_USEREQ_EMBEDDED_TOOL_NAMES,
+} from "../../src/core/pi-usereq-tools.js";
 
 /**
  * @brief Represents a JSON-compatible serialized value.
@@ -202,6 +206,37 @@ function buildSourceInfo(extensionPath: string, override?: Partial<RecordingSour
 }
 
 /**
+ * @brief Builds synthesized provenance metadata for one builtin tool.
+ * @details Produces the stable pseudo-path shape used by pi for builtin tools so extension runtime logic can distinguish builtin inventory entries during offline replay. Runtime is O(1). No external state is mutated.
+ * @param[in] name {string} Builtin tool name.
+ * @return {RecordingSourceInfo} Normalized builtin provenance record.
+ */
+function buildBuiltinSourceInfo(name: string): RecordingSourceInfo {
+  return {
+    path: `<builtin:${name}>`,
+    source: "builtin",
+    scope: "temporary",
+    origin: "top-level",
+    baseDir: "<builtin>",
+  };
+}
+
+/**
+ * @brief Builds one supported builtin tool descriptor for offline inventory queries.
+ * @details Creates a minimal tool descriptor containing the builtin name, label, generic description, and synthesized builtin provenance metadata. Runtime is O(1). No external state is mutated.
+ * @param[in] name {string} Builtin tool name.
+ * @return {RecordingToolDefinition & { sourceInfo: RecordingSourceInfo }} Builtin tool descriptor.
+ */
+function buildBuiltinToolDefinition(name: string): RecordingToolDefinition & { sourceInfo: RecordingSourceInfo } {
+  return {
+    name,
+    label: name,
+    description: `Built-in pi CLI tool ${name}.`,
+    sourceInfo: buildBuiltinSourceInfo(name),
+  };
+}
+
+/**
  * @brief Records UI activity for one offline command context.
  * @details Exposes the subset of `ctx.ui` methods consumed by the extension, dequeues scripted responses for interactive handlers, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI operation. Side effects are limited to in-memory state mutation.
  */
@@ -366,12 +401,24 @@ export class RecordingExtensionAPI {
 
   /**
    * @brief Initializes a recording extension API instance.
-   * @details Stores the normalized extension path used to synthesize provenance metadata for every subsequently registered command and tool. Runtime is O(p) in path length. Side effects are limited to instance initialization.
+   * @details Stores the normalized extension path used to synthesize provenance metadata for every subsequently registered command and tool, then seeds the recorder with the supported builtin default active-tool set. Runtime is O(p + b) in path length and builtin-tool count. Side effects are limited to instance initialization.
    * @param[in] extensionPath {string} Absolute or relative extension entry path.
    * @return {RecordingExtensionAPI} New recorder instance.
    */
   public constructor(extensionPath: string) {
     this.extensionPath = path.resolve(extensionPath);
+    this.activeTools = [...PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES];
+  }
+
+  /**
+   * @brief Returns the supported builtin tools visible during offline replay.
+   * @details Synthesizes builtin descriptors for the supported embedded-tool subset and omits names already overridden by extension-registered tools. Runtime is O(b). No external state is mutated.
+   * @return {Array<RecordingToolDefinition & { sourceInfo: RecordingSourceInfo }>} Builtin tool descriptors available to `getAllTools()`.
+   */
+  private getBuiltinTools(): Array<RecordingToolDefinition & { sourceInfo: RecordingSourceInfo }> {
+    return PI_USEREQ_EMBEDDED_TOOL_NAMES
+      .filter((name) => !this.toolDefinitions.has(name))
+      .map((name) => buildBuiltinToolDefinition(name));
   }
 
   /**
@@ -397,7 +444,7 @@ export class RecordingExtensionAPI {
 
   /**
    * @brief Registers one tool in the offline recorder.
-   * @details Preserves first-registration order, stores the callable execute handler for later replay, synthesizes extension provenance metadata, and marks newly seen tools active by default to mirror current extension-test behavior. Runtime is O(n) in tool count for duplicate filtering. Side effects mutate recorder state.
+   * @details Preserves first-registration order, stores the callable execute handler for later replay, synthesizes extension provenance metadata, and marks newly seen extension tools active by default to mirror runtime registration behavior. Runtime is O(n) in tool count for duplicate filtering. Side effects mutate recorder state.
    * @param[in] definition {RecordingToolDefinition} Tool registration payload.
    * @return {void} No return value.
    * @satisfies REQ-046
@@ -436,13 +483,13 @@ export class RecordingExtensionAPI {
   }
 
   /**
-   * @brief Returns all recorded tool registrations.
-   * @details Produces stable tool descriptors in registration order and includes synthesized `sourceInfo` required by extension startup-tool logic. Runtime is O(n) in registered tool count. No external state is mutated.
-   * @return {Array<RecordingToolDefinition & { sourceInfo: RecordingSourceInfo }>} Registered tool descriptors.
+   * @brief Returns all tools visible to extension runtime logic.
+   * @details Produces supported builtin tool descriptors first, then appends extension-registered tools in registration order, always including synthesized `sourceInfo` required by active-tool filtering. Runtime is O(n + b). No external state is mutated.
+   * @return {Array<RecordingToolDefinition & { sourceInfo: RecordingSourceInfo }>} Visible runtime tool descriptors.
    * @satisfies REQ-046
    */
   public getAllTools(): Array<RecordingToolDefinition & { sourceInfo: RecordingSourceInfo }> {
-    return this.toolOrder
+    const registeredTools = this.toolOrder
       .map((toolName) => {
         const definition = this.toolDefinitions.get(toolName);
         const snapshot = this.toolSnapshots.get(toolName);
@@ -456,6 +503,7 @@ export class RecordingExtensionAPI {
         };
       })
       .filter((tool): tool is RecordingToolDefinition & { sourceInfo: RecordingSourceInfo } => tool !== undefined);
+    return [...this.getBuiltinTools(), ...registeredTools];
   }
 
   /**
@@ -470,13 +518,13 @@ export class RecordingExtensionAPI {
 
   /**
    * @brief Replaces the active-tool set with a filtered deduplicated list.
-   * @details Removes unknown names, preserves first occurrence order, and stores the resulting activation set for later inspection and parity comparison. Runtime is O(n) in requested name count. Side effects mutate recorder state.
+   * @details Removes names absent from the visible runtime inventory, preserves first occurrence order, and stores the resulting activation set for later inspection and parity comparison. Runtime is O(n + b). Side effects mutate recorder state.
    * @param[in] names {string[]} Requested active-tool names.
    * @return {void} No return value.
    * @satisfies REQ-046
    */
   public setActiveTools(names: string[]): void {
-    const available = new Set(this.toolOrder);
+    const available = new Set(this.getAllTools().map((tool) => tool.name));
     this.activeTools = names.filter((toolName, index, values) => available.has(toolName) && values.indexOf(toolName) === index);
   }
 

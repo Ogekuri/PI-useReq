@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
-import { PI_USEREQ_STARTUP_TOOL_NAMES } from "../src/core/pi-usereq-tools.js";
+import {
+  PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
+  PI_USEREQ_EMBEDDED_TOOL_NAMES,
+  PI_USEREQ_STARTUP_TOOL_NAMES,
+} from "../src/core/pi-usereq-tools.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
 import { createTempDir, initFixtureRepo } from "./helpers.js";
 
@@ -19,6 +23,7 @@ type RegisteredCommand = { description?: string; handler: (args: string, ctx: an
  */
 type RegisteredTool = {
   name: string;
+  label?: string;
   description?: string;
   parameters?: unknown;
   sourceInfo?: Record<string, unknown>;
@@ -39,14 +44,41 @@ type FakeCtxPlan = { selects: string[]; inputs?: string[] };
 
 /**
  * @brief Creates a fake pi runtime that records command and tool registrations.
- * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, event dispatch, and active-tool mutation. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
+ * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, event dispatch, and active-tool mutation. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
  * @return {FakePi} Fake extension runtime.
  */
 function createFakePi() {
   const commands = new Map<string, RegisteredCommand>();
   const tools: RegisteredTool[] = [];
   const eventHandlers = new Map<string, Array<(event: any, ctx: any) => Promise<void> | void>>();
-  let activeTools: string[] = [];
+  const embeddedToolNames = new Set<string>(PI_USEREQ_EMBEDDED_TOOL_NAMES);
+  const builtinTools: RegisteredTool[] = PI_USEREQ_EMBEDDED_TOOL_NAMES.map((name) => ({
+    name,
+    label: name,
+    description: `Built-in pi CLI tool ${name}.`,
+    sourceInfo: {
+      path: `<builtin:${name}>`,
+      source: "builtin",
+      scope: "temporary",
+      origin: "top-level",
+    },
+  }));
+  let activeTools = PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.filter((name) => embeddedToolNames.has(name));
+  const getVisibleTools = () => {
+    const overridden = new Set(tools.map((tool) => tool.name));
+    return [
+      ...builtinTools.filter((tool) => !overridden.has(tool.name)),
+      ...tools,
+    ].map((tool) => ({
+      ...tool,
+      sourceInfo: tool.sourceInfo ?? {
+        path: "<extension:pi-usereq>",
+        source: "extension",
+        scope: "project",
+        origin: "top-level",
+      },
+    }));
+  };
   return {
     commands,
     tools,
@@ -55,18 +87,10 @@ function createFakePi() {
       return [...activeTools];
     },
     getAllTools() {
-      return tools.map((tool) => ({
-        ...tool,
-        sourceInfo: tool.sourceInfo ?? {
-          path: "<extension:pi-usereq>",
-          source: "extension",
-          scope: "project",
-          origin: "top-level",
-        },
-      }));
+      return getVisibleTools();
     },
     setActiveTools(names: string[]) {
-      const available = new Set(tools.map((tool) => tool.name));
+      const available = new Set(getVisibleTools().map((tool) => tool.name));
       activeTools = names.filter((name, index) => available.has(name) && names.indexOf(name) === index);
     },
     on(name: string, handler: (event: any, ctx: any) => Promise<void> | void) {
@@ -83,7 +107,12 @@ function createFakePi() {
       commands.set(name, options);
     },
     registerTool(definition: RegisteredTool) {
-      tools.push(definition);
+      const existingIndex = tools.findIndex((tool) => tool.name === definition.name);
+      if (existingIndex >= 0) {
+        tools[existingIndex] = definition;
+      } else {
+        tools.push(definition);
+      }
       if (!activeTools.includes(definition.name)) {
         activeTools = [...activeTools, definition.name];
       }
@@ -272,7 +301,43 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   assert.deepEqual([...activeTools].sort(), ["git-path", "static-check"]);
 });
 
-test("configuration menu can disable pi-usereq startup tools", async () => {
+test("session_start enables default custom tools and default embedded tools only", async () => {
+  const cwd = createTempDir("pi-usereq-default-tools-");
+  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  await pi.emit("session_start", { reason: "startup" }, createFakeCtx(cwd));
+
+  const activeTools = new Set(pi.getActiveTools());
+  for (const toolName of PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES) {
+    assert.ok(activeTools.has(toolName), `missing default active tool ${toolName}`);
+  }
+  assert.equal(activeTools.has("grep"), false);
+  assert.equal(activeTools.has("ls"), false);
+});
+
+test("configuration menu can enable embedded builtin tools", async () => {
+  const cwd = createTempDir("pi-usereq-menu-embedded-");
+  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+
+  await command!.handler(
+    "",
+    createFakeCtx(cwd, {
+      selects: ["Manage active tools", "Toggle tool", "✗ grep [builtin]", "Back", "Save and close"],
+    }),
+  );
+
+  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  assert.ok(config["enabled-tools"].includes("grep"));
+  assert.ok(pi.getActiveTools().includes("grep"));
+});
+
+test("configuration menu can disable configurable active tools", async () => {
   const cwd = createTempDir("pi-usereq-menu-tools-");
   fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
   const pi = createFakePi();
@@ -283,7 +348,7 @@ test("configuration menu can disable pi-usereq startup tools", async () => {
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["Manage startup tools", "Disable all pi-usereq tools", "Back", "Save and close"],
+      selects: ["Manage active tools", "Disable all configurable tools", "Back", "Save and close"],
     }),
   );
 

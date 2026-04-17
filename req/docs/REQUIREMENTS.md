@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.7"
+version: "0.0.8"
 date: "2026-04-17"
 author: "OpenAI Codex"
 scope:
@@ -42,7 +42,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ### 2.1 Project Functions
 - **PRJ-001**: MUST expose prompt commands that render bundled prompt templates with configuration-derived path substitutions and internal tool-reference adaptation.
 - **PRJ-002**: MUST expose CLI and agent-tool interfaces for token counting, references generation, compression, construct search, and static-check execution on explicit files or configured project sources.
-- **PRJ-003**: MUST provide an interactive pi configuration surface for docs path, tests path, source directories, static-check entries, and startup tool enablement.
+- **PRJ-003**: MUST provide an interactive pi configuration surface for docs path, tests path, source directories, static-check entries, and active-tool enablement for custom and supported embedded pi CLI tools.
 - **PRJ-004**: MUST provide git repository validation plus standardized worktree naming, creation, and deletion utilities using configured project and git paths.
 - **PRJ-005**: MUST provision bundled prompts, documentation templates, guidelines, model metadata, and editor settings into user-home pi-usereq resources.
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
@@ -96,7 +96,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-061**: MUST make `scripts/req-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
 - **REQ-062**: MUST make `scripts/req-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
 - **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, and `src-dir`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
-- **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for the predefined startup tool set.
+- **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for configurable custom and embedded pi CLI active tools.
+- **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `grep`, and `ls`.
+- **REQ-064**: MUST default all custom tools and embedded `read`, `bash`, `edit`, and `write` to enabled, and embedded `grep` and `ls` to disabled.
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
 - **REQ-009**: MUST ensure home resources, apply configured startup tools, and publish `pi-usereq` status text during `session_start`.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters, and emit per-file metrics plus a pack summary for valid file inputs.
