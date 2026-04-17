@@ -2,7 +2,12 @@
 ```
 .
 ├── scripts
-│   └── debug-extension.ts
+│   ├── debug-extension.ts
+│   ├── lib
+│   │   ├── extension-debug-harness.ts
+│   │   ├── recording-extension-api.ts
+│   │   └── sdk-smoke.ts
+│   └── req-debug.sh
 └── src
     ├── cli.ts
     ├── core
@@ -162,6 +167,528 @@ import { runSdkSmoke, type ParityMismatch, type SdkSmokeReport } from "./lib/sdk
 |`formatSdkSmokeReport`|fn||375-395|function formatSdkSmokeReport(report: SdkSmokeReport): st...|
 |`formatReport`|fn||405-427|function formatReport(|
 |`main`|fn||436-491|export async function main(argv = process.argv.slice(2)):...|
+
+
+---
+
+# extension-debug-harness.ts | TypeScript | 437L | 17 symbols | 6 imports | 20 comments
+> Path: `scripts/lib/extension-debug-harness.ts`
+- @brief Implements offline extension inspection and replay for the standalone debug harness.
+- @details Loads the extension default export as a black box, records registrations through `RecordingExtensionAPI`, replays `session_start`, command, and tool handlers through recorded public boundaries, and renders a deterministic usage manual. Runtime is O(r + u) where r is the number of registrations and u is the number of replayed side effects. Side effects are limited to dynamic module loading, temporary `process.cwd()` mutation during replay, filesystem existence checks, and any extension-owned side effects triggered by the recorded handlers.
+
+## Imports
+```
+import fs from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { pathToFileURL } from "node:url";
+import { ReqError } from "../../src/core/errors.js";
+import {
+```
+
+## Definitions
+
+### iface `export interface ExtensionFactory` (L25-27)
+- @brief Describes the public shape of an extension factory loaded by the harness.
+- @details Constrains the dynamic import result to the default-export contract used by pi extensions while remaining independent from the official SDK package at compile time. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface OfflineContractSnapshot extends RecordingExtensionSnapshot` : RecordingExtensionSnapshot (L33-38)
+- @brief Describes the shared offline snapshot returned by all harness operations.
+- @details Aggregates normalized paths plus the recorded command, tool, event, active-tool, and user-message inventories so every subcommand can emit a stable machine-readable payload. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface InspectReport extends OfflineContractSnapshot` : OfflineContractSnapshot (L44-46)
+- @brief Describes the `inspect` subcommand result.
+- @details Extends the base offline snapshot with a generated usage manual covering every registered `req-*` command and agent tool. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface SessionStartReport extends OfflineContractSnapshot` : OfflineContractSnapshot (L52-56)
+- @brief Describes the `session-start` subcommand result.
+- @details Extends the base offline snapshot with the invoked event payload and all recorded UI side effects produced during `session_start` replay. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CommandReplayReport extends OfflineContractSnapshot` : OfflineContractSnapshot (L62-66)
+- @brief Describes the `command` subcommand result.
+- @details Extends the base offline snapshot with the executed command name, raw argument string, and recorded UI side effects produced by the command handler. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface ToolReplayReport extends OfflineContractSnapshot` : OfflineContractSnapshot (L72-78)
+- @brief Describes the `tool` subcommand result.
+- @details Extends the base offline snapshot with the executed tool name, input parameter object, streamed updates, final result payload, and recorded UI side effects. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface HarnessPaths` (L84-87)
+- @brief Describes the resolved harness execution target paths.
+- @details Stores absolute normalized filesystem locations for the requested working directory and extension entry path. The interface is compile-time only and introduces no runtime cost.
+
+### fn `function toJsonValue(value: unknown): JsonValue` (L95-106)
+- @brief Serializes arbitrary replay payloads into deterministic JSON-compatible values.
+- @details Uses JSON stringify/parse with function elision and bigint normalization so tool results, streamed updates, and event payloads remain stable in offline reports. Runtime is O(n) in payload size. No external state is mutated.
+- @param[in] value {unknown} Arbitrary payload value.
+- @return {JsonValue} JSON-compatible representation.
+
+### fn `export function resolveHarnessPaths(cwd?: string, extensionPath?: string): HarnessPaths` (L116-126)
+- @brief Validates and resolves the requested working directory and extension path.
+- @details Normalizes both inputs to absolute paths, rejects missing directories and files, and defaults the extension entry to `./src/index.ts` relative to the current process cwd when omitted. Runtime is O(p) in path length plus filesystem existence checks. Side effects are limited to filesystem reads.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @return {HarnessPaths} Resolved absolute paths.
+- @throws {ReqError} Throws when the working directory or extension entry does not exist.
+
+### fn `export async function loadExtensionFactory(extensionPath: string): Promise<ExtensionFactory>` (L136-143)
+- @brief Loads the extension default export as a black-box factory.
+- @details Performs a dynamic ESM import from the resolved extension path, verifies that the module exposes a callable default export, and returns that function without inspecting extension internals. Runtime is dominated by module loading. Side effects are limited to module evaluation.
+- @param[in] extensionPath {string} Absolute extension entry path.
+- @return {Promise<ExtensionFactory>} Loaded extension factory.
+- @throws {ReqError} Throws when the module lacks a callable default export.
+- @satisfies REQ-048
+
+### fn `async function withProcessCwd<T>(cwd: string, action: () => Promise<T> | T): Promise<{ value: T; effectiveProcessCwd: string }>` (L152-161)
+- @brief Executes a callback with `process.cwd()` temporarily set to the requested directory.
+- @details Changes the current working directory before invoking the callback, records the effective cwd observed inside the callback, and restores the previous cwd in a `finally` block. Runtime is dominated by the callback. Side effects transiently mutate process cwd.
+- @param[in] cwd {string} Requested working directory.
+- @param[in] action {() => Promise<T> | T} Callback executed under the requested cwd.
+- @return {Promise<{ value: T; effectiveProcessCwd: string }>} Callback result plus the cwd observed during execution.
+
+### fn `async function registerExtensionOffline(` (L171-183)
+- @brief Registers the target extension into a fresh recording API instance.
+- @details Resolves the harness paths, loads the extension default export, instantiates a new recorder, and invokes the factory as a black box under the requested cwd. Runtime is dominated by module loading plus extension registration. Side effects include any extension-owned registration-time behavior.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @return {Promise<{ api: RecordingExtensionAPI; paths: HarnessPaths; effectiveProcessCwd: string }>} Recorder plus resolved paths.
+- @satisfies REQ-048
+
+### fn `export function buildDebugManual(snapshot: RecordingExtensionSnapshot): string` (L238-264)
+- @brief Builds the generated harness usage manual.
+- @details Emits one example for each debug mode plus one concrete replay example for every registered `req-*` command and agent tool. Runtime is O(c + t) in command and tool count. No external state is mutated.
+- @param[in] snapshot {RecordingExtensionSnapshot} Recorded registration snapshot.
+- @return {string} Markdown manual.
+- @satisfies REQ-052
+
+### fn `export async function inspectExtension(cwd?: string, extensionPath?: string): Promise<InspectReport>` (L274-289)
+- @brief Builds an offline inspection report without replaying runtime handlers.
+- @details Loads and registers the extension as a black box, captures the registration snapshot, and appends the generated usage manual. Runtime is dominated by extension registration. Side effects are limited to registration-time extension behavior.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @return {Promise<InspectReport>} Offline inspection report.
+- @satisfies REQ-048, REQ-050, REQ-051, REQ-052
+
+### fn `export async function replaySessionStart(` (L301-331)
+- @brief Replays the recorded `session_start` handlers offline.
+- @details Loads and registers the extension as a black box, invokes every recorded `session_start` handler in registration order, and captures final active tools, user messages, and UI side effects. Runtime is dominated by handler execution. Side effects include temporary `process.cwd()` mutation plus extension-owned handler behavior.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @param[in] eventPayload {Record<string, unknown> | undefined} Optional session-start payload. Defaults to `{ reason: "startup" }`.
+- @param[in] uiPlan {RecordingUiPlan | undefined} Optional scripted UI responses.
+- @return {Promise<SessionStartReport>} Offline session-start replay report.
+- @satisfies REQ-048, REQ-049, REQ-050, REQ-051, REQ-053
+
+### fn `export async function replayCommand(` (L345-377)
+- @brief Replays one recorded command handler offline.
+- @details Loads and registers the extension as a black box, resolves the named command from the recording API, executes its handler under the requested cwd, and captures resulting user messages plus UI side effects. Runtime is dominated by the command handler. Side effects include temporary `process.cwd()` mutation plus extension-owned command behavior.
+- @param[in] commandName {string} Registered command name.
+- @param[in] commandArgs {string} Raw command argument string.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @param[in] uiPlan {RecordingUiPlan | undefined} Optional scripted UI responses.
+- @return {Promise<CommandReplayReport>} Offline command replay report.
+- @throws {ReqError} Throws when the named command is not registered.
+- @satisfies REQ-048, REQ-049, REQ-050, REQ-051, REQ-054, REQ-058
+
+### fn `export async function replayTool(` (L391-437)
+- @brief Replays one recorded tool execute handler offline.
+- @details Loads and registers the extension as a black box, resolves the named tool from the recording API, executes its `execute(...)` handler under the requested cwd, records streamed updates, and captures the final return payload plus UI side effects. Runtime is dominated by the tool handler. Side effects include temporary `process.cwd()` mutation plus extension-owned tool behavior.
+- @param[in] toolName {string} Registered tool name.
+- @param[in] toolParams {Record<string, unknown>} Tool parameter object.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @param[in] uiPlan {RecordingUiPlan | undefined} Optional scripted UI responses.
+- @return {Promise<ToolReplayReport>} Offline tool replay report.
+- @throws {ReqError} Throws when the named tool is not registered or lacks an execute handler.
+- @satisfies REQ-048, REQ-049, REQ-050, REQ-051, REQ-055, REQ-058
+
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`ExtensionFactory`|iface||25-27|export interface ExtensionFactory|
+|`OfflineContractSnapshot`|iface||33-38|export interface OfflineContractSnapshot extends Recordin...|
+|`InspectReport`|iface||44-46|export interface InspectReport extends OfflineContractSna...|
+|`SessionStartReport`|iface||52-56|export interface SessionStartReport extends OfflineContra...|
+|`CommandReplayReport`|iface||62-66|export interface CommandReplayReport extends OfflineContr...|
+|`ToolReplayReport`|iface||72-78|export interface ToolReplayReport extends OfflineContract...|
+|`HarnessPaths`|iface||84-87|export interface HarnessPaths|
+|`toJsonValue`|fn||95-106|function toJsonValue(value: unknown): JsonValue|
+|`resolveHarnessPaths`|fn||116-126|export function resolveHarnessPaths(cwd?: string, extensi...|
+|`loadExtensionFactory`|fn||136-143|export async function loadExtensionFactory(extensionPath:...|
+|`withProcessCwd`|fn||152-161|async function withProcessCwd<T>(cwd: string, action: () ...|
+|`registerExtensionOffline`|fn||171-183|async function registerExtensionOffline(|
+|`buildDebugManual`|fn||238-264|export function buildDebugManual(snapshot: RecordingExten...|
+|`inspectExtension`|fn||274-289|export async function inspectExtension(cwd?: string, exte...|
+|`replaySessionStart`|fn||301-331|export async function replaySessionStart(|
+|`replayCommand`|fn||345-377|export async function replayCommand(|
+|`replayTool`|fn||391-437|export async function replayTool(|
+
+
+---
+
+# recording-extension-api.ts | TypeScript | 567L | 18 symbols | 1 imports | 42 comments
+> Path: `scripts/lib/recording-extension-api.ts`
+- @brief Implements recording adapters for offline extension registration and replay.
+- @details Provides a minimal pi-compatible extension API plus command-context UI recorder used by the standalone debug harness. The module captures registered commands, registered tools, event handlers, active-tool state, user-message payloads, and UI side effects without invoking the official pi runtime. Runtime cost is O(n) in the number of recorded registrations and side effects. Side effects are limited to in-memory state mutation.
+
+## Imports
+```
+import path from "node:path";
+```
+
+## Definitions
+
+- type `export type JsonValue =` (L13)
+- @brief Represents a JSON-compatible serialized value.
+- @details Constrains harness snapshots to deterministic, stringifiable payloads so offline reports remain stable across process boundaries. The alias is compile-time only and introduces no runtime cost.
+### iface `export interface RecordingSourceInfo` (L25-31)
+- @brief Describes normalized provenance metadata for commands and tools.
+- @details Mirrors the source-information shape documented by the pi SDK while remaining serializable for offline snapshots and parity reports. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingCommandSnapshot` (L37-42)
+- @brief Describes one offline-recorded slash command registration.
+- @details Stores user-visible metadata plus synthesized provenance for deterministic inspection and parity comparison. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingToolSnapshot` (L48-57)
+- @brief Describes one offline-recorded tool registration.
+- @details Stores registration metadata, parameter-schema presence, and normalized provenance while omitting executable function references from serialized output. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordedUserMessage` (L63-66)
+- @brief Describes one recorded `pi.sendUserMessage(...)` payload.
+- @details Preserves serialized content and optional delivery metadata so prompt-command replay can be inspected without a live SDK session. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingNotification` (L72-75)
+- @brief Describes one recorded notification side effect.
+- @details Captures the emitted message and severity level from `ctx.ui.notify(...)`. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingStatusUpdate` (L81-84)
+- @brief Describes one recorded status-bar mutation.
+- @details Stores the status key and the written or cleared value from `ctx.ui.setStatus(...)`. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingSelectCall` (L90-94)
+- @brief Describes one recorded `ctx.ui.select(...)` interaction.
+- @details Captures the menu title, offered items, and dequeued scripted response so interactive command replays remain deterministic and auditable. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingInputCall` (L100-104)
+- @brief Describes one recorded `ctx.ui.input(...)` interaction.
+- @details Captures the prompt title, placeholder, and dequeued scripted response so interactive command replays remain deterministic and auditable. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingUiStateSnapshot` (L110-120)
+- @brief Describes the complete UI-side-effect snapshot for one command context.
+- @details Aggregates notifications, statuses, editor mutations, select/input interactions, and unconsumed scripted responses for deterministic replay evidence. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingUiPlan` (L126-129)
+- @brief Describes scripted UI responses supplied to offline command replay.
+- @details Provides FIFO queues for `select` and `input` calls so the harness can execute interactive handlers without a live terminal UI. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingCommandDefinition` (L135-138)
+- @brief Describes the minimal command shape accepted by `registerCommand(...)`.
+- @details Matches the subset of the pi command-registration contract exercised by `src/index.ts`. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface RecordingToolDefinition` (L144-159)
+- @brief Describes the minimal tool shape accepted by `registerTool(...)`.
+- @details Matches the subset of the pi tool-registration contract exercised by `src/index.ts` while remaining independent from the official SDK package at compile time. The interface is compile-time only and introduces no runtime cost.
+
+### fn `function toJsonValue(value: unknown): JsonValue | undefined` (L167-184)
+- @brief Serializes arbitrary registration payloads into deterministic JSON-compatible values.
+- @details Uses JSON stringify/parse with function elision and `undefined` normalization so TypeBox schemas and options objects can be embedded in snapshots without executable references. Runtime is O(n) in serialized payload size. No external state is mutated.
+- @param[in] value {unknown} Arbitrary value to serialize.
+- @return {JsonValue | undefined} JSON-compatible copy or `undefined` when the value cannot be represented.
+
+### fn `function buildSourceInfo(extensionPath: string, override?: Partial<RecordingSourceInfo>): RecordingSourceInfo` (L193-202)
+- @brief Builds synthesized provenance metadata for offline registrations.
+- @details Normalizes the extension path and derives project-scoped extension source metadata that approximates the official runtime provenance contract. Runtime is O(p) in path length. No external state is mutated.
+- @param[in] extensionPath {string} Absolute extension entry path.
+- @param[in] override {Partial<RecordingSourceInfo> | undefined} Optional source-info overrides supplied during registration.
+- @return {RecordingSourceInfo} Normalized provenance record.
+
+### class `export class RecordingCommandContext` (L208-337)
+- @brief Records UI activity for one offline command context.
+- @brief Stores the working directory exposed to handlers through `ctx.cwd`.
+- @details Exposes the subset of `ctx.ui` methods consumed by the extension, dequeues scripted responses for interactive handlers, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI operation. Side effects are limited to in-memory state mutation.
+- @details The value is immutable after construction and is consumed by extension code that resolves project-local configuration and prompt paths. Access complexity is O(1).
+
+### iface `export interface RecordingExtensionSnapshot` (L343-349)
+- @brief Aggregates the offline registration snapshot maintained by `RecordingExtensionAPI`.
+- @details Combines command metadata, tool metadata, event names, active tools, and sent user messages for deterministic inspection and parity comparison. The interface is compile-time only and introduces no runtime cost.
+
+### class `export class RecordingExtensionAPI` (L355-567)
+- @brief Records extension registrations and runtime-like mutations for offline replay.
+- @details Implements the subset of the pi extension API exercised by `src/index.ts`, synthesizes provenance metadata, preserves registration order, and exposes lookup helpers for harness commands. Runtime is O(1) per registration or mutation plus payload serialization. Side effects are limited to in-memory state mutation.
+
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`JsonValue`|type||13||
+|`RecordingSourceInfo`|iface||25-31|export interface RecordingSourceInfo|
+|`RecordingCommandSnapshot`|iface||37-42|export interface RecordingCommandSnapshot|
+|`RecordingToolSnapshot`|iface||48-57|export interface RecordingToolSnapshot|
+|`RecordedUserMessage`|iface||63-66|export interface RecordedUserMessage|
+|`RecordingNotification`|iface||72-75|export interface RecordingNotification|
+|`RecordingStatusUpdate`|iface||81-84|export interface RecordingStatusUpdate|
+|`RecordingSelectCall`|iface||90-94|export interface RecordingSelectCall|
+|`RecordingInputCall`|iface||100-104|export interface RecordingInputCall|
+|`RecordingUiStateSnapshot`|iface||110-120|export interface RecordingUiStateSnapshot|
+|`RecordingUiPlan`|iface||126-129|export interface RecordingUiPlan|
+|`RecordingCommandDefinition`|iface||135-138|export interface RecordingCommandDefinition|
+|`RecordingToolDefinition`|iface||144-159|export interface RecordingToolDefinition|
+|`toJsonValue`|fn||167-184|function toJsonValue(value: unknown): JsonValue | undefined|
+|`buildSourceInfo`|fn||193-202|function buildSourceInfo(extensionPath: string, override?...|
+|`RecordingCommandContext`|class||208-337|export class RecordingCommandContext|
+|`RecordingExtensionSnapshot`|iface||343-349|export interface RecordingExtensionSnapshot|
+|`RecordingExtensionAPI`|class||355-567|export class RecordingExtensionAPI|
+
+
+---
+
+# sdk-smoke.ts | TypeScript | 503L | 20 symbols | 4 imports | 21 comments
+> Path: `scripts/lib/sdk-smoke.ts`
+- @brief Implements SDK-parity probing and comparison for the standalone debug harness.
+- @details Dynamically loads the official pi SDK when available, inventories extension-owned commands and tools from the runtime surface, normalizes provenance metadata, and compares the result against the offline recorder snapshot. Runtime is O(c + t) in command and tool counts plus the cost of SDK session creation. Side effects are limited to dynamic module loading, optional SDK-managed filesystem reads, and any extension-owned startup behavior triggered by the official runtime.
+
+## Imports
+```
+import path from "node:path";
+import { ReqError } from "../../src/core/errors.js";
+import type { JsonValue } from "./recording-extension-api.js";
+import { replaySessionStart, resolveHarnessPaths, type OfflineContractSnapshot } from "./extension-debug-harness.js";
+```
+
+## Definitions
+
+### iface `export interface NormalizedSourceInfo` (L16-22)
+- @brief Describes normalized provenance metadata used for parity comparison.
+- @details Reduces raw SDK and offline `sourceInfo` payloads to stable path and ownership fields so comparison is deterministic across absolute-path variations. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface NormalizedCommandRecord` (L28-32)
+- @brief Describes one normalized command record used by the parity comparator.
+- @details Stores the command name, description, and normalized provenance fields that are stable across offline and SDK inventories. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface NormalizedToolRecord` (L38-43)
+- @brief Describes one normalized tool record used by the parity comparator.
+- @details Stores the tool name, description, parameter-schema presence flag, and normalized provenance fields that are stable across offline and SDK inventories. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface SdkContractSnapshot` (L49-56)
+- @brief Describes one normalized SDK inventory snapshot.
+- @details Aggregates extension-owned commands, extension-owned tools, active tools, and runtime-shape metadata extracted from the official SDK surface. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface ParityMismatch` (L62-76)
+- @brief Describes one parity mismatch emitted by the comparator.
+- @details Records the mismatch category, subject identifier, and normalized offline versus SDK payloads so callers can render deterministic error reports. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface SdkSmokeReport` (L82-87)
+- @brief Describes the complete SDK parity smoke result.
+- @details Combines the offline session-start snapshot, normalized SDK snapshot, and mismatch list into one machine-readable report. The interface is compile-time only and introduces no runtime cost.
+
+### iface `interface SdkApiLike` (L93-97)
+- @brief Describes the minimal SDK runtime methods required by the parity probe.
+- @details Uses structural typing so the probe can adapt to minor SDK surface variations without compile-time coupling to package-local types. The interface is compile-time only and introduces no runtime cost.
+
+### fn `function normalizePathValue(value: unknown, projectRoot: string): string | undefined` (L106-119)
+- @brief Normalizes one path relative to the requested project root.
+- @details Converts absolute paths under the project root to slash-normalized relative paths and leaves non-project or pseudo-path values unchanged. Runtime is O(p) in path length. No external state is mutated.
+- @param[in] value {unknown} Candidate path value.
+- @param[in] projectRoot {string} Absolute project root.
+- @return {string | undefined} Normalized path or `undefined` when unavailable.
+
+### fn `export function normalizeSourceInfo(sourceInfo: unknown, projectRoot: string): NormalizedSourceInfo | undefined` (L128-141)
+- @brief Normalizes raw provenance metadata for parity comparison.
+- @details Extracts documented `sourceInfo` fields, normalizes path-like members relative to the requested project root, and drops undefined fields for deterministic deep comparison. Runtime is O(p) in field size. No external state is mutated.
+- @param[in] sourceInfo {unknown} Raw `sourceInfo` value.
+- @param[in] projectRoot {string} Absolute project root.
+- @return {NormalizedSourceInfo | undefined} Normalized provenance record or `undefined`.
+
+### fn `export function normalizeCommandRecord(command: unknown, projectRoot: string): NormalizedCommandRecord | undefined` (L150-163)
+- @brief Normalizes one raw command descriptor.
+- @details Extracts the stable fields required by the parity comparator and trims empty descriptions to `undefined`. Runtime is O(p) in metadata size. No external state is mutated.
+- @param[in] command {unknown} Raw command descriptor.
+- @param[in] projectRoot {string} Absolute project root.
+- @return {NormalizedCommandRecord | undefined} Normalized command record or `undefined` when the payload is invalid.
+
+### fn `export function normalizeToolRecord(tool: unknown, projectRoot: string): NormalizedToolRecord | undefined` (L172-186)
+- @brief Normalizes one raw tool descriptor.
+- @details Extracts the stable fields required by the parity comparator, including only the presence of a parameter schema instead of the raw schema object. Runtime is O(p) in metadata size. No external state is mutated.
+- @param[in] tool {unknown} Raw tool descriptor.
+- @param[in] projectRoot {string} Absolute project root.
+- @return {NormalizedToolRecord | undefined} Normalized tool record or `undefined` when the payload is invalid.
+
+### fn `function extractSdkApi(createAgentSessionResult: unknown): { api: SdkApiLike; runtimeShape: string } | undefined` (L194-216)
+- @brief Selects the first candidate object that exposes the SDK inventory methods.
+- @details Tries several plausible access paths derived from documented return objects and runtime wrappers so the parity probe can tolerate minor SDK surface differences. Runtime is O(k) in candidate count. No external state is mutated.
+- @param[in] createAgentSessionResult {unknown} Raw `createAgentSession(...)` result.
+- @return {{ api: SdkApiLike; runtimeShape: string } | undefined} Matched runtime surface descriptor.
+
+### fn `function isExtensionCommand(command: unknown, projectRoot: string): boolean` (L225-234)
+- @brief Tests whether one normalized command belongs to the target extension.
+- @details Accepts descriptors whose provenance identifies extension ownership and rejects prompt-template or skill commands discovered by the SDK. Runtime is O(1). No external state is mutated.
+- @param[in] command {unknown} Raw SDK command descriptor.
+- @param[in] projectRoot {string} Absolute project root.
+- @return {boolean} `true` when the command belongs to the target extension.
+
+### fn `function isExtensionTool(tool: unknown, projectRoot: string): boolean` (L243-250)
+- @brief Tests whether one normalized tool belongs to the target extension.
+- @details Accepts descriptors whose provenance identifies extension ownership and rejects built-in or SDK-injected tools from the official runtime. Runtime is O(1). No external state is mutated.
+- @param[in] tool {unknown} Raw SDK tool descriptor.
+- @param[in] projectRoot {string} Absolute project root.
+- @return {boolean} `true` when the tool belongs to the target extension.
+
+### fn `function compareCommandInventories(` (L260-300)
+- @brief Compares two command inventories and appends mismatches.
+- @details Detects missing names, differing descriptions, and differing normalized provenance metadata by command name. Runtime is O(n) in combined inventory size. Side effects mutate the mismatch accumulator only.
+- @param[in] offline {NormalizedCommandRecord[]} Offline command inventory.
+- @param[in] sdk {NormalizedCommandRecord[]} SDK command inventory.
+- @param[in,out] mismatches {ParityMismatch[]} Mutable mismatch accumulator.
+- @return {void} No return value.
+
+### fn `function compareToolInventories(` (L310-359)
+- @brief Compares two tool inventories and appends mismatches.
+- @details Detects missing names, differing descriptions, differing parameter-schema presence, and differing normalized provenance metadata by tool name. Runtime is O(n) in combined inventory size. Side effects mutate the mismatch accumulator only.
+- @param[in] offline {NormalizedToolRecord[]} Offline tool inventory.
+- @param[in] sdk {NormalizedToolRecord[]} SDK tool inventory.
+- @param[in,out] mismatches {ParityMismatch[]} Mutable mismatch accumulator.
+- @return {void} No return value.
+
+### fn `function compareActiveTools(offline: string[], sdk: string[], mismatches: ParityMismatch[]): void` (L369-381)
+- @brief Compares offline and SDK active-tool sets after `session_start`.
+- @details Normalizes both arrays as sorted unique sets so parity checks are robust to incidental ordering differences. Runtime is O(n log n) in active-tool count. Side effects mutate the mismatch accumulator only.
+- @param[in] offline {string[]} Offline active-tool names.
+- @param[in] sdk {string[]} SDK active-tool names.
+- @param[in,out] mismatches {ParityMismatch[]} Mutable mismatch accumulator.
+- @return {void} No return value.
+
+### fn `export function buildParityReport(offline: OfflineContractSnapshot, sdk: SdkContractSnapshot): SdkSmokeReport` (L391-413)
+- @brief Builds a parity report from an offline snapshot and an SDK snapshot.
+- @details Normalizes both inventories by name, compares required mismatch categories, and returns an `ok` flag when no mismatches remain. Runtime is O(n log n) in combined inventory size. No external state is mutated.
+- @param[in] offline {OfflineContractSnapshot} Offline session-start snapshot.
+- @param[in] sdk {SdkContractSnapshot} SDK parity snapshot.
+- @return {SdkSmokeReport} Complete parity report.
+- @satisfies REQ-057
+
+### fn `export async function probeSdkRuntime(cwd?: string, extensionPath?: string): Promise<SdkContractSnapshot>` (L424-489)
+- @brief Loads the official pi SDK runtime and extracts the extension-owned command and tool inventories.
+- @details Dynamically imports `@mariozechner/pi-coding-agent`, creates a `DefaultResourceLoader` with the requested extension path, creates an SDK session, extracts inventory methods from the returned runtime surface, and filters to extension-owned commands and tools only. Runtime is dominated by SDK startup. Side effects include SDK-managed resource loading and extension startup behavior.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @return {Promise<SdkContractSnapshot>} Normalized SDK inventory snapshot.
+- @throws {ReqError} Throws when the SDK package is unavailable, runtime extraction fails, or session creation fails.
+- @satisfies REQ-050, REQ-056, REQ-058
+
+### fn `export async function runSdkSmoke(cwd?: string, extensionPath?: string): Promise<SdkSmokeReport>` (L499-503)
+- @brief Executes the full SDK parity smoke workflow.
+- @details Replays offline `session_start`, probes the official SDK runtime, and compares the resulting command, tool, provenance, parameter-schema, and active-tool inventories. Runtime is dominated by SDK startup plus offline replay. Side effects include both offline and SDK extension startup behavior.
+- @param[in] cwd {string | undefined} Requested working directory.
+- @param[in] extensionPath {string | undefined} Requested extension entry path.
+- @return {Promise<SdkSmokeReport>} Complete parity smoke result.
+- @satisfies REQ-050, REQ-056, REQ-057, REQ-058
+
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`NormalizedSourceInfo`|iface||16-22|export interface NormalizedSourceInfo|
+|`NormalizedCommandRecord`|iface||28-32|export interface NormalizedCommandRecord|
+|`NormalizedToolRecord`|iface||38-43|export interface NormalizedToolRecord|
+|`SdkContractSnapshot`|iface||49-56|export interface SdkContractSnapshot|
+|`ParityMismatch`|iface||62-76|export interface ParityMismatch|
+|`SdkSmokeReport`|iface||82-87|export interface SdkSmokeReport|
+|`SdkApiLike`|iface||93-97|interface SdkApiLike|
+|`normalizePathValue`|fn||106-119|function normalizePathValue(value: unknown, projectRoot: ...|
+|`normalizeSourceInfo`|fn||128-141|export function normalizeSourceInfo(sourceInfo: unknown, ...|
+|`normalizeCommandRecord`|fn||150-163|export function normalizeCommandRecord(command: unknown, ...|
+|`normalizeToolRecord`|fn||172-186|export function normalizeToolRecord(tool: unknown, projec...|
+|`extractSdkApi`|fn||194-216|function extractSdkApi(createAgentSessionResult: unknown)...|
+|`isExtensionCommand`|fn||225-234|function isExtensionCommand(command: unknown, projectRoot...|
+|`isExtensionTool`|fn||243-250|function isExtensionTool(tool: unknown, projectRoot: stri...|
+|`compareCommandInventories`|fn||260-300|function compareCommandInventories(|
+|`compareToolInventories`|fn||310-359|function compareToolInventories(|
+|`compareActiveTools`|fn||369-381|function compareActiveTools(offline: string[], sdk: strin...|
+|`buildParityReport`|fn||391-413|export function buildParityReport(offline: OfflineContrac...|
+|`probeSdkRuntime`|fn||424-489|export async function probeSdkRuntime(cwd?: string, exten...|
+|`runSdkSmoke`|fn||499-503|export async function runSdkSmoke(cwd?: string, extension...|
+
+
+---
+
+# req-debug.sh | Shell | 255L | 13 symbols | 0 imports | 51 comments
+> Path: `scripts/req-debug.sh`
+
+## Definitions
+
+- var `readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"` (L10)
+- @brief Resolves the absolute directory containing `req-debug.sh`.
+- @details Uses `BASH_SOURCE[0]` so invocation through relative paths or symlinks still anchors repository-relative lookups. Runtime is O(p) in path length. No filesystem mutation occurs.
+- var `readonly REPO_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"` (L14)
+- @brief Resolves the repository root that owns the debug wrapper.
+- @details Moves one level above `SCRIPT_DIR` so delegated Node execution can load the repository-local `tsx` dependency and extension entry. Runtime is O(p) in path length. No filesystem mutation occurs.
+- var `readonly DEFAULT_EXTENSION="${REPO_ROOT}/src/index.ts"` (L18)
+- @brief Stores the default extension entry path used by the wrapper.
+- @details Binds all convenience subcommands to the repository's `src/index.ts` entry unless the caller provides a later `--extension` override. Runtime is O(1). No filesystem mutation occurs.
+- var `readonly CALLER_CWD="${PWD}"` (L22)
+- @brief Stores the caller working directory used as the default debug cwd.
+- @details Captures the shell cwd before the wrapper enters the repository root so replayed commands and tools observe the caller-selected project context. Runtime is O(1). No filesystem mutation occurs.
+- fn `resolve_tsx_binary() {` (L28)
+- @brief Resolves the `tsx` executable visible to the wrapper.
+- @details Searches the active repository install first, then the shared git-common checkout used by worktrees, and finally the process `PATH`. When a shared checkout provides `node_modules`, the function links that directory into the worktree before returning the executable path. Runtime is O(1) plus one git subprocess. Side effects may include creating `REPO_ROOT/node_modules` as a symlink.
+- @return {string} Absolute or PATH-resolved `tsx` executable path.
+- @throws {shell-error} Returns non-zero when no usable `tsx` executable is available.
+- var `readonly TSX_BIN="$(resolve_tsx_binary)"` (L62)
+- @brief Stores the resolved `tsx` executable path.
+- @details Captures the executable once during wrapper startup so later dispatch paths do not repeat repository lookup logic. Runtime is dominated by `resolve_tsx_binary()`. Side effects may include creating a worktree-local `node_modules` symlink.
+- fn `print_usage() {` (L68)
+- @brief Prints the wrapper usage contract.
+- @details Emits subcommand semantics, override rules, and concrete examples covering registrations, session replay, prompt replay, tool replay, and raw pass-through. Runtime is O(1). Side effect: writes to stdout.
+- @return {void} No return value.
+- @satisfies REQ-061, REQ-062
+- fn `contains_exact_option() {` (L109)
+- @brief Tests whether one exact option token is present in an argument list.
+- @details Performs a linear scan over forwarded tokens and returns success when any token equals the requested option string. Runtime is O(n) in argument count. No external state is mutated.
+- @param[in] needle {string} Exact option token to match.
+- @param[in] ... {string[]} Forwarded CLI tokens.
+- @return {int} Shell status `0` when the option exists; `1` otherwise.
+- fn `contains_long_option() {` (L125)
+- @brief Tests whether an argument list already contains any long option token.
+- @details Detects tokens beginning with `--` so the wrapper can avoid inferring positional payloads when the caller is already using the underlying debug-harness option grammar. Runtime is O(n) in argument count. No external state is mutated.
+- @param[in] ... {string[]} Forwarded CLI tokens.
+- @return {int} Shell status `0` when a long option exists; `1` otherwise.
+- fn `normalize_prompt_name() {` (L140)
+- @brief Normalizes prompt aliases to registered `req-*` command names.
+- @details Returns the input unchanged when it already begins with `req-`; otherwise prepends the prefix required by extension registration. Runtime is O(p) in prompt-name length. No external state is mutated.
+- @param[in] prompt_name {string} Prompt command alias supplied by the caller.
+- @return {string} Registered prompt command name.
+- @satisfies REQ-062
+- fn `run_debug_extension() {` (L154)
+- @brief Executes `scripts/debug-extension.ts` with wrapper defaults.
+- @details Enters the repository root so the resolved `tsx` dependency and shared `node_modules` tree remain visible, prepends default `--cwd` and `--extension` values, and forwards all remaining arguments unchanged so later overrides win. Runtime is dominated by the delegated Node process. Side effects include spawning one subprocess.
+- @param[in] ... {string[]} Debug-harness CLI tokens beginning with the target subcommand.
+- @return {int} Exit status produced by the delegated Node process.
+- @satisfies REQ-060, REQ-062
+- fn `require_value() {` (L166)
+- @brief Validates that one required subcommand operand is present.
+- @details Emits a deterministic stderr error when the caller omits a required positional name such as a command or tool identifier. Runtime is O(1). Side effect: writes to stderr on failure.
+- @param[in] label {string} Human-readable operand label.
+- @param[in] value {string} Operand value.
+- @return {int} Shell status `0` when the operand exists; `1` otherwise.
+- fn `main() {` (L181)
+- @brief Dispatches wrapper subcommands to the standalone TypeScript harness.
+- @details Implements the convenience grammar documented by `print_usage`, including session and SDK aliases, prompt-name normalization, default tool params, and raw pass-through mode. Runtime is O(n) in wrapper argument count plus delegated harness cost. Side effects include stdout/stderr writes and subprocess execution.
+- @param[in] ... {string[]} Wrapper CLI arguments excluding the script path.
+- @return {int} Exit status propagated from the delegated harness or local validation.
+- @satisfies REQ-060, REQ-061, REQ-062
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`SCRIPT_DIR`|var||10||
+|`REPO_ROOT`|var||14||
+|`DEFAULT_EXTENSION`|var||18||
+|`CALLER_CWD`|var||22||
+|`resolve_tsx_binary`|fn||28|resolve_tsx_binary()|
+|`TSX_BIN`|var||62||
+|`print_usage`|fn||68|print_usage()|
+|`contains_exact_option`|fn||109|contains_exact_option()|
+|`contains_long_option`|fn||125|contains_long_option()|
+|`normalize_prompt_name`|fn||140|normalize_prompt_name()|
+|`run_debug_extension`|fn||154|run_debug_extension()|
+|`require_value`|fn||166|require_value()|
+|`main`|fn||181|main()|
 
 
 ---

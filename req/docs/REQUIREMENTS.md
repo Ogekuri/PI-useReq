@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.6"
-date: "2026-04-15"
+version: "0.0.7"
+date: "2026-04-17"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -35,7 +35,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug harness for requirements-oriented prompt delivery, source summarization, static-check orchestration, git validation, worktree lifecycle helpers, and offline extension contract validation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness and support modules. `.github/workflows/` is empty in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, git validation, worktree lifecycle helpers, and offline extension contract validation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, and support modules. `.github/workflows/` is empty in this revision.
 
 ## 2. Project Requirements
 
@@ -45,7 +45,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-003**: MUST provide an interactive pi configuration surface for docs path, tests path, source directories, static-check entries, and startup tool enablement.
 - **PRJ-004**: MUST provide git repository validation plus standardized worktree naming, creation, and deletion utilities using configured project and git paths.
 - **PRJ-005**: MUST provision bundled prompts, documentation templates, guidelines, model metadata, and editor settings into user-home pi-usereq resources.
-- **PRJ-006**: MUST expose a standalone debug harness that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, and optionally compares the contract against the official pi SDK runtime.
+- **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 
 ### 2.2 Project Constraints
 - **CTN-001**: MUST persist project configuration at `.pi/pi-usereq/config.json` with default `docs-dir=req/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
@@ -68,7 +68,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
 - **DES-006**: MUST format references, compressed files, and construct search results as markdown blocks headed by `@@@ <path> | <language>`.
-- **DES-007**: MUST implement the standalone debug harness in `scripts/debug-extension.ts` plus `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
+- **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/req-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
 
 ### 3.2 Functions
 - **REQ-001**: MUST recursively copy bundled non-hidden resources into `~/.pi/pi-usereq/resources` and overwrite existing destination files.
@@ -92,6 +92,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-057**: MUST compare offline and SDK inventories for command names, command descriptions, tool names, tool descriptions, parameter-schema presence, normalized provenance/sourceInfo, and active tools after `session_start`.
 - **REQ-058**: MUST exit with non-zero status when a requested harness command or tool is not registered or when SDK parity loading fails.
 - **REQ-059**: MUST expose package scripts `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
+- **REQ-060**: MUST provide `scripts/req-debug.sh` as a bash wrapper for `scripts/debug-extension.ts`.
+- **REQ-061**: MUST make `scripts/req-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
+- **REQ-062**: MUST make `scripts/req-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
 - **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, and `src-dir`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
 - **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for the predefined startup tool set.
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
@@ -164,7 +167,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/static-check.ts` maps languages/extensions, parses enable specs, resolves inputs, and dispatches checker classes.
 - `src/core/config.ts`, `src/core/resources.ts`, and `src/core/prompts.ts` provide config persistence, home-resource synchronization, and prompt rendering.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
-- `scripts/debug-extension.ts` and `scripts/lib/*.ts` provide the standalone extension debug harness, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
+- `scripts/debug-extension.ts`, `scripts/req-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@mariozechner/pi-coding-agent` provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
@@ -228,6 +231,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── req/docs/
 ├── scripts/
 │   ├── debug-extension.ts
+│   ├── req-debug.sh
 │   └── lib/{extension-debug-harness.ts,recording-extension-api.ts,sdk-smoke.ts}
 ├── .github/
 │   ├── workflows/
