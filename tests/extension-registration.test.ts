@@ -1108,21 +1108,24 @@ test("configuration menu can toggle reset-context", async () => {
   assert.equal(config["reset-context"], false);
 });
 
-test("prompt commands preload the reset session with the rendered prompt by default", async () => {
+test("req-create resets the session before delivering the rendered prompt as a user message", async () => {
   const cwd = createTempDir("pi-usereq-prompt-reset-");
   const pi = createFakePi();
   piUsereqExtension(pi);
-  const command = pi.commands.get("req-analyze");
+  const command = pi.commands.get("req-create");
   assert.ok(command);
   const ctx = createFakeCtx(cwd);
 
-  await command!.handler("Inspect src/index.ts for prompt coverage", ctx);
+  await command!.handler("", ctx);
 
   assert.equal(ctx.__state.waitForIdleCalls, 1);
   assert.equal(ctx.__state.newSessions.length, 1);
-  assert.deepEqual(ctx.__state.newSessions.map((session) => session.messages.length), [1]);
-  assert.match(ctx.__state.newSessions[0]?.messages[0] ?? "", /Inspect src\/index\.ts for prompt coverage/);
-  assert.equal(pi.sentUserMessages.length, 0);
+  assert.deepEqual(ctx.__state.newSessions.map((session) => session.messages.length), [0]);
+  assert.equal(pi.sentUserMessages.length, 1);
+  assert.match(
+    String(pi.sentUserMessages[0]?.content),
+    /Write a Software Requirements Specification using the project's source code/,
+  );
 });
 
 test("prompt commands reuse the current session when reset-context is false", async () => {

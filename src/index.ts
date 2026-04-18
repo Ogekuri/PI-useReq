@@ -420,7 +420,7 @@ function buildFindToolExecuteResult(
 
 /**
  * @brief Delivers one rendered prompt according to the configured reset policy.
- * @details When `reset-context` is `true`, waits for idle, creates a `/new`-equivalent session, and appends the rendered prompt during `ctx.newSession(...setup)` so the fresh session starts with the prompt even after the old extension instance is shut down during session replacement. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement and user-message persistence.
+ * @details When `reset-context` is `true`, waits for idle, creates a `/new`-equivalent session, and only after a successful reset sends the rendered prompt through `pi.sendUserMessage(...)` so prompt delivery uses the same user-message path that triggers the agent turn in the fresh session. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement and user-message persistence.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -435,15 +435,11 @@ async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandConte
   }
 
   await ctx.waitForIdle();
-  await ctx.newSession({
-    setup: async (sessionManager) => {
-      sessionManager.appendMessage({
-        role: "user",
-        content: [{ type: "text", text: content }],
-        timestamp: Date.now(),
-      });
-    },
-  });
+  const newSessionResult = await ctx.newSession();
+  if (newSessionResult.cancelled) {
+    return;
+  }
+  pi.sendUserMessage(content);
 }
 
 /**
