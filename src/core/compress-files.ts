@@ -6,23 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { compressFile, detectLanguage } from "./compress.js";
-
-/**
- * @brief Extracts the first and last original source line numbers from compressed output.
- * @details Parses the line-number prefixes emitted by `compressFile(..., true)` and returns the inclusive range spanned by the compressed excerpt. Time complexity is O(n) in compressed line count. No external state is mutated.
- * @param[in] compressedWithLineNumbers {string} Compressed source text containing `N:` prefixes.
- * @return {[number, number]} Inclusive `[start, end]` source-line range, or `[0, 0]` when no numbered lines exist.
- */
-function extractLineRange(compressedWithLineNumbers: string): [number, number] {
-  const lineNumbers = compressedWithLineNumbers
-    .split(/\r?\n/)
-    .map((line) => line.match(/^(\d+):/))
-    .filter((match): match is RegExpMatchArray => !!match)
-    .map((match) => Number.parseInt(match[1]!, 10));
-  if (lineNumbers.length === 0) return [0, 0];
-  return [lineNumbers[0]!, lineNumbers[lineNumbers.length - 1]!];
-}
+import { compressFileDetailed, detectLanguage } from "./compress.js";
 
 /**
  * @brief Formats one source path for markdown output.
@@ -68,12 +52,10 @@ export function compressFiles(
       continue;
     }
     try {
-      const compressedWithLineNumbers = compressFile(filePath, language, true);
-      const [lineStart, lineEnd] = extractLineRange(compressedWithLineNumbers);
-      const compressed = includeLineNumbers ? compressedWithLineNumbers : compressFile(filePath, language, false);
+      const compressed = compressFileDetailed(filePath, language, includeLineNumbers);
       const outputPath = formatOutputPath(filePath, resolvedOutputBase);
-      parts.push(`@@@ ${outputPath} | ${language}\n> Lines: ${lineStart}-${lineEnd}\n\
-\`\`\`\n${compressed}\n\`\`\``);
+      parts.push(`@@@ ${outputPath} | ${language}\n> Lines: ${compressed.source_start_line_number}-${compressed.source_end_line_number}\n\
+\`\`\`\n${compressed.compressed_source_text}\n\`\`\``);
       okCount += 1;
       if (verbose) console.error(`  OK    ${filePath}`);
     } catch (error) {

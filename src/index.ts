@@ -24,6 +24,11 @@ import {
   type ReferenceToolPayload,
 } from "./core/reference-payload.js";
 import {
+  buildCompressToolExecutionStderr,
+  buildCompressToolPayload,
+  type CompressToolPayload,
+} from "./core/compress-payload.js";
+import {
   getDefaultConfig,
   loadConfig,
   saveConfig,
@@ -219,6 +224,35 @@ function buildReferenceToolExecuteResult(
     execution: {
       code: 0,
       stderr: buildReferenceToolExecutionStderr(payload),
+    },
+  };
+  return {
+    content: [{ type: "text", text: formatJsonToolPayload(details) }],
+    details,
+  };
+}
+
+/**
+ * @brief Builds the agent-oriented execute result returned by compression tools.
+ * @details Mirrors the structured compression payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
+ * @param[in] payload {CompressToolPayload} Structured compression payload.
+ * @return {{ content: Array<{ type: "text"; text: string }>; details: CompressToolPayload & { execution: { code: number; stderr: string } } }} Compression-tool execute result.
+ * @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087, REQ-088
+ */
+function buildCompressionToolExecuteResult(
+  payload: CompressToolPayload,
+): {
+  content: Array<{ type: "text"; text: string }>;
+  details: CompressToolPayload & { execution: { code: number; stderr: string } };
+} {
+  const details = {
+    request: payload.request,
+    summary: payload.summary,
+    repository: payload.repository,
+    files: payload.files,
+    execution: {
+      code: 0,
+      stderr: buildCompressToolExecutionStderr(payload),
     },
   };
   return {
@@ -538,21 +572,43 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
-  const multiFileLineSchema = Type.Object({
-    files: Type.Array(Type.String({ description: "Project or absolute file path" })),
-    enableLineNumbers: Type.Optional(Type.Boolean({ description: "Include original line numbers" })),
-  });
+  const filesCompressSchema = Type.Object(
+    {
+      files: Type.Array(
+        Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
+        { description: "Explicit source-file list preserved in caller order" },
+      ),
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `compressed_source_text` and `compressed_lines[].display_text` include original source line-number prefixes" })),
+    },
+    {
+      description: "Input contract: files[] plus optional enableLineNumbers. Output contract: JSON object with request, summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. Missing, unsupported, or invalid inputs become structured skipped entries. The tool fails when no file is compressed.",
+    },
+  );
 
   pi.registerTool({
     name: "files-compress",
     label: "files-compress",
-    description: "Compress explicit files by stripping comments and extra whitespace.",
-    promptSnippet: "Compress explicit files into compact source excerpts.",
-    promptGuidelines: ["Enable line numbers when the user needs precise evidence citations."],
-    parameters: multiFileLineSchema,
+    description: "Scope: explicit files. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
+    promptSnippet: "Return the structured compression payload for caller-selected source files.",
+    promptGuidelines: [
+      "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
+      "Output contract: request + summary + repository + files + execution. File entries expose canonical paths, absolute paths, line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
+      "Line-number behavior: enableLineNumbers changes only rendered display strings; numeric source_line_number facts remain dedicated fields on compressed_lines for direct access.",
+      "Behavior contract: missing inputs, non-file inputs, and unsupported extensions become structured skipped entries; compression failures become structured error entries; symbol-analysis failures retain compressed output with symbol_analysis_status=error; the tool fails only when no file is compressed.",
+    ],
+    parameters: filesCompressSchema,
     async execute(_toolCallId, params) {
-      const result = runFilesCompress(params.files, process.cwd(), params.enableLineNumbers ?? false);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const payload = buildCompressToolPayload({
+        toolName: "files-compress",
+        scope: "explicit-files",
+        baseDir: process.cwd(),
+        requestedPaths: params.files,
+        includeLineNumbers: params.enableLineNumbers ?? false,
+      });
+      if (payload.summary.compressed_file_count === 0) {
+        runFilesCompress(params.files, process.cwd(), params.enableLineNumbers ?? false);
+      }
+      return buildCompressionToolExecuteResult(payload);
     },
   });
 
@@ -617,18 +673,43 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
+  const compressSchema = Type.Object(
+    {
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `compressed_source_text` and `compressed_lines[].display_text` include original source line-number prefixes" })),
+    },
+    {
+      description: "Input contract: optional enableLineNumbers boolean. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with request, summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. The tool fails when no configured source file is compressed.",
+    },
+  );
+
   pi.registerTool({
     name: "compress",
     label: "compress",
-    description: "Compress source files from the configured project source directories.",
-    promptSnippet: "Compress all configured project source files.",
-    promptGuidelines: ["Use this when you need compact project-wide source snapshots."],
-    parameters: Type.Object({ enableLineNumbers: Type.Optional(Type.Boolean({ description: "Include original line numbers" })) }),
+    description: "Scope: configured project source directories. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
+    promptSnippet: "Return the structured project compression payload from the configured source directories.",
+    promptGuidelines: [
+      "Scope: resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
+      "Output contract: request + summary + repository + files + execution. Repository exposes source_directory_paths and file_canonical_paths; file entries expose line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
+      "Configuration contract: output changes with cwd-derived project config, src-dir values, and repository source discovery; the tool does not accept explicit file overrides.",
+      "Behavior contract: configured source files are processed in deterministic order, compression failures become structured error entries, symbol-analysis failures retain compressed output with symbol_analysis_status=error, and the tool fails only when no configured source file is compressed.",
+    ],
+    parameters: compressSchema,
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runCompress(projectBase, config, params.enableLineNumbers ?? false);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const sourceFiles = collectSourceFiles(config["src-dir"], projectBase);
+      const payload = buildCompressToolPayload({
+        toolName: "compress",
+        scope: "configured-source-directories",
+        baseDir: projectBase,
+        requestedPaths: sourceFiles,
+        includeLineNumbers: params.enableLineNumbers ?? false,
+        sourceDirectoryPaths: config["src-dir"],
+      });
+      if (payload.summary.compressed_file_count === 0) {
+        runCompress(projectBase, config, params.enableLineNumbers ?? false);
+      }
+      return buildCompressionToolExecuteResult(payload);
     },
   });
 

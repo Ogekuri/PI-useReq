@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.11"
+version: "0.0.12"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -67,9 +67,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
 - **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
-- **DES-006**: MUST format compressed files and construct search results as markdown blocks headed by `@@@ <path> | <language>`.
+- **DES-006**: MUST keep CLI compression and construct-search renderers as markdown blocks headed by `@@@ <path> | <language>`, while agent-tool compression responses use dedicated JSON payload builders.
 - **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/req-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
-- **DES-008**: MUST format `files-references` and `references` outputs as agent-oriented JSON with deterministic field order and dedicated metadata fields for symbols and Doxygen tags.
+- **DES-008**: MUST format `files-references`, `references`, `files-compress`, and `compress` agent-tool outputs as deterministic agent-oriented JSON with dedicated metadata fields for source structure, symbols, and Doxygen tags.
 
 ### 3.2 Functions
 - **REQ-001**: MUST recursively copy bundled non-hidden resources into `~/.pi/pi-usereq/resources` and overwrite existing destination files.
@@ -111,7 +111,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
 - **REQ-013**: MUST search explicit files by tag filter and name regex, then emit matching constructs with signature, line range, Doxygen fields, and comment-stripped code excerpts.
 - **REQ-014**: MUST make `references` scan configured `src-dir` files and emit agent-oriented JSON containing repository structure plus the structured per-file reference records used by `files-references`.
-- **REQ-015**: MUST make `compress` scan configured `src-dir` files and emit one compressed markdown block per supported file.
+- **REQ-015**: MUST make CLI project-scope compression scan configured `src-dir` files and emit one compressed markdown block per supported file.
 - **REQ-016**: MUST make `find` scan configured `src-dir` files using the requested tag filter and regular expression.
 - **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the structured `files-tokens` JSON contract, and fail when none exist.
 - **REQ-069**: MUST order `files-tokens` and `tokens` JSON sections as `request`, `summary`, `files`, and `guidance`, and order fields inside each section from canonical identifiers to source facts, metrics, and derived guidance.
@@ -126,6 +126,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-078**: MUST expose parsed Doxygen fields as tag-specific JSON objects or arrays, keeping monolithic `text` only for unsplittable residual content.
 - **REQ-079**: MUST normalize `files-references` and `references` text fields by removing decorative markdown artifacts and preserving only parser-relevant residual content.
 - **REQ-080**: MUST register `files-references` and `references` with agent-oriented descriptions covering purpose, inputs, configuration, output schema, specialized behaviors, and failure conditions.
+- **REQ-081**: MUST make agent-tool `files-compress` and `compress` return structured JSON sections ordered as `request`, `summary`, `repository`, `files`, and `execution`.
+- **REQ-082**: MUST expose canonical paths, absolute paths, language IDs, source line counts, source line ranges, compressed line counts, and removed line counts as dedicated typed compression fields.
+- **REQ-083**: MUST expose compressed excerpts through structured `compressed_lines` arrays and a separate `compressed_source_text` field, never only inside markdown headers, fences, or prefixed display strings.
+- **REQ-084**: MUST expose file-level and symbol-level Doxygen fields as structured tag-specific JSON objects, and emit symbol records with declaration kind, canonical path, signatures, and numeric declaration line ranges.
+- **REQ-085**: MUST keep residual monolithic text optional, place it after structured fields, and omit decorative markdown artifacts from compression JSON field values.
+- **REQ-086**: MUST register `files-compress` and `compress` with agent-oriented descriptions covering scope, parameters, line-number behavior, output schema, project-scope selection rules, output format, and failure conditions.
+- **REQ-087**: MUST expose skipped inputs, unsupported extensions, compression failures, and zero-processable requests as structured statuses and stable error reasons, while keeping stderr diagnostics optional.
+- **REQ-088**: MUST mirror the structured compression payload into tool `content[0].text` and tool `details`, with execution metadata nested under the mirrored JSON object.
 - **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy`, `pylance`, `ruff`, or `command` checker subcommands directly.
 - **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
 - **REQ-020**: MUST parse static-check enable specs in `LANG=MODULE[,CMD[,PARAM...]]` format and normalize supported language and module names case-insensitively.

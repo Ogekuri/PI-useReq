@@ -13,6 +13,7 @@
     ├── cli.ts
     ├── core
     │   ├── compress-files.ts
+    │   ├── compress-payload.ts
     │   ├── compress.ts
     │   ├── config.ts
     │   ├── doxygen-parser.ts
@@ -892,7 +893,7 @@ import {
 
 ---
 
-# compress-files.ts | TypeScript | 90L | 3 symbols | 3 imports | 4 comments
+# compress-files.ts | TypeScript | 72L | 2 symbols | 3 imports | 3 comments
 > Path: `src/core/compress-files.ts`
 - @brief Compresses explicit source-file lists into compact fenced-markdown excerpts.
 - @details Bridges file validation, language detection, per-file source compression, and final markdown packaging for prompt consumption. Runtime is O(F + S) where F is file count and S is total source size processed. Side effects are limited to filesystem reads and optional stderr logging.
@@ -901,25 +902,19 @@ import {
 ```
 import fs from "node:fs";
 import path from "node:path";
-import { compressFile, detectLanguage } from "./compress.js";
+import { compressFileDetailed, detectLanguage } from "./compress.js";
 ```
 
 ## Definitions
 
-### fn `function extractLineRange(compressedWithLineNumbers: string): [number, number]` (L17-25)
-- @brief Extracts the first and last original source line numbers from compressed output.
-- @details Parses the line-number prefixes emitted by `compressFile(..., true)` and returns the inclusive range spanned by the compressed excerpt. Time complexity is O(n) in compressed line count. No external state is mutated.
-- @param[in] compressedWithLineNumbers {string} Compressed source text containing `N:` prefixes.
-- @return {[number, number]} Inclusive `[start, end]` source-line range, or `[0, 0]` when no numbered lines exist.
-
-### fn `function formatOutputPath(filePath: string, outputBase?: string): string` (L34-37)
+### fn `function formatOutputPath(filePath: string, outputBase?: string): string` (L18-21)
 - @brief Formats one source path for markdown output.
 - @details Returns the original file path when no base is provided. Otherwise computes a normalized POSIX-style relative path against the resolved output base. Time complexity is O(p) in path length. No I/O side effects occur.
 - @param[in] filePath {string} Source file path.
 - @param[in] outputBase {string | undefined} Optional base directory for relative formatting.
 - @return {string} Display path used in the markdown header.
 
-### fn `export function compressFiles(` (L49-90)
+### fn `export function compressFiles(` (L33-72)
 - @brief Compresses a list of explicit source files into concatenated markdown sections.
 - @details Validates file existence, infers each supported language, invokes per-file compression, preserves optional line numbers, and emits one fenced block per successful file. Runtime is O(F + S) where F is file count and S is total processed source size. Side effects are limited to filesystem reads and optional stderr progress logging.
 - @param[in] filePaths {string[]} Explicit file paths to process.
@@ -932,14 +927,175 @@ import { compressFile, detectLanguage } from "./compress.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`extractLineRange`|fn||17-25|function extractLineRange(compressedWithLineNumbers: stri...|
-|`formatOutputPath`|fn||34-37|function formatOutputPath(filePath: string, outputBase?: ...|
-|`compressFiles`|fn||49-90|export function compressFiles(|
+|`formatOutputPath`|fn||18-21|function formatOutputPath(filePath: string, outputBase?: ...|
+|`compressFiles`|fn||33-72|export function compressFiles(|
 
 
 ---
 
-# compress.ts | TypeScript | 357L | 7 symbols | 3 imports | 11 comments
+# compress-payload.ts | TypeScript | 648L | 22 symbols | 5 imports | 23 comments
+> Path: `src/core/compress-payload.ts`
+- @brief Builds agent-oriented JSON payloads for `files-compress` and `compress`.
+- @details Converts compression results into deterministic JSON sections ordered for LLM traversal, including request metadata, repository scope, structured file metrics, structured compressed lines, symbols, and Doxygen fields. Runtime is O(F log F + S) where F is file count and S is total source size. Side effects are limited to filesystem reads and optional stderr logging.
+
+## Imports
+```
+import fs from "node:fs";
+import path from "node:path";
+import {
+import { compressFileDetailed, detectLanguage, type CompressedLineEntry } from "./compress.js";
+import {
+```
+
+## Definitions
+
+- type `export type CompressToolScope = "explicit-files" | "configured-source-directories";` (L27)
+- @brief Enumerates supported compression-payload scopes.
+- @details Distinguishes explicit-file requests from configured project scans while preserving one stable JSON contract. The alias is compile-time only and introduces no runtime cost.
+- type `export type CompressFileStatus = "compressed" | "error" | "skipped";` (L33)
+- @brief Enumerates supported per-file compression statuses.
+- @details Separates compressed files, hard failures, and skipped inputs so downstream agents can branch without reparsing stderr text. The alias is compile-time only and introduces no runtime cost.
+- type `export type CompressLineNumberMode = "enabled" | "disabled";` (L39)
+- @brief Enumerates the rendered line-number mode for compression output.
+- @details Distinguishes payloads whose display strings include original source line numbers from payloads whose display strings contain plain compressed text only. The alias is compile-time only and introduces no runtime cost.
+- type `export type CompressSymbolAnalysisStatus = "analyzed" | "error" | "not_attempted";` (L45)
+- @brief Enumerates structured symbol-analysis statuses for compressed files.
+- @details Separates successful symbol extraction from supplementary analysis failures so compression can still succeed when analyzer enrichment is unavailable. The alias is compile-time only and introduces no runtime cost.
+### iface `export interface CompressLineRange` (L51-55)
+- @brief Describes one numeric line range.
+- @details Exposes start and end line numbers plus the same inclusive range as a numeric tuple for direct agent access. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressToolLineEntry` (L61-66)
+- @brief Describes one structured compressed line entry in the tool payload.
+- @details Preserves output order, original source coordinates, raw compressed text, and rendered display text so agents can choose between normalized data and user-facing rendering without reparsing strings. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressToolSymbolEntry extends CompressLineRange` : CompressLineRange (L72-87)
+- @brief Describes one structured symbol record inside the compression payload.
+- @details Orders direct-access identity fields before hierarchy, locations, and Doxygen metadata so agents can branch without reparsing compressed source text. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressToolFileEntry extends CompressLineRange` : CompressLineRange (L93-120)
+- @brief Describes one per-file compression payload entry.
+- @details Stores path identity, compression metrics, rendered line-number mode, optional file-level and symbol-level metadata, structured compressed lines, and stable failure facts. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressToolRequestSection` (L126-136)
+- @brief Describes the request section of the compression payload.
+- @details Captures tool identity, scope, base directory, line-number mode, requested inputs, and configured source-directory scope so agents can reason about how the file set was selected. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressToolSummarySection` (L142-153)
+- @brief Describes the summary section of the compression payload.
+- @details Exposes aggregate file, line, symbol, and Doxygen counts as numeric fields with explicit unit names so agents can branch on totals without reparsing display strings. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressToolRepositorySection` (L159-164)
+- @brief Describes the repository section of the compression payload.
+- @details Stores the base path, configured source-directory scope, and canonical file list used during compression. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressToolPayload` (L170-175)
+- @brief Describes the full agent-oriented compression payload.
+- @details Orders the top-level sections as request, summary, repository, and files so execution metadata can be appended deterministically by the tool wrapper. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface BuildCompressToolPayloadOptions` (L181-189)
+- @brief Describes the options required to build one compression payload.
+- @details Supplies tool identity, scope, base directory, requested paths, line-number mode, and optional configured source directories while keeping payload construction deterministic. The interface is compile-time only and introduces no runtime cost.
+
+### fn `function canonicalizeCompressionPath(targetPath: string, baseDir: string): string` (L198-206)
+- @brief Canonicalizes one filesystem path relative to the payload base directory.
+- @details Emits a slash-normalized relative path when the target is under the base directory; otherwise emits the normalized absolute path. Runtime is O(p) in path length. No side effects occur.
+- @param[in] targetPath {string} Absolute or relative filesystem path.
+- @param[in] baseDir {string} Base directory used for relative canonicalization.
+- @return {string} Canonicalized path string.
+
+### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): CompressLineRange` (L215-221)
+- @brief Builds one structured line-range record.
+- @details Duplicates the inclusive range as start, end, and tuple fields so callers can address whichever shape is most convenient. Runtime is O(1). No side effects occur.
+- @param[in] startLineNumber {number} Inclusive start line number.
+- @param[in] endLineNumber {number} Inclusive end line number.
+- @return {CompressLineRange} Structured line-range record.
+
+### fn `function resolveSymbolName(element: SourceElement): string` (L229-231)
+- @brief Resolves one stable symbol name from an analyzed element.
+- @details Prefers explicit analyzer name metadata, then falls back to the derived signature or the first source line so every symbol retains a direct-access identifier. Runtime is O(1). No side effects occur.
+- @param[in] element {SourceElement} Source element.
+- @return {string} Stable symbol name.
+
+### fn `function resolveParentElement(definitions: SourceElement[], child: SourceElement): SourceElement | undefined` (L240-249)
+- @brief Resolves the direct parent element for one child symbol.
+- @details Matches by parent name plus inclusive line containment and chooses the deepest enclosing definition. Runtime is O(n) in definition count. No side effects occur.
+- @param[in] definitions {SourceElement[]} Sorted definition elements.
+- @param[in] child {SourceElement} Candidate child symbol.
+- @return {SourceElement | undefined} Matched parent definition when available.
+
+### fn `function mapCompressedLines(compressedLines: CompressedLineEntry[]): CompressToolLineEntry[]` (L257-264)
+- @brief Maps structured compression lines into the payload line-entry contract.
+- @details Performs a shallow field copy so the payload remains decoupled from the core compression result type. Runtime is O(n) in compressed line count. No side effects occur.
+- @param[in] compressedLines {CompressedLineEntry[]} Structured compression lines.
+- @return {CompressToolLineEntry[]} Payload line entries.
+
+### fn `function analyzeCompressedFileSymbols(` (L276-360)
+- @brief Builds structured symbol entries for one successfully analyzed file.
+- @details Extracts definition elements, computes parent-child relationships, attaches structured Doxygen metadata, and repeats the canonical file path inside each symbol record for direct-access agent indexing. Runtime is O(n log n) in definition count. No side effects occur.
+- @param[in] analyzer {SourceAnalyzer} Shared analyzer instance.
+- @param[in] absolutePath {string} Absolute file path.
+- @param[in] canonicalPath {string} Canonical path emitted in the payload.
+- @param[in] languageId {string} Canonical language identifier.
+- @return {{ languageName: string | undefined; symbols: CompressToolSymbolEntry[]; fileDoxygen: StructuredDoxygenFields | undefined; fileDescriptionText: string | undefined; doxygenFieldCount: number }} Structured symbol-analysis result.
+- @throws {Error} Throws when source analysis or enrichment fails.
+
+### fn `function analyzeCompressFile(` (L374-505)
+- @brief Analyzes one path into a structured compression file entry.
+- @details Resolves path identity, performs compression, attempts supplementary symbol and Doxygen extraction, preserves stable skip or error reasons, and keeps compression success independent from symbol-analysis success. Runtime is dominated by file I/O and analyzer cost. Side effects are limited to filesystem reads and optional stderr logging.
+- @param[in] analyzer {SourceAnalyzer} Shared analyzer instance.
+- @param[in] inputPath {string} Caller-supplied path.
+- @param[in] absolutePath {string} Absolute path resolved against the payload base directory.
+- @param[in] requestIndex {number} Caller-order index.
+- @param[in] baseDir {string} Base directory used for canonical path derivation.
+- @param[in] includeLineNumbers {boolean} When `true`, rendered compressed text includes original source line numbers.
+- @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
+- @return {CompressToolFileEntry} Structured file entry.
+
+### fn `export function buildCompressToolPayload(options: BuildCompressToolPayloadOptions): CompressToolPayload` (L514-628)
+- @brief Builds the full agent-oriented compression payload.
+- @details Validates requested paths against the filesystem, compresses processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits repository scope metadata. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+- @param[in] options {BuildCompressToolPayloadOptions} Payload-construction options.
+- @return {CompressToolPayload} Structured compression payload ordered as request, summary, repository, and files.
+- @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087
+
+### fn `export function buildCompressToolExecutionStderr(payload: CompressToolPayload): string` (L637-648)
+- @brief Builds execution diagnostics for one compression payload.
+- @details Serializes skipped inputs, hard compression failures, and supplementary symbol-analysis warnings into stable stderr lines while keeping successful compressed files silent. Runtime is O(n) in issue count. No side effects occur.
+- @param[in] payload {CompressToolPayload} Structured compression payload.
+- @return {string} Newline-delimited execution diagnostics.
+- @satisfies REQ-087
+
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`CompressToolScope`|type||27||
+|`CompressFileStatus`|type||33||
+|`CompressLineNumberMode`|type||39||
+|`CompressSymbolAnalysisStatus`|type||45||
+|`CompressLineRange`|iface||51-55|export interface CompressLineRange|
+|`CompressToolLineEntry`|iface||61-66|export interface CompressToolLineEntry|
+|`CompressToolSymbolEntry`|iface||72-87|export interface CompressToolSymbolEntry extends Compress...|
+|`CompressToolFileEntry`|iface||93-120|export interface CompressToolFileEntry extends CompressLi...|
+|`CompressToolRequestSection`|iface||126-136|export interface CompressToolRequestSection|
+|`CompressToolSummarySection`|iface||142-153|export interface CompressToolSummarySection|
+|`CompressToolRepositorySection`|iface||159-164|export interface CompressToolRepositorySection|
+|`CompressToolPayload`|iface||170-175|export interface CompressToolPayload|
+|`BuildCompressToolPayloadOptions`|iface||181-189|export interface BuildCompressToolPayloadOptions|
+|`canonicalizeCompressionPath`|fn||198-206|function canonicalizeCompressionPath(targetPath: string, ...|
+|`buildLineRange`|fn||215-221|function buildLineRange(startLineNumber: number, endLineN...|
+|`resolveSymbolName`|fn||229-231|function resolveSymbolName(element: SourceElement): string|
+|`resolveParentElement`|fn||240-249|function resolveParentElement(definitions: SourceElement[...|
+|`mapCompressedLines`|fn||257-264|function mapCompressedLines(compressedLines: CompressedLi...|
+|`analyzeCompressedFileSymbols`|fn||276-360|function analyzeCompressedFileSymbols(|
+|`analyzeCompressFile`|fn||374-505|function analyzeCompressFile(|
+|`buildCompressToolPayload`|fn||514-628|export function buildCompressToolPayload(options: BuildCo...|
+|`buildCompressToolExecutionStderr`|fn||637-648|export function buildCompressToolExecutionStderr(payload:...|
+
+
+---
+
+# compress.ts | TypeScript | 464L | 13 symbols | 3 imports | 17 comments
 > Path: `src/core/compress.ts`
 - @brief Removes comments and redundant whitespace from source code while preserving semantic structure.
 - @details Provides extension-based language detection and language-aware source compression backed by analyzer language specs. Runtime is linear in processed source size. Side effects are limited to filesystem reads in file-based helpers.
@@ -953,18 +1109,32 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ## Definitions
 
-### fn `function getSpecs()` (L57-60)
+### iface `export interface CompressedLineEntry` (L57-62)
+- @brief Describes one structured compressed output line.
+- @details Separates source coordinates, output order, raw compressed text, and rendered display text so downstream JSON payloads can expose line facts without reparsing prefixed strings. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface CompressedSourceResult` (L68-79)
+- @brief Describes one structured compression result.
+- @details Exposes language identity, source line metrics, removed-line totals, structured compressed lines, and the final rendered excerpt text so CLI and agent-tool layers can share one canonical compression model. The interface is compile-time only and introduces no runtime cost.
+
+### fn `function getSpecs()` (L86-89)
 - @brief Returns the cached language specification table.
 - @details Initializes the cache on first access by calling `buildLanguageSpecs`, then reuses the result for all subsequent calls. Time complexity is O(1) after cold start. Mutates module-local cache state only.
 - @return {ReturnType<typeof buildLanguageSpecs>} Cached language specification map.
 
-### fn `export function detectLanguage(filePath: string): string | undefined` (L68-70)
+### fn `export function detectLanguage(filePath: string): string | undefined` (L97-99)
 - @brief Infers a compression language from a file path extension.
 - @details Lowercases the file extension and looks it up in `EXT_LANG_MAP`. Time complexity is O(1). No I/O side effects occur.
 - @param[in] filePath {string} Source file path.
 - @return {string | undefined} Canonical compression language identifier, or `undefined` when unsupported.
 
-### fn `function isInString(line: string, pos: number, stringDelimiters: string[]): boolean` (L80-115)
+### fn `function countLogicalLines(content: string): number` (L107-113)
+- @brief Counts logical lines in one text payload.
+- @details Counts newline separators while treating a trailing newline as line termination instead of an extra empty logical line. Runtime is O(n) in text length. No side effects occur.
+- @param[in] content {string} Source text.
+- @return {number} Logical line count; `0` for empty content.
+
+### fn `function isInString(line: string, pos: number, stringDelimiters: string[]): boolean` (L123-158)
 - @brief Tests whether a character position falls inside a string literal.
 - @details Scans the line left-to-right while tracking active string delimiters and escaped quote characters. Runtime is O(n) in inspected prefix length. No side effects occur.
 - @param[in] line {string} Source line to inspect.
@@ -972,7 +1142,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 - @param[in] stringDelimiters {string[]} Supported string delimiters for the language.
 - @return {boolean} `true` when the position is inside a string literal.
 
-### fn `function removeInlineComment(line: string, singleComment: string | undefined, stringDelimiters: string[]): string` (L125-165)
+### fn `function removeInlineComment(line: string, singleComment: string | undefined, stringDelimiters: string[]): string` (L168-208)
 - @brief Removes a trailing single-line comment from a source line.
 - @details Scans the line while respecting string literals so comment markers inside strings are preserved. Runtime is O(n) in line length. No external state is mutated.
 - @param[in] line {string} Source line to strip.
@@ -980,25 +1150,51 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 - @param[in] stringDelimiters {string[]} Supported string delimiters for the language.
 - @return {string} Line content before the first real comment marker.
 
-### fn `function formatResult(entries: Array<[number, string]>, includeLineNumbers: boolean): string` (L174-178)
-- @brief Formats compressed source entries as newline-delimited text.
-- @details Emits either `line: text` pairs or plain text lines depending on the caller flag. Runtime is O(n) in entry count and content length. No side effects occur.
-- @param[in] entries {Array<[number, string]>} Compressed source lines paired with original line numbers.
-- @param[in] includeLineNumbers {boolean} When `true`, prefix each line with its original line number.
+### fn `function buildCompressedLineEntry(` (L219-231)
+- @brief Builds one rendered compressed line entry.
+- @details Materializes both the raw compressed text and the display text that optionally prefixes the original source line number. Runtime is O(n) in line length. No side effects occur.
+- @param[in] text {string} Compressed source text for one retained line.
+- @param[in] sourceLineNumber {number} Original source line number.
+- @param[in] compressedLineNumber {number} One-based output line number inside the compressed excerpt.
+- @param[in] includeLineNumbers {boolean} When `true`, prefix the display text with the original source line number.
+- @return {CompressedLineEntry} Structured compressed line entry.
+
+### fn `function formatCompressedSourceText(entries: CompressedLineEntry[]): string` (L239-241)
+- @brief Formats compressed line entries as newline-delimited text.
+- @details Joins pre-rendered display lines without adding headers, fences, or other presentation artifacts. Runtime is O(n) in entry count and aggregate content length. No side effects occur.
+- @param[in] entries {CompressedLineEntry[]} Structured compressed line entries.
 - @return {string} Final compressed source text.
 
-### fn `export function compressSource(source: string, language: string, includeLineNumbers = true): string` (L189-339)
+### fn `export function compressSourceDetailed(source: string, language: string, includeLineNumbers = true): CompressedSourceResult` (L252-420)
+- @brief Compresses in-memory source text into the structured compression model.
+- @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, retains leading indentation for indentation-significant languages, and emits both structured line entries and a rendered text excerpt. Runtime is O(n) in source length. No external state is mutated.
+- @param[in] source {string} Raw source text.
+- @param[in] language {string} Canonical compression language identifier.
+- @param[in] includeLineNumbers {boolean} When `true`, prefix rendered text lines with original source line numbers.
+- @return {CompressedSourceResult} Structured compression result.
+- @throws {Error} Throws when the language is unsupported.
+
+### fn `export function compressSource(source: string, language: string, includeLineNumbers = true): string` (L431-433)
 - @brief Compresses in-memory source text for one language.
-- @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, and retains leading indentation for indentation-significant languages. Runtime is O(n) in source length. No external state is mutated.
+- @details Delegates to `compressSourceDetailed(...)` and returns only the rendered compressed source text so legacy CLI and markdown-oriented paths keep their existing behavior. Runtime is O(n) in source length. No external state is mutated.
 - @param[in] source {string} Raw source text.
 - @param[in] language {string} Canonical compression language identifier.
 - @param[in] includeLineNumbers {boolean} When `true`, include original line-number prefixes in the output.
 - @return {string} Compressed source text.
 - @throws {Error} Throws when the language is unsupported.
 
-### fn `export function compressFile(filePath: string, language?: string, includeLineNumbers = true): string` (L350-357)
+### fn `export function compressFileDetailed(filePath: string, language?: string, includeLineNumbers = true): CompressedSourceResult` (L444-451)
+- @brief Compresses one source file from disk into the structured compression model.
+- @details Detects the language when not supplied, reads the file as UTF-8, and delegates to `compressSourceDetailed(...)`. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+- @param[in] filePath {string} Source file path.
+- @param[in] language {string | undefined} Optional explicit language override.
+- @param[in] includeLineNumbers {boolean} When `true`, prefix rendered text lines with original source line numbers.
+- @return {CompressedSourceResult} Structured compression result.
+- @throws {Error} Throws when the language cannot be detected or the file cannot be read.
+
+### fn `export function compressFile(filePath: string, language?: string, includeLineNumbers = true): string` (L462-464)
 - @brief Compresses one source file from disk.
-- @details Detects the language when not supplied, reads the file as UTF-8, and delegates to `compressSource`. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+- @details Delegates to `compressFileDetailed(...)` and returns only the rendered compressed source text so CLI and markdown emitters can retain their established text contract. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] filePath {string} Source file path.
 - @param[in] language {string | undefined} Optional explicit language override.
 - @param[in] includeLineNumbers {boolean} When `true`, include original line-number prefixes in the output.
@@ -1008,13 +1204,19 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`getSpecs`|fn||57-60|function getSpecs()|
-|`detectLanguage`|fn||68-70|export function detectLanguage(filePath: string): string ...|
-|`isInString`|fn||80-115|function isInString(line: string, pos: number, stringDeli...|
-|`removeInlineComment`|fn||125-165|function removeInlineComment(line: string, singleComment:...|
-|`formatResult`|fn||174-178|function formatResult(entries: Array<[number, string]>, i...|
-|`compressSource`|fn||189-339|export function compressSource(source: string, language: ...|
-|`compressFile`|fn||350-357|export function compressFile(filePath: string, language?:...|
+|`CompressedLineEntry`|iface||57-62|export interface CompressedLineEntry|
+|`CompressedSourceResult`|iface||68-79|export interface CompressedSourceResult|
+|`getSpecs`|fn||86-89|function getSpecs()|
+|`detectLanguage`|fn||97-99|export function detectLanguage(filePath: string): string ...|
+|`countLogicalLines`|fn||107-113|function countLogicalLines(content: string): number|
+|`isInString`|fn||123-158|function isInString(line: string, pos: number, stringDeli...|
+|`removeInlineComment`|fn||168-208|function removeInlineComment(line: string, singleComment:...|
+|`buildCompressedLineEntry`|fn||219-231|function buildCompressedLineEntry(|
+|`formatCompressedSourceText`|fn||239-241|function formatCompressedSourceText(entries: CompressedLi...|
+|`compressSourceDetailed`|fn||252-420|export function compressSourceDetailed(source: string, la...|
+|`compressSource`|fn||431-433|export function compressSource(source: string, language: ...|
+|`compressFileDetailed`|fn||444-451|export function compressFileDetailed(filePath: string, la...|
+|`compressFile`|fn||462-464|export function compressFile(filePath: string, language?:...|
 
 
 ---
@@ -2656,7 +2858,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 1185L | 30 symbols | 12 imports | 31 comments
+# index.ts | TypeScript | 1266L | 31 symbols | 13 imports | 32 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -2670,6 +2872,7 @@ import {
 import {
 import {
 import {
+import {
 import { renderPrompt } from "./core/prompts.js";
 import { ensureHomeResources } from "./core/resources.js";
 import {
@@ -2679,65 +2882,72 @@ import { shellSplit } from "./core/utils.js";
 
 ## Definitions
 
-### fn `function getProjectBase(cwd: string): string` (L100-102)
+### fn `function getProjectBase(cwd: string): string` (L105-107)
 - @brief Resolves the effective project base from a working directory.
 - @details Normalizes the provided cwd into an absolute path without consulting configuration. Time complexity is O(1). No I/O side effects occur.
 - @param[in] cwd {string} Current working directory.
 - @return {string} Absolute project base path.
 
-### fn `function loadProjectConfig(cwd: string): UseReqConfig` (L110-120)
+### fn `function loadProjectConfig(cwd: string): UseReqConfig` (L115-125)
 - @brief Loads project configuration and refreshes derived path metadata for the extension runtime.
 - @details Resolves the project base, loads persisted config, updates `base-path`, refreshes `git-path` when the project is inside a repository, and removes stale git metadata otherwise. Runtime is dominated by config I/O and git detection. Side effects are limited to filesystem reads and git subprocess execution.
 - @param[in] cwd {string} Current working directory.
 - @return {UseReqConfig} Effective project configuration.
 
-### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L129-133)
+### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L134-138)
 - @brief Persists project configuration from the extension runtime.
 - @details Recomputes `base-path` from the current working directory and delegates persistence to `saveConfig`. Runtime is O(n) in config size. Side effects include config-file writes.
 - @param[in] cwd {string} Current working directory.
 - @param[in] config {UseReqConfig} Configuration to persist.
 - @return {void} No return value.
 
-### fn `function formatResultForEditor(result: ToolResult): string` (L141-146)
+### fn `function formatResultForEditor(result: ToolResult): string` (L146-151)
 - @brief Formats a tool result for editor display.
 - @details Trims trailing whitespace on stdout and stderr independently, then joins non-empty sections with a blank line. Runtime is O(n) in emitted text size. No side effects occur.
 - @param[in] result {ToolResult} Tool result payload.
 - @return {string} Editor-ready textual representation.
 
-### fn `function formatJsonToolPayload(payload: unknown): string` (L154-156)
+### fn `function formatJsonToolPayload(payload: unknown): string` (L159-161)
 - @brief Serializes one structured payload as pretty-printed JSON text.
 - @details Uses two-space indentation and omits a trailing newline so tool `content` payloads remain compact while preserving deterministic field order. Runtime is O(n) in payload size. No side effects occur.
 - @param[in] payload {unknown} Structured JSON-compatible payload.
 - @return {string} Pretty-printed JSON string.
 
-### fn `function buildTokenToolExecutionStderr(payload: TokenToolPayload): string` (L164-170)
+### fn `function buildTokenToolExecutionStderr(payload: TokenToolPayload): string` (L169-175)
 - @brief Builds execution diagnostics for one token-tool payload.
 - @details Serializes skipped-input and read-error observations into stable stderr lines while leaving successful counted files silent. Runtime is O(n) in issue count. No side effects occur.
 - @param[in] payload {TokenToolPayload} Structured token payload.
 - @return {string} Newline-delimited execution diagnostics.
 
-### fn `function buildTokenToolExecuteResult(` (L179-199)
+### fn `function buildTokenToolExecuteResult(` (L184-204)
 - @brief Builds the agent-oriented execute result returned by token-count tools.
 - @details Mirrors the structured token payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
 - @param[in] payload {TokenToolPayload} Structured token payload.
 - @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Token-tool execute result.
 - @satisfies REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075
 
-### fn `function buildReferenceToolExecuteResult(` (L208-228)
+### fn `function buildReferenceToolExecuteResult(` (L213-233)
 - @brief Builds the agent-oriented execute result returned by references tools.
 - @details Mirrors the structured references payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
 - @param[in] payload {ReferenceToolPayload} Structured references payload.
 - @return {{ content: Array<{ type: "text"; text: string }>; details: ReferenceToolPayload & { execution: { code: number; stderr: string } } }} References-tool execute result.
 - @satisfies REQ-076, REQ-077, REQ-078, REQ-079
 
-### fn `function buildPromptSessionMessage(content: string):` (L237-247)
+### fn `function buildCompressionToolExecuteResult(` (L242-262)
+- @brief Builds the agent-oriented execute result returned by compression tools.
+- @details Mirrors the structured compression payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
+- @param[in] payload {CompressToolPayload} Structured compression payload.
+- @return {{ content: Array<{ type: "text"; text: string }>; details: CompressToolPayload & { execution: { code: number; stderr: string } } }} Compression-tool execute result.
+- @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087, REQ-088
+
+### fn `function buildPromptSessionMessage(content: string):` (L271-281)
 - @brief Builds the first user-message payload for a reset prompt session.
 - @details Creates the timestamped session entry appended during `ctx.newSession(...)` so `req-*` commands seed the cleared session with the rendered prompt content. Runtime is O(n) in prompt length. No external state is mutated.
 - @param[in] content {string} Rendered prompt markdown.
 - @return {{ role: "user"; content: Array<{ type: "text"; text: string }>; timestamp: number }} Session-manager user message payload.
 - @satisfies REQ-067
 
-### fn `async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void>` (L259-271)
+### fn `async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void>` (L293-305)
 - @brief Delivers one rendered prompt according to the configured reset policy.
 - @details When `reset-context` is `true`, waits for idle and uses `ctx.newSession(...)` to create a `/new`-equivalent session seeded with the rendered prompt as the first user message. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement or message dispatch.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2747,26 +2957,26 @@ import { shellSplit } from "./core/utils.js";
 - @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
 - @satisfies REQ-067, REQ-068
 
-### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L280-285)
+### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L314-319)
 - @brief Returns the configurable active-tool inventory visible to the extension.
 - @details Filters runtime tools against the canonical configurable-tool set, thereby combining extension-owned tools with supported embedded pi CLI tools. Output order is sorted by tool name. Runtime is O(t log t). No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {ToolInfo[]} Sorted configurable tool descriptors.
 - @satisfies REQ-007, REQ-063
 
-### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L293-297)
+### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L327-331)
 - @brief Normalizes and returns the configured enabled active tools.
 - @details Reuses repository normalization rules, updates the config object in place, and returns the normalized array. Runtime is O(n) in configured tool count. Side effect: mutates `config["enabled-tools"]`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {string[]} Normalized enabled tool names.
 
-### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L305-310)
+### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L339-344)
 - @brief Classifies one configurable tool as embedded or extension-owned.
 - @details Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated.
 - @param[in] tool {ToolInfo} Runtime tool descriptor.
 - @return {"builtin" | "extension"} Stable tool-kind label.
 
-### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L320-337)
+### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L354-371)
 - @brief Applies the configured active-tool enablement to the current session.
 - @details Preserves non-configurable active tools, removes every configurable tool from the active set, then re-adds only configured tools that exist in the current runtime inventory. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2774,7 +2984,7 @@ import { shellSplit } from "./core/utils.js";
 - @return {void} No return value.
 - @satisfies REQ-009, REQ-064
 
-### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L347-350)
+### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L381-384)
 - @brief Replaces the configured active-tool selection and applies it immediately.
 - @details Normalizes the requested tool names, stores them in config, and synchronizes the active tool set with runtime registration state. Runtime is O(n + t). Side effect: mutates config and active tools.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2782,35 +2992,35 @@ import { shellSplit } from "./core/utils.js";
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 
-### fn `function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string` (L359-362)
+### fn `function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string` (L393-396)
 - @brief Formats one configurable-tool label for selection menus.
 - @details Prefixes the tool name with a checkmark or cross and appends a stable builtin-versus-extension marker derived from runtime metadata. Runtime is O(1). No side effects occur.
 - @param[in] tool {ToolInfo} Tool descriptor.
 - @param[in] enabled {boolean} Enablement state.
 - @return {string} Menu label.
 
-### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L371-399)
+### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L405-433)
 - @brief Renders a textual reference for configurable-tool configuration and runtime state.
 - @details Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Multiline tool-status report.
 
-### fn `function registerPromptCommands(pi: ExtensionAPI): void` (L409-422)
+### fn `function registerPromptCommands(pi: ExtensionAPI): void` (L443-456)
 - @brief Registers bundled prompt commands with the extension.
 - @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and dispatches it either into a `/new`-equivalent reset session or the current session based on `reset-context`. Runtime is O(p) for registration; handler cost depends on prompt rendering plus optional session replacement. Side effects include command registration, session replacement, and message dispatch during execution.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-004, REQ-067, REQ-068
 
-### fn `function registerAgentTools(pi: ExtensionAPI): void` (L432-731)
+### fn `function registerAgentTools(pi: ExtensionAPI): void` (L466-765)
 - @brief Registers pi-usereq agent tools exposed to the model.
 - @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080
 
-### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L802-866)
+### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L883-947)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with persisted config, renders overview and mutation actions, and updates configuration state in response to UI selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2819,19 +3029,19 @@ import { shellSplit } from "./core/utils.js";
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064
 
-### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L874-880)
+### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L955-961)
 - @brief Formats one static-check configuration entry for UI display.
 - @details Renders command-backed entries as `Command(cmd args...)` and all other modules as `Module(args...)`. Runtime is O(n) in parameter count. No side effects occur.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Human-readable entry summary.
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L888-894)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L969-975)
 - @brief Summarizes configured static-check languages.
 - @details Keeps only languages with at least one configured checker, sorts them, and emits a compact `Language (count)` list. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string or `(none)`.
 
-### fn `function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string` (L904-907)
+### fn `function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string` (L985-988)
 - @brief Builds one static-check language selection label.
 - @details Includes the language name, supported extensions, and the number of configured checkers with singular/plural handling. Runtime is O(n) in extension count. No side effects occur.
 - @param[in] language {string} Canonical language name.
@@ -2839,20 +3049,20 @@ import { shellSplit } from "./core/utils.js";
 - @param[in] configuredCount {number} Number of configured checkers for the language.
 - @return {string} Menu label.
 
-### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L915-936)
+### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L996-1017)
 - @brief Renders the static-check configuration reference view.
 - @details Produces a markdown-like summary containing configured entries, supported languages, supported modules, and example specifications. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Reference text for the editor view.
 
-### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L945-1052)
+### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1026-1133)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {Promise<void>} Promise resolved when the menu closes.
 
-### fn `async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void>` (L1062-1139)
+### fn `async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void>` (L1143-1220)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2860,17 +3070,17 @@ import { shellSplit } from "./core/utils.js";
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-066
 
-### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L1065-1072)
+### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L1146-1153)
 
-### fn `const refreshStatus = () =>` (L1066-1072)
+### fn `const refreshStatus = () =>` (L1147-1153)
 
-### fn `function registerConfigCommands(pi: ExtensionAPI): void` (L1147-1162)
+### fn `function registerConfigCommands(pi: ExtensionAPI): void` (L1228-1243)
 - @brief Registers configuration-management commands.
 - @details Adds commands for opening the interactive configuration menu and showing the current config JSON in the editor. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L1171-1185)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L1252-1266)
 - @brief Registers the complete pi-usereq extension.
 - @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured active tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2880,34 +3090,35 @@ import { shellSplit } from "./core/utils.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`getProjectBase`|fn||100-102|function getProjectBase(cwd: string): string|
-|`loadProjectConfig`|fn||110-120|function loadProjectConfig(cwd: string): UseReqConfig|
-|`saveProjectConfig`|fn||129-133|function saveProjectConfig(cwd: string, config: UseReqCon...|
-|`formatResultForEditor`|fn||141-146|function formatResultForEditor(result: ToolResult): string|
-|`formatJsonToolPayload`|fn||154-156|function formatJsonToolPayload(payload: unknown): string|
-|`buildTokenToolExecutionStderr`|fn||164-170|function buildTokenToolExecutionStderr(payload: TokenTool...|
-|`buildTokenToolExecuteResult`|fn||179-199|function buildTokenToolExecuteResult(|
-|`buildReferenceToolExecuteResult`|fn||208-228|function buildReferenceToolExecuteResult(|
-|`buildPromptSessionMessage`|fn||237-247|function buildPromptSessionMessage(content: string):|
-|`deliverPromptCommand`|fn||259-271|async function deliverPromptCommand(pi: ExtensionAPI, ctx...|
-|`getPiUsereqStartupTools`|fn||280-285|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
-|`getConfiguredEnabledPiUsereqTools`|fn||293-297|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
-|`getPiUsereqToolKind`|fn||305-310|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
-|`applyConfiguredPiUsereqTools`|fn||320-337|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
-|`setConfiguredPiUsereqTools`|fn||347-350|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
-|`formatPiUsereqToolLabel`|fn||359-362|function formatPiUsereqToolLabel(tool: ToolInfo, enabled:...|
-|`renderPiUsereqToolsReference`|fn||371-399|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
-|`registerPromptCommands`|fn||409-422|function registerPromptCommands(pi: ExtensionAPI): void|
-|`registerAgentTools`|fn||432-731|function registerAgentTools(pi: ExtensionAPI): void|
-|`configurePiUsereqToolsMenu`|fn||802-866|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
-|`formatStaticCheckEntry`|fn||874-880|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
-|`formatStaticCheckLanguagesSummary`|fn||888-894|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckLanguageLabel`|fn||904-907|function buildStaticCheckLanguageLabel(language: string, ...|
-|`renderStaticCheckReference`|fn||915-936|function renderStaticCheckReference(config: UseReqConfig)...|
-|`configureStaticCheckMenu`|fn||945-1052|async function configureStaticCheckMenu(ctx: ExtensionCom...|
-|`configurePiUsereq`|fn||1062-1139|async function configurePiUsereq(pi: ExtensionAPI, ctx: E...|
-|`ensureSaved`|fn||1065-1072|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
-|`refreshStatus`|fn||1066-1072|const refreshStatus = () =>|
-|`registerConfigCommands`|fn||1147-1162|function registerConfigCommands(pi: ExtensionAPI): void|
-|`piUsereqExtension`|fn||1171-1185|export default function piUsereqExtension(pi: ExtensionAP...|
+|`getProjectBase`|fn||105-107|function getProjectBase(cwd: string): string|
+|`loadProjectConfig`|fn||115-125|function loadProjectConfig(cwd: string): UseReqConfig|
+|`saveProjectConfig`|fn||134-138|function saveProjectConfig(cwd: string, config: UseReqCon...|
+|`formatResultForEditor`|fn||146-151|function formatResultForEditor(result: ToolResult): string|
+|`formatJsonToolPayload`|fn||159-161|function formatJsonToolPayload(payload: unknown): string|
+|`buildTokenToolExecutionStderr`|fn||169-175|function buildTokenToolExecutionStderr(payload: TokenTool...|
+|`buildTokenToolExecuteResult`|fn||184-204|function buildTokenToolExecuteResult(|
+|`buildReferenceToolExecuteResult`|fn||213-233|function buildReferenceToolExecuteResult(|
+|`buildCompressionToolExecuteResult`|fn||242-262|function buildCompressionToolExecuteResult(|
+|`buildPromptSessionMessage`|fn||271-281|function buildPromptSessionMessage(content: string):|
+|`deliverPromptCommand`|fn||293-305|async function deliverPromptCommand(pi: ExtensionAPI, ctx...|
+|`getPiUsereqStartupTools`|fn||314-319|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
+|`getConfiguredEnabledPiUsereqTools`|fn||327-331|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
+|`getPiUsereqToolKind`|fn||339-344|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
+|`applyConfiguredPiUsereqTools`|fn||354-371|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
+|`setConfiguredPiUsereqTools`|fn||381-384|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
+|`formatPiUsereqToolLabel`|fn||393-396|function formatPiUsereqToolLabel(tool: ToolInfo, enabled:...|
+|`renderPiUsereqToolsReference`|fn||405-433|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
+|`registerPromptCommands`|fn||443-456|function registerPromptCommands(pi: ExtensionAPI): void|
+|`registerAgentTools`|fn||466-765|function registerAgentTools(pi: ExtensionAPI): void|
+|`configurePiUsereqToolsMenu`|fn||883-947|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
+|`formatStaticCheckEntry`|fn||955-961|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
+|`formatStaticCheckLanguagesSummary`|fn||969-975|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckLanguageLabel`|fn||985-988|function buildStaticCheckLanguageLabel(language: string, ...|
+|`renderStaticCheckReference`|fn||996-1017|function renderStaticCheckReference(config: UseReqConfig)...|
+|`configureStaticCheckMenu`|fn||1026-1133|async function configureStaticCheckMenu(ctx: ExtensionCom...|
+|`configurePiUsereq`|fn||1143-1220|async function configurePiUsereq(pi: ExtensionAPI, ctx: E...|
+|`ensureSaved`|fn||1146-1153|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
+|`refreshStatus`|fn||1147-1153|const refreshStatus = () =>|
+|`registerConfigCommands`|fn||1228-1243|function registerConfigCommands(pi: ExtensionAPI): void|
+|`piUsereqExtension`|fn||1252-1266|export default function piUsereqExtension(pi: ExtensionAP...|
 
