@@ -25,12 +25,12 @@ In scope: static analysis of source under %%SRC_PATHS%% to generate/overwrite on
 
 ## Pre-requisite: Execution Context
 - **CRITICAL**: All information declared in this `Pre-requisite: Execution Context` section MUST remain continuously available in the active execution context for the entire workflow and MUST NEVER be dropped, forgotten, or overwritten.
-- Generate <WORKTREE_NAME> with `req --git-wt-name`, retain the literal result for later steps, and use simple sequential execution with only linear shell commands compatible with restrictive filtering systems for all worktree operations in this workflow.
+- Generate <WORKTREE_NAME> with the `worktree-name` tool, retain the literal result for later steps, and use simple sequential execution with only linear shell commands compatible with restrictive filtering systems for all worktree operations in this workflow.
 
 
 ## Absolute Rules, Non-Negotiable
 - **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
-- **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active git worktree directory, except under `/tmp`, and except for worktree operations executed through `req --git-wt-create <WORKTREE_NAME>` and `req --git-wt-delete <WORKTREE_NAME>`.
+- **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active git worktree directory, except under `/tmp`, and except for worktree operations executed through the `worktree-create` and `worktree-delete` tools.
 - You can read, write, or edit `%%DOC_PATH%%/WORKFLOW.md`.
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
 - **CRITICAL**: Do not modify any project files except creating/updating `%%DOC_PATH%%/WORKFLOW.md`.
@@ -99,44 +99,23 @@ Structured index of all source-defined symbols (functions, classes, structs, obj
 
 Use to: identify candidate symbols by name, description, or `@satisfies` link; obtain exact file paths and line ranges; understand function signatures and contracts before extracting code. Cross-reference with WORKFLOW.md call-traces to narrow scope.
 
-### 3. Code Extraction: `req --find` / `req --files-find`
-Extract actual source constructs as structured markdown with signatures, line ranges, and optional line-numbered code. Use after pillars 1-2 to extract only the targeted constructs identified during analysis.
-#### What these commands do (and what they don't)
-- Extract named constructs (e.g., CLASS, FUNCTION, STRUCT, INTERFACE, IMPORT, …) filtered by TAG and name-regex.
-- Regex (PATTERN) matches construct name only (not body). For body-content search, use rg/git grep (pillar 4).
-- Output per file: header `@@@ <filepath> | <language>`, per-construct blocks with:
-    - `### <TAG>: <name>` + optional Signature + `Lines: <start>-<end>`
-    - optional extracted Doxygen fields (if present in/around the construct)
-    - fenced code block with the complete construct slice (comments stripped, strings preserved)
-#### Choose the right mode
-- Project-wide scan: use --find (`--here` is implicit; `--base` is forbidden)
-    - Syntax: `req --find <TAG_FILTER> <NAME_REGEX>`
-    - Note: --find scans all files under configured source dirs; does not take a filename.
-- Target specific files: use --files-find (standalone; --here is optional but harmless)
-    - Syntax: `req --here --files-find <TAG_FILTER> <NAME_REGEX> <FILE1> [FILE2 ...]`
-#### Enable line-numbered code for evidence citation
-Add --enable-line-numbers (code lines prefixed as `<n>:`):
-- `req --enable-line-numbers --find "<TAG_FILTER>" "<NAME_REGEX>"`
-- `req --here --enable-line-numbers --files-find "<TAG_FILTER>" "<NAME_REGEX>" <FILE...>`
-#### TAGs and filters
-- TAG_FILTER: pipe-separated, case-insensitive (e.g., `CLASS|FUNCTION|IMPORT`).
-- Tags are language-dependent; unsupported tags are ignored. Run `req -h` for supported TAGs per language.
-- Broad cross-language TAG_FILTER: `CLASS|STRUCT|ENUM|INTERFACE|TRAIT|IMPL|FUNCTION|METHOD|MODULE|NAMESPACE|TYPE_ALIAS|TYPEDEF|IMPORT|CONSTANT|VARIABLE|MACRO|DECORATOR|COMPONENT|PROPERTY|PROTOCOL|EXTENSION|UNION`
-#### Regex rules (NAME_REGEX)
-- Regex matching follows `re.search()` semantics against construct names (tool behavior, independent of repository language).
-- Prefer anchored patterns: exact `^Foo$`, prefix `^parse_`, suffix `Service$`. Use `.*` only when scope is already constrained by files/TAGs.
-#### Failure modes you must handle
-- "No constructs found": adjust TAGs (supported?), file paths, or NAME_REGEX (valid regex?).
-- Regex-based extractor (not full AST): treat results as evidence pointers; confirm edge cases by opening referenced file/lines.
+### 3. Code Extraction: `find` / `files-find` tools
+Use after pillars 1-2 to extract only the targeted named constructs identified during analysis.
+- Prefer the `find` tool for project-wide named-symbol, declaration, and construct scans, and the `files-find` tool when target files are already known.
+- Use these tools as the default discovery path for named-symbol, declaration, construct, and known-file lookup; use `rg`/`git grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
+- Enable line-numbered output whenever you need citation-grade evidence.
+- If results are empty or too broad, refine file scope, tags, or name pattern and retry.
+- Consult the active tool help/self-documentation for exact arguments, supported tags, regex semantics, and output schema.
+
 
 ### 4. Supplementary Search: `rg` / `git grep`
-Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, or any content not captured by construct-name-based extraction.
+Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
 
 ### Recommended Analysis Workflow
 1. **Read `%%DOC_PATH%%/WORKFLOW.md`** (full read) → identify execution units, call-trace paths, and function names relevant to the task.
 2. **Read `%%DOC_PATH%%/REFERENCES.md`** (full read or targeted search) → locate candidate symbols by name/description/`@satisfies`, obtain file paths and line ranges, understand function contracts.
-3. **Extract code** via `req --find`/`req --files-find` → use symbol names from steps 1-2 as NAME_REGEX, file paths as --files-find targets; enable --enable-line-numbers when citing evidence.
-4. **Search code bodies** via `rg`/`git grep` → find patterns, references, or values not captured by construct-level extraction.
+3. **Extract code** via the `find` or `files-find` tool → use symbol names from steps 1-2 as `NAME_REGEX`, file paths as `files-find` targets, and enable line numbers when citing evidence.
+4. **Search code bodies** via `rg`/`git grep` → after `find`/`files-find`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
 
 
 ## Execution Protocol (Global vs Local)
@@ -165,10 +144,10 @@ During the execution flow you MUST follow these directives:
 ## Steps
 Create internally a *check-list* for the **Global Roadmap** including all the numbered steps below: `1..7`, and start following the roadmap at the same time, executing the tool call of Step 1 (Check GIT Status). If a tool call is required in Step 1, invoke it immediately; otherwise proceed to Step 1 without additional commentary. Do not add extra intent-adjustment checks unless explicitly listed in the Steps section.
 1. **CRITICAL**: Check GIT Status
-   - Check GIT status with `req --git-check`. If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Git status unclear!", and then terminate the execution.
+   - Check GIT status with the `git-status` tool. If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Git status unclear!", and then terminate the execution.
 2. **CRITICAL**: Worktree Generation & Isolation
-   - Derive <BASE_PATH> with `req --get-base-path`, derive <GIT_PATH> with `req --git-path`, and generate <WORKTREE_NAME> with `req --git-wt-name` using literal `req` commands executed sequentially without shell composition.
-   - Create the dedicated isolated worktree with `req --git-wt-create <WORKTREE_NAME>`, then execute `cd <GIT_PATH>/../<WORKTREE_NAME>` before proceeding to the next step.
+   - Derive <BASE_PATH> with the `base-path` tool, derive <GIT_PATH> with the `git-path` tool, and generate <WORKTREE_NAME> with the `worktree-name` tool using simple sequential tool execution without shell composition.
+   - Create the dedicated isolated worktree with the `worktree-create` tool, then execute `cd <GIT_PATH>/../<WORKTREE_NAME>` before proceeding to the next step.
    - If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Worktree generation failed!", and then terminate the execution.
 
 3. Static analysis: build the runtime model from %%SRC_PATHS%%
@@ -205,19 +184,19 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 5. **CRITICAL**: Stage & commit
    - Show a summary of changes with `git diff` and `git diff --stat`.
    - Stage changes explicitly (prefer targeted add; avoid `git add -A` if it may include unintended files): `git add <file...>` (ensure to include only `%%DOC_PATH%%/WORKFLOW.md`).
-   - Ensure there is something to commit with: `git diff --cached --quiet && echo "Nothing to commit. Aborting."`. If command output contains "Aborting", OUTPUT exactly "No changes to commit.", and then delete the isolated worktree and branch with `req --git-wt-delete <WORKTREE_NAME>`, and then terminate the execution.
+   - Ensure there is something to commit with: `git diff --cached --quiet && echo "Nothing to commit. Aborting."`. If command output contains "Aborting", OUTPUT exactly "No changes to commit.", and then delete the isolated worktree and branch with the `worktree-delete` tool, and then terminate the execution.
    - Commit a structured commit message with: `git commit -m "docs(<COMPONENT>)<BREAKING>: <DESCRIPTION> [useReq]"`
       - Set `<COMPONENT>` to the most specific component, module, or function affected. If multiple areas are touched, choose the primary one. If you cannot identify a unique component, use `core`.
       - Set `<DESCRIPTION>` to a short, clear summary in **English language** of what changed, including (when applicable) updates to: requirements/specs, source code, tests. Use present tense, avoid vague wording, and keep it under ~80 characters if possible.
       - Set `<BREAKING>` to `!` if a breaking change was implemented (a modification to an API, library, or system that breaks backward compatibility, causing dependent client applications or code to fail or behave incorrectly), set empty otherwise.
       - Include main features added, requirements changes, or a bug-fix description adding a multi-line comment (maximum 10 lines).
          - Do not include the 'Co-authored-by' trailer or any AI attribution. A GPG-signed commit is not required.
-   - Confirm the repo is clean with `req --git-check`. If the command returns an error code or prints any text containing "ERROR", override the final line with EXACTLY "WARNING: Workflow request completed with unclean git repository!".
+   - Confirm the repo is clean with the `git-status` tool. If the command returns an error code or prints any text containing "ERROR", override the final line with EXACTLY "WARNING: Workflow request completed with unclean git repository!".
 6. **CRITICAL**: Merge Conflict Management
    - Return to the original repository directory (the sibling directory of the worktree).
-   - Ensure you are on the original branch used before worktree creation by deriving `<BASE_PATH>` with `req --get-base-path` if needed and executing `cd <BASE_PATH>`.
+   - Ensure you are on the original branch used before worktree creation by deriving `<BASE_PATH>` with the `base-path` tool if needed and executing `cd <BASE_PATH>`.
    - Merge the isolated branch into the original branch: `git merge <WORKTREE_NAME>`
-   - If the merge completes successfully, delete the isolated worktree and branch with `req --git-wt-delete <WORKTREE_NAME>`; if the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Worktree cleanup verification failed!", and then terminate the execution.
+   - If the merge completes successfully, delete the isolated worktree and branch with the `worktree-delete` tool; if the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Worktree cleanup verification failed!", and then terminate the execution.
    - If the merge fails or results in conflicts, do NOT remove the worktree directory and override the final line with EXACTLY "WARNING: Workflow request completed with merge conflicting!".
 7. Present results
    - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. Use the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**. Final line MUST be exactly: STATUS: OK or STATUS: ERROR.

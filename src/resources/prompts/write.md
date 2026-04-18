@@ -79,7 +79,7 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
       - Ensure every requirement is atomic, unambiguous, and formatted for maximum testability using RFC 2119 keywords (MUST, MUST NOT, SHOULD, SHOULD NOT, MAY)
       - Write each requirement for other LLM **Agents** and Automated Parsers, NOT humans.
       - Must be optimized for machine comprehension. Do not write flowery prose. Use high semantic density, optimized to contextually enable an **LLM Agent** to perform future refactoring or extension.
-       - Read the template at `.req/docs/Requirements_Template.md` and follow its section schema.
+       - Read the template at `%%TEMPLATE_PATH%%/Requirements_Template.md` and follow its section schema.
        - Do NOT add per-section "Scope/Grouping" requirements; use headings to encode grouping.
 	       - Use a single canonical requirement line schema: `- **<ID>**: <RFC2119 keyword> <single-sentence requirement>.` Target <= 35 words per requirement; split compound statements into multiple requirements.
        - If document-authoring rules are needed, keep them only under the dedicated "Document Rules" section (do not duplicate them across sections).
@@ -87,7 +87,7 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
      - Check [User Request](#users-request) for unit test requirements. If any test requests are found, analyze them and provide a concise summary of the high-level functional requirements and the business logic being tested.
    - Create the **Software Requirements Specification** document at `%%DOC_PATH%%/REQUIREMENTS.md`.
       - Write requirements, section titles, tables, and other content in **English language**.
-      - Follow `.req/docs/Requirements_Template.md`.
+      - Follow `%%TEMPLATE_PATH%%/Requirements_Template.md`.
       - Describe every project requirement clearly, succinctly, and unambiguously.
       - Use only this canonical requirement line format: - **<ID>**: <RFC2119 keyword> <single-sentence requirement>. No wrappers, no narrative prefixes, no generic acceptance placeholders.
       - Ensure every requirement is atomic, unambiguous, and formatted for maximum testability using RFC 2119 keywords (MUST, MUST NOT, SHOULD, SHOULD NOT, MAY).

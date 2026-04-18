@@ -65,7 +65,7 @@ During the execution flow you MUST follow these directives:
 ## Steps
 Create internally a *check-list* for the **Global Roadmap** including all the numbered steps below: `1..3`, and start following the roadmap at the same time, following the instructions of Step 1 (Generate the Software Requirements Specification). Do not add extra intent-adjustment checks unless explicitly listed in the Steps section.
 1. Generate the **Software Requirements Specification**
-   - Read the template at `.req/docs/Requirements_Template.md` and apply its guidelines to the requirement draft.
+   - Read the template at `%%TEMPLATE_PATH%%/Requirements_Template.md` and apply its guidelines to the requirement draft.
    - Analyze the project's main existing source code, ignoring unit test source code, documentation automation source code, and any companion scripts (e.g., launching scripts, environment management scripts, example scripts, ...), to infer the software’s behavior and main features, then produce a hierarchical requirements structure with a maximum depth of 3 levels.
       - Requirements for the output:
          - Describe any text-based UI and/or GUI functionality implemented.
@@ -93,7 +93,7 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
       - Write each requirement for other LLM **Agents** and Automated Parsers, NOT humans.
       - Must be optimized for machine comprehension. Do not write flowery prose. Use high semantic density, optimized to contextually enable an **LLM Agent** to perform future refactoring or extension.
       - Write requirements, section titles, tables, and other content in **English language**.
-      - Follow `.req/docs/Requirements_Template.md`.
+      - Follow `%%TEMPLATE_PATH%%/Requirements_Template.md`.
       - Output the entire response in clean, properly formatted Markdown.
 2. Validate the **Software Requirements Specification**
    - Review `%%DOC_PATH%%/REQUIREMENTS.md`. If previously read and present in context, use that content; otherwise read the file and cross-reference with the source code.

@@ -23,11 +23,11 @@ In scope: static analysis of source under %%SRC_PATHS%% to generate/overwrite on
 
 ## Pre-requisite: Execution Context
 - **CRITICAL**: All information declared in this `Pre-requisite: Execution Context` section MUST remain continuously available in the active execution context for the entire workflow and MUST NEVER be dropped, forgotten, or overwritten.
-- Generate <WORKTREE_NAME> with `req --git-wt-name`, retain the literal result for later steps, and use simple sequential execution with only linear shell commands compatible with restrictive filtering systems for all worktree operations in this workflow.
+- Generate <WORKTREE_NAME> with the `worktree-name` tool, retain the literal result for later steps, and use simple sequential execution with only linear shell commands compatible with restrictive filtering systems for all worktree operations in this workflow.
 
 ## Absolute Rules, Non-Negotiable
 - **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
-- **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active git worktree directory, except under `/tmp`, and except for worktree operations executed through `req --git-wt-create <WORKTREE_NAME>` and `req --git-wt-delete <WORKTREE_NAME>`.
+- **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active git worktree directory, except under `/tmp`, and except for worktree operations executed through the `worktree-create` and `worktree-delete` tools.
 - You can read, write, or edit `%%DOC_PATH%%/FLOWCHART.md`.
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
 - **CRITICAL**: Do not modify any project files except creating/updating `%%DOC_PATH%%/FLOWCHART.md`.
@@ -90,44 +90,23 @@ Structured index of all source-defined symbols (functions, classes, structs, obj
 
 Use to: identify candidate symbols by name, description, or `@satisfies` link; obtain exact file paths and line ranges; understand function signatures and contracts before extracting code. Cross-reference with WORKFLOW.md call-traces to narrow scope.
 
-### 3. Code Extraction: `req --find` / `req --files-find`
-Extract actual source constructs as structured markdown with signatures, line ranges, and optional line-numbered code. Use after pillars 1-2 to extract only the targeted constructs identified during analysis.
-#### What these commands do (and what they don't)
-- Extract named constructs (e.g., CLASS, FUNCTION, STRUCT, INTERFACE, IMPORT, …) filtered by TAG and name-regex.
-- Regex (PATTERN) matches construct name only (not body). For body-content search, use rg/git grep (pillar 4).
-- Output per file: header `@@@ <filepath> | <language>`, per-construct blocks with:
-    - `### <TAG>: <name>` + optional Signature + `Lines: <start>-<end>`
-    - optional extracted Doxygen fields (if present in/around the construct)
-    - fenced code block with the complete construct slice (comments stripped, strings preserved)
-#### Choose the right mode
-- Project-wide scan: use --find (`--here` is implicit; `--base` is forbidden)
-    - Syntax: `req --find <TAG_FILTER> <NAME_REGEX>`
-    - Note: --find scans all files under configured source dirs; does not take a filename.
-- Target specific files: use --files-find (standalone; --here is optional but harmless)
-    - Syntax: `req --here --files-find <TAG_FILTER> <NAME_REGEX> <FILE1> [FILE2 ...]`
-#### Enable line-numbered code for evidence citation
-Add --enable-line-numbers (code lines prefixed as `<n>:`):
-- `req --enable-line-numbers --find "<TAG_FILTER>" "<NAME_REGEX>"`
-- `req --here --enable-line-numbers --files-find "<TAG_FILTER>" "<NAME_REGEX>" <FILE...>`
-#### TAGs and filters
-- TAG_FILTER: pipe-separated, case-insensitive (e.g., `CLASS|FUNCTION|IMPORT`).
-- Tags are language-dependent; unsupported tags are ignored. Run `req -h` for supported TAGs per language.
-- Broad cross-language TAG_FILTER: `CLASS|STRUCT|ENUM|INTERFACE|TRAIT|IMPL|FUNCTION|METHOD|MODULE|NAMESPACE|TYPE_ALIAS|TYPEDEF|IMPORT|CONSTANT|VARIABLE|MACRO|DECORATOR|COMPONENT|PROPERTY|PROTOCOL|EXTENSION|UNION`
-#### Regex rules (NAME_REGEX)
-- Regex matching follows `re.search()` semantics against construct names (tool behavior, independent of repository language).
-- Prefer anchored patterns: exact `^Foo$`, prefix `^parse_`, suffix `Service$`. Use `.*` only when scope is already constrained by files/TAGs.
-#### Failure modes you must handle
-- "No constructs found": adjust TAGs (supported?), file paths, or NAME_REGEX (valid regex?).
-- Regex-based extractor (not full AST): treat results as evidence pointers; confirm edge cases by opening referenced file/lines.
+### 3. Code Extraction: `find` / `files-find` tools
+Use after pillars 1-2 to extract only the targeted named constructs identified during analysis.
+- Prefer the `find` tool for project-wide named-symbol, declaration, and construct scans, and the `files-find` tool when target files are already known.
+- Use these tools as the default discovery path for named-symbol, declaration, construct, and known-file lookup; use `rg`/`git grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
+- Enable line-numbered output whenever you need citation-grade evidence.
+- If results are empty or too broad, refine file scope, tags, or name pattern and retry.
+- Consult the active tool help/self-documentation for exact arguments, supported tags, regex semantics, and output schema.
+
 
 ### 4. Supplementary Search: `rg` / `git grep`
-Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, or any content not captured by construct-name-based extraction.
+Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
 
 ### Recommended Analysis Workflow
 1. **Read `%%DOC_PATH%%/WORKFLOW.md`** (full read) → identify execution units, call-trace paths, and function names relevant to the task.
 2. **Read `%%DOC_PATH%%/REFERENCES.md`** (full read or targeted search) → locate candidate symbols by name/description/`@satisfies`, obtain file paths and line ranges, understand function contracts.
-3. **Extract code** via `req --find`/`req --files-find` → use symbol names from steps 1-2 as NAME_REGEX, file paths as --files-find targets; enable --enable-line-numbers when citing evidence.
-4. **Search code bodies** via `rg`/`git grep` → find patterns, references, or values not captured by construct-level extraction.
+3. **Extract code** via the `find` or `files-find` tool → use symbol names from steps 1-2 as `NAME_REGEX`, file paths as `files-find` targets, and enable line numbers when citing evidence.
+4. **Search code bodies** via `rg`/`git grep` → after `find`/`files-find`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
 
 ## Execution Protocol (Global vs Local)
 You must manage the execution flow using two distinct methods:
@@ -154,10 +133,10 @@ During the execution flow you MUST follow these directives:
 ## Steps
 Create internally a *check-list* for the **Global Roadmap** including all the numbered steps below: `1..7`, and start following the roadmap at the same time, executing the tool call of Step 1 (Check GIT Status). If a tool call is required in Step 1, invoke it immediately; otherwise proceed to Step 1 without additional commentary. Do not add extra intent-adjustment checks unless explicitly listed in the Steps section.
 1. **CRITICAL**: Check GIT Status
-   - Check GIT status with `req --git-check`. If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Git status unclear!", and then terminate the execution.
+   - Check GIT status with the `git-status` tool. If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Git status unclear!", and then terminate the execution.
 2. **CRITICAL**: Worktree Generation & Isolation
-   - Derive <BASE_PATH> with `req --get-base-path`, derive <GIT_PATH> with `req --git-path`, and generate <WORKTREE_NAME> with `req --git-wt-name` using literal `req` commands executed sequentially without shell composition.
-   - Create the dedicated isolated worktree with `req --git-wt-create <WORKTREE_NAME>`, then execute `cd <GIT_PATH>/../<WORKTREE_NAME>` before proceeding to the next step.
+   - Derive <BASE_PATH> with the `base-path` tool, derive <GIT_PATH> with the `git-path` tool, and generate <WORKTREE_NAME> with the `worktree-name` tool using simple sequential tool execution without shell composition.
+   - Create the dedicated isolated worktree with the `worktree-create` tool, then execute `cd <GIT_PATH>/../<WORKTREE_NAME>` before proceeding to the next step.
    - If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Worktree generation failed!", and then terminate the execution.
 
 3. Static analysis: build the runtime model from %%SRC_PATHS%%
@@ -180,18 +159,39 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Deduce actual control flow, branching, and joins from the code analyzed in Step 3.
    - **Granularity consistency rule (CRITICAL):** maintain the same abstraction level across sibling branches that originate from the same decision node. If one branch exposes internal sub-operations of a composite internal function, then every sibling branch at that same decision depth MUST expose the equivalent internal sub-operations needed for semantic comparison; conversely, if one branch remains collapsed as a composite phase, sibling branches MUST NOT mix in a lower-level expansion unless that lower-level expansion is required in all sibling branches.
    - **Comparability rule (CRITICAL):** the flowchart MUST make branch-to-branch equivalence explicit. Do not represent one branch as a wrapper function and another branch as the wrapper’s internal steps when both branches implement the same logical stage. Expand or collapse branches so that a downstream LLM Agent can compare them without inferring hidden steps.
-   - **No hidden-step ambiguity rule (CRITICAL):** do not allow a phase node to visually imply that an internal operation is skipped when that operation is actually executed inside a composite helper. If a composite helper contains operations that are shown explicitly in an alternative branch, either:
-      - expand the composite helper to expose those operations in the same phase, or
+   - **Mandatory-entry vs optional-effect rule (CRITICAL):** explicitly distinguish between:
+      - mandatory stage entry: the caller always invokes the helper or stage wrapper;
+      - optional stage effect: the invoked helper may internally return the input unchanged, bypass its principal work, or otherwise behave as pass-through.
+     A helper that is always called MUST NOT be rendered as an unconditional application phase when its internal logic can disable the actual effect.
+   - **Decision-hoisting rule (CRITICAL):** when the first semantically relevant branch is internal to a composite helper, the flowchart MUST extract that branch outside the helper and render it as an explicit decision diamond using the real code condition expressed in strict pseudo-code.
+   - **Optional-wrapper detection heuristic (CRITICAL):** the agent MUST actively inspect composite helpers and wrappers for internal optional-work branches, including patterns such as:
+      - `if <mode> is None`
+      - `if not <enabled_flag>`
+      - enum or selector values such as `disable`
+      - early returns such as `return stage_input`, `return input_rgb`, or `return image_rgb_float`
+      - diagnostic messages indicating `disabled` or `pass-through`
+   - **Enable-state wrapper rule (CRITICAL):** if a composite helper contains enable-state validation and can bypass its principal work, the flowchart MUST render that condition as an explicit decision node even when the helper call itself is always executed. Wrappers with enable-state validation plus pass-through MUST NOT remain collapsed into a single phase node when the hidden decision changes the semantic meaning of the flow.
+   - **No hidden-step ambiguity rule (CRITICAL):** do not allow a phase node to visually imply that an internal operation is skipped when that operation is actually executed inside a composite helper, or to imply unconditional work when that helper can internally bypass the work. If a composite helper contains operations that are shown explicitly in an alternative branch, or contains the first relevant bypass condition for that logical stage, either:
+      - expand the composite helper to expose those operations and the bypass decision in the same decision region, or
       - collapse the alternative branch to the same semantic level,
-        choosing the representation that maximizes branch readability and preserves the primary execution flow.
-   - **Wrapper-function rule (CRITICAL):** a composite internal function MAY appear as a single visible phase only if its internal operations are not separately exposed elsewhere in parallel or sibling branches of the same logical decision region. If they are exposed elsewhere, the composite function MUST be expanded enough to remove ambiguity.
-   - **Join readability rule (CRITICAL):** place joins only after branches have been normalized to a comparable semantic granularity. A join MUST NOT merge branches where one path still hides decision-relevant internal operations that are shown in another path.
-   - **Skipped-work rule (CRITICAL):** represent intentionally skipped work explicitly only when the source code emits or enforces a real skip condition. Do not create an apparent skip merely by collapsing one branch more aggressively than another.
-   - Before writing the file, perform a strict internal audit cross-referencing the generated flowchart, the runtime model from Step 3, and the original source code.
+        choosing the representation that maximizes branch readability and preserves the primary execution flow without hiding branch semantics.
+   - **Optional-stage representation rule (CRITICAL):** for a helper with mandatory stage entry and optional stage effect, the flowchart MUST show both semantic outcomes:
+      - disabled or bypass branch: render an explicit pass-through path to the next step;
+      - enabled branch: render either the phase node that actually applies the effect or a coherent expansion of its internal sub-steps.
+   - **Wrapper-function rule (CRITICAL):** a composite internal function MAY appear as a single visible phase only if its internal operations are not separately exposed elsewhere in parallel or sibling branches of the same logical decision region and it does not hide a decision that changes whether the stage effect is applied. If those operations are exposed elsewhere, or if such a decision exists, the composite function MUST be expanded enough to remove ambiguity.
+   - **Join readability rule (CRITICAL):** place joins only after branches have been normalized to a comparable semantic granularity and after enabled and disabled branches have actually reconverged. A join MUST NOT merge branches where one path still hides decision-relevant internal operations that are shown in another path.
+   - **Skipped-work rule (CRITICAL):** represent intentionally skipped work explicitly only when the source code emits or enforces a real skip condition. Do not create an apparent skip merely by collapsing one branch more aggressively than another. Real pass-through branches MUST be rendered as explicit bypasses.
+   - **Lexical signal check (CRITICAL):** before finalizing the flowchart, cross-check `%%DOC_PATH%%/REQUIREMENTS.md` and `%%DOC_PATH%%/WORKFLOW.md` for signal terms such as `optional`, `disabled`, `pass-through`, `enable-state validation`, `when omitted`, and `disable`; when those terms correspond to an analyzed stage or helper, ensure the flowchart reflects the same optionality semantics with visible decision and bypass structure.
+   - **Normative category example (CRITICAL):** "A helper always invoked by the caller but internally bypassed by an enable/disable selector MUST be rendered as a decision region, not as an unconditional application phase."
+   - Before writing the file, perform a strict internal audit cross-referencing the generated flowchart, the runtime model from Step 3, the original source code, and the lexical signals found in `%%DOC_PATH%%/REQUIREMENTS.md` and `%%DOC_PATH%%/WORKFLOW.md`.
    - The internal audit MUST explicitly verify:
       - every decision node has sibling branches rendered at comparable semantic granularity;
+      - every optional stage with mandatory stage entry has a visible decision node;
+      - every real pass-through is represented as an explicit bypass;
       - no branch appears to omit an operation that is actually executed inside a composite helper;
+      - no composite helper hides a decision that changes the stage effect;
       - every visible skip corresponds to a real code-level skip or bypass condition;
+      - no join occurs before enabled and disabled branches reconverge;
       - every join occurs only after branch normalization.
    - Mermaid generation rules:
       - Write the final output strictly enclosed within ` ```mermaid ` and ` ``` ` fences.
@@ -202,19 +202,19 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 5. **CRITICAL**: Stage & commit
    - Show a summary of changes with `git diff` and `git diff --stat`.
    - Stage changes explicitly (prefer targeted add; avoid `git add -A` if it may include unintended files): `git add <file...>` (ensure to include only `%%DOC_PATH%%/FLOWCHART.md`).
-   - Ensure there is something to commit with: `git diff --cached --quiet && echo "Nothing to commit. Aborting."`. If command output contains "Aborting", OUTPUT exactly "No changes to commit.", and then delete the isolated worktree and branch with `req --git-wt-delete <WORKTREE_NAME>`, and then terminate the execution.
+   - Ensure there is something to commit with: `git diff --cached --quiet && echo "Nothing to commit. Aborting."`. If command output contains "Aborting", OUTPUT exactly "No changes to commit.", and then delete the isolated worktree and branch with the `worktree-delete` tool, and then terminate the execution.
    - Commit a structured commit message with: `git commit -m "docs(<COMPONENT>)<BREAKING>: <DESCRIPTION> [useReq]"`
       - Set `<COMPONENT>` to the most specific component, module, or function affected. If multiple areas are touched, choose the primary one. If you cannot identify a unique component, use `core`.
       - Set `<DESCRIPTION>` to a short, clear summary in **English language** of what changed, including (when applicable) updates to: requirements/specs, source code, tests. Use present tense, avoid vague wording, and keep it under ~80 characters if possible.
       - Set `<BREAKING>` to `!` if a breaking change was implemented (a modification to an API, library, or system that breaks backward compatibility, causing dependent client applications or code to fail or behave incorrectly), set empty otherwise.
       - Include main features added, requirements changes, or a bug-fix description adding a multi-line comment (maximum 10 lines).
          - Do not include the 'Co-authored-by' trailer or any AI attribution. A GPG-signed commit is not required.
-   - Confirm the repo is clean with `req --git-check`. If the command returns an error code or prints any text containing "ERROR", override the final line with EXACTLY "WARNING: Flowchart request completed with unclean git repository!".
+   - Confirm the repo is clean with the `git-status` tool. If the command returns an error code or prints any text containing "ERROR", override the final line with EXACTLY "WARNING: Flowchart request completed with unclean git repository!".
 6. **CRITICAL**: Merge Conflict Management
    - Return to the original repository directory (the sibling directory of the worktree).
-   - Ensure you are on the original branch used before worktree creation by deriving `<BASE_PATH>` with `req --get-base-path` if needed and executing `cd <BASE_PATH>`.
+   - Ensure you are on the original branch used before worktree creation by deriving `<BASE_PATH>` with the `base-path` tool if needed and executing `cd <BASE_PATH>`.
    - Merge the isolated branch into the original branch: `git merge <WORKTREE_NAME>`
-   - If the merge completes successfully, delete the isolated worktree and branch with `req --git-wt-delete <WORKTREE_NAME>`; if the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Worktree cleanup verification failed!", and then terminate the execution.
+   - If the merge completes successfully, delete the isolated worktree and branch with the `worktree-delete` tool; if the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Worktree cleanup verification failed!", and then terminate the execution.
    - If the merge fails or results in conflicts, do NOT remove the worktree directory and override the final line with EXACTLY "WARNING: Flowchart request completed with merge conflicting!".
 7. Present results
    - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. Use the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**. Final line MUST be exactly: STATUS: OK or STATUS: ERROR.

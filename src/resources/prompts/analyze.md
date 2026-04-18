@@ -74,44 +74,23 @@ Structured index of all source-defined symbols (functions, classes, structs, obj
 
 Use to: identify candidate symbols by name, description, or `@satisfies` link; obtain exact file paths and line ranges; understand function signatures and contracts before extracting code. Cross-reference with WORKFLOW.md call-traces to narrow scope.
 
-### 3. Code Extraction: `req --find` / `req --files-find`
-Extract actual source constructs as structured markdown with signatures, line ranges, and optional line-numbered code. Use after pillars 1-2 to extract only the targeted constructs identified during analysis.
-#### What these commands do (and what they don't)
-- Extract named constructs (e.g., CLASS, FUNCTION, STRUCT, INTERFACE, IMPORT, …) filtered by TAG and name-regex.
-- Regex (PATTERN) matches construct name only (not body). For body-content search, use rg/git grep (pillar 4).
-- Output per file: header `@@@ <filepath> | <language>`, per-construct blocks with:
-    - `### <TAG>: <name>` + optional Signature + `Lines: <start>-<end>`
-    - optional extracted Doxygen fields (if present in/around the construct)
-    - fenced code block with the complete construct slice (comments stripped, strings preserved)
-#### Choose the right mode
-- Project-wide scan: use --find (`--here` is implicit; `--base` is forbidden)
-    - Syntax: `req --find <TAG_FILTER> <NAME_REGEX>`
-    - Note: --find scans all files under configured source dirs; does not take a filename.
-- Target specific files: use --files-find (standalone; --here is optional but harmless)
-    - Syntax: `req --here --files-find <TAG_FILTER> <NAME_REGEX> <FILE1> [FILE2 ...]`
-#### Enable line-numbered code for evidence citation
-Add --enable-line-numbers (code lines prefixed as `<n>:`):
-- `req --enable-line-numbers --find "<TAG_FILTER>" "<NAME_REGEX>"`
-- `req --here --enable-line-numbers --files-find "<TAG_FILTER>" "<NAME_REGEX>" <FILE...>`
-#### TAGs and filters
-- TAG_FILTER: pipe-separated, case-insensitive (e.g., `CLASS|FUNCTION|IMPORT`).
-- Tags are language-dependent; unsupported tags are ignored. Run `req -h` for supported TAGs per language.
-- Broad cross-language TAG_FILTER: `CLASS|STRUCT|ENUM|INTERFACE|TRAIT|IMPL|FUNCTION|METHOD|MODULE|NAMESPACE|TYPE_ALIAS|TYPEDEF|IMPORT|CONSTANT|VARIABLE|MACRO|DECORATOR|COMPONENT|PROPERTY|PROTOCOL|EXTENSION|UNION`
-#### Regex rules (NAME_REGEX)
-- Regex matching follows `re.search()` semantics against construct names (tool behavior, independent of repository language).
-- Prefer anchored patterns: exact `^Foo$`, prefix `^parse_`, suffix `Service$`. Use `.*` only when scope is already constrained by files/TAGs.
-#### Failure modes you must handle
-- "No constructs found": adjust TAGs (supported?), file paths, or NAME_REGEX (valid regex?).
-- Regex-based extractor (not full AST): treat results as evidence pointers; confirm edge cases by opening referenced file/lines.
+### 3. Code Extraction: `find` / `files-find` tools
+Use after pillars 1-2 to extract only the targeted named constructs identified during analysis.
+- Prefer the `find` tool for project-wide named-symbol, declaration, and construct scans, and the `files-find` tool when target files are already known.
+- Use these tools as the default discovery path for named-symbol, declaration, construct, and known-file lookup; use `rg`/`git grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
+- Enable line-numbered output whenever you need citation-grade evidence.
+- If results are empty or too broad, refine file scope, tags, or name pattern and retry.
+- Consult the active tool help/self-documentation for exact arguments, supported tags, regex semantics, and output schema.
+
 
 ### 4. Supplementary Search: `rg` / `git grep`
-Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, or any content not captured by construct-name-based extraction.
+Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
 
 ### Recommended Analysis Workflow
 1. **Read `%%DOC_PATH%%/WORKFLOW.md`** (full read) → identify execution units, call-trace paths, and function names relevant to the task.
 2. **Read `%%DOC_PATH%%/REFERENCES.md`** (full read or targeted search) → locate candidate symbols by name/description/`@satisfies`, obtain file paths and line ranges, understand function contracts.
-3. **Extract code** via `req --find`/`req --files-find` → use symbol names from steps 1-2 as NAME_REGEX, file paths as --files-find targets; enable --enable-line-numbers when citing evidence.
-4. **Search code bodies** via `rg`/`git grep` → find patterns, references, or values not captured by construct-level extraction.
+3. **Extract code** via the `find` or `files-find` tool → use symbol names from steps 1-2 as `NAME_REGEX`, file paths as `files-find` targets, and enable line numbers when citing evidence.
+4. **Search code bodies** via `rg`/`git grep` → after `find`/`files-find`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
 
 
 ## Execution Protocol (Global vs Local)
@@ -140,7 +119,7 @@ During the execution flow you MUST follow these directives:
 ## Steps
 Create internally a *check-list* for the **Global Roadmap** including all the numbered steps below: `1..2`, and start following the roadmap at the same time, following the instructions of Step 1 (Check file presence). Do not add extra intent-adjustment checks unless explicitly listed in the Steps section.
 1. **CRITICAL**: Check `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md` and `%%DOC_PATH%%/REFERENCES.md` file presence
-   - Check required docs presence with `req --docs-check`. If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Required docs check failed!", and then terminate the execution.
+   - Check required docs presence with the `docs-check` tool. If the command returns an error code or prints any text containing "ERROR", OUTPUT exactly "ERROR: Required docs check failed!", and then terminate the execution.
 2. Analyze the [User Request](#users-request) and present the analysis report
    - Using [User Request](#users-request) as a unified semantic framework, extract all directly and tangentially related information from `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md` and `%%DOC_PATH%%/REFERENCES.md`, prioritizing high recall to capture every borderline connection across both sources, to identify the most likely related files and functions based on explicit evidence, and treat any uncertain links as candidates without claiming completeness, then analyze the involved source code from %%SRC_PATHS%% to answer the [User Request](#users-request), ensuring compliance with %%GUIDELINES_FILES%% documents if present.
    - Do NOT create or modify tests in this workflow. If you cite tests as evidence, treat them as read-only artifacts.
