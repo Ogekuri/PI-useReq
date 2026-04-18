@@ -10,7 +10,7 @@
   - Type: Process
   - Role: Bash wrapper dispatcher for standalone extension-debug inspection, session replay, prompt replay, tool replay, and raw harness passthrough.
   - Entrypoints:
-    - `main(...)` [`scripts/req-debug.sh`]
+    - `main(...)` [`scripts/pi-usereq-debug.sh`]
   - Parent Process: none
   - Threads: no explicit threads detected
 - ID: `PROC:tool-args-to-params`
@@ -467,23 +467,23 @@
 
 ### `PROC:req-debug`
 - Entrypoints:
-  - `main(...)`: bash wrapper runtime root [`scripts/req-debug.sh`]
+  - `main(...)`: bash wrapper runtime root [`scripts/pi-usereq-debug.sh`]
 - Lifecycle/trigger:
-  - Start trigger: Bash executes `scripts/req-debug.sh` as a one-shot wrapper.
+  - Start trigger: Bash executes `scripts/pi-usereq-debug.sh` as a one-shot wrapper.
   - Stop trigger: returns delegated harness exit status or local validation failure.
   - Looping model: single-pass subcommand dispatch with no persistent loop.
   - Threads: no explicit threads detected.
   - Startup invariant: script body resolves `TSX_BIN` through `resolve_tsx_binary(...)` before invoking `main(...)`.
 - Internal Call-Trace Tree:
-  - `main(...)`: parse wrapper subcommand, normalize prompt and tool convenience aliases, rewrite tool `--args` when requested, and delegate to the TypeScript harness [`scripts/req-debug.sh`]
-    - `print_usage(...)`: render wrapper usage text for help and empty invocation [`scripts/req-debug.sh`]
-    - `require_value(...)`: validate required command, prompt, tool, or raw operands [`scripts/req-debug.sh`]
-    - `contains_exact_option(...)`: detect forwarded `--args` or `--params` tokens for command and prompt replay [`scripts/req-debug.sh`]
-    - `contains_long_option(...)`: detect explicit long options before inferring positional payloads [`scripts/req-debug.sh`]
-    - `normalize_prompt_name(...)`: map bare prompt aliases to registered `req-*` command names [`scripts/req-debug.sh`]
-    - `forward_tool_subcommand(...)`: normalize wrapper tool forwarding and rewrite `--args` into `--params` JSON when present [`scripts/req-debug.sh`]
-      - `build_tool_params_json(...)`: spawn the tool-argument converter and capture serialized JSON params [`scripts/req-debug.sh`]
-    - `run_debug_extension(...)`: enter repository root, apply default `--cwd` and `--extension`, and spawn the TypeScript harness [`scripts/req-debug.sh`]
+  - `main(...)`: parse wrapper subcommand, normalize prompt and tool convenience aliases, rewrite tool `--args` when requested, and delegate to the TypeScript harness [`scripts/pi-usereq-debug.sh`]
+    - `print_usage(...)`: render wrapper usage text for help and empty invocation [`scripts/pi-usereq-debug.sh`]
+    - `require_value(...)`: validate required command, prompt, tool, or raw operands [`scripts/pi-usereq-debug.sh`]
+    - `contains_exact_option(...)`: detect forwarded `--args` or `--params` tokens for command and prompt replay [`scripts/pi-usereq-debug.sh`]
+    - `contains_long_option(...)`: detect explicit long options before inferring positional payloads [`scripts/pi-usereq-debug.sh`]
+    - `normalize_prompt_name(...)`: map bare prompt aliases to registered `req-*` command names [`scripts/pi-usereq-debug.sh`]
+    - `forward_tool_subcommand(...)`: normalize wrapper tool forwarding and rewrite `--args` into `--params` JSON when present [`scripts/pi-usereq-debug.sh`]
+      - `build_tool_params_json(...)`: spawn the tool-argument converter and capture serialized JSON params [`scripts/pi-usereq-debug.sh`]
+    - `run_debug_extension(...)`: enter repository root, apply default `--cwd` and `--extension`, and spawn the TypeScript harness [`scripts/pi-usereq-debug.sh`]
 - External Boundaries:
   - Bash shell argument expansion, stdout, and stderr handling.
   - `git rev-parse`, `ln -s`, and resolved `tsx` executable lookup triggered by `resolve_tsx_binary(...)` during startup.
@@ -878,10 +878,10 @@
 - `PROC:req-debug` -> `PROC:tool-args-to-params`
   - Mechanism: child-process spawn through resolved `tsx` executable.
   - Endpoint/channel: CLI argv plus captured stdout/stderr.
-  - Payload/data-shape: wrapper tool name plus raw `--args` text, returned as one serialized JSON params object [`scripts/req-debug.sh`, `scripts/tool-args-to-params.ts`]
+  - Payload/data-shape: wrapper tool name plus raw `--args` text, returned as one serialized JSON params object [`scripts/pi-usereq-debug.sh`, `scripts/tool-args-to-params.ts`]
 - `PROC:req-debug` -> `PROC:debug-ext`
   - Mechanism: child-process spawn through resolved `tsx` executable.
   - Endpoint/channel: CLI argv plus inherited stdout/stderr.
-  - Payload/data-shape: wrapper-normalized subcommand and forwarded debug-harness options with default `--cwd` and `--extension` values, including rewritten tool `--params` JSON when `--args` was supplied [`scripts/req-debug.sh`, `scripts/debug-extension.ts`]
+  - Payload/data-shape: wrapper-normalized subcommand and forwarded debug-harness options with default `--cwd` and `--extension` values, including rewritten tool `--params` JSON when `--args` was supplied [`scripts/pi-usereq-debug.sh`, `scripts/debug-extension.ts`]
 - Internal thread communication edges: none.
 - Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, and `PROC:pi-host` are alternative runtime entry modes over shared modules; only `PROC:req-debug` directly spawns `PROC:tool-args-to-params` and `PROC:debug-ext`.

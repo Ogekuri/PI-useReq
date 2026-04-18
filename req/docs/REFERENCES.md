@@ -7,7 +7,7 @@
 │   │   ├── extension-debug-harness.ts
 │   │   ├── recording-extension-api.ts
 │   │   └── sdk-smoke.ts
-│   ├── req-debug.sh
+│   ├── pi-usereq-debug.sh
 │   └── tool-args-to-params.ts
 └── src
     ├── cli.ts
@@ -636,13 +636,13 @@ import { replaySessionStart, resolveHarnessPaths, type OfflineContractSnapshot }
 
 ---
 
-# req-debug.sh | Shell | 330L | 15 symbols | 0 imports | 63 comments
-> Path: `scripts/req-debug.sh`
+# pi-usereq-debug.sh | Shell | 330L | 15 symbols | 0 imports | 63 comments
+> Path: `scripts/pi-usereq-debug.sh`
 
 ## Definitions
 
 - var `readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"` (L10)
-- @brief Resolves the absolute directory containing `req-debug.sh`.
+- @brief Resolves the absolute directory containing `pi-usereq-debug.sh`.
 - @details Uses `BASH_SOURCE[0]` so invocation through relative paths or symlinks still anchors repository-relative lookups. Runtime is O(p) in path length. No filesystem mutation occurs.
 - var `readonly REPO_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"` (L14)
 - @brief Resolves the repository root that owns the debug wrapper.
@@ -739,8 +739,8 @@ import { replaySessionStart, resolveHarnessPaths, type OfflineContractSnapshot }
 
 # tool-args-to-params.ts | TypeScript | 208L | 7 symbols | 3 imports | 9 comments
 > Path: `scripts/tool-args-to-params.ts`
-- @brief Converts req-debug tool `--args` text into the JSON object expected by `--params`.
-- @details Parses the wrapper-only tool-argument grammar, tokenizes shell-style text without invoking a shell, validates the argument shape for the current registered tool set, and emits one compact JSON object for `scripts/req-debug.sh`. Runtime is O(n) in argument length. Side effects are limited to stdout and stderr writes.
+- @brief Converts pi-usereq-debug tool `--args` text into the JSON object expected by `--params`.
+- @details Parses the wrapper-only tool-argument grammar, tokenizes shell-style text without invoking a shell, validates the argument shape for the current registered tool set, and emits one compact JSON object for `scripts/pi-usereq-debug.sh`. Runtime is O(n) in argument length. Side effects are limited to stdout and stderr writes.
 
 ## Imports
 ```
@@ -769,9 +769,9 @@ import { shellSplit } from "../src/core/utils.js";
 - @return {{ tokens: string[]; present: boolean }} Remaining tokens plus presence marker.
 
 ### fn `export function buildToolParamsFromArgsText(toolName: string, argsText: string): Record<string, unknown>` (L97-152)
-- @brief Converts one req-debug tool `--args` string into a tool-parameter object.
+- @brief Converts one pi-usereq-debug tool `--args` string into a tool-parameter object.
 - @details Tokenizes shell-style text with `shellSplit`, applies tool-specific positional and flag mappings, and rejects unsupported or structurally incomplete argument layouts before wrapper forwarding. Runtime is O(n) in token count. No external state is mutated.
-- @param[in] toolName {string} Registered tool name selected by `scripts/req-debug.sh`.
+- @param[in] toolName {string} Registered tool name selected by `scripts/pi-usereq-debug.sh`.
 - @param[in] argsText {string} Raw wrapper `--args` payload.
 - @return {Record<string, unknown>} JSON-serializable tool-parameter object compatible with `--params`.
 - @throws {ReqError} Throws when the selected tool has no supported `--args` mapping or when the token layout is invalid.
@@ -2108,29 +2108,29 @@ import type { UseReqConfig } from "./config.js";
 
 ---
 
-# pi-usereq-tools.ts | TypeScript | 125L | 5 symbols | 0 imports | 14 comments
+# pi-usereq-tools.ts | TypeScript | 140L | 5 symbols | 0 imports | 14 comments
 > Path: `src/core/pi-usereq-tools.ts`
 - @brief Declares the configurable pi-usereq active-tool inventory.
 - @details Provides canonical custom-tool names, supported embedded-tool names, default enablement subsets, and normalization helpers shared by configuration loading, extension startup, and test doubles. The module is side-effect free. Lookup and normalization costs are linear in configured tool count.
 
 ## Definitions
 
-- type `export type PiUsereqCustomToolName = (typeof PI_USEREQ_CUSTOM_TOOL_NAMES)[number];` (L68)
+- type `export type PiUsereqCustomToolName = (typeof PI_USEREQ_CUSTOM_TOOL_NAMES)[number];` (L83)
 - @brief Represents one valid extension-owned configurable tool identifier.
 - @details Narrows arbitrary strings to the literal union derived from `PI_USEREQ_CUSTOM_TOOL_NAMES`. The alias is compile-time only and introduces no runtime cost.
-- type `export type PiUsereqEmbeddedToolName = (typeof PI_USEREQ_EMBEDDED_TOOL_NAMES)[number];` (L74)
+- type `export type PiUsereqEmbeddedToolName = (typeof PI_USEREQ_EMBEDDED_TOOL_NAMES)[number];` (L89)
 - @brief Represents one valid embedded configurable tool identifier.
 - @details Narrows arbitrary strings to the literal union derived from `PI_USEREQ_EMBEDDED_TOOL_NAMES`. The alias is compile-time only and introduces no runtime cost.
-- type `export type PiUsereqStartupToolName = (typeof PI_USEREQ_STARTUP_TOOL_NAMES)[number];` (L80)
+- type `export type PiUsereqStartupToolName = (typeof PI_USEREQ_STARTUP_TOOL_NAMES)[number];` (L95)
 - @brief Represents one valid configurable active-tool identifier.
 - @details Narrows arbitrary strings to the literal union derived from `PI_USEREQ_STARTUP_TOOL_NAMES`. The alias is compile-time only and introduces no runtime cost.
-### fn `export function isPiUsereqEmbeddedToolName(name: string): name is PiUsereqEmbeddedToolName` (L106-108)
+### fn `export function isPiUsereqEmbeddedToolName(name: string): name is PiUsereqEmbeddedToolName` (L121-123)
 - @brief Tests whether one tool name belongs to the supported embedded-tool subset.
 - @details Performs one set-membership probe against `PI_USEREQ_EMBEDDED_TOOL_SET`. Runtime is O(1). No external state is mutated.
 - @param[in] name {string} Candidate tool name.
 - @return {boolean} `true` when the name belongs to the embedded configurable-tool subset.
 
-### fn `export function normalizeEnabledPiUsereqTools(value: unknown): PiUsereqStartupToolName[]` (L118-125)
+### fn `export function normalizeEnabledPiUsereqTools(value: unknown): PiUsereqStartupToolName[]` (L133-140)
 - @brief Normalizes a user-configured active-tool list.
 - @details Returns the default enabled-tool tuple when the input is not an array. Otherwise filters to string entries, removes names outside the configurable tool set, and deduplicates while preserving first-seen order. Time complexity is O(n). No external state is mutated.
 - @param[in] value {unknown} Raw configuration payload for `enabled-tools`.
@@ -2141,11 +2141,11 @@ import type { UseReqConfig } from "./config.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`PiUsereqCustomToolName`|type||68||
-|`PiUsereqEmbeddedToolName`|type||74||
-|`PiUsereqStartupToolName`|type||80||
-|`isPiUsereqEmbeddedToolName`|fn||106-108|export function isPiUsereqEmbeddedToolName(name: string):...|
-|`normalizeEnabledPiUsereqTools`|fn||118-125|export function normalizeEnabledPiUsereqTools(value: unkn...|
+|`PiUsereqCustomToolName`|type||83||
+|`PiUsereqEmbeddedToolName`|type||89||
+|`PiUsereqStartupToolName`|type||95||
+|`isPiUsereqEmbeddedToolName`|fn||121-123|export function isPiUsereqEmbeddedToolName(name: string):...|
+|`normalizeEnabledPiUsereqTools`|fn||133-140|export function normalizeEnabledPiUsereqTools(value: unkn...|
 
 
 ---

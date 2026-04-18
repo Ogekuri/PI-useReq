@@ -119,14 +119,14 @@ function buildSdkFixture(overrides?: Partial<SdkContractSnapshot>): SdkContractS
 }
 
 /**
- * @brief Executes `scripts/req-debug.sh` in a subprocess.
+ * @brief Executes `scripts/pi-usereq-debug.sh` in a subprocess.
  * @details Resolves the repository-local wrapper path from the current test module, runs it through `bash` so shell semantics remain stable, and captures the resulting stdout, stderr, and exit status for wrapper-focused assertions. Runtime is dominated by subprocess execution. Side effects are limited to child-process creation.
  * @param[in] args {string[]} Wrapper CLI arguments excluding the script path.
  * @param[in] cwd {string} Working directory exposed to the wrapper as the caller cwd.
  * @return {import("node:child_process").SpawnSyncReturns<string>} Captured subprocess result.
  */
-function runReqDebug(args: string[], cwd: string) {
-  const scriptPath = fileURLToPath(new URL("../scripts/req-debug.sh", import.meta.url));
+function runPiUsereqDebug(args: string[], cwd: string) {
+  const scriptPath = fileURLToPath(new URL("../scripts/pi-usereq-debug.sh", import.meta.url));
   return spawnSync("bash", [scriptPath, ...args], {
     cwd,
     encoding: "utf8",
@@ -313,7 +313,7 @@ test("replayTool captures tool results and cwd semantics", async () => {
   }
 });
 
-test("req-debug tool forwards --params unchanged for files-find", () => {
+test("pi-usereq-debug tool forwards --params unchanged for files-find", () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     fs.writeFileSync(path.join(projectBase, "src", "find_target.py"), "def foo():\n    return 1\n", "utf8");
@@ -323,7 +323,7 @@ test("req-debug tool forwards --params unchanged for files-find", () => {
       files: ["src/find_target.py"],
       enableLineNumbers: true,
     };
-    const result = runReqDebug(
+    const result = runPiUsereqDebug(
       ["tool", "files-find", "--params", JSON.stringify(expectedParams), "--format", "json"],
       projectBase,
     );
@@ -336,7 +336,7 @@ test("req-debug tool forwards --params unchanged for files-find", () => {
   }
 });
 
-test("req-debug tool converts --args text into forwarded params JSON", () => {
+test("pi-usereq-debug tool converts --args text into forwarded params JSON", () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     fs.writeFileSync(path.join(projectBase, "src", "find_target.py"), "def foo():\n    return 1\n", "utf8");
@@ -346,7 +346,7 @@ test("req-debug tool converts --args text into forwarded params JSON", () => {
       files: ["src/find_target.py"],
       enableLineNumbers: true,
     };
-    const result = runReqDebug(
+    const result = runPiUsereqDebug(
       [
         "tool",
         "files-find",

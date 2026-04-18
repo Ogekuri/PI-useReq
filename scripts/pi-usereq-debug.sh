@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-# @brief Resolves the absolute directory containing `req-debug.sh`.
+# @brief Resolves the absolute directory containing `pi-usereq-debug.sh`.
 # @details Uses `BASH_SOURCE[0]` so invocation through relative paths or symlinks still anchors repository-relative lookups. Runtime is O(p) in path length. No filesystem mutation occurs.
 readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -67,7 +67,7 @@ readonly TSX_BIN="$(resolve_tsx_binary)"
 # @satisfies REQ-061, REQ-062, REQ-065
 print_usage() {
   cat <<EOF
-Usage: ./scripts/req-debug.sh <subcommand> [options]
+Usage: ./scripts/pi-usereq-debug.sh <subcommand> [options]
 
 Subcommands:
   inspect [debug-extension options...]
@@ -93,11 +93,11 @@ Default forwarding:
   - Later --cwd or --extension arguments override the defaults.
 
 Examples:
-  ./scripts/req-debug.sh inspect --format pretty
-  ./scripts/req-debug.sh session --format json
-  ./scripts/req-debug.sh prompt analyze --args "Inspect prompt rendering"
-  ./scripts/req-debug.sh tool files-find --args 'FUNCTION ^run src/index.ts --enable-line-numbers'
-  ./scripts/req-debug.sh raw command --name req-analyze --args "Review REQ-004"
+  ./scripts/pi-usereq-debug.sh inspect --format pretty
+  ./scripts/pi-usereq-debug.sh session --format json
+  ./scripts/pi-usereq-debug.sh prompt analyze --args "Inspect prompt rendering"
+  ./scripts/pi-usereq-debug.sh tool files-find --args 'FUNCTION ^run src/index.ts --enable-line-numbers'
+  ./scripts/pi-usereq-debug.sh raw command --name req-analyze --args "Review REQ-004"
 EOF
 }
 
@@ -320,7 +320,7 @@ main() {
       run_debug_extension "$@"
       ;;
     *)
-      printf 'Error: unknown req-debug subcommand: %s\n' "${subcommand}" >&2
+      printf 'Error: unknown pi-usereq-debug subcommand: %s\n' "${subcommand}" >&2
       print_usage >&2
       return 1
       ;;

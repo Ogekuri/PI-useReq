@@ -202,7 +202,7 @@ const PROMPT_COMMAND_EXAMPLES: Record<string, string> = {
   "req-references": 'npm run debug:ext:command -- --name req-references --args "Regenerate REFERENCES.md after code changes" --cwd . --format pretty',
   "req-renumber": 'npm run debug:ext:command -- --name req-renumber --args "Renumber requirements after section reorganization" --cwd . --format pretty',
   "req-workflow": 'npm run debug:ext:command -- --name req-workflow --args "Refresh WORKFLOW.md from current runtime evidence" --cwd . --format pretty',
-  "req-write": 'npm run debug:ext:command -- --name req-write --args "Write missing documentation sections for req/docs" --cwd . --format pretty',
+  "req-write": 'npm run debug:ext:command -- --name req-write --args "Write missing documentation sections for pi-usereq/docs" --cwd . --format pretty',
 };
 
 /**
@@ -212,7 +212,7 @@ const PROMPT_COMMAND_EXAMPLES: Record<string, string> = {
 const TOOL_EXAMPLES: Record<string, string> = {
   "git-path": "npm run debug:ext:tool -- --name git-path --cwd . --format pretty",
   "get-base-path": "npm run debug:ext:tool -- --name get-base-path --cwd . --format pretty",
-  "files-tokens": `npm run debug:ext:tool -- --name files-tokens --params '{"files":["req/docs/REQUIREMENTS.md","req/docs/WORKFLOW.md"]}' --cwd . --format json`,
+  "files-tokens": `npm run debug:ext:tool -- --name files-tokens --params '{"files":["pi-usereq/docs/REQUIREMENTS.md","pi-usereq/docs/WORKFLOW.md"]}' --cwd . --format json`,
   "files-references": `npm run debug:ext:tool -- --name files-references --params '{"files":["src/index.ts","src/core/tool-runner.ts"]}' --cwd . --format pretty`,
   "files-compress": `npm run debug:ext:tool -- --name files-compress --params '{"files":["src/index.ts"],"enableLineNumbers":true}' --cwd . --format json`,
   "files-find": `npm run debug:ext:tool -- --name files-find --params '{"tag":"FUNCTION|METHOD","pattern":"^run","files":["src/core/tool-runner.ts"],"enableLineNumbers":true}' --cwd . --format pretty`,

@@ -1188,6 +1188,7 @@ test("session_start enables default custom tools and default embedded tools only
   for (const toolName of PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES) {
     assert.ok(activeTools.has(toolName), `missing default active tool ${toolName}`);
   }
+  assert.equal(activeTools.has("find"), false);
   assert.equal(activeTools.has("grep"), false);
   assert.equal(activeTools.has("ls"), false);
 });

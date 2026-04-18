@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.19"
+version: "0.0.20"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -69,7 +69,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
 - **DES-006**: MUST keep CLI compression and construct-search renderers as markdown blocks headed by `@@@ <path> | <language>`, while agent-tool compression and construct-search responses use dedicated JSON payload builders.
-- **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/req-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
+- **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
 - **DES-008**: MUST format `files-references`, `references`, `files-compress`, and `compress` agent-tool outputs as deterministic agent-oriented JSON with dedicated metadata fields for source structure, symbols, and Doxygen tags.
 
 ### 3.2 Functions
@@ -94,14 +94,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-057**: MUST compare offline and SDK inventories for command names, command descriptions, tool names, tool descriptions, parameter-schema presence, normalized provenance/sourceInfo, and active tools after `session_start`.
 - **REQ-058**: MUST exit with non-zero status when a requested harness command or tool is not registered or when SDK parity loading fails.
 - **REQ-059**: MUST expose package scripts `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
-- **REQ-060**: MUST provide `scripts/req-debug.sh` as a bash wrapper for `scripts/debug-extension.ts`.
-- **REQ-061**: MUST make `scripts/req-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
-- **REQ-062**: MUST make `scripts/req-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
-- **REQ-065**: MUST make `scripts/req-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
+- **REQ-060**: MUST provide `scripts/pi-usereq-debug.sh` as a bash wrapper for `scripts/debug-extension.ts`.
+- **REQ-061**: MUST make `scripts/pi-usereq-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
+- **REQ-062**: MUST make `scripts/pi-usereq-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
+- **REQ-065**: MUST make `scripts/pi-usereq-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
 - **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, `src-dir`, and `reset-context`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
 - **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for configurable custom and embedded pi CLI active tools.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `grep`, and `ls`.
-- **REQ-064**: MUST default all custom tools and embedded `read`, `bash`, `edit`, and `write` to enabled, and embedded `grep` and `ls` to disabled.
+- **REQ-064**: MUST default all custom tools except `find` and embedded `read`, `bash`, `edit`, and `write` to enabled, and custom `find` plus embedded `grep` and `ls` to disabled.
 - **REQ-066**: MUST expose `reset-context` as a project configuration boolean with persisted values `true` and `false`.
 - **REQ-067**: MUST make `req-<prompt>` commands perform a `/new`-equivalent pre-reset before prompt delivery when `reset-context` is `true`, using pi CLI reset APIs when available.
 - **REQ-068**: MUST make `req-<prompt>` commands skip the pre-reset and send the rendered prompt into the current session when `reset-context` is `false`.
@@ -202,7 +202,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-018**: MUST verify offline harness inspection and session-start replay capture registered commands, registered tools, event handlers, active tools, statuses, notifications, editor text, and sent user messages.
 - **TST-019**: MUST verify offline harness command and tool replay invoke registered handlers, preserve requested cwd semantics, and capture prompt payloads, tool results, and UI side effects.
 - **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, and `package.json` declares the `debug:ext*` harness scripts.
-- **TST-021**: MUST verify `scripts/req-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
+- **TST-021**: MUST verify `scripts/pi-usereq-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
 - **TST-022**: MUST verify `files-references` and `references` JSON outputs expose repository, file, symbol, location, and Doxygen facts through dedicated structured fields.
 - **TST-023**: MUST verify harness inspection surfaces agent-oriented `files-references` and `references` tool descriptions with output schema, configuration, specialized behaviors, and failure details.
 - **TST-024**: MUST verify `files-find` and `find` JSON outputs expose request, repository, file, match, location, and Doxygen facts through dedicated structured fields.
@@ -223,7 +223,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/static-check.ts` maps languages/extensions, parses enable specs, resolves inputs, and dispatches checker classes.
 - `src/core/config.ts`, `src/core/resources.ts`, and `src/core/prompts.ts` provide config persistence, home-resource synchronization, and prompt rendering.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
-- `scripts/debug-extension.ts`, `scripts/req-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
+- `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@mariozechner/pi-coding-agent` provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
@@ -285,7 +285,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── req/docs/
 ├── scripts/
 │   ├── debug-extension.ts
-│   ├── req-debug.sh
+│   ├── pi-usereq-debug.sh
 │   └── lib/{extension-debug-harness.ts,recording-extension-api.ts,sdk-smoke.ts}
 ├── .github/
 │   ├── workflows/
@@ -319,7 +319,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | PRJ-003 | `src/index.ts` :: `configurePiUsereq` :: menu options include `Set docs-dir`, `Set tests-dir`, `Manage src-dir`, `Manage static-check`, `Manage startup tools`, `Reset defaults`, `Save and close`. |
 | PRJ-004 | `src/core/tool-runner.ts` :: `runGitCheck`, `runGitWtName`, `runGitWtCreate`, `runGitWtDelete` :: git validation and worktree helpers are exported and invoked by CLI/extension wrappers. |
 | PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,templates,guidelines}`. |
-| CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `req/docs`, `tests`, and `["src"]`. |
+| CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `pi-usereq/docs`, `tests`, and `["src"]`. |
 | CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
 | CTN-003 | `src/core/tool-runner.ts` :: `SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG))`; `src/core/source-analyzer.ts` :: alias assignments `specs.cc = specs.cpp`, `specs.cxx = specs.cpp`, `specs.hpp = specs.cpp`, `specs.exs = specs.elixir`. |
 | CTN-004 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` :: defines `fixtureRoots` with `tests/fixtures` and `${testsDirRel}/fixtures`, then filters matching files out before execution. |

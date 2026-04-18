@@ -1,7 +1,7 @@
 /**
  * @file
- * @brief Converts req-debug tool `--args` text into the JSON object expected by `--params`.
- * @details Parses the wrapper-only tool-argument grammar, tokenizes shell-style text without invoking a shell, validates the argument shape for the current registered tool set, and emits one compact JSON object for `scripts/req-debug.sh`. Runtime is O(n) in argument length. Side effects are limited to stdout and stderr writes.
+ * @brief Converts pi-usereq-debug tool `--args` text into the JSON object expected by `--params`.
+ * @details Parses the wrapper-only tool-argument grammar, tokenizes shell-style text without invoking a shell, validates the argument shape for the current registered tool set, and emits one compact JSON object for `scripts/pi-usereq-debug.sh`. Runtime is O(n) in argument length. Side effects are limited to stdout and stderr writes.
  */
 
 import process from "node:process";
@@ -26,7 +26,7 @@ const USAGE_TEXT = `Usage: node --import tsx ./scripts/tool-args-to-params.ts --
 
 Options:
   --name <tool>           Registered tool name.
-  --args <text>           Raw req-debug tool argument text.
+  --args <text>           Raw pi-usereq-debug tool argument text.
   --help                  Show this help text.
 `;
 
@@ -86,9 +86,9 @@ function takeBooleanFlag(tokens: string[], flag: string): { tokens: string[]; pr
 }
 
 /**
- * @brief Converts one req-debug tool `--args` string into a tool-parameter object.
+ * @brief Converts one pi-usereq-debug tool `--args` string into a tool-parameter object.
  * @details Tokenizes shell-style text with `shellSplit`, applies tool-specific positional and flag mappings, and rejects unsupported or structurally incomplete argument layouts before wrapper forwarding. Runtime is O(n) in token count. No external state is mutated.
- * @param[in] toolName {string} Registered tool name selected by `scripts/req-debug.sh`.
+ * @param[in] toolName {string} Registered tool name selected by `scripts/pi-usereq-debug.sh`.
  * @param[in] argsText {string} Raw wrapper `--args` payload.
  * @return {Record<string, unknown>} JSON-serializable tool-parameter object compatible with `--params`.
  * @throws {ReqError} Throws when the selected tool has no supported `--args` mapping or when the token layout is invalid.

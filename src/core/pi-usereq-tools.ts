@@ -53,11 +53,26 @@ export const PI_USEREQ_STARTUP_TOOL_NAMES = [
 
 /**
  * @brief Enumerates the default enabled-tool configuration.
- * @details Enables all extension-owned tools plus the supported embedded read/write shell quartet while leaving embedded discovery helpers disabled until explicitly configured. Access complexity is O(1).
+ * @details Enables every extension-owned tool except `find` plus the supported embedded read/write shell quartet while leaving discovery helpers `find`, `grep`, and `ls` disabled until explicitly configured. Access complexity is O(1).
  * @satisfies REQ-064
  */
 export const PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES = [
-  ...PI_USEREQ_CUSTOM_TOOL_NAMES,
+  "git-path",
+  "get-base-path",
+  "files-tokens",
+  "files-references",
+  "files-compress",
+  "files-find",
+  "references",
+  "compress",
+  "tokens",
+  "files-static-check",
+  "static-check",
+  "git-check",
+  "docs-check",
+  "git-wt-name",
+  "git-wt-create",
+  "git-wt-delete",
   ...PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES,
 ] as const;
 
