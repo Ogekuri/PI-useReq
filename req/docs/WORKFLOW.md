@@ -714,7 +714,7 @@
           - `buildPiDevConformanceBlock(...)`: resolve manifest-gated pi.dev review and API-compliance rules [`src/core/prompts.ts`]
         - `adaptPromptForInternalTools(...)`: rewrite tool names for internal wrappers [`src/core/prompts.ts`]
       - `deliverPromptCommand(...)`: dispatch the rendered prompt according to `reset-context` [`src/index.ts`]
-        - External boundaries: `ctx.waitForIdle(...)`, `ctx.newSession(...)`, and `pi.sendUserMessage(...)`; reset-enabled delivery performs the `/new`-equivalent reset first and sends the prompt only after a successful session replacement, while reset-disabled delivery sends the prompt into the current session.
+        - External boundaries: `ctx.waitForIdle(...)`, `ctx.newSession(...)`, and `pi.sendUserMessage(...)`; reset-enabled delivery performs the `/new`-equivalent reset and appends the prompt during new-session setup so the replacement session starts with the rendered user message, while reset-disabled delivery sends the prompt into the current session.
     - `registerAgentTools(...)`: register structured pi tools whose execute callbacks reuse internal runner families and agent-oriented payload builders [`src/index.ts`]
       - `ensureBundledResourcesAccessible(...)`: validate installation-owned bundled resources for tool executes that need bundled assets [`src/core/resources.ts`]
         - `getBundledResourceRoot(...)`: resolve installation-owned resource root [`src/core/resources.ts`]
