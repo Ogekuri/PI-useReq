@@ -151,8 +151,19 @@ function createFakePi() {
 }
 
 /**
+ * @brief Encodes one fake themed fragment for deterministic status assertions.
+ * @details Wraps the requested color and text in stable XML-like markers so tests can validate color intent without terminal escape sequences. Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] color {string} Requested theme color token.
+ * @param[in] text {string} Raw text payload.
+ * @return {string} Encoded themed fragment.
+ */
+function formatFakeThemeForeground(color: string, text: string): string {
+  return `<${color}>${text}</${color}>`;
+}
+
+/**
  * @brief Creates a fake extension command context with scripted UI interactions.
- * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, and `newSession` behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
+ * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
  * @param[in] cwd {string} Working directory exposed to command handlers.
  * @param[in] plan {FakeCtxPlan} Scripted select and input responses.
  * @return {any} Fake command context compatible with the tested handlers.
@@ -193,6 +204,11 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }) {
       return { cancelled: false };
     },
     ui: {
+      theme: {
+        fg(color: string, text: string) {
+          return formatFakeThemeForeground(color, text);
+        },
+      },
       async select(_title: string, _items: string[]) {
         return selects.shift();
       },
@@ -1165,7 +1181,8 @@ test("session_start applies configured pi-usereq startup tools", async () => {
     `${JSON.stringify({
       "docs-dir": DEFAULT_DOCS_DIR,
       "tests-dir": "tests",
-      "src-dir": ["src"],
+      "src-dir": ["src", "foobar"],
+      "reset-context": false,
       "static-check": {},
       "enabled-tools": ["git-path", "static-check"],
     }, null, 2)}\n`,
@@ -1174,10 +1191,19 @@ test("session_start applies configured pi-usereq startup tools", async () => {
 
   const pi = createFakePi();
   piUsereqExtension(pi);
-  await pi.emit("session_start", { reason: "startup" }, createFakeCtx(cwd));
+  const ctx = createFakeCtx(cwd);
+  await pi.emit("session_start", { reason: "startup" }, ctx);
 
   const activeTools = new Set(pi.getActiveTools());
   assert.deepEqual([...activeTools].sort(), ["git-path", "static-check"]);
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    [
+      `${formatFakeThemeForeground("accent", "docs:")}${formatFakeThemeForeground("warning", DEFAULT_DOCS_DIR)}${formatFakeThemeForeground("dim", " • ")}${formatFakeThemeForeground("accent", "tests:")}${formatFakeThemeForeground("warning", "tests")}${formatFakeThemeForeground("dim", " • ")}${formatFakeThemeForeground("accent", "src:")}${formatFakeThemeForeground("warning", "src,foobar")}`,
+      `${formatFakeThemeForeground("accent", "tools:")}${formatFakeThemeForeground("warning", "git-path,static-check")}`,
+      `${formatFakeThemeForeground("accent", "reset-context:")}${formatFakeThemeForeground("warning", "disabled")}`,
+    ].join("\n"),
+  );
 });
 
 test("session_start enables default custom tools and default embedded tools only", async () => {

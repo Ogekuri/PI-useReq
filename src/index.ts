@@ -469,6 +469,51 @@ function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[] {
 }
 
 /**
+ * @brief Describes the theme subset required by pi-usereq status rendering.
+ * @details Restricts status formatting to foreground-color application so runtime contexts, offline replays, and tests can satisfy the same structural contract without depending on the full UI theme API. Compile-time only and introduces no runtime cost.
+ */
+interface StatusTheme {
+  fg: (color: "accent" | "warning" | "dim", text: string) => string;
+}
+
+/**
+ * @brief Formats one status-bar field as colored name-plus-value text.
+ * @details Renders the field name with the accent color and the value with the warning color while keeping the separator outside both fragments. Runtime is O(n) in combined text length. No external state is mutated.
+ * @param[in] theme {StatusTheme} Theme adapter providing foreground coloring.
+ * @param[in] fieldName {string} Field label emitted before the colon.
+ * @param[in] value {string} Field value emitted after the colon.
+ * @return {string} Colored field fragment.
+ * @satisfies REQ-112
+ */
+function formatPiUsereqStatusField(theme: StatusTheme, fieldName: string, value: string): string {
+  return `${theme.fg("accent", `${fieldName}:`)}${theme.fg("warning", value)}`;
+}
+
+/**
+ * @brief Builds the multi-line pi-usereq status-bar payload.
+ * @details Renders configured docs, tests, and source paths on the first line, enabled tool names on the second line, and the `reset-context` state on the third line. Empty tool selections render as `none`. Runtime is O(s + t) in configured source-path and tool counts. No external state is mutated.
+ * @param[in] theme {StatusTheme} Theme adapter providing foreground coloring.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] enabledTools {string[]} Normalized enabled tool names.
+ * @return {string} Multi-line status-bar text.
+ * @satisfies REQ-009, REQ-109, REQ-110, REQ-111, REQ-112
+ */
+function formatPiUsereqStatus(theme: StatusTheme, config: UseReqConfig, enabledTools: string[]): string {
+  const separator = theme.fg("dim", " • ");
+  const sourcePaths = config["src-dir"].join(",");
+  const toolsValue = enabledTools.length > 0 ? enabledTools.join(",") : "none";
+  const resetContextValue = config["reset-context"] ? "enabled" : "disabled";
+  const firstLine = [
+    formatPiUsereqStatusField(theme, "docs", config["docs-dir"]),
+    formatPiUsereqStatusField(theme, "tests", config["tests-dir"]),
+    formatPiUsereqStatusField(theme, "src", sourcePaths),
+  ].join(separator);
+  const secondLine = formatPiUsereqStatusField(theme, "tools", toolsValue);
+  const thirdLine = formatPiUsereqStatusField(theme, "reset-context", resetContextValue);
+  return [firstLine, secondLine, thirdLine].join("\n");
+}
+
+/**
  * @brief Classifies one configurable tool as embedded or extension-owned.
  * @details Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated.
  * @param[in] tool {ToolInfo} Runtime tool descriptor.
@@ -1499,11 +1544,11 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the multi-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-066
+ * @satisfies REQ-006, REQ-066, REQ-109, REQ-110, REQ-111, REQ-112
  */
 async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
   let config = loadProjectConfig(ctx.cwd);
@@ -1511,10 +1556,7 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
   const ensureSaved = () => saveProjectConfig(ctx.cwd, config);
   const refreshStatus = () => {
     const enabledTools = getConfiguredEnabledPiUsereqTools(config);
-    ctx.ui.setStatus(
-      "pi-usereq",
-      `docs:${config["docs-dir"]} • tests:${config["tests-dir"]} • src:${config["src-dir"].length} • tools:${enabledTools.length}`,
-    );
+    ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, enabledTools));
   };
 
   while (true) {
@@ -1609,10 +1651,10 @@ function registerConfigCommands(pi: ExtensionAPI): void {
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
+ * @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the multi-line status bar. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   ensureBundledResourcesAccessible();
@@ -1623,9 +1665,7 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
     ensureBundledResourcesAccessible();
     const config = loadProjectConfig(ctx.cwd);
     applyConfiguredPiUsereqTools(pi, config);
-    ctx.ui.setStatus(
-      "pi-usereq",
-      `docs:${config["docs-dir"]} • tests:${config["tests-dir"]} • src:${config["src-dir"].length} • tools:${getConfiguredEnabledPiUsereqTools(config).length}`,
-    );
+    const enabledTools = getConfiguredEnabledPiUsereqTools(config);
+    ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, enabledTools));
   });
 }

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.21"
+version: "0.0.22"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -107,7 +107,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-067**: MUST make `req-<prompt>` commands perform a `/new`-equivalent pre-reset before prompt delivery when `reset-context` is `true`, using pi CLI reset APIs when available.
 - **REQ-068**: MUST make `req-<prompt>` commands skip the pre-reset and send the rendered prompt into the current session when `reset-context` is `false`.
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
-- **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish `pi-usereq` status text during `session_start`.
+- **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish multi-line `pi-usereq` status text during `session_start`.
+- **REQ-109**: MUST make the first status-bar line render `docs`, `tests`, and `src` fields with explicit configured path values, keeping every field name separate from its value.
+- **REQ-110**: MUST make the second status-bar line render enabled startup tool names as a comma-separated `tools` field.
+- **REQ-111**: MUST make the third status-bar line render enabled configuration flags as comma-separated `<flag>:<state>` pairs, including `reset-context`.
+- **REQ-112**: MUST render status-bar field names in violet and field values in yellow.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
@@ -189,7 +193,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-003**: MUST verify standalone CLI outputs for `files-tokens`, `files-compress`, `files-find`, and `--test-static-check` match the Python oracle for every fixture file.
 - **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, and adds static-check entries through raw-spec and guided flows.
-- **TST-006**: MUST verify `session_start` activates configured startup tools and updates the `pi-usereq` status line.
+- **TST-006**: MUST verify `session_start` activates configured startup tools and updates the multi-line `pi-usereq` status bar.
+- **TST-031**: MUST verify the status bar renders explicit docs/tests/src paths, comma-separated enabled tools, `reset-context` state, and violet/yellow field-value color separation.
 - **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
 - **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.

@@ -259,8 +259,19 @@ function buildBuiltinToolDefinition(name: string): RecordingToolDefinition & { s
 }
 
 /**
+ * @brief Encodes one fake themed fragment for offline status capture.
+ * @details Wraps the requested color and text in stable XML-like markers so offline replay can preserve color intent in serialized status snapshots without terminal escape sequences. Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] color {string} Requested theme color token.
+ * @param[in] text {string} Raw text payload.
+ * @return {string} Encoded themed fragment.
+ */
+function formatRecordedThemeForeground(color: string, text: string): string {
+  return `<${color}>${text}</${color}>`;
+}
+
+/**
  * @brief Records UI activity and session-control side effects for one offline command context.
- * @details Exposes the subset of `ctx.ui` plus command-only session APIs consumed by the extension, dequeues scripted responses for interactive handlers, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI or session-control operation plus delegated setup cost. Side effects are limited to in-memory state mutation.
+ * @details Exposes the subset of `ctx.ui` plus command-only session APIs consumed by the extension, dequeues scripted responses for interactive handlers, encodes theme-color output deterministically, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI or session-control operation plus delegated setup cost. Side effects are limited to in-memory state mutation.
  */
 export class RecordingCommandContext {
   /**
@@ -274,6 +285,9 @@ export class RecordingCommandContext {
    * @details Each method mutates recorder state only and never touches a real terminal UI. Access complexity is O(1).
    */
   public readonly ui: {
+    theme: {
+      fg: (color: string, text: string) => string;
+    };
     select: (title: string, items: string[]) => Promise<string | undefined>;
     input: (title: string, placeholder?: string) => Promise<string | undefined>;
     notify: (message: string, level?: string) => void;
@@ -297,7 +311,7 @@ export class RecordingCommandContext {
 
   /**
    * @brief Initializes a recording command context.
-   * @details Copies scripted response queues so callers can reuse input arrays safely across replays, stores the user-message recorder used by `ctx.newSession(...setup)`, then binds a stable `ui` adapter over the recorder methods. Runtime is O(s + i) in queued select and input count. Side effects are limited to instance initialization.
+   * @details Copies scripted response queues so callers can reuse input arrays safely across replays, stores the user-message recorder used by `ctx.newSession(...setup)`, then binds a stable `ui` adapter over recorder methods plus deterministic theme-color encoding. Runtime is O(s + i) in queued select and input count. Side effects are limited to instance initialization.
    * @param[in] cwd {string} Working directory exposed through `ctx.cwd`.
    * @param[in] plan {RecordingUiPlan | undefined} Optional scripted UI responses.
    * @param[in] recordSessionUserMessage {(content: JsonValue) => void | undefined} Optional recorder for user messages appended during new-session setup.
@@ -309,6 +323,9 @@ export class RecordingCommandContext {
     this.inputQueue = [...(plan?.inputs ?? [])];
     this.recordSessionUserMessage = recordSessionUserMessage ?? (() => undefined);
     this.ui = {
+      theme: {
+        fg: (color: string, text: string) => formatRecordedThemeForeground(color, text),
+      },
       select: async (title: string, items: string[]) => this.recordSelect(title, items),
       input: async (title: string, placeholder?: string) => this.recordInput(title, placeholder),
       notify: (message: string, level = "info") => this.recordNotification(message, level),

@@ -240,11 +240,17 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
   try {
     writeEnabledTools(projectBase, ["git-path", "static-check"]);
     const report = await replaySessionStart(projectBase);
+    const status = report.ui.statuses["pi-usereq"] ?? "";
 
     assert.deepEqual([...report.activeTools].sort(), ["git-path", "static-check"]);
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
-    assert.match(report.ui.statuses["pi-usereq"] ?? "", /tools:2/);
+    assert.match(
+      status,
+      /<accent>docs:<\/accent><warning>pi-usereq\/docs<\/warning><dim> • <\/dim><accent>tests:<\/accent><warning>tests<\/warning><dim> • <\/dim><accent>src:<\/accent><warning>src<\/warning>/,
+    );
+    assert.match(status, /\n<accent>tools:<\/accent><warning>git-path,static-check<\/warning>\n/);
+    assert.match(status, /<accent>reset-context:<\/accent><warning>enabled<\/warning>/);
     assert.equal(report.ui.notifications.length, 0);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -281,7 +287,7 @@ test("replayCommand captures interactive UI side effects", async () => {
 
     assert.deepEqual(report.activeTools, []);
     assert.ok(report.ui.notifications.some((entry) => entry.message === "Disabled all configurable active tools"));
-    assert.match(report.ui.statuses["pi-usereq"] ?? "", /tools:0/);
+    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>tools:<\/accent><warning>none<\/warning>/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
