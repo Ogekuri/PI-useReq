@@ -2150,7 +2150,7 @@ import type { UseReqConfig } from "./config.js";
 
 ---
 
-# prompts.ts | TypeScript | 180L | 5 symbols | 4 imports | 11 comments
+# prompts.ts | TypeScript | 184L | 5 symbols | 4 imports | 11 comments
 > Path: `src/core/prompts.ts`
 - @brief Renders bundled pi-usereq prompts for the current project context.
 - @details Applies placeholder substitution, legacy tool-name rewrites, and conditional pi.dev conformance guidance before prompt text is sent to the agent. Runtime is linear in prompt size plus replacement count. Side effects are limited to filesystem reads used for manifest checks and bundled prompt loading.
@@ -2165,31 +2165,31 @@ import { readBundledPrompt } from "./resources.js";
 
 ## Definitions
 
-### fn `function buildPiDevConformanceBlock(promptName: string, projectBase: string): string` (L92-101)
+### fn `function buildPiDevConformanceBlock(promptName: string, projectBase: string): string` (L96-105)
 - @brief Builds the conditional pi.dev conformance block for one rendered prompt.
 - @details Emits the manifest-driven rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the pi.dev manifest. Time complexity O(1). No filesystem writes.
 - @param[in] promptName {string} Bundled prompt identifier.
 - @param[in] projectBase {string} Absolute project root used for manifest existence checks.
 - @return {string} Markdown bullet block or the empty string when injection is not applicable.
-- @satisfies REQ-032, REQ-033, REQ-034
+- @satisfies REQ-032, REQ-033, REQ-034, REQ-108
 
-### fn `function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string` (L112-119)
+### fn `function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string` (L116-123)
 - @brief Injects the pi.dev conformance block into the prompt behavior section.
 - @details Inserts the block immediately after the `## Behavior` heading so downstream agents evaluate the rule before workflow steps. Leaves prompts unchanged when no behavior section exists or the block is already present. Time complexity O(n).
 - @param[in] text {string} Prompt markdown after placeholder replacement.
 - @param[in] promptName {string} Bundled prompt identifier.
 - @param[in] projectBase {string} Absolute project root used for manifest existence checks.
 - @return {string} Prompt markdown with zero or one injected conformance block.
-- @satisfies REQ-032, REQ-033, REQ-034
+- @satisfies REQ-032, REQ-033, REQ-034, REQ-108
 
-### fn `export function adaptPromptForInternalTools(text: string): string` (L128-134)
+### fn `export function adaptPromptForInternalTools(text: string): string` (L132-138)
 - @brief Rewrites bundled prompt tool references from legacy `req --...` syntax to internal tool names.
 - @details Applies deterministic global regex replacements so prompt text matches the extension-registered tool surface instead of the standalone CLI spelling. Time complexity O(p*r) where p is pattern count and r is prompt length.
 - @param[in] text {string} Prompt markdown before tool-reference normalization.
 - @return {string} Prompt markdown with internal tool names.
 - @satisfies REQ-003
 
-### fn `export function applyReplacements(text: string, replacements: Record<string, string>): string` (L144-150)
+### fn `export function applyReplacements(text: string, replacements: Record<string, string>): string` (L148-154)
 - @brief Applies literal placeholder replacements to bundled prompt markdown.
 - @details Replaces every placeholder token using split/join semantics so all occurrences are updated without regex escaping. Time complexity O(t*n) where t is replacement count and n is prompt length.
 - @param[in] text {string} Prompt markdown containing placeholder tokens.
@@ -2197,7 +2197,7 @@ import { readBundledPrompt } from "./resources.js";
 - @return {string} Prompt markdown with all placeholder tokens expanded.
 - @satisfies REQ-002
 
-### fn `export function renderPrompt(` (L162-180)
+### fn `export function renderPrompt(` (L166-184)
 - @brief Renders a bundled prompt for the current project context.
 - @details Loads the bundled markdown template, expands configuration-derived placeholders, injects conditional pi.dev conformance guidance, and rewrites legacy tool references to internal names. Time complexity O(n) relative to prompt size. No tracked files are modified.
 - @param[in] promptName {string} Bundled prompt identifier.
@@ -2205,16 +2205,16 @@ import { readBundledPrompt } from "./resources.js";
 - @param[in] projectBase {string} Absolute project root used for placeholder and manifest resolution.
 - @param[in] config {UseReqConfig} Effective project configuration used for path substitutions.
 - @return {string} Fully rendered prompt markdown ready for `pi.sendUserMessage(...)`.
-- @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034
+- @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`buildPiDevConformanceBlock`|fn||92-101|function buildPiDevConformanceBlock(promptName: string, p...|
-|`injectPiDevConformanceBlock`|fn||112-119|function injectPiDevConformanceBlock(text: string, prompt...|
-|`adaptPromptForInternalTools`|fn||128-134|export function adaptPromptForInternalTools(text: string)...|
-|`applyReplacements`|fn||144-150|export function applyReplacements(text: string, replaceme...|
-|`renderPrompt`|fn||162-180|export function renderPrompt(|
+|`buildPiDevConformanceBlock`|fn||96-105|function buildPiDevConformanceBlock(promptName: string, p...|
+|`injectPiDevConformanceBlock`|fn||116-123|function injectPiDevConformanceBlock(text: string, prompt...|
+|`adaptPromptForInternalTools`|fn||132-138|export function adaptPromptForInternalTools(text: string)...|
+|`applyReplacements`|fn||148-154|export function applyReplacements(text: string, replaceme...|
+|`renderPrompt`|fn||166-184|export function renderPrompt(|
 
 
 ---

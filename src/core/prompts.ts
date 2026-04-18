@@ -72,12 +72,16 @@ const PI_DEV_MANIFEST_PROMPT_PATH = "docs/pi.dev/agent-document-manifest.json";
 const PI_DEV_DOCS_PROMPT_PATH = "docs/pi.dev";
 /**
  * @brief Defines the injected pi.dev conformance guidance block.
- * @details The block instructs downstream agents to read the manifest and referenced documentation before changing pi.dev-integrated code. Construction happens once at module load. Access complexity is O(1).
+ * @details The block requires manifest-first review and manifest-defined API compliance for new or modified software that interfaces with the pi.dev CLI. Construction happens once at module load. Access complexity is O(1).
+ * @satisfies REQ-033, REQ-034, REQ-108
  */
 const PI_DEV_CONFORMANCE_BLOCK = [
-  "- If the task touches extension code that interfaces with pi CLI or pi.dev APIs, "
+  "- If the task creates or modifies software that interfaces with the pi.dev CLI, "
     + `read \`${PI_DEV_MANIFEST_PROMPT_PATH}\` and every document path it `
     + "references before analysis, implementation, verification, or bug fixing.",
+  `- Treat \`${PI_DEV_MANIFEST_PROMPT_PATH}\` as the authoritative API contract; `
+    + "new or modified pi.dev CLI integrations MUST comply with the APIs it "
+    + "describes.",
   `- Treat manifest document paths as relative to \`${PI_DEV_DOCS_PROMPT_PATH}/\`.`,
 ].join("\n");
 
@@ -87,7 +91,7 @@ const PI_DEV_CONFORMANCE_BLOCK = [
  * @param[in] promptName {string} Bundled prompt identifier.
  * @param[in] projectBase {string} Absolute project root used for manifest existence checks.
  * @return {string} Markdown bullet block or the empty string when injection is not applicable.
- * @satisfies REQ-032, REQ-033, REQ-034
+ * @satisfies REQ-032, REQ-033, REQ-034, REQ-108
  */
 function buildPiDevConformanceBlock(promptName: string, projectBase: string): string {
   if (!PI_DEV_AWARE_PROMPT_NAMES.has(promptName)) {
@@ -107,7 +111,7 @@ function buildPiDevConformanceBlock(promptName: string, projectBase: string): st
  * @param[in] promptName {string} Bundled prompt identifier.
  * @param[in] projectBase {string} Absolute project root used for manifest existence checks.
  * @return {string} Prompt markdown with zero or one injected conformance block.
- * @satisfies REQ-032, REQ-033, REQ-034
+ * @satisfies REQ-032, REQ-033, REQ-034, REQ-108
  */
 function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string {
   const block = buildPiDevConformanceBlock(promptName, projectBase);
@@ -157,7 +161,7 @@ export function applyReplacements(text: string, replacements: Record<string, str
  * @param[in] projectBase {string} Absolute project root used for placeholder and manifest resolution.
  * @param[in] config {UseReqConfig} Effective project configuration used for path substitutions.
  * @return {string} Fully rendered prompt markdown ready for `pi.sendUserMessage(...)`.
- * @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034
+ * @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108
  */
 export function renderPrompt(
   promptName: string,
