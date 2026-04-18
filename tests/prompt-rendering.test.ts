@@ -10,7 +10,7 @@ import { renderPrompt } from "../src/core/prompts.js";
 test("embedded resources are copied under the user home pi-usereq resource root", () => {
   const resourceRoot = ensureHomeResources();
   assert.ok(fs.existsSync(path.join(resourceRoot, "prompts", "analyze.md")));
-  assert.ok(fs.existsSync(path.join(resourceRoot, "docs", "Requirements_Template.md")));
+  assert.ok(fs.existsSync(path.join(resourceRoot, "templates", "Requirements_Template.md")));
   assert.ok(fs.existsSync(path.join(resourceRoot, "guidelines", "Google_Python_Style_Guide.md")));
 });
 
@@ -23,10 +23,11 @@ test("prompt rendering replaces all dynamic placeholders and adapts req tool ref
   const rendered = renderPrompt("write", "Build a CLI parser", projectBase, config);
   assert.match(rendered, /Build a CLI parser/);
   assert.match(rendered, /req\/docs/);
+  assert.match(rendered, /~\/\.pi\/pi-usereq\/resources\/templates/);
   assert.match(rendered, /`src\/`, `scripts\/`, `\.github\/workflows\/`/);
   assert.match(rendered, /Build a CLI parser/);
   assert.match(rendered, /`src\/`, `scripts\/`, `\.github\/workflows\/`/);
-  assert.doesNotMatch(rendered, /%%ARGS%%|%%DOC_PATH%%|%%GUIDELINES_FILES%%|%%SRC_PATHS%%|%%TEST_PATH%%/);
+  assert.doesNotMatch(rendered, /%%ARGS%%|%%DOC_PATH%%|%%GUIDELINES_FILES%%|%%TEMPLATE_PATH%%|%%SRC_PATHS%%|%%TEST_PATH%%/);
 });
 
 test("pi.dev-aware prompts inject manifest conformance rules when the manifest exists", () => {

@@ -183,14 +183,16 @@ export function normalizeConfigPaths(projectBase: string, config: UseReqConfig):
 
 /**
  * @brief Builds placeholder replacements for bundled prompt rendering.
- * @details Computes project-relative docs, source, test, and guideline paths; enumerates visible guideline files from the home resource tree; and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
+ * @details Computes project-relative docs, template, source, test, and guideline paths; enumerates visible guideline files from the home resource tree; and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {Record<string, string>} Placeholder-to-string replacement map.
+ * @return {Record<string, string>} Placeholder-to-string replacement map including `%%TEMPLATE_PATH%%`.
+ * @satisfies REQ-002, CTN-011
  */
 export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string> {
   const resourcesRoot = getHomeResourceRoot();
   const guidelinesDir = path.join(resourcesRoot, "guidelines");
+  const templatesDir = path.join(resourcesRoot, "templates");
   const guidelineEntries = fs.existsSync(guidelinesDir)
     ? fs.readdirSync(guidelinesDir)
         .filter((entry) => !entry.startsWith("."))
@@ -208,6 +210,7 @@ export function buildPromptReplacementPaths(projectBase: string, config: UseReqC
     "%%DOC_PATH%%": config["docs-dir"].replace(/[/\\]+$/, ""),
     "%%GUIDELINES_FILES%%": guidelinesValue,
     "%%GUIDELINES_PATH%%": homeRelative(guidelinesDir),
+    "%%TEMPLATE_PATH%%": homeRelative(templatesDir),
     "%%SRC_PATHS%%": srcValue,
     "%%TEST_PATH%%": testValue,
     "%%PROJECT_BASE%%": projectBase,

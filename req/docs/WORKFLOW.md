@@ -689,7 +689,7 @@
         - `readBundledPrompt(...)`: read bundled prompt template [`src/core/resources.ts`]
           - `getBundledResourceRoot(...)`: resolve packaged resource root [`src/core/resources.ts`]
             - `getPackageRoot(...)`: resolve package root from module URL [`src/core/resources.ts`]
-        - `buildPromptReplacementPaths(...)`: build replacement token map [`src/core/config.ts`]
+        - `buildPromptReplacementPaths(...)`: build replacement token map including template-resource paths [`src/core/config.ts`]
           - `getHomeResourceRoot(...)`: resolve user cache root [`src/core/config.ts`]
           - `homeRelative(...)`: render home-relative tokens [`src/core/utils.ts`]
             - `formatSubstitutedPath(...)`: normalize path separators [`src/core/utils.ts`]

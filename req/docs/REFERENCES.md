@@ -1412,7 +1412,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ---
 
-# config.ts | TypeScript | 215L | 9 symbols | 6 imports | 15 comments
+# config.ts | TypeScript | 218L | 9 symbols | 6 imports | 15 comments
 > Path: `src/core/config.ts`
 - @brief Loads, normalizes, and persists pi-usereq project configuration.
 - @details Defines the configuration schema, default directory conventions, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi/pi-usereq`.
@@ -1475,12 +1475,13 @@ import { homeRelative, makeRelativeIfContainsProject } from "./utils.js";
 - @param[in] config {UseReqConfig} Configuration object to normalize.
 - @return {UseReqConfig} Normalized configuration copy.
 
-### fn `export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string>` (L191-215)
+### fn `export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string>` (L192-218)
 - @brief Builds placeholder replacements for bundled prompt rendering.
-- @details Computes project-relative docs, source, test, and guideline paths; enumerates visible guideline files from the home resource tree; and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
+- @details Computes project-relative docs, template, source, test, and guideline paths; enumerates visible guideline files from the home resource tree; and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Effective project configuration.
-- @return {Record<string, string>} Placeholder-to-string replacement map.
+- @return {Record<string, string>} Placeholder-to-string replacement map including `%%TEMPLATE_PATH%%`.
+- @satisfies REQ-002, CTN-011
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -1493,7 +1494,7 @@ import { homeRelative, makeRelativeIfContainsProject } from "./utils.js";
 |`loadConfig`|fn||110-150|export function loadConfig(projectBase: string): UseReqCo...|
 |`saveConfig`|fn||159-163|export function saveConfig(projectBase: string, config: U...|
 |`normalizeConfigPaths`|fn||172-182|export function normalizeConfigPaths(projectBase: string,...|
-|`buildPromptReplacementPaths`|fn||191-215|export function buildPromptReplacementPaths(projectBase: ...|
+|`buildPromptReplacementPaths`|fn||192-218|export function buildPromptReplacementPaths(projectBase: ...|
 
 
 ---

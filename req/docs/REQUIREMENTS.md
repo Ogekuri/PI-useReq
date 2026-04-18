@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.14"
+version: "0.0.16"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -58,6 +58,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-008**: MUST expose package scripts for test, watch-mode test, and CLI execution through `node --import tsx`.
 - **CTN-009**: MUST implement extension debugging outside `src/index.ts` business logic and drive extension behavior only through the default extension export, registered commands, registered tools, and registered events.
 - **CTN-010**: MUST execute offline harness flows without requiring pi.dev services or `docs/pi.dev/agent-document-manifest.json`.
+- **CTN-011**: MUST store bundled template markdown resources under `src/resources/templates` and provision them under `~/.pi/pi-usereq/resources/templates`.
 
 ## 3. Requirements
 
@@ -73,7 +74,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ### 3.2 Functions
 - **REQ-001**: MUST recursively copy bundled non-hidden resources into `~/.pi/pi-usereq/resources` and overwrite existing destination files.
-- **REQ-002**: MUST replace `%%DOC_PATH%%`, `%%GUIDELINES_*%%`, `%%SRC_PATHS%%`, `%%TEST_PATH%%`, `%%PROJECT_BASE%%`, and `%%ARGS%%` tokens when rendering prompts.
+- **REQ-002**: MUST replace `%%DOC_PATH%%`, `%%GUIDELINES_*%%`, `%%TEMPLATE_PATH%%`, `%%SRC_PATHS%%`, `%%TEST_PATH%%`, `%%PROJECT_BASE%%`, and `%%ARGS%%` tokens when rendering prompts.
 - **REQ-003**: MUST rewrite legacy `req --...` prompt text references to internal tool names such as `find tool` and `git-check tool`.
 - **REQ-004**: MUST register `req-<prompt>` commands for every bundled prompt name and send rendered prompt content as a user message.
 - **REQ-005**: MUST expose `git-path`, `get-base-path`, `files-tokens`, `files-references`, `files-compress`, and `files-find` only through agent-tool registration.
@@ -177,7 +178,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting custom slash commands for tool names and `test-static-check`.
-- **TST-002**: MUST verify resource provisioning copies bundled prompt, docs, and guideline files and prompt rendering replaces all dynamic placeholders.
+- **TST-002**: MUST verify resource provisioning copies bundled prompt, template, and guideline files and prompt rendering replaces all dynamic placeholders.
 - **TST-003**: MUST verify standalone CLI outputs for `files-tokens`, `files-compress`, `files-find`, and `--test-static-check` match the Python oracle for every fixture file.
 - **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, and adds static-check entries through raw-spec and guided flows.
@@ -267,7 +268,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   │   └── utils.ts
 │   └── resources/
 │       ├── common/{models.json,models-legacy.json}
-│       ├── docs/{Requirements_Template.md,HDT_Test_Authoring_Guide.md,Document_Source_Code_in_Doxygen_Style.md}
+│       ├── templates/{Requirements_Template.md,HDT_Test_Authoring_Guide.md,Document_Source_Code_in_Doxygen_Style.md}
 │       ├── guidelines/{Google_Python_Style_Guide.md,Google_C++_Style_Guide.md}
 │       ├── prompts/{analyze.md,change.md,check.md,cover.md,create.md,fix.md,flowchart.md,implement.md,new.md,readme.md,recreate.md,refactor.md,references.md,renumber.md,workflow.md,write.md}
 │       └── vscode/settings.json
@@ -314,7 +315,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | PRJ-002 | `src/index.ts` :: `TOOL_RUNNERS` and `registerAgentTools` :: tool names include `files-tokens`, `references`, `compress`, `find`, `static-check`, `git-check`, `docs-check`, `git-wt-*`. |
 | PRJ-003 | `src/index.ts` :: `configurePiUsereq` :: menu options include `Set docs-dir`, `Set tests-dir`, `Manage src-dir`, `Manage static-check`, `Manage startup tools`, `Reset defaults`, `Save and close`. |
 | PRJ-004 | `src/core/tool-runner.ts` :: `runGitCheck`, `runGitWtName`, `runGitWtCreate`, `runGitWtDelete` :: git validation and worktree helpers are exported and invoked by CLI/extension wrappers. |
-| PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,docs,guidelines,common,vscode}`. |
+| PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,templates,guidelines,common,vscode}`. |
 | CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `req/docs`, `tests`, and `["src"]`. |
 | CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
 | CTN-003 | `src/core/tool-runner.ts` :: `SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG))`; `src/core/source-analyzer.ts` :: alias assignments `specs.cc = specs.cpp`, `specs.cxx = specs.cpp`, `specs.hpp = specs.cpp`, `specs.exs = specs.elixir`. |
@@ -323,6 +324,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | CTN-006 | `tsconfig.json` :: `"strict": true`, `"noEmit": true`, `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
 | CTN-007 | `package.json` :: `"pi": { "extensions": ["./src/index.ts"] }`. |
 | CTN-008 | `package.json` :: `"scripts"` :: `"test": "node --import tsx --test tests/**/*.test.ts"`, `"test:watch": ...`, `"cli": "node --import tsx ./src/cli.ts"`. |
+| CTN-011 | `src/core/config.ts` :: `buildPromptReplacementPaths` :: emits `%%TEMPLATE_PATH%%` from `~/.pi/pi-usereq/resources/templates`; bundled template files exist under `src/resources/templates/`. |
 
 ### 8.2 DES Evidence
 | ID | Evidence |
@@ -338,7 +340,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | ID | Evidence |
 | --- | --- |
 | REQ-001 | `src/core/resources.ts` :: `copyDirectoryContents` :: skips dotfiles, recurses into directories, and uses `fs.copyFileSync(sourcePath, destinationPath)`. |
-| REQ-002 | `src/core/prompts.ts` :: `renderPrompt` :: replacements merge `buildPromptReplacementPaths(projectBase, config)` with `"%%ARGS%%": args`. |
+| REQ-002 | `src/core/config.ts` :: `buildPromptReplacementPaths` :: emits `%%TEMPLATE_PATH%%` plus docs/guideline/source/test tokens; `src/core/prompts.ts` :: `renderPrompt` merges them with `"%%ARGS%%": args`. |
 | REQ-003 | `src/core/prompts.ts` :: `TOOL_REFERENCE_REPLACEMENTS` and `adaptPromptForInternalTools` :: replaces ``req --find`` style text with `find tool` style text. |
 | REQ-004 | `src/index.ts` :: `registerPromptCommands` :: each handler runs `ensureHomeResources()`, renders the prompt, then executes `pi.sendUserMessage(content)`. |
 | REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
