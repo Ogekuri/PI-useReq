@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.12"
+version: "0.0.13"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -67,7 +67,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
 - **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
-- **DES-006**: MUST keep CLI compression and construct-search renderers as markdown blocks headed by `@@@ <path> | <language>`, while agent-tool compression responses use dedicated JSON payload builders.
+- **DES-006**: MUST keep CLI compression and construct-search renderers as markdown blocks headed by `@@@ <path> | <language>`, while agent-tool compression and construct-search responses use dedicated JSON payload builders.
 - **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/req-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
 - **DES-008**: MUST format `files-references`, `references`, `files-compress`, and `compress` agent-tool outputs as deterministic agent-oriented JSON with dedicated metadata fields for source structure, symbols, and Doxygen tags.
 
@@ -134,6 +134,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-086**: MUST register `files-compress` and `compress` with agent-oriented descriptions covering scope, parameters, line-number behavior, output schema, project-scope selection rules, output format, and failure conditions.
 - **REQ-087**: MUST expose skipped inputs, unsupported extensions, compression failures, and zero-processable requests as structured statuses and stable error reasons, while keeping stderr diagnostics optional.
 - **REQ-088**: MUST mirror the structured compression payload into tool `content[0].text` and tool `details`, with execution metadata nested under the mirrored JSON object.
+- **REQ-089**: MUST make agent-tool `files-find` and `find` return structured JSON sections ordered as `request`, `summary`, `repository`, `files`, and `execution`.
+- **REQ-090**: MUST expose find request scope facts as dedicated fields, including tag filter, regex pattern, line-number mode, requested paths, configured source directories, and supported tags by language.
+- **REQ-091**: MUST expose per-file and per-match find facts as dedicated fields, including canonical path, language, construct kind, symbol name, signature, declaration order, numeric line ranges, and stripped code lines.
+- **REQ-092**: MUST expose parsed find Doxygen fields as tag-specific JSON objects or arrays for file-level and construct-level metadata, keeping monolithic residual text only when safe splitting is impossible.
+- **REQ-093**: MUST emit find counts, file totals, match totals, line numbers, and line ranges as JSON numbers with explicit unit-specific field names, never only inside display strings.
+- **REQ-094**: MUST normalize `files-find` and `find` text fields by removing markdown headers, fences, bullets, and other presentation-only artifacts from structured JSON values.
+- **REQ-095**: MUST register `files-find` and `find` with agent-oriented descriptions covering purpose, scope, input schema, output schema, `enableLineNumbers`, regex semantics, supported tags by language, and failure conditions.
+- **REQ-096**: MUST expose structured statuses for skipped files, unsupported languages, invalid tag filters, invalid regex patterns, no-match outcomes, and analysis failures, while keeping stderr diagnostics optional.
+- **REQ-097**: MUST mirror the structured find payload into tool `content[0].text` and tool `details`, with execution metadata nested under the mirrored JSON object.
+- **REQ-098**: MUST keep monolithic find `text` fields optional, place them after structured fields, and omit any fact from text-only representation when a dedicated JSON field can carry it.
 - **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy`, `pylance`, `ruff`, or `command` checker subcommands directly.
 - **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
 - **REQ-020**: MUST parse static-check enable specs in `LANG=MODULE[,CMD[,PARAM...]]` format and normalize supported language and module names case-insensitively.
@@ -185,6 +195,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-021**: MUST verify `scripts/req-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
 - **TST-022**: MUST verify `files-references` and `references` JSON outputs expose repository, file, symbol, location, and Doxygen facts through dedicated structured fields.
 - **TST-023**: MUST verify harness inspection surfaces agent-oriented `files-references` and `references` tool descriptions with output schema, configuration, specialized behaviors, and failure details.
+- **TST-024**: MUST verify `files-find` and `find` JSON outputs expose request, repository, file, match, location, and Doxygen facts through dedicated structured fields.
+- **TST-025**: MUST verify harness inspection surfaces agent-oriented `files-find` and `find` tool descriptions with input schema, output schema, line-number behavior, regex semantics, supported tags by language, and failure details.
 
 ## 5. Observed Component Model
 

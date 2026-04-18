@@ -146,8 +146,61 @@ function extractFileLevelDoxygenFields(elements: SourceElement[]): Record<string
 }
 
 /**
+ * @brief Describes one stripped-code line extracted from a matched construct.
+ * @details Preserves output order, original source coordinates, normalized stripped text, and rendered display text so markdown and JSON renderers can share one canonical intermediate format. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface StrippedConstructLineEntry {
+  output_line_number: number;
+  source_line_number: number;
+  text: string;
+  display_text: string;
+}
+
+/**
+ * @brief Removes comments from a construct excerpt and returns structured stripped-code lines.
+ * @details Reuses `compressSource` for comment stripping, translates local compressed line numbers back into absolute file coordinates, and emits both direct-access text fields and rendered display strings. Runtime is O(n) in excerpt length. No external state is mutated.
+ * @param[in] codeLines {string[]} Raw code lines belonging to the construct.
+ * @param[in] language {string} Canonical analyzer language identifier.
+ * @param[in] lineStart {number} Absolute starting line number of the construct.
+ * @param[in] includeLineNumbers {boolean} When `true`, `display_text` includes absolute source line prefixes.
+ * @return {StrippedConstructLineEntry[]} Structured stripped-code line entries.
+ */
+export function buildStrippedConstructLineEntries(
+  codeLines: string[],
+  language: string,
+  lineStart: number,
+  includeLineNumbers: boolean,
+): StrippedConstructLineEntry[] {
+  const rawSource = codeLines.join("");
+  const strippedWithLocalNumbers = compressSource(rawSource, language, true);
+  return strippedWithLocalNumbers
+    .split(/\r?\n/)
+    .filter((line) => line.length > 0)
+    .map((line, outputIndex) => {
+      const match = /^(\d+):\s(.*)$/.exec(line);
+      if (!match) {
+        return {
+          output_line_number: outputIndex + 1,
+          source_line_number: lineStart + outputIndex,
+          text: line,
+          display_text: line,
+        } satisfies StrippedConstructLineEntry;
+      }
+      const localLine = Number.parseInt(match[1]!, 10);
+      const absoluteLine = lineStart + localLine - 1;
+      const strippedText = match[2]!;
+      return {
+        output_line_number: outputIndex + 1,
+        source_line_number: absoluteLine,
+        text: strippedText,
+        display_text: includeLineNumbers ? `${absoluteLine}: ${strippedText}` : strippedText,
+      } satisfies StrippedConstructLineEntry;
+    });
+}
+
+/**
  * @brief Removes comments from a construct excerpt while preserving optional absolute line numbers.
- * @details Reuses `compressSource` for comment stripping, then either drops local line numbers or translates them back into absolute file coordinates. Runtime is O(n) in excerpt length. No external state is mutated.
+ * @details Delegates to `buildStrippedConstructLineEntries(...)` and joins the rendered display strings into one newline-delimited excerpt. Runtime is O(n) in excerpt length. No external state is mutated.
  * @param[in] codeLines {string[]} Raw code lines belonging to the construct.
  * @param[in] language {string} Canonical analyzer language identifier.
  * @param[in] lineStart {number} Absolute starting line number of the construct.
@@ -155,22 +208,8 @@ function extractFileLevelDoxygenFields(elements: SourceElement[]): Record<string
  * @return {string} Comment-stripped construct excerpt.
  */
 function stripConstructComments(codeLines: string[], language: string, lineStart: number, includeLineNumbers: boolean): string {
-  const rawSource = codeLines.join("");
-  const strippedWithLocalNumbers = compressSource(rawSource, language, true);
-  const strippedLines = strippedWithLocalNumbers.split(/\r?\n/);
-  if (!includeLineNumbers) {
-    return strippedLines
-      .map((line) => line.replace(/^\d+:\s/, ""))
-      .join("\n");
-  }
-  return strippedLines
-    .map((line) => {
-      const match = /^(\d+):\s(.*)$/.exec(line);
-      if (!match) return line;
-      const localLine = Number.parseInt(match[1]!, 10);
-      const absoluteLine = lineStart + localLine - 1;
-      return `${absoluteLine}: ${match[2]}`;
-    })
+  return buildStrippedConstructLineEntries(codeLines, language, lineStart, includeLineNumbers)
+    .map((line) => line.display_text)
     .join("\n");
 }
 

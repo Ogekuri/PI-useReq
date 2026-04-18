@@ -154,6 +154,26 @@ test("inspectExtension records commands, tools, events, and manual examples", as
   }
 });
 
+test("inspectExtension surfaces agent-oriented find tool descriptions and schema details", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    const report = await inspectExtension(projectBase);
+    const filesFind = report.tools.find((tool) => tool.name === "files-find");
+    const find = report.tools.find((tool) => tool.name === "find");
+
+    assert.ok(filesFind, "missing files-find tool");
+    assert.ok(find, "missing find tool");
+    assert.match(filesFind.description ?? "", /LLM-oriented JSON payload/);
+    assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
+    assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /supported_tags_by_language/);
+    assert.match(find.description ?? "", /configured project source directories/);
+    assert.ok(find.promptGuidelines?.some((line) => line.includes("Regex rule:")));
+    assert.match(String((find.parameters as { description?: string } | undefined)?.description ?? ""), /Regex matches construct names only/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("replaySessionStart captures active tools, statuses, and cwd semantics", async () => {
   const { projectBase } = initFixtureRepo();
   try {

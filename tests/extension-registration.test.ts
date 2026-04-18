@@ -354,6 +354,27 @@ test("reference tools register agent-oriented descriptions and schema details", 
   assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /directory tree/);
 });
 
+test("find tools register agent-oriented descriptions and schema details", () => {
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  const filesFind = pi.tools.find((tool: RegisteredTool) => tool.name === "files-find");
+  const find = pi.tools.find((tool: RegisteredTool) => tool.name === "find");
+  assert.ok(filesFind, "missing files-find tool");
+  assert.ok(find, "missing find tool");
+
+  assert.match(filesFind.description ?? "", /LLM-oriented JSON payload/);
+  assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Regex rule:")));
+  assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
+  assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Python]:")));
+  assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /supported_tags_by_language/);
+
+  assert.match(find.description ?? "", /configured project source directories/);
+  assert.ok(find.promptGuidelines?.some((line) => line.includes("source_directory_paths")));
+  assert.ok(find.promptGuidelines?.some((line) => line.includes("Tag rule:")));
+  assert.match(String((find.parameters as { description?: string } | undefined)?.description ?? ""), /Regex matches construct names only/);
+});
+
 test("files-tokens returns structured source facts and separated guidance", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
@@ -558,6 +579,201 @@ test("references returns a structured repository tree for configured source dire
     assert.equal(payload.files[0]?.symbols.length, 0);
     assert.equal(payload.files[1]?.symbols[0]?.symbol_name, "beta");
     assert.deepEqual(payload.files[1]?.symbols[0]?.line_range, [1, 3]);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("files-find returns structured match, code-line, and Doxygen facts", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const samplePath = path.join(projectBase, "src", "sample.ts");
+  fs.writeFileSync(samplePath, `/**
+ * @file
+ * @brief Sample source file.
+ */
+
+/**
+ * @brief Builds the sample value.
+ * @param[in] input {string} Caller-supplied value.
+ * @return {string} Upper-cased result.
+ * @satisfies REQ-089
+ */
+export function buildSample(input: string): string {
+  return input.toUpperCase();
+}
+`, "utf8");
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "files-find", projectBase, {
+      tag: "FUNCTION",
+      pattern: "^buildSample$",
+      files: ["src/sample.ts", "src/missing.ts"],
+      enableLineNumbers: true,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: {
+        request: {
+          tag_filter_values: string[];
+          tag_filter_status: string;
+          line_number_mode: string;
+          requested_input_paths: string[];
+        };
+        summary: {
+          search_status: string;
+          matched_file_count: number;
+          skipped_file_count: number;
+          total_match_count: number;
+        };
+        repository: {
+          supported_tags_by_language: Record<string, string[]>;
+        };
+        files: Array<{
+          canonical_path: string;
+          status: string;
+          match_count: number;
+          supported_tags: string[];
+          file_doxygen?: { brief?: string[] };
+          matches: Array<{
+            symbol_name: string;
+            qualified_name: string;
+            symbol_kind: string;
+            line_range: [number, number];
+            code_line_count: number;
+            code_lines: Array<{ source_line_number: number; display_text: string; text: string }>;
+            stripped_source_text?: string;
+            doxygen?: {
+              brief?: string[];
+              params?: Array<{ direction: string; parameter_name?: string; value_type?: string; description?: string }>;
+              returns?: string[];
+              satisfies_requirement_ids?: string[];
+            };
+          }>;
+        }>;
+        execution: {
+          code: number;
+          stderr: string;
+        };
+      };
+    };
+
+    const payload = result.details!;
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
+    assert.deepEqual(payload.request.tag_filter_values, ["FUNCTION"]);
+    assert.equal(payload.request.tag_filter_status, "valid");
+    assert.equal(payload.request.line_number_mode, "enabled");
+    assert.deepEqual(payload.request.requested_input_paths, ["src/sample.ts", "src/missing.ts"]);
+    assert.equal(payload.summary.search_status, "matched");
+    assert.equal(payload.summary.matched_file_count, 1);
+    assert.equal(payload.summary.skipped_file_count, 1);
+    assert.equal(payload.summary.total_match_count, 1);
+    assert.ok(payload.repository.supported_tags_by_language.typescript?.includes("FUNCTION"));
+    assert.deepEqual(payload.files.map((file) => file.status), ["matched", "skipped"]);
+    assert.equal(payload.files[0]?.canonical_path, "src/sample.ts");
+    assert.equal(payload.files[0]?.match_count, 1);
+    assert.ok(payload.files[0]?.supported_tags.includes("FUNCTION"));
+    assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample source file."]);
+    assert.equal(payload.files[0]?.matches[0]?.symbol_name, "buildSample");
+    assert.equal(payload.files[0]?.matches[0]?.qualified_name, "buildSample");
+    assert.equal(payload.files[0]?.matches[0]?.symbol_kind, "FUNCTION");
+    assert.deepEqual(payload.files[0]?.matches[0]?.line_range, [12, 14]);
+    assert.ok((payload.files[0]?.matches[0]?.code_line_count ?? 0) > 0);
+    assert.equal(payload.files[0]?.matches[0]?.code_lines[0]?.source_line_number, 12);
+    assert.match(payload.files[0]?.matches[0]?.code_lines[0]?.display_text ?? "", /^12: export function buildSample/);
+    assert.match(payload.files[0]?.matches[0]?.stripped_source_text ?? "", /^12: export function buildSample/m);
+    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.brief, ["Builds the sample value."]);
+    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.params, [
+      { direction: "in", parameter_name: "input", value_type: "string", description: "Caller-supplied value." },
+    ]);
+    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.returns, ["{string} Upper-cased result."]);
+    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.satisfies_requirement_ids, ["REQ-089"]);
+    assert.equal(payload.execution.code, 0);
+    assert.match(payload.execution.stderr, /skipped: src\/missing\.ts: not_found/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("find returns a structured repository-scoped construct-search payload", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  fs.writeFileSync(
+    path.join(projectBase, "src", "alpha.ts"),
+    `/**
+ * @brief Builds alpha.
+ * @return {number} Constant one.
+ */
+export function buildAlpha(): number {
+  return 1;
+}
+`,
+    "utf8",
+  );
+  fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectBase, "src", "nested", "beta.ts"),
+    "export function helperBeta(): number {\n  return 2;\n}\n",
+    "utf8",
+  );
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "find", projectBase, {
+      tag: "FUNCTION",
+      pattern: "^build",
+      enableLineNumbers: false,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: {
+        request: {
+          scope: string;
+          regex_status: string;
+          requested_file_count: number;
+        };
+        summary: {
+          search_status: string;
+          matched_file_count: number;
+          no_match_file_count: number;
+          total_match_count: number;
+        };
+        repository: {
+          source_directory_paths: string[];
+          file_canonical_paths: string[];
+          supported_tags_by_language: Record<string, string[]>;
+        };
+        files: Array<{
+          canonical_path: string;
+          status: string;
+          matches: Array<{
+            symbol_name: string;
+            code_lines: Array<{ display_text: string }>;
+            stripped_source_text?: string;
+          }>;
+        }>;
+        execution: {
+          code: number;
+          stderr: string;
+        };
+      };
+    };
+
+    const payload = result.details!;
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
+    assert.equal(payload.request.scope, "configured-source-directories");
+    assert.equal(payload.request.regex_status, "valid");
+    assert.equal(payload.request.requested_file_count, 2);
+    assert.equal(payload.summary.search_status, "matched");
+    assert.equal(payload.summary.matched_file_count, 1);
+    assert.equal(payload.summary.no_match_file_count, 1);
+    assert.equal(payload.summary.total_match_count, 1);
+    assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
+    assert.deepEqual(payload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
+    assert.ok(payload.repository.supported_tags_by_language.typescript?.includes("FUNCTION"));
+    assert.deepEqual(payload.files.map((file) => file.status), ["matched", "no_match"]);
+    assert.equal(payload.files[0]?.matches[0]?.symbol_name, "buildAlpha");
+    assert.match(payload.files[0]?.matches[0]?.code_lines[0]?.display_text ?? "", /^export function buildAlpha/);
+    assert.doesNotMatch(payload.files[0]?.matches[0]?.stripped_source_text ?? "", /^\d+:/m);
+    assert.equal(payload.execution.code, 0);
+    assert.match(payload.execution.stderr, /info: no_match: src\/nested\/beta\.ts/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

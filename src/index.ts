@@ -29,6 +29,12 @@ import {
   type CompressToolPayload,
 } from "./core/compress-payload.js";
 import {
+  buildFindToolExecutionStderr,
+  buildFindToolPayload,
+  type FindToolPayload,
+  type FindToolScope,
+} from "./core/find-payload.js";
+import {
   getDefaultConfig,
   loadConfig,
   saveConfig,
@@ -47,11 +53,9 @@ import {
   runCompress,
   runDocsCheck,
   runFilesCompress,
-  runFilesFind,
   runFilesReferences,
   runFilesStaticCheck,
   runFilesTokens,
-  runFind,
   runGetBasePath,
   runGitCheck,
   runGitPath,
@@ -65,6 +69,7 @@ import {
   runTokens,
   type ToolResult,
 } from "./core/tool-runner.js";
+import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
   STATIC_CHECK_MODULES,
   getSupportedStaticCheckLanguageSupport,
@@ -253,6 +258,138 @@ function buildCompressionToolExecuteResult(
     execution: {
       code: 0,
       stderr: buildCompressToolExecutionStderr(payload),
+    },
+  };
+  return {
+    content: [{ type: "text", text: formatJsonToolPayload(details) }],
+    details,
+  };
+}
+
+/**
+ * @brief Maps find-payload language identifiers to stable registration labels.
+ * @details Preserves the canonical capitalization used by tool descriptions so supported-tag guidance remains deterministic across inspection snapshots. Access complexity is O(1).
+ */
+const FIND_TOOL_LANGUAGE_LABELS: Record<string, string> = {
+  c: "C",
+  cpp: "Cpp",
+  csharp: "Csharp",
+  elixir: "Elixir",
+  go: "Go",
+  haskell: "Haskell",
+  java: "Java",
+  javascript: "Javascript",
+  kotlin: "Kotlin",
+  lua: "Lua",
+  perl: "Perl",
+  php: "Php",
+  python: "Python",
+  ruby: "Ruby",
+  rust: "Rust",
+  scala: "Scala",
+  shell: "Shell",
+  swift: "Swift",
+  typescript: "Typescript",
+  zig: "Zig",
+};
+
+/**
+ * @brief Defines the stable language order used by find-tool supported-tag guidance.
+ * @details Keeps registration descriptions aligned with the repository-supported language matrix and preserves deterministic inspection snapshots. Access complexity is O(1).
+ */
+const FIND_TOOL_LANGUAGE_ORDER = [
+  "c",
+  "cpp",
+  "csharp",
+  "elixir",
+  "go",
+  "haskell",
+  "java",
+  "javascript",
+  "kotlin",
+  "lua",
+  "perl",
+  "php",
+  "python",
+  "ruby",
+  "rust",
+  "scala",
+  "shell",
+  "swift",
+  "typescript",
+  "zig",
+] as const;
+
+/**
+ * @brief Builds the supported-tag guidance lines embedded in find-tool registrations.
+ * @details Emits one deterministic line per supported language containing its canonical registration label and sorted tag list so downstream agents can specialize requests without invoking the tool first. Runtime is O(l * t log t). No side effects occur.
+ * @return {string[]} Supported-tag guidance lines.
+ */
+function buildFindToolSupportedTagGuidelines(): string[] {
+  return FIND_TOOL_LANGUAGE_ORDER
+    .filter((language) => language in LANGUAGE_TAGS)
+    .map((language) => `Supported tags [${FIND_TOOL_LANGUAGE_LABELS[language]}]: ${[...LANGUAGE_TAGS[language]!].sort().join(", ")}`);
+}
+
+/**
+ * @brief Builds the schema description for one find-tool registration.
+ * @details Specializes the input-scope sentence for explicit-file or configured-directory searches while keeping the JSON output contract stable and fully machine-readable. Runtime is O(1). No side effects occur.
+ * @param[in] scope {FindToolScope} Find-tool scope.
+ * @return {string} Parameter-schema description.
+ */
+function buildFindToolSchemaDescription(scope: FindToolScope): string {
+  const inputContract = scope === "explicit-files"
+    ? "Input contract: tag + pattern + files[] + optional enableLineNumbers."
+    : "Input contract: tag + pattern + optional enableLineNumbers. Scope is the configured src-dir list resolved from the current project configuration.";
+  return `${inputContract} Output contract: JSON object with request, summary, repository, files, and execution. Repository exposes file_canonical_paths and supported_tags_by_language. File entries expose path facts, supported_tags, structured statuses, file_doxygen, and match records with typed line ranges, stripped code lines, and structured Doxygen fields. Regex matches construct names only.`;
+}
+
+/**
+ * @brief Builds the prompt-guideline set for one find-tool registration.
+ * @details Encodes scope selection, output schema, regex semantics, line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
+ * @param[in] scope {FindToolScope} Find-tool scope.
+ * @return {string[]} Prompt-guideline strings.
+ */
+function buildFindToolPromptGuidelines(scope: FindToolScope): string[] {
+  const scopeLine = scope === "explicit-files"
+    ? "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute."
+    : "Scope: resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.";
+  const outputLine = scope === "explicit-files"
+    ? "Output contract: request + summary + repository + files + execution. Repository exposes requested file scope and supported_tags_by_language; file entries expose status, supported_tags, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields."
+    : "Output contract: request + summary + repository + files + execution. Repository exposes source_directory_paths, file_canonical_paths, and supported_tags_by_language; file entries expose status, supported_tags, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields.";
+  return [
+    scopeLine,
+    outputLine,
+    "Regex rule: pattern is applied to construct names only with JavaScript RegExp search semantics; it never matches construct bodies; use ^...$ for exact-name matching.",
+    "Tag rule: tag is pipe-separated and case-insensitive; unsupported tags are ignored; if no valid tag remains, request.tag_filter_status becomes invalid.",
+    "Line-number behavior: enableLineNumbers changes only display_text and stripped_source_text rendering; numeric source_line_number and line_range facts remain dedicated fields.",
+    "Failure contract: invalid tag filters, invalid regex patterns, unsupported extensions, unsupported tag-language combinations, no-match files, and analysis failures are surfaced as structured statuses plus optional execution.stderr diagnostics.",
+    ...buildFindToolSupportedTagGuidelines(),
+  ];
+}
+
+/**
+ * @brief Builds the agent-oriented execute result returned by find tools.
+ * @details Mirrors the structured find payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
+ * @param[in] payload {FindToolPayload} Structured find payload.
+ * @return {{ content: Array<{ type: "text"; text: string }>; details: FindToolPayload & { execution: { code: number; stderr: string } } }} Find-tool execute result.
+ * @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-097, REQ-098
+ */
+function buildFindToolExecuteResult(
+  payload: FindToolPayload,
+): {
+  content: Array<{ type: "text"; text: string }>;
+  details: FindToolPayload & { execution: { code: number; stderr: string } };
+} {
+  const stderr = buildFindToolExecutionStderr(payload);
+  const details = {
+    request: payload.request,
+    summary: payload.summary,
+    repository: payload.repository,
+    files: payload.files,
+    execution: {
+      code: payload.summary.search_status === "matched" ? 0 : 1,
+      stderr,
     },
   };
   return {
@@ -461,7 +598,7 @@ function registerPromptCommands(pi: ExtensionAPI): void {
  * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080
+ * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098
  */
 function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
@@ -612,21 +749,39 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
+  const filesFindSchema = Type.Object(
+    {
+      tag: Type.String({ description: "Pipe-separated construct-tag filter applied case-insensitively; unsupported tags are ignored" }),
+      pattern: Type.String({ description: "JavaScript RegExp applied to construct names only; use ^...$ for exact-name matching" }),
+      files: Type.Array(
+        Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
+        { description: "Explicit source-file list preserved in caller order" },
+      ),
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `code_lines[].display_text` and `stripped_source_text` include original source line-number prefixes" })),
+    },
+    {
+      description: buildFindToolSchemaDescription("explicit-files"),
+    },
+  );
+
   pi.registerTool({
     name: "files-find",
     label: "files-find",
-    description: "Find named constructs in explicit files using a tag filter and regex pattern.",
-    promptSnippet: "Extract named constructs from explicit files.",
-    promptGuidelines: ["Use this for targeted code extraction when you already know which files to inspect."],
-    parameters: Type.Object({
-      tag: Type.String({ description: "Pipe-separated tag filter" }),
-      pattern: Type.String({ description: "Regular expression applied to construct names" }),
-      files: Type.Array(Type.String({ description: "Project or absolute file path" })),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "Include original line numbers" })),
-    }),
+    description: "Scope: explicit source files. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
+    promptSnippet: "Return the structured construct-search payload for caller-selected source files.",
+    promptGuidelines: buildFindToolPromptGuidelines("explicit-files"),
+    parameters: filesFindSchema,
     async execute(_toolCallId, params) {
-      const result = runFilesFind([params.tag, params.pattern, ...params.files], params.enableLineNumbers ?? false);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const payload = buildFindToolPayload({
+        toolName: "files-find",
+        scope: "explicit-files",
+        baseDir: process.cwd(),
+        tagFilter: params.tag,
+        pattern: params.pattern,
+        requestedPaths: params.files,
+        includeLineNumbers: params.enableLineNumbers ?? false,
+      });
+      return buildFindToolExecuteResult(payload);
     },
   });
 
@@ -713,22 +868,39 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
+  const findSchema = Type.Object(
+    {
+      tag: Type.String({ description: "Pipe-separated construct-tag filter applied case-insensitively; unsupported tags are ignored" }),
+      pattern: Type.String({ description: "JavaScript RegExp applied to construct names only; use ^...$ for exact-name matching" }),
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `code_lines[].display_text` and `stripped_source_text` include original source line-number prefixes" })),
+    },
+    {
+      description: buildFindToolSchemaDescription("configured-source-directories"),
+    },
+  );
+
   pi.registerTool({
     name: "find",
     label: "find",
-    description: "Find named constructs in the configured project source directories.",
-    promptSnippet: "Extract project constructs by tag and name regex.",
-    promptGuidelines: ["Enable line numbers when the caller needs exact source locations."],
-    parameters: Type.Object({
-      tag: Type.String({ description: "Pipe-separated tag filter" }),
-      pattern: Type.String({ description: "Regular expression applied to construct names" }),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "Include original line numbers" })),
-    }),
+    description: "Scope: configured project source directories. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
+    promptSnippet: "Return the structured construct-search payload from the configured source directories.",
+    promptGuidelines: buildFindToolPromptGuidelines("configured-source-directories"),
+    parameters: findSchema,
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runFind(projectBase, params.tag, params.pattern, config, params.enableLineNumbers ?? false);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const sourceFiles = collectSourceFiles(config["src-dir"], projectBase);
+      const payload = buildFindToolPayload({
+        toolName: "find",
+        scope: "configured-source-directories",
+        baseDir: projectBase,
+        tagFilter: params.tag,
+        pattern: params.pattern,
+        requestedPaths: sourceFiles,
+        includeLineNumbers: params.enableLineNumbers ?? false,
+        sourceDirectoryPaths: config["src-dir"],
+      });
+      return buildFindToolExecuteResult(payload);
     },
   });
 
