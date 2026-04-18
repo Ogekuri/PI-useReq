@@ -47,6 +47,40 @@ type FakePi = ReturnType<typeof createFakePi>;
 type FakeCtxPlan = { selects: string[]; inputs?: string[] };
 
 /**
+ * @brief Describes one fake session entry stored by reset-aware prompt tests.
+ * @details Mirrors the minimal subset of session-manager entry shapes consumed by the suite so reset-context flows can persist pending prompt markers and setup messages across simulated runtime replacement. The alias is compile-time only and introduces no runtime side effects.
+ */
+type FakeSessionEntry =
+  | { id: string; type: "custom"; customType: string; data?: unknown }
+  | { id: string; type: "message"; message: unknown };
+
+/**
+ * @brief Describes the fake session-manager surface consumed by prompt-reset tests.
+ * @details Exposes only the mutation and read APIs required by `ctx.newSession(...setup)`, `ctx.sessionManager`, and `pi.appendEntry(...)`. The interface is compile-time only and introduces no runtime cost.
+ */
+interface FakeSessionManager {
+  appendCustomEntry: (customType: string, data?: unknown) => string;
+  appendMessage: (message: unknown) => string;
+  getBranch: () => FakeSessionEntry[];
+  getEntries: () => FakeSessionEntry[];
+}
+
+/**
+ * @brief Describes optional fake pi runtime capabilities used by specific tests.
+ * @details Allows tests to connect extension-side session-entry writes to a shared fake session manager without affecting call sites that only require command and tool registration capture. The alias is compile-time only and introduces no runtime side effects.
+ */
+type FakePiOptions = { sessionManager?: FakeSessionManager };
+
+/**
+ * @brief Describes optional fake command-context capabilities used by prompt-reset tests.
+ * @details Allows tests to inject a shared fake session manager and a callback that simulates runtime replacement after `ctx.newSession(...)` completes. The alias is compile-time only and introduces no runtime side effects.
+ */
+type FakeCtxOptions = {
+  sessionManager?: FakeSessionManager;
+  onNewSession?: (options?: { parentSession?: string }) => Promise<{ cancelled: boolean } | void> | { cancelled: boolean } | void;
+};
+
+/**
  * @brief Extracts text content from a recorded session-manager user message.
  * @details Collapses text-part arrays appended during fake `ctx.newSession(...setup)` execution into one comparable string. Non-text payloads yield an empty string. Runtime is O(n) in part count. No external state is mutated.
  * @param[in] message {unknown} Session-manager message payload.
@@ -68,11 +102,41 @@ function extractSessionMessageText(message: unknown): string {
 }
 
 /**
+ * @brief Creates a fake session manager for reset-aware prompt tests.
+ * @details Stores appended custom entries and setup messages in deterministic insertion order, returns stable synthetic entry identifiers, and exposes branch reads used by `session_start` handlers. Runtime is O(1) per mutation plus O(n) per snapshot copy. Side effects are limited to in-memory state mutation.
+ * @return {FakeSessionManager} Fake session manager.
+ */
+function createFakeSessionManager(): FakeSessionManager {
+  const entries: FakeSessionEntry[] = [];
+  let nextEntryId = 0;
+  const buildEntryId = (): string => `entry-${nextEntryId++}`;
+  return {
+    appendCustomEntry(customType: string, data?: unknown): string {
+      const entryId = buildEntryId();
+      entries.push({ id: entryId, type: "custom", customType, data });
+      return entryId;
+    },
+    appendMessage(message: unknown): string {
+      const entryId = buildEntryId();
+      entries.push({ id: entryId, type: "message", message });
+      return entryId;
+    },
+    getBranch(): FakeSessionEntry[] {
+      return entries.map((entry) => ({ ...entry }));
+    },
+    getEntries(): FakeSessionEntry[] {
+      return entries.map((entry) => ({ ...entry }));
+    },
+  };
+}
+
+/**
  * @brief Creates a fake pi runtime that records command and tool registrations.
- * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, event dispatch, active-tool mutation, and prompt delivery. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
+ * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, event dispatch, active-tool mutation, prompt delivery, and optional session-entry persistence. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
+ * @param[in] options {FakePiOptions} Optional fake runtime integrations.
  * @return {FakePi} Fake extension runtime.
  */
-function createFakePi() {
+function createFakePi(options: FakePiOptions = {}) {
   const commands = new Map<string, RegisteredCommand>();
   const tools: RegisteredTool[] = [];
   const sentUserMessages: Array<{ content: unknown; options?: unknown }> = [];
@@ -147,6 +211,9 @@ function createFakePi() {
     sendUserMessage(content: unknown, options?: unknown) {
       sentUserMessages.push({ content, options });
     },
+    appendEntry(customType: string, data?: unknown) {
+      return options.sessionManager?.appendCustomEntry(customType, data);
+    },
   } as any;
 }
 
@@ -163,14 +230,16 @@ function formatFakeThemeForeground(color: string, text: string): string {
 
 /**
  * @brief Creates a fake extension command context with scripted UI interactions.
- * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
+ * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` injection lets tests emulate runtime replacement after setup logic mutates the fake session manager. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
  * @param[in] cwd {string} Working directory exposed to command handlers.
  * @param[in] plan {FakeCtxPlan} Scripted select and input responses.
+ * @param[in] options {FakeCtxOptions} Optional fake session-manager and runtime-replacement integrations.
  * @return {any} Fake command context compatible with the tested handlers.
  */
-function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }) {
+function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options: FakeCtxOptions = {}) {
   const selects = [...plan.selects];
   const inputs = [...(plan.inputs ?? [])];
+  const sessionManager = options.sessionManager ?? createFakeSessionManager();
   const state = {
     editorText: "",
     statuses: new Map<string, string>(),
@@ -181,26 +250,40 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }) {
   return {
     cwd,
     __state: state,
+    sessionManager,
     async waitForIdle() {
       state.waitForIdleCalls += 1;
     },
-    async newSession(options?: {
+    async newSession(newSessionOptions?: {
       parentSession?: string;
-      setup?: (sessionManager: { appendMessage: (message: unknown) => string }) => Promise<void>;
+      setup?: (sessionManager: FakeSessionManager) => Promise<void>;
     }) {
-      void options?.parentSession;
       const session = { messages: [] as string[] };
-      if (options?.setup) {
-        await options.setup({
-          appendMessage(message: unknown) {
-            if ((message as { role?: unknown })?.role === "user") {
-              session.messages.push(extractSessionMessageText(message));
-            }
-            return "recorded-entry";
-          },
-        });
+      const setupSessionManager: FakeSessionManager = {
+        appendCustomEntry(customType: string, data?: unknown): string {
+          return sessionManager.appendCustomEntry(customType, data);
+        },
+        appendMessage(message: unknown): string {
+          if ((message as { role?: unknown })?.role === "user") {
+            session.messages.push(extractSessionMessageText(message));
+          }
+          return sessionManager.appendMessage(message);
+        },
+        getBranch(): FakeSessionEntry[] {
+          return sessionManager.getBranch();
+        },
+        getEntries(): FakeSessionEntry[] {
+          return sessionManager.getEntries();
+        },
+      };
+      if (newSessionOptions?.setup) {
+        await newSessionOptions.setup(setupSessionManager);
       }
       state.newSessions.push(session);
+      if (options.onNewSession) {
+        const result = await options.onNewSession({ parentSession: newSessionOptions?.parentSession });
+        return result ?? { cancelled: false };
+      }
       return { cancelled: false };
     },
     ui: {
@@ -1124,7 +1207,7 @@ test("configuration menu can toggle reset-context", async () => {
   assert.equal(config["reset-context"], false);
 });
 
-test("req-workflow sends the rendered prompt after creating a new session when reset-context is true", async () => {
+test("req-workflow queues one pending reset-context prompt during new-session setup", async () => {
   const cwd = createTempDir("pi-usereq-prompt-reset-");
   const pi = createFakePi();
   piUsereqExtension(pi);
@@ -1134,11 +1217,48 @@ test("req-workflow sends the rendered prompt after creating a new session when r
 
   await command!.handler("", ctx);
 
+  const branch = ctx.sessionManager.getBranch();
+  const pendingPromptEntry = branch.find((entry) => {
+    return entry.type === "custom"
+      && entry.customType === "pi-usereq-reset-context-prompt";
+  });
+
   assert.equal(ctx.__state.waitForIdleCalls, 1);
   assert.equal(ctx.__state.newSessions.length, 1);
   assert.deepEqual(ctx.__state.newSessions.map((session) => session.messages.length), [0]);
-  assert.equal(pi.sentUserMessages.length, 1);
-  assert.match(String(pi.sentUserMessages[0]?.content), /req\/docs\/WORKFLOW\.md/);
+  assert.equal(pi.sentUserMessages.length, 0);
+  assert.equal(pendingPromptEntry?.type, "custom");
+  assert.match(String((pendingPromptEntry as { data?: { content?: string } } | undefined)?.data?.content), /req\/docs\/WORKFLOW\.md/);
+});
+
+test("req-workflow delivers reset-context prompts through the replacement session runtime", async () => {
+  const cwd = createTempDir("pi-usereq-prompt-runtime-reset-");
+  const sessionManager = createFakeSessionManager();
+  const oldPi = createFakePi({ sessionManager });
+  const newPi = createFakePi({ sessionManager });
+  piUsereqExtension(oldPi);
+  piUsereqExtension(newPi);
+  const replacementCtx = createFakeCtx(cwd, { selects: [] }, { sessionManager });
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    sessionManager,
+    async onNewSession() {
+      await newPi.emit("session_start", { reason: "new" }, replacementCtx);
+      return { cancelled: false };
+    },
+  });
+  const command = oldPi.commands.get("req-workflow");
+  assert.ok(command);
+
+  await command!.handler("", ctx);
+
+  assert.equal(ctx.__state.waitForIdleCalls, 1);
+  assert.equal(oldPi.sentUserMessages.length, 0);
+  assert.equal(newPi.sentUserMessages.length, 1);
+  assert.match(String(newPi.sentUserMessages[0]?.content), /req\/docs\/WORKFLOW\.md/);
+
+  await newPi.emit("session_start", { reason: "reload" }, replacementCtx);
+
+  assert.equal(newPi.sentUserMessages.length, 1);
 });
 
 test("prompt commands reuse the current session when reset-context is false", async () => {

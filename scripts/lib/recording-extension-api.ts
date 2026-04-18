@@ -345,13 +345,13 @@ export class RecordingCommandContext {
 
   /**
    * @brief Simulates `ctx.newSession(...)` for offline command replay.
-   * @details Executes the optional setup callback against a minimal session-manager stub that records appended user messages, thereby preserving `/new`-equivalent prompt delivery evidence without switching real sessions. Runtime is O(n) in setup work. Side effects are limited to in-memory user-message recording.
-   * @param[in] options {{ parentSession?: string; setup?: (sessionManager: { appendMessage: (message: unknown) => string }) => Promise<void> } | undefined} Optional new-session options.
+   * @details Executes the optional setup callback against a minimal session-manager stub that records appended user messages and accepts custom-entry writes, thereby preserving `/new`-equivalent prompt delivery evidence without switching real sessions. Custom entries are acknowledged but not serialized because command replay does not simulate the replacement session branch. Runtime is O(n) in setup work. Side effects are limited to in-memory user-message recording.
+   * @param[in] options {{ parentSession?: string; setup?: (sessionManager: { appendMessage: (message: unknown) => string; appendCustomEntry: (customType: string, data?: unknown) => string }) => Promise<void> } | undefined} Optional new-session options.
    * @return {Promise<{ cancelled: boolean }>} Deterministic non-cancelled result.
    */
   public async newSession(options?: {
     parentSession?: string;
-    setup?: (sessionManager: { appendMessage: (message: unknown) => string }) => Promise<void>;
+    setup?: (sessionManager: { appendMessage: (message: unknown) => string; appendCustomEntry: (customType: string, data?: unknown) => string }) => Promise<void>;
   }): Promise<{ cancelled: boolean }> {
     void options?.parentSession;
     if (options?.setup) {
@@ -360,6 +360,9 @@ export class RecordingCommandContext {
           if ((message as { role?: unknown })?.role === "user") {
             this.recordSessionUserMessage(normalizeSessionUserMessageContent(message));
           }
+          return "recorded-entry";
+        },
+        appendCustomEntry: (_customType: string, _data?: unknown): string => {
           return "recorded-entry";
         },
       });

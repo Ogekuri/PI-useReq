@@ -419,8 +419,69 @@ function buildFindToolExecuteResult(
 }
 
 /**
+ * @brief Identifies queued reset-context prompt payload entries.
+ * @details The custom entry type is written during `ctx.newSession(...setup)` so the replacement session can detect one pending prompt delivery request during `session_start`. Access complexity is O(1).
+ */
+const RESET_CONTEXT_PENDING_PROMPT_ENTRY_TYPE = "pi-usereq-reset-context-prompt";
+
+/**
+ * @brief Identifies consumed reset-context prompt payload entries.
+ * @details The custom entry type records the pending-entry identifier already delivered by the replacement session, preventing duplicate prompt sends on later `session_start` events such as reload or resume. Access complexity is O(1).
+ */
+const RESET_CONTEXT_CONSUMED_PROMPT_ENTRY_TYPE = "pi-usereq-reset-context-prompt-consumed";
+
+/**
+ * @brief Resolves the latest queued reset-context prompt that has not yet been consumed.
+ * @details Scans the active branch in chronological order, tracks the latest pending prompt custom entry and the latest consumed pending-entry identifier, and returns the pending payload only when it still requires delivery. Runtime is O(n) in branch entry count. No external state is mutated.
+ * @param[in] sessionManager {{ getBranch: () => Array<unknown> }} Active session manager.
+ * @return {{ pendingEntryId: string; content: string } | undefined} Pending prompt descriptor or `undefined` when no undelivered prompt exists.
+ */
+function getPendingResetContextPrompt(sessionManager: { getBranch: () => Array<unknown> }): { pendingEntryId: string; content: string } | undefined {
+  let pendingPrompt: { pendingEntryId: string; content: string } | undefined;
+  let consumedPendingEntryId: string | undefined;
+
+  for (const entry of sessionManager.getBranch()) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const candidate = entry as {
+      id?: unknown;
+      type?: unknown;
+      customType?: unknown;
+      data?: unknown;
+    };
+    if (candidate.type !== "custom" || typeof candidate.customType !== "string") {
+      continue;
+    }
+    if (candidate.customType === RESET_CONTEXT_PENDING_PROMPT_ENTRY_TYPE) {
+      const pendingEntryId = typeof candidate.id === "string" ? candidate.id : undefined;
+      const content = typeof (candidate.data as { content?: unknown } | undefined)?.content === "string"
+        ? (candidate.data as { content: string }).content
+        : undefined;
+      if (pendingEntryId && content) {
+        pendingPrompt = { pendingEntryId, content };
+      }
+      continue;
+    }
+    if (candidate.customType === RESET_CONTEXT_CONSUMED_PROMPT_ENTRY_TYPE) {
+      const pendingEntryId = typeof (candidate.data as { pendingEntryId?: unknown } | undefined)?.pendingEntryId === "string"
+        ? (candidate.data as { pendingEntryId: string }).pendingEntryId
+        : undefined;
+      if (pendingEntryId) {
+        consumedPendingEntryId = pendingEntryId;
+      }
+    }
+  }
+
+  if (!pendingPrompt || pendingPrompt.pendingEntryId === consumedPendingEntryId) {
+    return undefined;
+  }
+  return pendingPrompt;
+}
+
+/**
  * @brief Delivers one rendered prompt according to the configured reset policy.
- * @details When `reset-context` is `true`, waits for idle, creates a `/new`-equivalent session, then sends the rendered prompt through `pi.sendUserMessage(...)` after runtime replacement so the new session starts an agent turn instead of only mutating session history. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement and user-message delivery.
+ * @details When `reset-context` is `true`, waits for idle and creates a `/new`-equivalent session whose setup callback writes a pending prompt marker into the replacement session so the new runtime instance can send the rendered prompt during `session_start`. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement, custom-entry persistence, and user-message delivery.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -435,11 +496,14 @@ async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandConte
   }
 
   await ctx.waitForIdle();
-  const newSessionResult = await ctx.newSession();
+  const newSessionResult = await ctx.newSession({
+    setup: async (sessionManager) => {
+      sessionManager.appendCustomEntry(RESET_CONTEXT_PENDING_PROMPT_ENTRY_TYPE, { content });
+    },
+  });
   if (newSessionResult.cancelled) {
     return;
   }
-  pi.sendUserMessage(content);
 }
 
 /**
@@ -1667,5 +1731,13 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
     applyConfiguredPiUsereqTools(pi, config);
     const enabledTools = getConfiguredEnabledPiUsereqTools(config);
     ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, enabledTools));
+    const pendingPrompt = getPendingResetContextPrompt(ctx.sessionManager);
+    if (!pendingPrompt) {
+      return;
+    }
+    pi.appendEntry(RESET_CONTEXT_CONSUMED_PROMPT_ENTRY_TYPE, {
+      pendingEntryId: pendingPrompt.pendingEntryId,
+    });
+    pi.sendUserMessage(pendingPrompt.content);
   });
 }
