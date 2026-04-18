@@ -5,7 +5,12 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { getProjectConfigPath, saveConfig, type UseReqConfig } from "../src/core/config.js";
+import {
+  DEFAULT_DOCS_DIR,
+  getProjectConfigPath,
+  saveConfig,
+  type UseReqConfig,
+} from "../src/core/config.js";
 import { normalizeEnabledPiUsereqTools } from "../src/core/pi-usereq-tools.js";
 
 const require = createRequire(import.meta.url);
@@ -154,7 +159,7 @@ export function initFixtureRepo(options: {
   fs.mkdirSync(path.join(projectBase, "src"), { recursive: true });
   fs.mkdirSync(path.join(projectBase, "tests"), { recursive: true });
   fs.mkdirSync(path.join(projectBase, "guidelines"), { recursive: true });
-  fs.mkdirSync(path.join(projectBase, "req", "docs"), { recursive: true });
+  fs.mkdirSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/")), { recursive: true });
   fs.mkdirSync(path.join(projectBase, ".pi-usereq"), { recursive: true });
 
   for (const fixture of options.fixtures ?? getFixtureFiles()) {
@@ -168,7 +173,7 @@ export function initFixtureRepo(options: {
     "REFERENCES.md": "# References\n",
   };
   for (const [name, content] of Object.entries(docs)) {
-    fs.writeFileSync(path.join(projectBase, "req", "docs", name), content, "utf8");
+    fs.writeFileSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/"), name), content, "utf8");
   }
 
   const gitInit = spawnSync("git", ["init"], { cwd: projectBase, encoding: "utf8" });
@@ -181,7 +186,7 @@ export function initFixtureRepo(options: {
   const gitPath = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: projectBase, encoding: "utf8" }).stdout.trim();
 
   const config: UseReqConfig = {
-    "docs-dir": "req/docs",
+    "docs-dir": DEFAULT_DOCS_DIR,
     "tests-dir": "tests",
     "src-dir": ["src"],
     "static-check": options.staticCheck ?? {},

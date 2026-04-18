@@ -9,7 +9,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { getProjectConfigPath, type UseReqConfig } from "../src/core/config.js";
+import {
+  DEFAULT_DOCS_DIR,
+  getProjectConfigPath,
+  type UseReqConfig,
+} from "../src/core/config.js";
 import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
 import { detectLanguage } from "../src/core/generate-markdown.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
@@ -571,7 +575,7 @@ const TARGET_CASES: TargetParityCase[] = [
       });
       fs.mkdirSync(path.join(projectBase, "src"), { recursive: true });
       fs.mkdirSync(path.join(projectBase, "tests"), { recursive: true });
-      fs.mkdirSync(path.join(projectBase, "req", "docs"), { recursive: true });
+      fs.mkdirSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/")), { recursive: true });
       const result = runNodeCli(
         ["--base", projectBase, "--enable-static-check", "C=Command,nonexistent_tool_xyz_12345"],
         projectBase,
@@ -702,12 +706,12 @@ const TARGET_CASES: TargetParityCase[] = [
       const success = runNodeCli(["--docs-check"], projectBase);
       assert.equal(success.status, 0, success.stderr);
 
-      fs.rmSync(path.join(projectBase, "req", "docs", "REQUIREMENTS.md"));
+      fs.rmSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/"), "REQUIREMENTS.md"));
       const missingRequirements = runNodeCli(["--docs-check"], projectBase);
       assert.equal(missingRequirements.status, 1);
 
-      fs.writeFileSync(path.join(projectBase, "req", "docs", "REQUIREMENTS.md"), "# Requirements\n", "utf8");
-      fs.rmSync(path.join(projectBase, "req", "docs", "WORKFLOW.md"));
+      fs.writeFileSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/"), "REQUIREMENTS.md"), "# Requirements\n", "utf8");
+      fs.rmSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/"), "WORKFLOW.md"));
       const missingWorkflow = runNodeCli(["--docs-check"], projectBase);
       assert.equal(missingWorkflow.status, 1);
     },

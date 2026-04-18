@@ -1420,7 +1420,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ---
 
-# config.ts | TypeScript | 211L | 8 symbols | 6 imports | 13 comments
+# config.ts | TypeScript | 212L | 8 symbols | 6 imports | 13 comments
 > Path: `src/core/config.ts`
 - @brief Loads, normalizes, and persists pi-usereq project configuration.
 - @details Defines the configuration schema, default directory conventions, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq`.
@@ -1445,40 +1445,40 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @brief Defines the persisted pi-usereq project configuration schema.
 - @details Captures documentation paths, source/test directory selection, prompt-session reset policy, static-check configuration, enabled startup tools, and git/base-path metadata. The interface is compile-time only and introduces no runtime side effects.
 
-### fn `export function getProjectConfigPath(projectBase: string): string` (L71-73)
+### fn `export function getProjectConfigPath(projectBase: string): string` (L72-74)
 - @brief Computes the per-project config file path.
 - @details Joins the project base with `.pi-usereq/config.json`, producing the canonical persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {string} Absolute config file path.
 
-### fn `export function getDefaultConfig(projectBase: string): UseReqConfig` (L81-92)
+### fn `export function getDefaultConfig(projectBase: string): UseReqConfig` (L82-93)
 - @brief Builds the default project configuration.
 - @details Populates canonical docs/test/source directories, enables prompt-session reset plus the default startup tool set, and records the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {UseReqConfig} Fresh default configuration object.
 
-### fn `export function loadConfig(projectBase: string): UseReqConfig` (L101-141)
+### fn `export function loadConfig(projectBase: string): UseReqConfig` (L102-142)
 - @brief Loads and sanitizes the persisted project configuration.
 - @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates core field shapes, applies fallbacks for directory and reset fields, and normalizes enabled tool names. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {UseReqConfig} Sanitized effective configuration.
 - @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
 
-### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L150-154)
+### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L151-155)
 - @brief Persists the project configuration to disk.
 - @details Creates the parent `.pi-usereq` directory when necessary and writes formatted JSON terminated by a newline. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Configuration object to persist.
 - @return {void} No return value.
 
-### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L163-173)
+### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L164-174)
 - @brief Normalizes persisted directory fields to project-relative forms.
 - @details Rewrites docs, tests, and source directories using project containment heuristics, strips trailing separators, and restores defaults for empty results. Runtime is O(n) in configured path count plus path-length processing. No filesystem writes occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Configuration object to normalize.
 - @return {UseReqConfig} Normalized configuration copy.
 
-### fn `export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string>` (L183-211)
+### fn `export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string>` (L184-212)
 - @brief Builds placeholder replacements for bundled prompt rendering.
 - @details Computes runtime path context from the execution path, derives installation-owned template and guideline paths, enumerates visible guideline files from the installed resource tree, and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -1491,12 +1491,12 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 |---|---|---|---|---|
 |`StaticCheckEntry`|iface||23-27|export interface StaticCheckEntry|
 |`UseReqConfig`|iface||33-42|export interface UseReqConfig|
-|`getProjectConfigPath`|fn||71-73|export function getProjectConfigPath(projectBase: string)...|
-|`getDefaultConfig`|fn||81-92|export function getDefaultConfig(projectBase: string): Us...|
-|`loadConfig`|fn||101-141|export function loadConfig(projectBase: string): UseReqCo...|
-|`saveConfig`|fn||150-154|export function saveConfig(projectBase: string, config: U...|
-|`normalizeConfigPaths`|fn||163-173|export function normalizeConfigPaths(projectBase: string,...|
-|`buildPromptReplacementPaths`|fn||183-211|export function buildPromptReplacementPaths(projectBase: ...|
+|`getProjectConfigPath`|fn||72-74|export function getProjectConfigPath(projectBase: string)...|
+|`getDefaultConfig`|fn||82-93|export function getDefaultConfig(projectBase: string): Us...|
+|`loadConfig`|fn||102-142|export function loadConfig(projectBase: string): UseReqCo...|
+|`saveConfig`|fn||151-155|export function saveConfig(projectBase: string, config: U...|
+|`normalizeConfigPaths`|fn||164-174|export function normalizeConfigPaths(projectBase: string,...|
+|`buildPromptReplacementPaths`|fn||184-212|export function buildPromptReplacementPaths(projectBase: ...|
 
 
 ---

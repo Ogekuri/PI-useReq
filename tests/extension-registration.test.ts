@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
-import { getProjectConfigPath } from "../src/core/config.js";
+import { DEFAULT_DOCS_DIR, getProjectConfigPath } from "../src/core/config.js";
 import {
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
@@ -410,7 +410,7 @@ test("files-tokens returns structured source facts and separated guidance", asyn
     const pi = createFakePi();
     piUsereqExtension(pi);
     const result = await executeRegisteredTool(pi, "files-tokens", projectBase, {
-      files: ["req/docs/REQUIREMENTS.md", "req/docs/MISSING.md"],
+      files: [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`, `${DEFAULT_DOCS_DIR}/MISSING.md`],
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
@@ -447,20 +447,20 @@ test("files-tokens returns structured source facts and separated guidance", asyn
     const payload = result.details!;
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
     assert.equal(payload.request.base_dir_path, projectBase);
-    assert.deepEqual(payload.request.requested_input_paths, ["req/docs/REQUIREMENTS.md", "req/docs/MISSING.md"]);
+    assert.deepEqual(payload.request.requested_input_paths, [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`, `${DEFAULT_DOCS_DIR}/MISSING.md`]);
     assert.equal(payload.summary.counted_file_count, 1);
     assert.equal(payload.summary.skipped_file_count, 1);
-    assert.equal(payload.files[0]?.canonical_path, "req/docs/REQUIREMENTS.md");
+    assert.equal(payload.files[0]?.canonical_path, `${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`);
     assert.equal(payload.files[0]?.start_line_number, 1);
     assert.equal(payload.files[0]?.end_line_number, payload.files[0]?.line_count);
     assert.ok((payload.files[0]?.byte_count ?? 0) > 0);
     assert.equal(payload.files[0]?.primary_heading_text, "Requirements");
     assert.deepEqual(payload.guidance.source_observations.skipped_inputs, [
-      { input_path: "req/docs/MISSING.md", canonical_path: "req/docs/MISSING.md", reason: "not found" },
+      { input_path: `${DEFAULT_DOCS_DIR}/MISSING.md`, canonical_path: `${DEFAULT_DOCS_DIR}/MISSING.md`, reason: "not found" },
     ]);
     assert.equal(payload.guidance.derived_recommendations[0]?.kind, "prioritize_high_token_paths");
     assert.equal(payload.guidance.actionable_next_steps[0]?.kind, "read_top_token_paths_first");
-    assert.match(payload.execution.stderr, /skipped: req\/docs\/MISSING\.md: not found/);
+    assert.match(payload.execution.stderr, new RegExp(`skipped: ${DEFAULT_DOCS_DIR.replace("/", "\\/")}/MISSING\\.md: not found`));
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -1130,7 +1130,7 @@ test("prompt commands reuse the current session when reset-context is false", as
   fs.writeFileSync(
     getProjectConfigPath(cwd),
     `${JSON.stringify({
-      "docs-dir": "req/docs",
+      "docs-dir": DEFAULT_DOCS_DIR,
       "tests-dir": "tests",
       "src-dir": ["src"],
       "reset-context": false,
@@ -1159,7 +1159,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   fs.writeFileSync(
     getProjectConfigPath(cwd),
     `${JSON.stringify({
-      "docs-dir": "req/docs",
+      "docs-dir": DEFAULT_DOCS_DIR,
       "tests-dir": "tests",
       "src-dir": ["src"],
       "static-check": {},

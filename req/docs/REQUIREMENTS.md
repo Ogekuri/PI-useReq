@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.18"
+version: "0.0.19"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -48,7 +48,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 
 ### 2.2 Project Constraints
-- **CTN-001**: MUST persist project configuration at `<base-path>/.pi-usereq/config.json` with default `docs-dir=req/docs`, `tests-dir=tests`, `src-dir=["src"]`, and `reset-context=true`.
+- **CTN-001**: MUST persist project configuration at `<base-path>/.pi-usereq/config.json` with default `docs-dir=pi-usereq/docs`, `tests-dir=tests`, `src-dir=["src"]`, and `reset-context=true`.
 - **CTN-002**: MUST collect project-wide source files through `git ls-files --cached --others --exclude-standard`; non-git project scans therefore fail instead of falling back to directory walking.
 - **CTN-003**: MUST limit project-wide source discovery to extensions listed in `STATIC_CHECK_EXT_TO_LANG`; analyzer-only aliases such as `.cc`, `.cxx`, `.hpp`, and `.exs` remain undiscoverable.
 - **CTN-004**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from project-wide static-check execution.
