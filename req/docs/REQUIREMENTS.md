@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.17"
+version: "0.0.18"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -44,11 +44,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-002**: MUST expose CLI and agent-tool interfaces for token counting, references generation, compression, construct search, and static-check execution on explicit files or configured project sources.
 - **PRJ-003**: MUST provide an interactive pi configuration surface for docs path, tests path, source directories, static-check entries, `reset-context`, and active-tool enablement for custom and supported embedded pi CLI tools.
 - **PRJ-004**: MUST provide git repository validation plus standardized worktree naming, creation, and deletion utilities using configured project and git paths.
-- **PRJ-005**: MUST provision bundled prompts, documentation templates, and guidelines into user-home pi-usereq resources.
+- **PRJ-005**: MUST install bundled prompts, documentation templates, and guidelines under the extension installation path and expose them through shared runtime path context.
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 
 ### 2.2 Project Constraints
-- **CTN-001**: MUST persist project configuration at `.pi/pi-usereq/config.json` with default `docs-dir=req/docs`, `tests-dir=tests`, `src-dir=["src"]`, and `reset-context=true`.
+- **CTN-001**: MUST persist project configuration at `<base-path>/.pi-usereq/config.json` with default `docs-dir=req/docs`, `tests-dir=tests`, `src-dir=["src"]`, and `reset-context=true`.
 - **CTN-002**: MUST collect project-wide source files through `git ls-files --cached --others --exclude-standard`; non-git project scans therefore fail instead of falling back to directory walking.
 - **CTN-003**: MUST limit project-wide source discovery to extensions listed in `STATIC_CHECK_EXT_TO_LANG`; analyzer-only aliases such as `.cc`, `.cxx`, `.hpp`, and `.exs` remain undiscoverable.
 - **CTN-004**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from project-wide static-check execution.
@@ -58,7 +58,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-008**: MUST expose package scripts for test, watch-mode test, and CLI execution through `node --import tsx`.
 - **CTN-009**: MUST implement extension debugging outside `src/index.ts` business logic and drive extension behavior only through the default extension export, registered commands, registered tools, and registered events.
 - **CTN-010**: MUST execute offline harness flows without requiring pi.dev services or `docs/pi.dev/agent-document-manifest.json`.
-- **CTN-011**: MUST store bundled template markdown resources under `src/resources/templates` and provision them under `~/.pi/pi-usereq/resources/templates`.
+- **CTN-011**: MUST store bundled prompt, template, and guideline resources under `src/resources/{prompts,templates,guidelines}` and install them under `<installation-path>/resources/{prompts,templates,guidelines}`.
 
 ## 3. Requirements
 
@@ -73,8 +73,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-008**: MUST format `files-references`, `references`, `files-compress`, and `compress` agent-tool outputs as deterministic agent-oriented JSON with dedicated metadata fields for source structure, symbols, and Doxygen tags.
 
 ### 3.2 Functions
-- **REQ-001**: MUST recursively copy bundled non-hidden resources into `~/.pi/pi-usereq/resources` and overwrite existing destination files.
-- **REQ-002**: MUST replace `%%DOC_PATH%%`, `%%GUIDELINES_*%%`, `%%TEMPLATE_PATH%%`, `%%SRC_PATHS%%`, `%%TEST_PATH%%`, `%%PROJECT_BASE%%`, and `%%ARGS%%` tokens when rendering prompts.
+- **REQ-001**: MUST access bundled prompts, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
+- **REQ-002**: MUST replace `%%DOC_PATH%%`, `%%GUIDELINES_*%%`, `%%TEMPLATE_PATH%%`, `%%SRC_PATHS%%`, `%%TEST_PATH%%`, `%%PROJECT_BASE%%`, `%%EXECUTION_PATH%%`, `%%INSTALLATION_PATH%%`, `%%CONFIG_PATH%%`, and `%%ARGS%%` tokens when rendering prompts.
 - **REQ-003**: MUST rewrite legacy `req --...` prompt text references to internal tool names such as `find tool` and `git-check tool`.
 - **REQ-004**: MUST register `req-<prompt>` commands for every bundled prompt name and send rendered prompt content as a user message.
 - **REQ-005**: MUST expose `git-path`, `get-base-path`, `files-tokens`, `files-references`, `files-compress`, and `files-find` only through agent-tool registration.
@@ -106,7 +106,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-067**: MUST make `req-<prompt>` commands perform a `/new`-equivalent pre-reset before prompt delivery when `reset-context` is `true`, using pi CLI reset APIs when available.
 - **REQ-068**: MUST make `req-<prompt>` commands skip the pre-reset and send the rendered prompt into the current session when `reset-context` is `false`.
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
-- **REQ-009**: MUST ensure home resources, apply configured startup tools, and publish `pi-usereq` status text during `session_start`.
+- **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish `pi-usereq` status text during `session_start`.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
@@ -158,10 +158,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-024**: MUST make `git-check` fail unless configured `git-path` exists, resolves inside a work tree, has no porcelain changes, and has a valid `HEAD`.
 - **REQ-025**: MUST make `docs-check` fail when `REQUIREMENTS.md`, `WORKFLOW.md`, or `REFERENCES.md` is missing and name the prompt command that should generate the missing file.
 - **REQ-026**: MUST make `git-wt-name` emit `useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
-- **REQ-027**: MUST make `git-wt-create` reject invalid names, create `../<wtName>` from the configured git root, and copy `.pi/pi-usereq` into the matching worktree base when present.
+- **REQ-027**: MUST make `git-wt-create` reject invalid names, create `../<wtName>` from the configured git root, and copy `.pi-usereq` into the matching worktree base when present.
 - **REQ-028**: MUST make `git-wt-delete` remove the exact named worktree and/or branch when either exists and fail when neither exists.
-- **REQ-029**: MUST make `git-path` and `get-base-path` print configured `git-path` and `base-path` values.
-- **REQ-030**: MUST make extension project-config loading set `base-path` to current cwd and recompute `git-path` when current cwd is inside a repository.
+- **REQ-029**: MUST make `get-base-path` print `base-path`, where `base-path` equals the current `execution-path`.
+- **REQ-030**: MUST make extension project-config loading set `execution-path` to current cwd and set `config-path` to `<base-path>/.pi-usereq/config.json`.
+- **REQ-103**: MUST resolve `installation-path` from the executing extension entry module and expose it with runtime path context to prompts, tools, and `session_start` handlers.
+- **REQ-104**: MUST keep `docs-dir`, `tests-dir`, and every `src-dir` entry relative to `base-path` and resolve them against `base-path` during execution.
+- **REQ-105**: MUST make `git-path` print the derived repository root only when it equals `base-path` or is an ancestor of `base-path`.
+- **REQ-106**: MUST make prompt `%%GUIDELINES_FILES%%`, `%%GUIDELINES_PATH%%`, and `%%TEMPLATE_PATH%%` resolve under `<installation-path>/resources`.
+- **REQ-107**: MUST express prompt-visible `installation-path`, `execution-path`, `base-path`, `config-path`, template paths, and guideline paths relative to user home using platform-native home environment variables.
 - **REQ-031**: MUST make `pi-usereq-show-config` write the current project configuration JSON to the editor.
 - **REQ-032**: MUST inject a pi.dev conformance block into rendered prompts when `docs/pi.dev/agent-document-manifest.json` exists under the project base.
 - **REQ-033**: MUST make that conformance block require manifest-guided document review before implementing or changing extension code that interfaces with pi CLI.
@@ -178,13 +183,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting custom slash commands for tool names and `test-static-check`.
-- **TST-002**: MUST verify resource provisioning copies bundled prompt, template, and guideline files and prompt rendering replaces all dynamic placeholders.
+- **TST-002**: MUST verify installed bundled prompt, template, and guideline resources remain readable from `installation-path` and prompt rendering replaces all dynamic placeholders with runtime path context.
 - **TST-003**: MUST verify standalone CLI outputs for `files-tokens`, `files-compress`, `files-find`, and `--test-static-check` match the Python oracle for every fixture file.
 - **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, and adds static-check entries through raw-spec and guided flows.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the `pi-usereq` status line.
-- **TST-007**: MUST verify `git-path` output ignores stale stored `git-path` values and resolves the current repository root.
-- **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, and remove the named worktree as observable filesystem side effects.
+- **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
+- **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
 - **TST-010**: MUST verify `tsconfig.json` declares `NodeNext`, `strict`, `noEmit`, and includes both `src/**/*.ts` and `tests/**/*.ts`.
 - **TST-011**: MUST verify pi.dev-aware prompt rendering injects manifest-driven conformance rules only when the pi.dev manifest exists under the project base.
@@ -204,7 +209,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-025**: MUST verify harness inspection surfaces agent-oriented `files-find` and `find` tool descriptions with input schema, output schema, line-number behavior, regex semantics, supported tags by language, and failure details.
 - **TST-026**: MUST verify `files-compress` and `compress` JSON outputs expose structured request, repository, line, symbol, status, and Doxygen facts through dedicated fields.
 - **TST-027**: MUST verify harness inspection surfaces agent-oriented `files-compress` and `compress` tool descriptions with parameters, line-number behavior, output schema, specialization triggers, and failure conditions.
-- **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON request, result, status, and execution facts through dedicated fields.
+- **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON request, result, status, execution, and derived runtime path facts through dedicated fields.
 - **TST-029**: MUST verify harness inspection surfaces machine-oriented descriptions for path, static-check, git, docs, and worktree tools, including parameters, output schema, specialization triggers, and failure conditions.
 
 ## 5. Observed Component Model

@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectLanguage } from "../src/core/generate-markdown.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
-import type { UseReqConfig } from "../src/core/config.js";
+import { getProjectConfigPath, type UseReqConfig } from "../src/core/config.js";
 import {
   initFixtureRepo,
   runNodeCli,
@@ -476,7 +476,7 @@ function buildProjectScenarios(): AttendedScenario[] {
           normalize: createProjectNormalizer(projectBase),
           cleanup: () => removePath(projectBase),
           postAssert: () => {
-            const payload = JSON.parse(fs.readFileSync(path.join(projectBase, ".pi", "pi-usereq", "config.json"), "utf8")) as UseReqConfig;
+            const payload = JSON.parse(fs.readFileSync(getProjectConfigPath(projectBase), "utf8")) as UseReqConfig;
             assert.deepEqual(payload["static-check"].Python, [{ module: "Pylance" }]);
           },
         };
@@ -587,7 +587,7 @@ function buildProjectScenarios(): AttendedScenario[] {
         },
         postAssert: () => {
           assert.ok(fs.existsSync(worktreePath), "worktree path was not created");
-          assert.ok(fs.existsSync(path.join(worktreePath, ".pi", "pi-usereq", "config.json")), "worktree config was not copied");
+          assert.ok(fs.existsSync(getProjectConfigPath(worktreePath)), "worktree config was not copied");
         },
       };
     }),

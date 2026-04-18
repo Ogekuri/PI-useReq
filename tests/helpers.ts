@@ -5,7 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { saveConfig, type UseReqConfig } from "../src/core/config.js";
+import { getProjectConfigPath, saveConfig, type UseReqConfig } from "../src/core/config.js";
 import { normalizeEnabledPiUsereqTools } from "../src/core/pi-usereq-tools.js";
 
 const require = createRequire(import.meta.url);
@@ -111,7 +111,7 @@ function writeOracleReqConfig(projectBase: string, config: UseReqConfig): void {
 
 /**
  * @brief Persists both Node and Python-oracle project configs for parity tests.
- * @details Writes `.pi/pi-usereq/config.json` for the TypeScript CLI and `.req/config.json` for the Python oracle using the same logical payload. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
+ * @details Writes `.pi-usereq/config.json` for the TypeScript CLI and `.req/config.json` for the Python oracle using the same logical payload. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] config {UseReqConfig} Effective project configuration to persist.
  * @return {void} No return value.
@@ -123,12 +123,12 @@ export function saveFixtureConfigs(projectBase: string, config: UseReqConfig): v
 
 /**
  * @brief Reads the raw persisted TypeScript project config JSON.
- * @details Loads `.pi/pi-usereq/config.json` without normalization so tests can inspect merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Loads `.pi-usereq/config.json` without normalization so tests can inspect merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Fixture project root.
  * @return {Record<string, unknown>} Parsed raw configuration object.
  */
 export function readProjectConfigJson(projectBase: string): Record<string, unknown> {
-  return JSON.parse(fs.readFileSync(path.join(projectBase, ".pi", "pi-usereq", "config.json"), "utf8")) as Record<string, unknown>;
+  return JSON.parse(fs.readFileSync(getProjectConfigPath(projectBase), "utf8")) as Record<string, unknown>;
 }
 
 /**
@@ -155,7 +155,7 @@ export function initFixtureRepo(options: {
   fs.mkdirSync(path.join(projectBase, "tests"), { recursive: true });
   fs.mkdirSync(path.join(projectBase, "guidelines"), { recursive: true });
   fs.mkdirSync(path.join(projectBase, "req", "docs"), { recursive: true });
-  fs.mkdirSync(path.join(projectBase, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.join(projectBase, ".pi-usereq"), { recursive: true });
 
   for (const fixture of options.fixtures ?? getFixtureFiles()) {
     const destination = path.join(projectBase, "src", path.basename(fixture));

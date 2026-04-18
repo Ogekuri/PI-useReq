@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { getProjectConfigPath } from "../src/core/config.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
 import { initFixtureRepo, runNodeCli, runPythonCli } from "./helpers.js";
 
@@ -54,7 +55,7 @@ test("git worktree create/delete wrappers produce expected worktree side effects
   assert.equal(createResult.status, 0, createResult.stderr);
   const worktreePath = path.join(path.dirname(projectBase), wtName);
   assert.ok(fs.existsSync(worktreePath), "worktree path was not created");
-  assert.ok(fs.existsSync(path.join(worktreePath, ".pi", "pi-usereq", "config.json")), "project config was not copied into worktree");
+  assert.ok(fs.existsSync(getProjectConfigPath(worktreePath)), "project config was not copied into worktree");
 
   const deleteResult = runNodeCli(["--git-wt-delete", wtName], projectBase);
   assert.equal(deleteResult.status, 0, deleteResult.stderr);

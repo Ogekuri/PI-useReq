@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import type { UseReqConfig } from "../src/core/config.js";
+import { getProjectConfigPath, type UseReqConfig } from "../src/core/config.js";
+import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
 import { detectLanguage } from "../src/core/generate-markdown.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
 import {
@@ -577,7 +578,7 @@ const TARGET_CASES: TargetParityCase[] = [
       );
       assert.equal(result.status, 1);
       assert.match(result.stderr, /not an executable program/);
-      assert.ok(!fs.existsSync(path.join(projectBase, ".pi", "pi-usereq", "config.json")));
+      assert.ok(!fs.existsSync(getProjectConfigPath(projectBase)));
     },
   },
   {
@@ -730,7 +731,7 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.equal(created.status, 0, created.stderr);
       const worktreePath = path.join(path.dirname(projectBase), wtName);
       assert.ok(fs.existsSync(worktreePath), "worktree path was not created");
-      assert.ok(fs.existsSync(path.join(worktreePath, ".pi", "pi-usereq", "config.json")), "config was not copied");
+      assert.ok(fs.existsSync(getProjectConfigPath(worktreePath)), "config was not copied");
 
       const partial = runNodeCli(["--git-wt-delete", "pi-usereq-option-parity"], projectBase);
       assert.notEqual(partial.status, 0);
@@ -750,11 +751,11 @@ const TARGET_CASES: TargetParityCase[] = [
       const { projectBase, config } = createFixtureRepo(t, { fixtures: [] });
       const gitPath = runNodeCli(["--git-path"], projectBase);
       assert.equal(gitPath.status, 0, gitPath.stderr);
-      assert.equal(gitPath.stdout.trim(), config["git-path"]);
+      assert.equal(gitPath.stdout.trim(), formatRuntimePathForDisplay(String(config["git-path"] ?? "")));
 
       const basePath = runNodeCli(["--get-base-path"], projectBase);
       assert.equal(basePath.status, 0, basePath.stderr);
-      assert.equal(basePath.stdout.trim(), config["base-path"]);
+      assert.equal(basePath.stdout.trim(), formatRuntimePathForDisplay(String(config["base-path"] ?? projectBase)));
 
       const gitRejected = runNodeCli(["--base", projectBase, "--git-path"], projectBase);
       assert.notEqual(gitRejected.status, 0);

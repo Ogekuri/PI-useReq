@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
+import { getProjectConfigPath } from "../src/core/config.js";
 import {
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
@@ -975,17 +976,25 @@ test("path, static-check, git, docs, and worktree tools return structured JSON p
 
     const gitPathResult = await executeRegisteredTool(pi, "git-path", projectBase) as {
       content?: Array<{ text?: string }>;
-      details?: { result: { path_value: string; path_present: boolean }; execution: { code: number } };
+      details?: {
+        result: { path_value: string; path_present: boolean };
+        runtime_paths: { git_path: string };
+        execution: { code: number };
+      };
     };
     assert.deepEqual(JSON.parse(gitPathResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(gitPathResult.details)));
-    assert.equal(gitPathResult.details?.result.path_value, projectBase);
+    assert.equal(gitPathResult.details?.result.path_value, gitPathResult.details?.runtime_paths.git_path);
     assert.equal(gitPathResult.details?.result.path_present, true);
     assert.equal(gitPathResult.details?.execution.code, 0);
 
     const basePathResult = await executeRegisteredTool(pi, "get-base-path", projectBase) as {
-      details?: { result: { path_value: string }; execution: { code: number } };
+      details?: {
+        result: { path_value: string };
+        runtime_paths: { base_path: string };
+        execution: { code: number };
+      };
     };
-    assert.equal(basePathResult.details?.result.path_value, projectBase);
+    assert.equal(basePathResult.details?.result.path_value, basePathResult.details?.runtime_paths.base_path);
     assert.equal(basePathResult.details?.execution.code, 0);
 
     const gitCheckResult = await executeRegisteredTool(pi, "git-check", projectBase) as {
@@ -1075,27 +1084,27 @@ test("path, static-check, git, docs, and worktree tools return structured JSON p
 
 test("configuration menu saves updated docs-dir in project config", async () => {
   const cwd = createTempDir("pi-usereq-menu-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
 
   await command!.handler("", createFakeCtx(cwd, { selects: ["Set docs-dir", "Save and close"], inputs: ["docs/custom"] }));
-  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(config["docs-dir"], "docs/custom");
 });
 
 test("configuration menu can toggle reset-context", async () => {
   const cwd = createTempDir("pi-usereq-menu-reset-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
 
   await command!.handler("", createFakeCtx(cwd, { selects: ["Toggle reset-context (true)", "Save and close"] }));
-  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(config["reset-context"], false);
 });
 
@@ -1117,9 +1126,9 @@ test("prompt commands reset context by default before prompt delivery", async ()
 
 test("prompt commands reuse the current session when reset-context is false", async () => {
   const cwd = createTempDir("pi-usereq-prompt-current-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   fs.writeFileSync(
-    path.join(cwd, ".pi", "pi-usereq", "config.json"),
+    getProjectConfigPath(cwd),
     `${JSON.stringify({
       "docs-dir": "req/docs",
       "tests-dir": "tests",
@@ -1146,9 +1155,9 @@ test("prompt commands reuse the current session when reset-context is false", as
 
 test("session_start applies configured pi-usereq startup tools", async () => {
   const cwd = createTempDir("pi-usereq-tools-startup-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   fs.writeFileSync(
-    path.join(cwd, ".pi", "pi-usereq", "config.json"),
+    getProjectConfigPath(cwd),
     `${JSON.stringify({
       "docs-dir": "req/docs",
       "tests-dir": "tests",
@@ -1169,7 +1178,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
 
 test("session_start enables default custom tools and default embedded tools only", async () => {
   const cwd = createTempDir("pi-usereq-default-tools-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
 
@@ -1185,7 +1194,7 @@ test("session_start enables default custom tools and default embedded tools only
 
 test("configuration menu can enable embedded builtin tools", async () => {
   const cwd = createTempDir("pi-usereq-menu-embedded-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
@@ -1198,14 +1207,14 @@ test("configuration menu can enable embedded builtin tools", async () => {
     }),
   );
 
-  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.ok(config["enabled-tools"].includes("grep"));
   assert.ok(pi.getActiveTools().includes("grep"));
 });
 
 test("configuration menu can disable configurable active tools", async () => {
   const cwd = createTempDir("pi-usereq-menu-tools-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
@@ -1218,7 +1227,7 @@ test("configuration menu can disable configurable active tools", async () => {
     }),
   );
 
-  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.deepEqual(config["enabled-tools"], []);
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
@@ -1226,7 +1235,7 @@ test("configuration menu can disable configurable active tools", async () => {
 test("git-path tool derives the repository root at runtime", async () => {
   const { projectBase } = initFixtureRepo();
   try {
-    const configPath = path.join(projectBase, ".pi", "pi-usereq", "config.json");
+    const configPath = getProjectConfigPath(projectBase);
     const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     config["git-path"] = "/tmp/wrong-git-root";
     fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
@@ -1235,11 +1244,11 @@ test("git-path tool derives the repository root at runtime", async () => {
     piUsereqExtension(pi);
     const result = await executeRegisteredTool(pi, "git-path", projectBase) as {
       content?: Array<{ text?: string }>;
-      details?: { result: { path_value: string } };
+      details?: { result: { path_value: string }; runtime_paths: { git_path: string } };
     };
 
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(result.details)));
-    assert.equal(result.details?.result.path_value, projectBase);
+    assert.equal(result.details?.result.path_value, result.details?.runtime_paths.git_path);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -1257,7 +1266,7 @@ test("static-check exposes the supported programming languages", () => {
 
 test("configuration menu can add static-check entries from raw specs", async () => {
   const cwd = createTempDir("pi-usereq-menu-sc-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
@@ -1271,13 +1280,13 @@ test("configuration menu can add static-check entries from raw specs", async () 
     }),
   );
 
-  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.deepEqual(config["static-check"].Python, [{ module: "Command", cmd: "true" }]);
 });
 
 test("configuration menu can add guided static-check entries for explicit supported languages", async () => {
   const cwd = createTempDir("pi-usereq-menu-sc-guided-");
-  fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
@@ -1297,6 +1306,6 @@ test("configuration menu can add guided static-check entries for explicit suppor
     }),
   );
 
-  const config = JSON.parse(fs.readFileSync(path.join(cwd, ".pi", "pi-usereq", "config.json"), "utf8"));
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.deepEqual(config["static-check"].Python, [{ module: "Ruff" }]);
 });

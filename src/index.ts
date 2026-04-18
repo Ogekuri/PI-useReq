@@ -52,13 +52,14 @@ import {
   type StaticCheckEntry,
   type UseReqConfig,
 } from "./core/config.js";
+import { buildRuntimePathContext, buildRuntimePathFacts } from "./core/path-context.js";
 import {
   PI_USEREQ_STARTUP_TOOL_SET,
   isPiUsereqEmbeddedToolName,
   normalizeEnabledPiUsereqTools,
 } from "./core/pi-usereq-tools.js";
 import { renderPrompt } from "./core/prompts.js";
-import { ensureHomeResources } from "./core/resources.js";
+import { ensureBundledResourcesAccessible } from "./core/resources.js";
 import {
   collectSourceFiles,
   runFilesStaticCheck,
@@ -112,6 +113,17 @@ const PROMPT_NAMES = [
  */
 function getProjectBase(cwd: string): string {
   return path.resolve(cwd);
+}
+
+/**
+ * @brief Builds the shared runtime path facts for the current command or tool context.
+ * @details Derives installation, execution, base, config, resource, docs, test, source, and optional git paths from the cwd-derived project configuration and converts them into prompt/tool-facing strings. Runtime is O(s + p) where s is configured source-directory count and p is aggregate path length. No external state is mutated.
+ * @param[in] cwd {string} Current working directory.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {import("./core/path-context.js").RuntimePathFacts} Shared runtime path facts.
+ */
+function buildSharedRuntimePathFacts(cwd: string, config: UseReqConfig): import("./core/path-context.js").RuntimePathFacts {
+  return buildRuntimePathFacts(buildRuntimePathContext(getProjectBase(cwd), config, { gitPath: config["git-path"] }));
 }
 
 /**
@@ -590,7 +602,7 @@ function registerPromptCommands(pi: ExtensionAPI): void {
     pi.registerCommand(`req-${promptName}`, {
       description: `Run pi-usereq prompt ${promptName}`,
       handler: async (args, ctx) => {
-        ensureHomeResources();
+        ensureBundledResourcesAccessible();
         const projectBase = getProjectBase(ctx.cwd);
         const config = loadProjectConfig(ctx.cwd);
         const content = renderPrompt(promptName, args, projectBase, config);
@@ -628,15 +640,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
     ],
     parameters: gitPathSchema,
     async execute() {
-      ensureHomeResources();
+      ensureBundledResourcesAccessible();
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const result = runGitPath(projectBase, config);
       const payload = buildPathQueryToolPayload(
         "git-path",
         process.cwd(),
         projectBase,
         result.stdout.trimEnd(),
+        runtimePaths,
         buildToolExecutionSection(result),
       );
       return buildStructuredToolExecuteResult(payload);
@@ -664,12 +678,14 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const result = runGetBasePath(projectBase, config);
       const payload = buildPathQueryToolPayload(
         "get-base-path",
         process.cwd(),
         projectBase,
         result.stdout.trimEnd(),
+        runtimePaths,
         buildToolExecutionSection(result),
       );
       return buildStructuredToolExecuteResult(payload);
@@ -987,6 +1003,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const staticCheckConfig = config["static-check"] ?? {};
       const result = runFilesStaticCheck(params.files, projectBase, config);
       const payload = buildStaticCheckToolPayload(
@@ -997,6 +1014,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
         [],
         [],
         staticCheckConfig,
+        runtimePaths,
         buildToolExecutionSection(result),
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1024,6 +1042,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const staticCheckConfig = config["static-check"] ?? {};
       const selectionDirectoryPaths = [...config["src-dir"], config["tests-dir"]];
       const testsDirRel = makeRelativeIfContainsProject(config["tests-dir"], projectBase)
@@ -1051,6 +1070,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
         selectionDirectoryPaths,
         excludedDirectoryPaths,
         staticCheckConfig,
+        runtimePaths,
         execution,
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1078,13 +1098,14 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitCheck(projectBase, config));
       } catch (error) {
         execution = buildToolExecutionSection(normalizeToolFailure(error));
       }
-      const payload = buildGitCheckToolPayload(projectBase, config["git-path"], execution);
+      const payload = buildGitCheckToolPayload(projectBase, config["git-path"], runtimePaths, execution);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1110,7 +1131,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const payload = buildDocsCheckToolPayload(projectBase, config["docs-dir"]);
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
+      const payload = buildDocsCheckToolPayload(projectBase, config["docs-dir"], runtimePaths);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1136,13 +1158,14 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitWtName(projectBase, config));
       } catch (error) {
         execution = buildToolExecutionSection(normalizeToolFailure(error));
       }
-      const payload = buildWorktreeNameToolPayload(projectBase, config["git-path"], execution);
+      const payload = buildWorktreeNameToolPayload(projectBase, config["git-path"], runtimePaths, execution);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1170,6 +1193,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitWtCreate(projectBase, params.wtName, config));
@@ -1181,6 +1205,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
         projectBase,
         config["git-path"],
         params.wtName,
+        runtimePaths,
         execution,
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1210,6 +1235,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitWtDelete(projectBase, params.wtName, config));
@@ -1221,6 +1247,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
         projectBase,
         config["git-path"],
         params.wtName,
+        runtimePaths,
         execution,
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1601,18 +1628,18 @@ function registerConfigCommands(pi: ExtensionAPI): void {
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured active tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
+ * @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
-  ensureHomeResources();
+  ensureBundledResourcesAccessible();
   registerPromptCommands(pi);
   registerAgentTools(pi);
   registerConfigCommands(pi);
   pi.on("session_start", async (_event, ctx) => {
-    ensureHomeResources();
+    ensureBundledResourcesAccessible();
     const config = loadProjectConfig(ctx.cwd);
     applyConfiguredPiUsereqTools(pi, config);
     ctx.ui.setStatus(

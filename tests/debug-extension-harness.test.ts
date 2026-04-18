@@ -12,17 +12,18 @@ import {
   type OfflineContractSnapshot,
 } from "../scripts/lib/extension-debug-harness.js";
 import { buildParityReport, type SdkContractSnapshot } from "../scripts/lib/sdk-smoke.js";
+import { getProjectConfigPath } from "../src/core/config.js";
 import { initFixtureRepo } from "./helpers.js";
 
 /**
  * @brief Persists a targeted enabled-tool list into a fixture project config.
- * @details Loads `.pi/pi-usereq/config.json`, replaces the `enabled-tools` array with the supplied values, and writes the updated JSON back to disk with a trailing newline. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
+ * @details Loads `.pi-usereq/config.json`, replaces the `enabled-tools` array with the supplied values, and writes the updated JSON back to disk with a trailing newline. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] enabledTools {string[]} Enabled-tool names to persist.
  * @return {void} No return value.
  */
 function writeEnabledTools(projectBase: string, enabledTools: string[]): void {
-  const configPath = path.join(projectBase, ".pi", "pi-usereq", "config.json");
+  const configPath = getProjectConfigPath(projectBase);
   const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
   config["enabled-tools"] = enabledTools;
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
@@ -56,7 +57,7 @@ function buildOfflineFixture(): OfflineContractSnapshot {
     tools: [
       {
         name: "git-path",
-        description: "Print the configured git root path from .pi/pi-usereq/config.json.",
+        description: "Print the configured git root path from .pi-usereq/config.json.",
         promptGuidelines: [],
         hasParameters: false,
         sourceInfo: {
@@ -100,7 +101,7 @@ function buildSdkFixture(overrides?: Partial<SdkContractSnapshot>): SdkContractS
     tools: [
       {
         name: "git-path",
-        description: "Print the configured git root path from .pi/pi-usereq/config.json.",
+        description: "Print the configured git root path from .pi-usereq/config.json.",
         hasParameters: false,
         sourceInfo: {
           path: "src/index.ts",
@@ -295,6 +296,7 @@ test("replayTool captures tool results and cwd semantics", async () => {
       details?: {
         request: { project_base_path: string };
         result: { path_value: string; path_present: boolean };
+        runtime_paths: { git_path: string };
         execution: { code: number };
       };
     };
@@ -303,7 +305,7 @@ test("replayTool captures tool results and cwd semantics", async () => {
     assert.equal(report.effectiveProcessCwd, projectBase);
     assert.deepEqual(JSON.parse(toolResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(toolResult.details)));
     assert.equal(toolResult.details?.request.project_base_path, projectBase);
-    assert.equal(toolResult.details?.result.path_value, projectBase);
+    assert.equal(toolResult.details?.result.path_value, toolResult.details?.runtime_paths.git_path);
     assert.equal(toolResult.details?.result.path_present, true);
     assert.equal(toolResult.details?.execution.code, 0);
   } finally {

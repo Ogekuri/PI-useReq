@@ -1,15 +1,20 @@
 /**
  * @file
  * @brief Loads, normalizes, and persists pi-usereq project configuration.
- * @details Defines the configuration schema, default directory conventions, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi/pi-usereq`.
+ * @details Defines the configuration schema, default directory conventions, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq`.
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { ReqError } from "./errors.js";
+import {
+  buildRuntimePathContext,
+  buildRuntimePathFacts,
+  formatRuntimePathForDisplay,
+  getConfigPath,
+} from "./path-context.js";
 import { normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
-import { homeRelative, makeRelativeIfContainsProject } from "./utils.js";
+import { makeRelativeIfContainsProject } from "./utils.js";
 
 /**
  * @brief Describes one static-check module configuration entry.
@@ -58,28 +63,13 @@ export const DEFAULT_SRC_DIRS = ["src"];
  */
 export const DEFAULT_RESET_CONTEXT = true;
 /**
- * @brief Defines the fixed configuration namespace under `.pi`.
- * @details Shared by config and resource helpers to keep all pi-usereq artifacts in a deterministic directory tree. Access complexity is O(1).
- */
-export const CONFIG_DIRNAME = "pi-usereq";
-
-/**
  * @brief Computes the per-project config file path.
- * @details Joins the project root with `.pi/pi-usereq/config.json`, producing the canonical persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
+ * @details Joins the project base with `.pi-usereq/config.json`, producing the canonical persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {string} Absolute config file path.
  */
 export function getProjectConfigPath(projectBase: string): string {
-  return path.join(projectBase, ".pi", CONFIG_DIRNAME, "config.json");
-}
-
-/**
- * @brief Computes the user-scoped resource directory for pi-usereq assets.
- * @details Resolves the home directory and appends `.pi/pi-usereq/resources`. Time complexity is O(1). No filesystem writes occur.
- * @return {string} Absolute home resource root path.
- */
-export function getHomeResourceRoot(): string {
-  return path.join(os.homedir(), ".pi", CONFIG_DIRNAME, "resources");
+  return getConfigPath(projectBase);
 }
 
 /**
@@ -89,6 +79,7 @@ export function getHomeResourceRoot(): string {
  * @return {UseReqConfig} Fresh default configuration object.
  */
 export function getDefaultConfig(projectBase: string): UseReqConfig {
+  const normalizedProjectBase = path.resolve(projectBase);
   return {
     "docs-dir": DEFAULT_DOCS_DIR,
     "tests-dir": DEFAULT_TESTS_DIR,
@@ -96,7 +87,7 @@ export function getDefaultConfig(projectBase: string): UseReqConfig {
     "reset-context": DEFAULT_RESET_CONTEXT,
     "static-check": {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
-    "base-path": projectBase,
+    "base-path": normalizedProjectBase,
   };
 }
 
@@ -151,7 +142,7 @@ export function loadConfig(projectBase: string): UseReqConfig {
 
 /**
  * @brief Persists the project configuration to disk.
- * @details Creates the parent `.pi/pi-usereq` directory when necessary and writes formatted JSON terminated by a newline. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
+ * @details Creates the parent `.pi-usereq` directory when necessary and writes formatted JSON terminated by a newline. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] config {UseReqConfig} Configuration object to persist.
  * @return {void} No return value.
@@ -183,36 +174,38 @@ export function normalizeConfigPaths(projectBase: string, config: UseReqConfig):
 
 /**
  * @brief Builds placeholder replacements for bundled prompt rendering.
- * @details Computes project-relative docs, template, source, test, and guideline paths; enumerates visible guideline files from the home resource tree; and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
+ * @details Computes runtime path context from the execution path, derives installation-owned template and guideline paths, enumerates visible guideline files from the installed resource tree, and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {Record<string, string>} Placeholder-to-string replacement map including `%%TEMPLATE_PATH%%`.
- * @satisfies REQ-002, CTN-011
+ * @return {Record<string, string>} Placeholder-to-string replacement map including runtime path tokens.
+ * @satisfies REQ-002, REQ-103, REQ-106, REQ-107, CTN-011
  */
 export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string> {
-  const resourcesRoot = getHomeResourceRoot();
-  const guidelinesDir = path.join(resourcesRoot, "guidelines");
-  const templatesDir = path.join(resourcesRoot, "templates");
-  const guidelineEntries = fs.existsSync(guidelinesDir)
-    ? fs.readdirSync(guidelinesDir)
+  const runtimePathContext = buildRuntimePathContext(projectBase, config, { gitPath: config["git-path"] });
+  const runtimePathFacts = buildRuntimePathFacts(runtimePathContext);
+  const guidelineEntries = fs.existsSync(runtimePathContext.guidelinesPath)
+    ? fs.readdirSync(runtimePathContext.guidelinesPath)
         .filter((entry) => !entry.startsWith("."))
-        .map((entry) => homeRelative(path.join(guidelinesDir, entry)))
-        .sort()
+        .map((entry) => formatRuntimePathForDisplay(path.join(runtimePathContext.guidelinesPath, entry)))
+        .sort((left, right) => left.localeCompare(right))
     : [];
 
   const srcValue = config["src-dir"].map((value) => `\`${value.replace(/[/\\]+$/, "")}/\``).join(", ");
   const testValue = `\`${config["tests-dir"].replace(/[/\\]+$/, "")}/\``;
   const guidelinesValue = guidelineEntries.length > 0
     ? guidelineEntries.map((entry) => `\`${entry}\``).join(", ")
-    : `\`${homeRelative(guidelinesDir)}/\``;
+    : `\`${runtimePathFacts.guidelines_path}/\``;
 
   return {
     "%%DOC_PATH%%": config["docs-dir"].replace(/[/\\]+$/, ""),
     "%%GUIDELINES_FILES%%": guidelinesValue,
-    "%%GUIDELINES_PATH%%": homeRelative(guidelinesDir),
-    "%%TEMPLATE_PATH%%": homeRelative(templatesDir),
+    "%%GUIDELINES_PATH%%": runtimePathFacts.guidelines_path,
+    "%%TEMPLATE_PATH%%": runtimePathFacts.templates_path,
     "%%SRC_PATHS%%": srcValue,
     "%%TEST_PATH%%": testValue,
-    "%%PROJECT_BASE%%": projectBase,
+    "%%PROJECT_BASE%%": runtimePathFacts.base_path,
+    "%%EXECUTION_PATH%%": runtimePathFacts.execution_path,
+    "%%INSTALLATION_PATH%%": runtimePathFacts.installation_path,
+    "%%CONFIG_PATH%%": runtimePathFacts.config_path,
   };
 }

@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { StaticCheckEntry } from "./config.js";
+import type { RuntimePathFacts } from "./path-context.js";
 import { ReqError } from "./errors.js";
 import { STATIC_CHECK_EXT_TO_LANG } from "./static-check.js";
 import type { ToolResult } from "./tool-runner.js";
@@ -36,7 +37,7 @@ export interface StructuredToolExecuteResult<T> {
 
 /**
  * @brief Describes the structured payload returned by path-query tools.
- * @details Exposes the requested config key, caller cwd, resolved project base, and resolved path value as direct-access fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes the requested config key, caller cwd, resolved project base, resolved path value, and shared runtime path facts as direct-access fields. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PathQueryToolPayload {
   request: {
@@ -52,12 +53,13 @@ export interface PathQueryToolPayload {
     path_value: string;
     path_present: boolean;
   };
+  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes the structured payload returned by `git-check`.
- * @details Exposes git-root presence, repository validation status, and normalized execution diagnostics as stable fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes git-root presence, repository validation status, shared runtime path facts, and normalized execution diagnostics as stable fields. The interface is compile-time only and introduces no runtime cost.
  */
 export interface GitCheckToolPayload {
   request: {
@@ -73,6 +75,7 @@ export interface GitCheckToolPayload {
     head_status: "valid" | "unknown";
     error_message?: string;
   };
+  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
@@ -92,7 +95,7 @@ export interface DocsCheckFileRecord {
 
 /**
  * @brief Describes the structured payload returned by `docs-check`.
- * @details Exposes docs-root selection, per-document presence facts, remediation prompt commands, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes docs-root selection, per-document presence facts, remediation prompt commands, shared runtime path facts, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
  */
 export interface DocsCheckToolPayload {
   request: {
@@ -108,12 +111,13 @@ export interface DocsCheckToolPayload {
     missing_file_count: number;
   };
   files: DocsCheckFileRecord[];
+  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes the structured payload returned by `git-wt-name`.
- * @details Exposes the generated worktree name and its normative format as direct-access fields while preserving execution diagnostics separately. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes the generated worktree name, its normative format, shared runtime path facts, and execution diagnostics as direct-access fields. The interface is compile-time only and introduces no runtime cost.
  */
 export interface WorktreeNameToolPayload {
   request: {
@@ -128,12 +132,13 @@ export interface WorktreeNameToolPayload {
     format_text: "useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>";
     error_message?: string;
   };
+  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes the structured payload returned by worktree mutation tools.
- * @details Exposes the requested operation, exact worktree name, derived worktree path, mutation status, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes the requested operation, exact worktree name, derived worktree path, mutation status, shared runtime path facts, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
  */
 export interface WorktreeMutationToolPayload {
   request: {
@@ -151,6 +156,7 @@ export interface WorktreeMutationToolPayload {
     worktree_path: string;
     error_message?: string;
   };
+  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
@@ -174,7 +180,7 @@ export interface StaticCheckFileRecord {
 
 /**
  * @brief Describes the structured payload returned by static-check agent tools.
- * @details Exposes scope selection, configured checker coverage, per-file selection facts, and normalized execution diagnostics while keeping residual checker text optional under execution. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes scope selection, configured checker coverage, per-file selection facts, shared runtime path facts, and normalized execution diagnostics while keeping residual checker text optional under execution. The interface is compile-time only and introduces no runtime cost.
  */
 export interface StaticCheckToolPayload {
   request: {
@@ -196,6 +202,7 @@ export interface StaticCheckToolPayload {
     total_configured_checker_count: number;
   };
   files: StaticCheckFileRecord[];
+  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
@@ -298,6 +305,7 @@ export function normalizeToolFailure(error: unknown): ToolResult {
  * @param[in] workingDirectoryPath {string} Caller working directory.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] resolvedPath {string} Resolved config path value.
+ * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {PathQueryToolPayload} Structured path-query payload.
  */
@@ -306,6 +314,7 @@ export function buildPathQueryToolPayload(
   workingDirectoryPath: string,
   projectBasePath: string,
   resolvedPath: string,
+  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): PathQueryToolPayload {
   const queryKey = toolName === "git-path" ? "git-path" : "base-path";
@@ -323,6 +332,7 @@ export function buildPathQueryToolPayload(
       path_value: resolvedPath,
       path_present: resolvedPath !== "",
     },
+    runtime_paths: runtimePaths,
     execution,
   };
 }
@@ -332,12 +342,14 @@ export function buildPathQueryToolPayload(
  * @details Encodes configured git-root presence plus clean-versus-error status as direct fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] configuredGitPath {string | undefined} Configured git root path.
+ * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {GitCheckToolPayload} Structured git-check payload.
  */
 export function buildGitCheckToolPayload(
   projectBasePath: string,
   configuredGitPath: string | undefined,
+  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): GitCheckToolPayload {
   const errorMessage = execution.stderr_lines[0];
@@ -355,6 +367,7 @@ export function buildGitCheckToolPayload(
       head_status: execution.code === 0 ? "valid" : "unknown",
       error_message: execution.code === 0 ? undefined : errorMessage,
     },
+    runtime_paths: runtimePaths,
     execution,
   };
 }
@@ -364,11 +377,13 @@ export function buildGitCheckToolPayload(
  * @details Enumerates required canonical documents, binds each missing file to its remediation prompt command, and emits summary counts plus normalized execution metadata. Runtime is O(k) in required file count plus filesystem reads. Side effects are limited to filesystem reads.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] docsDirPath {string} Configured docs directory relative to the project base.
+ * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @return {DocsCheckToolPayload} Structured docs-check payload.
  */
 export function buildDocsCheckToolPayload(
   projectBasePath: string,
   docsDirPath: string,
+  runtimePaths: RuntimePathFacts,
 ): DocsCheckToolPayload {
   const normalizedProjectBasePath = path.resolve(projectBasePath);
   const normalizedDocsRootPath = path.join(normalizedProjectBasePath, docsDirPath.replace(/[/\\]+$/, ""));
@@ -412,6 +427,7 @@ export function buildDocsCheckToolPayload(
       missing_file_count: missingFiles.length,
     },
     files,
+    runtime_paths: runtimePaths,
     execution,
   };
 }
@@ -421,12 +437,14 @@ export function buildDocsCheckToolPayload(
  * @details Preserves the generated worktree name plus its normative format string as direct-access fields and reports failures through structured execution metadata. Runtime is O(n) in output size. No external state is mutated.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] configuredGitPath {string | undefined} Configured git root path.
+ * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {WorktreeNameToolPayload} Structured worktree-name payload.
  */
 export function buildWorktreeNameToolPayload(
   projectBasePath: string,
   configuredGitPath: string | undefined,
+  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): WorktreeNameToolPayload {
   const worktreeName = execution.stdout_lines[0];
@@ -443,6 +461,7 @@ export function buildWorktreeNameToolPayload(
       format_text: "useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>",
       error_message: execution.code === 0 ? undefined : execution.stderr_lines[0],
     },
+    runtime_paths: runtimePaths,
     execution,
   };
 }
@@ -454,6 +473,7 @@ export function buildWorktreeNameToolPayload(
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] configuredGitPath {string | undefined} Configured git root path.
  * @param[in] worktreeName {string} Exact requested worktree name.
+ * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {WorktreeMutationToolPayload} Structured worktree mutation payload.
  */
@@ -462,6 +482,7 @@ export function buildWorktreeMutationToolPayload(
   projectBasePath: string,
   configuredGitPath: string | undefined,
   worktreeName: string,
+  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): WorktreeMutationToolPayload {
   const gitRoot = configuredGitPath ? path.resolve(configuredGitPath) : "";
@@ -487,6 +508,7 @@ export function buildWorktreeMutationToolPayload(
       worktree_path: worktreePath,
       error_message: execution.code === 0 ? undefined : execution.stderr_lines[0],
     },
+    runtime_paths: runtimePaths,
     execution,
   };
 }
@@ -551,6 +573,7 @@ function buildStaticCheckFileRecord(
  * @param[in] selectionDirectoryPaths {string[]} Directories that produced the selection.
  * @param[in] excludedDirectoryPaths {string[]} Directory roots excluded from project selection.
  * @param[in] staticCheckConfig {Record<string, StaticCheckEntry[]>} Effective static-check configuration.
+ * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {StaticCheckToolPayload} Structured static-check payload.
  */
@@ -562,6 +585,7 @@ export function buildStaticCheckToolPayload(
   selectionDirectoryPaths: string[],
   excludedDirectoryPaths: string[],
   staticCheckConfig: Record<string, StaticCheckEntry[]>,
+  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): StaticCheckToolPayload {
   const files = requestedPaths.map((inputPath, index) => buildStaticCheckFileRecord(
@@ -591,6 +615,7 @@ export function buildStaticCheckToolPayload(
       total_configured_checker_count: files.reduce((sum, file) => sum + file.configured_checker_count, 0),
     },
     files,
+    runtime_paths: runtimePaths,
     execution,
   };
 }

@@ -1,92 +1,63 @@
 /**
  * @file
- * @brief Resolves bundled resource locations and mirrors them into the user resource directory.
- * @details Encapsulates package-root discovery, prompt enumeration, and one-way copying from bundled assets into `~/.pi/pi-usereq/resources`. File-system work is proportional to the number of copied entries. The module performs directory creation and file-copy side effects.
+ * @brief Resolves installation-owned bundled resource locations.
+ * @details Encapsulates installation-path discovery, bundled-resource validation, prompt enumeration, and prompt loading directly from the installed extension payload. Runtime is proportional to directory-entry enumeration and prompt file size. Side effects are limited to filesystem reads.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { getHomeResourceRoot } from "./config.js";
+import { getInstallationPath, RESOURCE_ROOT_DIRNAME } from "./path-context.js";
 
 /**
- * @brief Resolves the installed package root directory.
- * @details Computes the parent directory of the current module file so bundled resources can be located without relying on process working directory. Time complexity is O(1). No filesystem writes occur.
- * @return {string} Absolute package root path.
- */
-export function getPackageRoot(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-}
-
-/**
- * @brief Resolves the bundled resource directory inside the package.
- * @details Joins the package root with `resources`, producing the immutable source tree used for prompt and guideline seeding. Time complexity is O(1). No I/O side effects occur.
+ * @brief Resolves the bundled resource directory inside the installed extension payload.
+ * @details Joins the installation path with `resources`, producing the immutable source tree used for prompt, template, and guideline access during runtime. Time complexity is O(1). No I/O side effects occur.
  * @return {string} Absolute bundled resource root path.
  */
 export function getBundledResourceRoot(): string {
-  return path.join(getPackageRoot(), "resources");
+  return path.join(getInstallationPath(), RESOURCE_ROOT_DIRNAME);
 }
 
 /**
- * @brief Ensures bundled resources are available under the user's pi-usereq home directory.
- * @details Creates the destination root when necessary and recursively copies non-hidden bundled files into it. Copy complexity is O(n) in the number of directory entries. Side effects include directory creation and file overwrites in the home resource tree.
- * @return {string} Absolute destination resource root path.
- * @post Destination directory exists when bundled resources are present.
+ * @brief Validates that installed bundled resources are accessible.
+ * @details Verifies that the installation-owned resource root plus `prompts`, `templates`, and `guidelines` directories exist before prompt or tool execution. Runtime is O(1) plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
+ * @return {string} Absolute bundled resource root path.
+ * @throws {Error} Propagates a deterministic error when required installed resource directories are missing.
  */
-export function ensureHomeResources(): string {
-  const sourceRoot = getBundledResourceRoot();
-  const destinationRoot = getHomeResourceRoot();
-  if (!fs.existsSync(sourceRoot)) {
-    return destinationRoot;
+export function ensureBundledResourcesAccessible(): string {
+  const resourceRoot = getBundledResourceRoot();
+  if (!fs.existsSync(resourceRoot) || !fs.statSync(resourceRoot).isDirectory()) {
+    throw new Error(`Missing bundled resources at ${resourceRoot}`);
   }
-  fs.mkdirSync(destinationRoot, { recursive: true });
-  copyDirectoryContents(sourceRoot, destinationRoot);
-  return destinationRoot;
-}
-
-/**
- * @brief Recursively copies visible files from one directory tree into another.
- * @details Skips hidden entries, creates intermediate directories lazily, and mirrors regular files using `fs.copyFileSync`. Time complexity is O(n) in traversed entries. Side effects mutate the destination filesystem tree.
- * @param[in] sourceDir {string} Absolute or relative source directory path.
- * @param[in] destinationDir {string} Absolute or relative destination directory path.
- * @return {void} No return value.
- */
-function copyDirectoryContents(sourceDir: string, destinationDir: string): void {
-  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-    if (entry.name.startsWith(".")) continue;
-    const sourcePath = path.join(sourceDir, entry.name);
-    const destinationPath = path.join(destinationDir, entry.name);
-    if (entry.isDirectory()) {
-      fs.mkdirSync(destinationPath, { recursive: true });
-      copyDirectoryContents(sourcePath, destinationPath);
-    } else if (entry.isFile()) {
-      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-      fs.copyFileSync(sourcePath, destinationPath);
+  for (const requiredDirectoryName of ["prompts", "templates", "guidelines"]) {
+    const requiredDirectoryPath = path.join(resourceRoot, requiredDirectoryName);
+    if (!fs.existsSync(requiredDirectoryPath) || !fs.statSync(requiredDirectoryPath).isDirectory()) {
+      throw new Error(`Missing bundled resource directory at ${requiredDirectoryPath}`);
     }
   }
+  return resourceRoot;
 }
 
 /**
  * @brief Reads one bundled markdown prompt by logical prompt name.
- * @details Resolves the prompt file under the bundled `resources/prompts` directory and loads it as UTF-8 text. Time complexity is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Resolves the prompt file under the installation-owned `resources/prompts` directory, validates resource accessibility, and loads it as UTF-8 text. Time complexity is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] promptName {string} Prompt identifier without the `.md` suffix.
  * @return {string} Raw prompt markdown content.
  * @throws {Error} Propagates `fs.readFileSync` errors when the prompt file is missing or unreadable.
  */
 export function readBundledPrompt(promptName: string): string {
-  const filePath = path.join(getBundledResourceRoot(), "prompts", `${promptName}.md`);
+  const filePath = path.join(ensureBundledResourcesAccessible(), "prompts", `${promptName}.md`);
   return fs.readFileSync(filePath, "utf8");
 }
 
 /**
- * @brief Lists bundled prompt identifiers available in the package resources.
- * @details Scans the prompt directory, keeps visible markdown files only, strips the `.md` suffix, and returns a lexicographically sorted list. Time complexity is O(n log n). Side effects are limited to filesystem reads.
+ * @brief Lists bundled prompt identifiers available in the installed extension payload.
+ * @details Scans the installation-owned prompt directory, keeps visible markdown files only, strips the `.md` suffix, and returns a lexicographically sorted list. Time complexity is O(n log n). Side effects are limited to filesystem reads.
  * @return {string[]} Sorted prompt names without file extensions.
  */
 export function listBundledPromptNames(): string[] {
   return fs
-    .readdirSync(path.join(getBundledResourceRoot(), "prompts"), { withFileTypes: true })
+    .readdirSync(path.join(ensureBundledResourcesAccessible(), "prompts"), { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith("."))
     .map((entry) => entry.name.slice(0, -3))
-    .sort();
+    .sort((left, right) => left.localeCompare(right));
 }
