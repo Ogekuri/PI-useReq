@@ -419,33 +419,14 @@ function buildFindToolExecuteResult(
 }
 
 /**
- * @brief Builds the first user-message payload for a reset prompt session.
- * @details Creates the timestamped session entry appended during `ctx.newSession(...)` so `req-*` commands seed the cleared session with the rendered prompt content. Runtime is O(n) in prompt length. No external state is mutated.
- * @param[in] content {string} Rendered prompt markdown.
- * @return {{ role: "user"; content: Array<{ type: "text"; text: string }>; timestamp: number }} Session-manager user message payload.
- * @satisfies REQ-067
- */
-function buildPromptSessionMessage(content: string): {
-  role: "user";
-  content: Array<{ type: "text"; text: string }>;
-  timestamp: number;
-} {
-  return {
-    role: "user",
-    content: [{ type: "text", text: content }],
-    timestamp: Date.now(),
-  };
-}
-
-/**
  * @brief Delivers one rendered prompt according to the configured reset policy.
- * @details When `reset-context` is `true`, waits for idle and uses `ctx.newSession(...)` to create a `/new`-equivalent session seeded with the rendered prompt as the first user message. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement or message dispatch.
+ * @details When `reset-context` is `true`, waits for idle, creates a `/new`-equivalent session, and sends the rendered prompt as a fresh user message only if session creation is not cancelled. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement and message dispatch.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] content {string} Rendered prompt markdown.
  * @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
- * @satisfies REQ-067, REQ-068
+ * @satisfies REQ-004, REQ-067, REQ-068
  */
 async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void> {
   if (!config["reset-context"]) {
@@ -454,11 +435,10 @@ async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandConte
   }
 
   await ctx.waitForIdle();
-  await ctx.newSession({
-    setup: async (sessionManager) => {
-      sessionManager.appendMessage(buildPromptSessionMessage(content));
-    },
-  });
+  const newSessionResult = await ctx.newSession();
+  if (!newSessionResult.cancelled) {
+    pi.sendUserMessage(content);
+  }
 }
 
 /**

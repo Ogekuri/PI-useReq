@@ -560,13 +560,10 @@
         - `loadProjectConfig(...)`: load command runtime config [`src/index.ts`]
         - `renderPrompt(...)`: render prompt-command payloads [`src/core/prompts.ts`]
         - `deliverPromptCommand(...)`: dispatch prompt replay according to `reset-context` [`src/index.ts`]
-          - `buildPromptSessionMessage(...)`: build the first user message for reset-session prompt delivery [`src/index.ts`]
           - `RecordingCommandContext.waitForIdle(...)`: resolve the offline idle gate before session replacement [`scripts/lib/recording-extension-api.ts`]
           - `RecordingCommandContext.newSession(...)`: emulate `/new`-equivalent prompt-session replacement [`scripts/lib/recording-extension-api.ts`]
-            - `normalizeSessionUserMessageContent(...)`: collapse appended user-message content for replay snapshots [`scripts/lib/recording-extension-api.ts`]
-            - `RecordingExtensionAPI.recordSessionUserMessage(...)`: append reset-session prompt payload to the replay snapshot [`scripts/lib/recording-extension-api.ts`]
-              - `RecordingExtensionAPI.appendRecordedUserMessage(...)`: centralize replay user-message storage [`scripts/lib/recording-extension-api.ts`]
-          - External boundary: `pi.sendUserMessage(...)` when `reset-context` is `false`.
+          - `RecordingExtensionAPI.sendUserMessage(...)`: append the rendered prompt as a fresh user message after session replacement [`scripts/lib/recording-extension-api.ts`]
+            - `RecordingExtensionAPI.appendRecordedUserMessage(...)`: centralize replay user-message storage [`scripts/lib/recording-extension-api.ts`]
         - `configurePiUsereq(...)`: execute the interactive configuration menu [`src/index.ts`]
           - `saveProjectConfig(...)`: persist menu updates on save-and-close [`src/index.ts`]
     - `replayTool(...)`: replay a recorded tool execute handler and capture content/details [`scripts/lib/extension-debug-harness.ts`]
@@ -709,8 +706,7 @@
           - `buildPiDevConformanceBlock(...)`: resolve manifest-gated pi.dev conformance rules [`src/core/prompts.ts`]
         - `adaptPromptForInternalTools(...)`: rewrite tool names for internal wrappers [`src/core/prompts.ts`]
       - `deliverPromptCommand(...)`: dispatch the rendered prompt according to `reset-context` [`src/index.ts`]
-        - `buildPromptSessionMessage(...)`: build the first user message for reset-session prompt delivery [`src/index.ts`]
-        - External boundaries: `ctx.waitForIdle(...)` plus `ctx.newSession(...)` on the reset path; `pi.sendUserMessage(...)` on the current-session path.
+        - External boundaries: `ctx.waitForIdle(...)`, `ctx.newSession(...)`, and `pi.sendUserMessage(...)`; reset-enabled delivery sends the prompt after session replacement unless session creation is cancelled.
     - `registerAgentTools(...)`: register structured pi tools whose execute callbacks reuse internal runner families and agent-oriented payload builders [`src/index.ts`]
       - `ensureBundledResourcesAccessible(...)`: validate installation-owned bundled resources for tool executes that need bundled assets [`src/core/resources.ts`]
         - `getBundledResourceRoot(...)`: resolve installation-owned resource root [`src/core/resources.ts`]
