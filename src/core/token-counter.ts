@@ -1,12 +1,14 @@
 /**
  * @file
- * @brief Provides token and character counting utilities for documentation packs.
- * @details Wraps `js-tiktoken` encoding lookup, applies it to in-memory content or file lists, and builds agent-oriented JSON payloads for token-centric tools. Runtime is linear in processed text size. Side effects are limited to filesystem reads in multi-file helpers.
+ * @brief Provides token, size, and structure counting utilities for agent-oriented file payloads.
+ * @details Wraps `js-tiktoken` encoding lookup, extracts per-file structural facts, and builds machine-oriented JSON payloads for token-centric tools. Runtime is linear in processed text size plus sort cost for derived ordering hints. Side effects are limited to filesystem reads in file-based helpers.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { getEncoding } from "js-tiktoken";
+import { detectLanguage as detectSourceLanguage } from "./compress.js";
+import { parseDoxygenComment, type DoxygenFieldMap } from "./doxygen-parser.js";
 
 /**
  * @brief Declares the tokenizer encoding used by token-count workflows.
@@ -22,56 +24,77 @@ export type TokenToolScope = "explicit-files" | "canonical-docs";
 
 /**
  * @brief Enumerates supported per-file token-entry statuses.
- * @details Separates counted files, read-time failures, and skipped inputs so downstream agents can branch without reparsing text warnings. The alias is compile-time only and introduces no runtime cost.
+ * @details Separates counted files, read-time failures, and skipped inputs so downstream agents can branch without reparsing text diagnostics. The alias is compile-time only and introduces no runtime cost.
  */
 export type TokenFileStatus = "counted" | "error" | "skipped";
 
 /**
  * @brief Describes one per-file token metric record.
- * @details Stores the source path, numeric token count, numeric character count, and optional read-error payload returned by low-level counting helpers. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores canonical file identity plus numeric token, character, byte, and line metrics extracted from one readable file. Optional metadata remains isolated in dedicated fields so agents can access headings and Doxygen fields without reparsing monolithic text. The interface is compile-time only and introduces no runtime cost.
  */
 export interface CountFileMetricsResult {
   file: string;
   tokens: number;
   chars: number;
+  bytes: number;
+  lines: number;
+  startLineNumber: number;
+  endLineNumber: number;
+  fileExtension: string;
+  languageName?: string;
+  primaryHeadingText?: string;
+  doxygenFileFields?: DoxygenFieldMap;
   error?: string;
 }
 
 /**
  * @brief Describes one file entry in the agent-oriented token payload.
- * @details Preserves caller order, exposes canonicalized path fields, and keeps numeric counts separate from status/error metadata for deterministic downstream parsing. The interface is compile-time only and introduces no runtime cost.
+ * @details Orders direct-access path identifiers before source facts and numeric metrics so agents can branch without reparsing formatted strings. Optional metadata captures markdown headings or Doxygen file fields when they can be derived from the source content. The interface is compile-time only and introduces no runtime cost.
  */
 export interface TokenToolFileEntry {
   request_index: number;
   input_path: string;
   canonical_path: string;
+  absolute_path: string;
   file_name: string;
+  file_extension: string;
+  language_name?: string;
   status: TokenFileStatus;
+  exists: boolean;
+  is_file: boolean;
+  start_line_number: number;
+  end_line_number: number;
+  line_count: number;
+  primary_heading_text?: string;
+  doxygen_file_fields?: DoxygenFieldMap;
   token_count: number;
   character_count: number;
+  byte_count: number;
   token_share: number;
   character_share: number;
+  byte_share: number;
   error_message?: string;
 }
 
 /**
  * @brief Describes the request section of the agent-oriented token payload.
- * @details Captures tool identity, scope, path-resolution base, encoding, and requested path inventory so agents can reason about how metrics were selected. The interface is compile-time only and introduces no runtime cost.
+ * @details Captures tool identity, scope, path-resolution base, encoding, and requested path inventories so agents can reason about how metrics were selected. The interface is compile-time only and introduces no runtime cost.
  */
 export interface TokenToolRequestSection {
   tool_name: string;
   scope: TokenToolScope;
   encoding_name: string;
-  path_base: string;
+  base_dir_path: string;
   requested_file_count: number;
-  requested_paths: string[];
-  docs_dir?: string;
+  requested_input_paths: string[];
+  requested_canonical_paths: string[];
+  docs_dir_path?: string;
   canonical_doc_names?: string[];
 }
 
 /**
  * @brief Describes the summary section of the agent-oriented token payload.
- * @details Exposes aggregate counts and averages as numeric fields with explicit units so agents can branch on totals without reparsing formatted strings. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes aggregate counts, sizes, totals, and per-file averages as numeric fields with explicit units so agents can branch on totals without reparsing formatted strings. The interface is compile-time only and introduces no runtime cost.
  */
 export interface TokenToolSummarySection {
   processable_file_count: number;
@@ -80,18 +103,74 @@ export interface TokenToolSummarySection {
   skipped_file_count: number;
   total_token_count: number;
   total_character_count: number;
+  total_byte_count: number;
+  total_line_count: number;
   average_token_count_per_counted_file: number;
   average_character_count_per_counted_file: number;
+  average_byte_count_per_counted_file: number;
+  average_line_count_per_counted_file: number;
+}
+
+/**
+ * @brief Describes one skipped-input or read-error observation.
+ * @details Preserves both the caller-provided path and the canonicalized path plus a stable machine-readable reason string. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface TokenToolPathIssue {
+  input_path: string;
+  canonical_path: string;
+  reason: string;
+}
+
+/**
+ * @brief Describes the dominant counted file for one metric ordering.
+ * @details Exposes the canonical path plus the numeric token metrics that justify why the file dominates the current context budget. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface TokenToolDominantFileObservation {
+  canonical_path: string;
+  token_count: number;
+  token_share: number;
+}
+
+/**
+ * @brief Describes the source-observation subsection of the guidance payload.
+ * @details Separates measured ordering facts and path issues from derived recommendations so agents can reason about raw observations independently. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface TokenToolSourceObservationsSection {
+  counted_paths_by_token_count_desc: string[];
+  counted_paths_by_line_count_desc: string[];
+  skipped_inputs: TokenToolPathIssue[];
+  error_inputs: TokenToolPathIssue[];
+  dominant_token_file?: TokenToolDominantFileObservation;
+}
+
+/**
+ * @brief Describes one derived recommendation in the guidance payload.
+ * @details Provides a stable recommendation kind, the basis metric used to derive it, and the ordered path list the agent can follow directly. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface TokenToolRecommendation {
+  kind: string;
+  basis_metric_name: "token_count" | "line_count";
+  ordered_paths: string[];
+}
+
+/**
+ * @brief Describes one actionable next-step hint in the guidance payload.
+ * @details Supplies a stable hint kind, a focused ordered path subset, and the goal the agent can apply without reparsing surrounding prose. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface TokenToolNextStepHint {
+  kind: string;
+  ordered_paths: string[];
+  goal: string;
 }
 
 /**
  * @brief Describes the guidance section of the agent-oriented token payload.
- * @details Separates derived ordering hints and warning strings from source-derived facts so agents can choose planning heuristics without reparsing the factual file table. The interface is compile-time only and introduces no runtime cost.
+ * @details Separates source observations, derived recommendations, and actionable next-step hints so downstream agents can choose between raw evidence and planning heuristics without reparsing mixed prose. The interface is compile-time only and introduces no runtime cost.
  */
 export interface TokenToolGuidanceSection {
-  warnings: string[];
-  token_heavy_paths_desc: string[];
-  token_light_paths_asc: string[];
+  source_observations: TokenToolSourceObservationsSection;
+  derived_recommendations: TokenToolRecommendation[];
+  actionable_next_steps: TokenToolNextStepHint[];
 }
 
 /**
@@ -183,8 +262,92 @@ function canonicalizeTokenPath(filePath: string, baseDir: string): string {
 }
 
 /**
+ * @brief Counts logical lines in one text payload.
+ * @details Counts newline separators while treating a trailing newline as line termination instead of an extra empty logical line. Runtime is O(n) in text length. No side effects occur.
+ * @param[in] content {string} Text payload.
+ * @return {number} Logical line count; `0` for empty content.
+ */
+function countLines(content: string): number {
+  if (content.length === 0) {
+    return 0;
+  }
+  const newlineCount = content.match(/\r\n|\r|\n/g)?.length ?? 0;
+  return /(?:\r\n|\r|\n)$/.test(content) ? newlineCount : newlineCount + 1;
+}
+
+/**
+ * @brief Strips YAML front matter from markdown content before heading extraction.
+ * @details Removes the first `--- ... ---` block only when it appears at the file start so heading detection can operate on semantic markdown content instead of metadata. Runtime is O(n) in content length. No side effects occur.
+ * @param[in] content {string} Markdown payload.
+ * @return {string} Markdown body without the leading front matter block.
+ */
+function stripMarkdownFrontMatter(content: string): string {
+  const frontMatterMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?(?:\n|$)/);
+  return frontMatterMatch ? content.slice(frontMatterMatch[0].length) : content;
+}
+
+/**
+ * @brief Extracts the first level-one markdown heading when present.
+ * @details Restricts extraction to markdown-like files, skips YAML front matter, and returns the first `# ` heading payload without surrounding whitespace. Runtime is O(n) in content length. No side effects occur.
+ * @param[in] content {string} File content.
+ * @param[in] filePath {string} Source path used for extension-based markdown detection.
+ * @return {string | undefined} First heading text, or `undefined` when absent or the file is not markdown-like.
+ */
+function extractPrimaryHeadingText(content: string, filePath: string): string | undefined {
+  const extension = path.extname(filePath).toLowerCase();
+  if (![".md", ".markdown", ".mdx"].includes(extension)) {
+    return undefined;
+  }
+  const headingMatch = stripMarkdownFrontMatter(content).match(/^#\s+(.+?)\s*$/m);
+  return headingMatch?.[1]?.trim() || undefined;
+}
+
+/**
+ * @brief Infers a file language label optimized for agent payloads.
+ * @details Reuses source-language detection when available, normalizes markdown extensions explicitly, and falls back to the lowercase extension name without the leading dot. Runtime is O(1). No side effects occur.
+ * @param[in] filePath {string} File path whose extension should be classified.
+ * @return {string | undefined} Normalized language label, or `undefined` when the path has no usable extension.
+ */
+function inferLanguageName(filePath: string): string | undefined {
+  const extension = path.extname(filePath).toLowerCase();
+  if ([".md", ".markdown"].includes(extension)) {
+    return "markdown";
+  }
+  if (extension === ".mdx") {
+    return "mdx";
+  }
+  return detectSourceLanguage(filePath) ?? (extension ? extension.slice(1) : undefined);
+}
+
+/**
+ * @brief Extracts leading Doxygen file fields when present.
+ * @details Tests common leading-comment syntaxes, normalizes an optional shebang away before matching, and returns the first non-empty parsed Doxygen map. Runtime is O(n) in comment length. No side effects occur.
+ * @param[in] content {string} File content.
+ * @return {DoxygenFieldMap | undefined} Parsed Doxygen field map, or `undefined` when no supported file-level fields are present.
+ */
+function extractLeadingDoxygenFields(content: string): DoxygenFieldMap | undefined {
+  const normalizedContent = content.replace(/^#![^\n]*\n/, "");
+  const candidates = [
+    normalizedContent.match(/^\s*(\/\*\*[\s\S]*?\*\/|\/\*![\s\S]*?\*\/)/)?.[1],
+    normalizedContent.match(/^(?:\s*\/\/\/?!?[^\n]*(?:\n|$))+/)?.[0],
+    normalizedContent.match(/^(?:\s*#(?:\s|$)[^\n]*(?:\n|$))+/)?.[0],
+    normalizedContent.match(/^\s*(?:"""[\s\S]*?"""|'''[\s\S]*?''')/)?.[0],
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const fields = parseDoxygenComment(candidate);
+    if (Object.keys(fields).length > 0) {
+      return fields;
+    }
+  }
+  return undefined;
+}
+
+/**
  * @brief Rounds one ratio to six decimal places.
- * @details Preserves zero exactly and otherwise limits floating-point noise so token-share fields remain stable across executions. Runtime is O(1). No side effects occur.
+ * @details Preserves zero exactly and otherwise limits floating-point noise so share fields remain stable across executions. Runtime is O(1). No side effects occur.
  * @param[in] numerator {number} Partial numeric value.
  * @param[in] denominator {number} Total numeric value.
  * @return {number} Rounded ratio in range `[0, 1]` when the denominator is positive; `0` otherwise.
@@ -232,42 +395,99 @@ function orderPathsByMetric(
 }
 
 /**
- * @brief Counts tokens and characters for one in-memory content string.
- * @details Instantiates a `TokenCounter`, tokenizes the supplied text, and pairs the result with raw character length. Runtime is O(n). No filesystem I/O occurs.
- * @param[in] content {string} Text payload to measure.
- * @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
- * @return {{ tokens: number; chars: number }} Aggregate metrics for the supplied content.
+ * @brief Probes one requested path before token counting.
+ * @details Resolves whether the target exists and is a regular file while capturing a stable skip reason for missing or non-file inputs. Runtime is dominated by one filesystem stat. Side effects are limited to filesystem reads.
+ * @param[in] absolutePath {string} Absolute path to inspect.
+ * @return {{ exists: boolean; isFile: boolean; reason?: string }} Path probe result.
  */
-export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING): { tokens: number; chars: number } {
-  const counter = new TokenCounter(encodingName);
+function probeRequestedPath(absolutePath: string): { exists: boolean; isFile: boolean; reason?: string } {
+  if (!fs.existsSync(absolutePath)) {
+    return { exists: false, isFile: false, reason: "not found" };
+  }
+  try {
+    const isFile = fs.statSync(absolutePath).isFile();
+    return isFile ? { exists: true, isFile: true } : { exists: true, isFile: false, reason: "not a file" };
+  } catch (error) {
+    return {
+      exists: true,
+      isFile: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * @brief Builds one rich per-file metrics record from readable content.
+ * @details Combines token, character, byte, and line counts with file-extension, inferred-language, heading, and Doxygen metadata extraction so agents can consume direct-access facts without reparsing the raw file. Runtime is O(n) in content length. No external state is mutated.
+ * @param[in] filePath {string} Absolute or project-local file path.
+ * @param[in] content {string} UTF-8 file content.
+ * @param[in] counter {TokenCounter} Reused token counter instance.
+ * @return {CountFileMetricsResult} Structured per-file metrics record.
+ */
+function buildCountFileMetricsResult(filePath: string, content: string, counter: TokenCounter): CountFileMetricsResult {
+  const lineCount = countLines(content);
   return {
+    file: filePath,
     tokens: counter.countTokens(content),
     chars: TokenCounter.countChars(content),
+    bytes: Buffer.byteLength(content, "utf8"),
+    lines: lineCount,
+    startLineNumber: lineCount > 0 ? 1 : 0,
+    endLineNumber: lineCount,
+    fileExtension: path.extname(filePath).toLowerCase(),
+    languageName: inferLanguageName(filePath),
+    primaryHeadingText: extractPrimaryHeadingText(content, filePath),
+    doxygenFileFields: extractLeadingDoxygenFields(content),
   };
 }
 
 /**
- * @brief Counts tokens and characters for multiple files.
- * @details Reuses a single `TokenCounter`, reads each file as UTF-8, and returns per-file metrics. Read failures are captured as error strings instead of aborting the entire batch. Runtime is O(F + S). Side effects are limited to filesystem reads.
+ * @brief Counts tokens, characters, bytes, and lines for one in-memory content string.
+ * @details Instantiates a `TokenCounter`, tokenizes the supplied text, and pairs the result with raw character length, UTF-8 byte size, and logical line count. Runtime is O(n). No filesystem I/O occurs.
+ * @param[in] content {string} Text payload to measure.
+ * @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
+ * @return {{ tokens: number; chars: number; bytes: number; lines: number }} Aggregate metrics for the supplied content.
+ */
+export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING): {
+  tokens: number;
+  chars: number;
+  bytes: number;
+  lines: number;
+} {
+  const counter = new TokenCounter(encodingName);
+  return {
+    tokens: counter.countTokens(content),
+    chars: TokenCounter.countChars(content),
+    bytes: Buffer.byteLength(content, "utf8"),
+    lines: countLines(content),
+  };
+}
+
+/**
+ * @brief Counts tokens, characters, bytes, and lines for multiple files.
+ * @details Reuses a single `TokenCounter`, reads each file as UTF-8, and returns per-file metrics plus direct-access metadata such as heading and Doxygen file fields. Read failures are captured as error strings instead of aborting the entire batch. Runtime is O(F + S). Side effects are limited to filesystem reads.
  * @param[in] filePaths {string[]} File paths to measure.
  * @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
  * @return {CountFileMetricsResult[]} Per-file metrics and optional read errors.
+ * @satisfies REQ-010, REQ-070, REQ-073
  */
 export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUNTER_ENCODING): CountFileMetricsResult[] {
   const counter = new TokenCounter(encodingName);
   return filePaths.map((filePath) => {
     try {
       const content = fs.readFileSync(filePath, "utf8");
-      return {
-        file: filePath,
-        tokens: counter.countTokens(content),
-        chars: TokenCounter.countChars(content),
-      };
+      return buildCountFileMetricsResult(filePath, content, counter);
     } catch (error) {
       return {
         file: filePath,
         tokens: 0,
         chars: 0,
+        bytes: 0,
+        lines: 0,
+        startLineNumber: 0,
+        endLineNumber: 0,
+        fileExtension: path.extname(filePath).toLowerCase(),
+        languageName: inferLanguageName(filePath),
         error: error instanceof Error ? error.message : String(error),
       };
     }
@@ -276,63 +496,83 @@ export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUN
 
 /**
  * @brief Builds the agent-oriented JSON payload for token-centric tools.
- * @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, and emits derived ordering hints in a separate guidance section. Runtime is O(F log F + S). Side effects are limited to filesystem reads.
+ * @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, separates raw observations from derived guidance, and emits direct-access file facts such as line ranges, sizes, headings, and optional Doxygen file fields. Runtime is O(F log F + S). Side effects are limited to filesystem reads.
  * @param[in] options {BuildTokenToolPayloadOptions} Payload-construction options.
  * @return {TokenToolPayload} Structured token payload ordered as request, summary, files, guidance.
- * @satisfies REQ-010, REQ-017, REQ-069, REQ-070, REQ-071
+ * @satisfies REQ-010, REQ-017, REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075
  */
 export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): TokenToolPayload {
   const baseDir = path.resolve(options.baseDir);
   const encodingName = options.encodingName ?? TOKEN_COUNTER_ENCODING;
   const requestedEntries = options.requestedPaths.map((inputPath, index) => {
     const absolutePath = path.resolve(baseDir, inputPath);
+    const pathProbe = probeRequestedPath(absolutePath);
     return {
       requestIndex: index + 1,
       inputPath,
       absolutePath,
       canonicalPath: canonicalizeTokenPath(absolutePath, baseDir),
+      pathProbe,
     };
   });
-  const readableEntries: Array<typeof requestedEntries[number]> = [];
-  const skippedWarnings: string[] = [];
-  for (const entry of requestedEntries) {
-    if (!fs.existsSync(entry.absolutePath) || !fs.statSync(entry.absolutePath).isFile()) {
-      skippedWarnings.push(`skipped: ${entry.canonicalPath}: not found or not a file`);
-      continue;
-    }
-    readableEntries.push(entry);
-  }
+  const readableEntries = requestedEntries.filter((entry) => entry.pathProbe.isFile);
   const measuredResults = countFilesMetrics(readableEntries.map((entry) => entry.absolutePath), encodingName);
-  const measuredQueue = [...measuredResults];
+  const measuredByRequestIndex = new Map<number, CountFileMetricsResult>();
+  readableEntries.forEach((entry, index) => {
+    measuredByRequestIndex.set(entry.requestIndex, measuredResults[index]!);
+  });
   const files: TokenToolFileEntry[] = requestedEntries.map((entry) => {
-    const nextMeasured = measuredQueue[0];
-    if (!readableEntries.find((readableEntry) => readableEntry.requestIndex === entry.requestIndex)) {
+    const measured = measuredByRequestIndex.get(entry.requestIndex);
+    const fileExtension = measured?.fileExtension ?? path.extname(entry.absolutePath).toLowerCase();
+    const languageName = measured?.languageName ?? inferLanguageName(entry.absolutePath);
+    if (!entry.pathProbe.isFile) {
       return {
         request_index: entry.requestIndex,
         input_path: entry.inputPath,
         canonical_path: entry.canonicalPath,
+        absolute_path: entry.absolutePath.split(path.sep).join("/"),
         file_name: path.basename(entry.canonicalPath),
+        file_extension: fileExtension,
+        language_name: languageName,
         status: "skipped",
+        exists: entry.pathProbe.exists,
+        is_file: false,
+        start_line_number: 0,
+        end_line_number: 0,
+        line_count: 0,
         token_count: 0,
         character_count: 0,
+        byte_count: 0,
         token_share: 0,
         character_share: 0,
-        error_message: "not found or not a file",
+        byte_share: 0,
+        error_message: entry.pathProbe.reason ?? "not a file",
       };
     }
-    measuredQueue.shift();
-    const status: TokenFileStatus = nextMeasured?.error ? "error" : "counted";
+    const status: TokenFileStatus = measured?.error ? "error" : "counted";
     return {
       request_index: entry.requestIndex,
       input_path: entry.inputPath,
       canonical_path: entry.canonicalPath,
+      absolute_path: entry.absolutePath.split(path.sep).join("/"),
       file_name: path.basename(entry.canonicalPath),
+      file_extension: fileExtension,
+      language_name: languageName,
       status,
-      token_count: nextMeasured?.tokens ?? 0,
-      character_count: nextMeasured?.chars ?? 0,
+      exists: true,
+      is_file: true,
+      start_line_number: measured?.startLineNumber ?? 0,
+      end_line_number: measured?.endLineNumber ?? 0,
+      line_count: measured?.lines ?? 0,
+      primary_heading_text: measured?.primaryHeadingText,
+      doxygen_file_fields: measured?.doxygenFileFields,
+      token_count: measured?.tokens ?? 0,
+      character_count: measured?.chars ?? 0,
+      byte_count: measured?.bytes ?? 0,
       token_share: 0,
       character_share: 0,
-      error_message: nextMeasured?.error,
+      byte_share: 0,
+      error_message: measured?.error,
     };
   });
   const totalTokenCount = files
@@ -341,29 +581,84 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
   const totalCharacterCount = files
     .filter((entry) => entry.status === "counted")
     .reduce((sum, entry) => sum + entry.character_count, 0);
+  const totalByteCount = files
+    .filter((entry) => entry.status === "counted")
+    .reduce((sum, entry) => sum + entry.byte_count, 0);
+  const totalLineCount = files
+    .filter((entry) => entry.status === "counted")
+    .reduce((sum, entry) => sum + entry.line_count, 0);
   const filesWithShares = files.map((entry) => ({
     ...entry,
     token_share: roundRatio(entry.token_count, totalTokenCount),
     character_share: roundRatio(entry.character_count, totalCharacterCount),
+    byte_share: roundRatio(entry.byte_count, totalByteCount),
   }));
   const countedFileCount = filesWithShares.filter((entry) => entry.status === "counted").length;
   const errorFileCount = filesWithShares.filter((entry) => entry.status === "error").length;
   const skippedFileCount = filesWithShares.filter((entry) => entry.status === "skipped").length;
-  const warningLines = [
-    ...skippedWarnings,
-    ...filesWithShares
-      .filter((entry) => entry.status === "error" && entry.error_message)
-      .map((entry) => `error: ${entry.canonical_path}: ${entry.error_message}`),
-  ];
+  const countedPathsByTokenCountDesc = orderPathsByMetric(filesWithShares, (entry) => entry.token_count, "desc");
+  const countedPathsByTokenCountAsc = orderPathsByMetric(filesWithShares, (entry) => entry.token_count, "asc");
+  const countedPathsByLineCountDesc = orderPathsByMetric(filesWithShares, (entry) => entry.line_count, "desc");
+  const dominantTokenFileEntry = filesWithShares
+    .filter((entry) => entry.status === "counted")
+    .sort((left, right) => {
+      if (left.token_count === right.token_count) {
+        return left.canonical_path.localeCompare(right.canonical_path);
+      }
+      return right.token_count - left.token_count;
+    })[0];
+  const skippedInputs = filesWithShares
+    .filter((entry) => entry.status === "skipped" && entry.error_message)
+    .map((entry) => ({
+      input_path: entry.input_path,
+      canonical_path: entry.canonical_path,
+      reason: entry.error_message!,
+    }));
+  const errorInputs = filesWithShares
+    .filter((entry) => entry.status === "error" && entry.error_message)
+    .map((entry) => ({
+      input_path: entry.input_path,
+      canonical_path: entry.canonical_path,
+      reason: entry.error_message!,
+    }));
+  const derivedRecommendations: TokenToolRecommendation[] = countedPathsByTokenCountDesc.length > 0
+    ? [
+      {
+        kind: "prioritize_high_token_paths",
+        basis_metric_name: "token_count",
+        ordered_paths: countedPathsByTokenCountDesc,
+      },
+      {
+        kind: "defer_low_token_paths",
+        basis_metric_name: "token_count",
+        ordered_paths: countedPathsByTokenCountAsc,
+      },
+    ]
+    : [];
+  const actionableNextSteps: TokenToolNextStepHint[] = countedPathsByTokenCountDesc.length > 0
+    ? [
+      {
+        kind: "read_top_token_paths_first",
+        ordered_paths: countedPathsByTokenCountDesc.slice(0, 3),
+        goal: "minimize context-truncation risk during initial review",
+      },
+      {
+        kind: "reserve_low_token_paths_for_follow_up",
+        ordered_paths: countedPathsByTokenCountAsc.slice(0, 3),
+        goal: "defer lower-cost files until high-cost files have been reviewed",
+      },
+    ]
+    : [];
   return {
     request: {
       tool_name: options.toolName,
       scope: options.scope,
       encoding_name: encodingName,
-      path_base: baseDir.split(path.sep).join("/"),
+      base_dir_path: baseDir.split(path.sep).join("/"),
       requested_file_count: options.requestedPaths.length,
-      requested_paths: requestedEntries.map((entry) => entry.canonicalPath),
-      docs_dir: options.docsDir,
+      requested_input_paths: options.requestedPaths,
+      requested_canonical_paths: requestedEntries.map((entry) => entry.canonicalPath),
+      docs_dir_path: options.docsDir,
       canonical_doc_names: options.canonicalDocNames,
     },
     summary: {
@@ -373,14 +668,30 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
       skipped_file_count: skippedFileCount,
       total_token_count: totalTokenCount,
       total_character_count: totalCharacterCount,
+      total_byte_count: totalByteCount,
+      total_line_count: totalLineCount,
       average_token_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalTokenCount / countedFileCount).toFixed(6)),
       average_character_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalCharacterCount / countedFileCount).toFixed(6)),
+      average_byte_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalByteCount / countedFileCount).toFixed(6)),
+      average_line_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalLineCount / countedFileCount).toFixed(6)),
     },
     files: filesWithShares,
     guidance: {
-      warnings: warningLines,
-      token_heavy_paths_desc: orderPathsByMetric(filesWithShares, (entry) => entry.token_count, "desc"),
-      token_light_paths_asc: orderPathsByMetric(filesWithShares, (entry) => entry.token_count, "asc"),
+      source_observations: {
+        counted_paths_by_token_count_desc: countedPathsByTokenCountDesc,
+        counted_paths_by_line_count_desc: countedPathsByLineCountDesc,
+        skipped_inputs: skippedInputs,
+        error_inputs: errorInputs,
+        dominant_token_file: dominantTokenFileEntry
+          ? {
+            canonical_path: dominantTokenFileEntry.canonical_path,
+            token_count: dominantTokenFileEntry.token_count,
+            token_share: dominantTokenFileEntry.token_share,
+          }
+          : undefined,
+      },
+      derived_recommendations: derivedRecommendations,
+      actionable_next_steps: actionableNextSteps,
     },
   };
 }

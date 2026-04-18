@@ -150,11 +150,25 @@ function formatJsonToolPayload(payload: unknown): string {
 }
 
 /**
+ * @brief Builds execution diagnostics for one token-tool payload.
+ * @details Serializes skipped-input and read-error observations into stable stderr lines while leaving successful counted files silent. Runtime is O(n) in issue count. No side effects occur.
+ * @param[in] payload {TokenToolPayload} Structured token payload.
+ * @return {string} Newline-delimited execution diagnostics.
+ */
+function buildTokenToolExecutionStderr(payload: TokenToolPayload): string {
+  const skippedLines = payload.guidance.source_observations.skipped_inputs
+    .map((entry) => `skipped: ${entry.canonical_path}: ${entry.reason}`);
+  const errorLines = payload.guidance.source_observations.error_inputs
+    .map((entry) => `error: ${entry.canonical_path}: ${entry.reason}`);
+  return [...skippedLines, ...errorLines].join("\n");
+}
+
+/**
  * @brief Builds the agent-oriented execute result returned by token-count tools.
  * @details Mirrors the structured token payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
  * @param[in] payload {TokenToolPayload} Structured token payload.
  * @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Token-tool execute result.
- * @satisfies REQ-069, REQ-070, REQ-071
+ * @satisfies REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075
  */
 function buildTokenToolExecuteResult(
   payload: TokenToolPayload,
@@ -169,7 +183,7 @@ function buildTokenToolExecuteResult(
     guidance: payload.guidance,
     execution: {
       code: 0,
-      stderr: payload.guidance.warnings.join("\n"),
+      stderr: buildTokenToolExecutionStderr(payload),
     },
   };
   return {
@@ -378,7 +392,7 @@ function registerPromptCommands(pi: ExtensionAPI): void {
  * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies REQ-005, REQ-010, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072
+ * @satisfies REQ-005, REQ-010, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075
  */
 function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
@@ -416,24 +430,25 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const filesTokensSchema = Type.Object(
     {
       files: Type.Array(
-        Type.String({ description: "Project-relative or absolute file path" }),
+        Type.String({ description: "Project-relative or absolute file path resolved from the current working directory when not already absolute" }),
         { description: "Input file list preserved in caller order" },
       ),
     },
     {
-      description: "Counts readable files with cl100k_base. Missing or non-file inputs are skipped. The tool fails when no processable files remain.",
+      description: "Input contract: files[]. Output contract: JSON object with request, summary, files, guidance, and execution. File entries expose path identifiers, access facts, line ranges, sizes, token metrics, and optional heading or Doxygen metadata. Missing or non-file inputs become skipped entries. The tool fails when no processable files remain.",
     },
   );
 
   pi.registerTool({
     name: "files-tokens",
     label: "files-tokens",
-    description: "Analyze explicit files with cl100k_base and return JSON sections request, summary, files, guidance, and execution.",
-    promptSnippet: "Return structured token metrics for caller-selected files.",
+    description: "Scope: explicit files. Return an LLM-oriented JSON payload with request, summary, files, guidance, and execution sections. File entries expose direct-access path facts, status, line ranges, sizes, token metrics, and optional heading or Doxygen metadata.",
+    promptSnippet: "Return the structured token-analysis payload for caller-selected files.",
     promptGuidelines: [
-      "Input: files[]; order is preserved; each item may be project-relative or absolute.",
-      "Output: JSON sections request, summary, files, guidance, execution; counts remain numeric.",
-      "Error handling: missing or non-file inputs are skipped; the tool fails when no processable files remain.",
+      "Scope: explicit files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
+      "Output contract: request + summary + files + guidance + execution. File entries expose canonical paths, absolute paths, existence, file status, line range, line count, byte count, character count, token count, shares, and optional primary-heading or Doxygen file metadata.",
+      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; descriptive text is limited to stable reasons and guidance labels.",
+      "Behavior contract: missing or non-file inputs become skipped entries; read failures become error entries; the tool fails only when no processable files remain.",
     ],
     parameters: filesTokensSchema,
     async execute(_toolCallId, params) {
@@ -504,7 +519,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const tokensSchema = Type.Object(
     {},
     {
-      description: "No params. Uses project config docs-dir, selects canonical docs, reports missing canonical docs, and fails when no processable canonical docs remain.",
+      description: "Input contract: no params. Scope is the configured docs-dir plus canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md. Output contract: same structured JSON shape as files-tokens, plus docs_dir_path and canonical_doc_names in request. Missing canonical docs become skipped entries. The tool fails when no processable canonical docs remain.",
     },
   );
 
@@ -560,12 +575,13 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "tokens",
     label: "tokens",
-    description: "Analyze canonical docs from the configured docs-dir with cl100k_base and return JSON sections request, summary, files, guidance, and execution.",
-    promptSnippet: "Return structured token metrics for canonical documentation files.",
+    description: "Scope: canonical docs from the configured docs-dir. Return the same LLM-oriented JSON contract as files-tokens, plus canonical-doc selection metadata in request for REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
+    promptSnippet: "Return the structured token-analysis payload for canonical documentation files.",
     promptGuidelines: [
-      "Input: no params; uses docs-dir plus canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
-      "Output: same JSON sections as files-tokens; counts remain numeric and canonical paths are isolated.",
-      "Error handling: missing canonical docs are reported; the tool fails when no processable canonical docs remain.",
+      "Scope: no params; resolve docs-dir from project config; target canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
+      "Output contract: request + summary + files + guidance + execution. Request includes docs_dir_path and canonical_doc_names; file entries expose direct-access path facts, line ranges, sizes, token metrics, and optional metadata.",
+      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; guidance separates source observations, derived recommendations, and actionable next-step hints.",
+      "Behavior contract: missing canonical docs become skipped entries; read failures become error entries; the tool fails only when no processable canonical docs remain.",
     ],
     parameters: tokensSchema,
     async execute() {

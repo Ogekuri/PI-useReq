@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.9"
-date: "2026-04-17"
+version: "0.0.10"
+date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -105,18 +105,21 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-068**: MUST make `req-<prompt>` commands skip the pre-reset and send the rendered prompt into the current session when `reset-context` is `false`.
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
 - **REQ-009**: MUST ensure home resources, apply configured startup tools, and publish `pi-usereq` status text during `session_start`.
-- **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters, and make `files-tokens` agent-tool executes emit agent-oriented JSON with per-file metrics plus aggregate metrics.
+- **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate file references by analyzing supported source files and emitting Markdown with file headers, imports, definitions, and a symbol index.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
 - **REQ-013**: MUST search explicit files by tag filter and name regex, then emit matching constructs with signature, line range, Doxygen fields, and comment-stripped code excerpts.
 - **REQ-014**: MUST make `references` scan configured `src-dir` files and prepend an ASCII tree of discovered repository-relative paths.
 - **REQ-015**: MUST make `compress` scan configured `src-dir` files and emit one compressed markdown block per supported file.
 - **REQ-016**: MUST make `find` scan configured `src-dir` files using the requested tag filter and regular expression.
-- **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the `files-tokens` agent-oriented JSON contract, and fail when none exist.
-- **REQ-069**: MUST order `files-tokens` and `tokens` agent-tool JSON sections as `request`, `summary`, `files`, and `guidance`.
-- **REQ-070**: MUST emit counts, sizes, and derived totals as JSON numbers with unit-specific field names and keep optional display strings separate.
-- **REQ-071**: MUST normalize `files-tokens` and `tokens` agent-tool text fields by removing decorative formatting, isolating canonical paths, and separating source-derived facts from derived guidance.
-- **REQ-072**: MUST register `files-tokens` and `tokens` with agent-oriented descriptions covering purpose, configurable inputs, output sections, and failure conditions.
+- **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the structured `files-tokens` JSON contract, and fail when none exist.
+- **REQ-069**: MUST order `files-tokens` and `tokens` JSON sections as `request`, `summary`, `files`, and `guidance`, and order fields inside each section from canonical identifiers to source facts, metrics, and derived guidance.
+- **REQ-070**: MUST emit counts, sizes, line counts, line ranges, and derived totals as JSON numbers with explicit unit-specific field names, keeping display strings optional and never as the sole carrier of numeric facts.
+- **REQ-071**: MUST normalize `files-tokens` and `tokens` text fields by removing decorative formatting, isolating canonical paths, separating source-derived facts from guidance, and stripping non-semantic presentation artifacts.
+- **REQ-072**: MUST register `files-tokens` and `tokens` with agent-oriented descriptions covering purpose, inputs, output schema, output format, specialized behaviors, configuration options, invocation modes, and failure conditions.
+- **REQ-073**: MUST expose file-derived facts needed for direct access, including canonical path, language, existence, line counts, line ranges, and Doxygen-derived metadata, as dedicated JSON fields when available.
+- **REQ-074**: MUST keep monolithic text summaries optional, place them after structured fields, and omit any fact from text-only representation when the same fact can be emitted as dedicated JSON.
+- **REQ-075**: MUST make `files-tokens` and `tokens` guidance fields explicitly distinguish source observations, derived recommendations, and actionable next-step hints.
 - **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy`, `pylance`, `ruff`, or `command` checker subcommands directly.
 - **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
 - **REQ-020**: MUST parse static-check enable specs in `LANG=MODULE[,CMD[,PARAM...]]` format and normalize supported language and module names case-insensitively.

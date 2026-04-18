@@ -19,12 +19,14 @@ type RegisteredCommand = { description?: string; handler: (args: string, ctx: an
 
 /**
  * @brief Describes one fake extension tool registration captured during tests.
- * @details Mirrors the minimal custom-tool definition surface used by the suite, including the optional execute callback required for direct tool invocation assertions. The alias is compile-time only and introduces no runtime side effects.
+ * @details Mirrors the minimal custom-tool definition surface used by the suite, including prompt metadata, parameter schemas, and the optional execute callback required for direct tool invocation assertions. The alias is compile-time only and introduces no runtime side effects.
  */
 type RegisteredTool = {
   name: string;
   label?: string;
   description?: string;
+  promptSnippet?: string;
+  promptGuidelines?: string[];
   parameters?: unknown;
   sourceInfo?: Record<string, unknown>;
   execute?: (toolCallId: string, params: any, signal?: AbortSignal, onUpdate?: unknown, ctx?: any) => Promise<any> | any;
@@ -311,6 +313,93 @@ test("extension registers prompt and config commands while exposing tool capabil
     "git-wt-delete",
   ]) {
     assert.ok(toolNames.includes(name), `missing tool ${name}`);
+  }
+});
+
+test("token tools register agent-oriented descriptions and schema details", () => {
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  const filesTokens = pi.tools.find((tool: RegisteredTool) => tool.name === "files-tokens");
+  const tokens = pi.tools.find((tool: RegisteredTool) => tool.name === "tokens");
+  assert.ok(filesTokens, "missing files-tokens tool");
+  assert.ok(tokens, "missing tokens tool");
+
+  assert.match(filesTokens.description ?? "", /LLM-oriented JSON payload/);
+  assert.ok(filesTokens.promptGuidelines?.some((line) => line.includes("Output contract:")));
+  assert.match(String((filesTokens.parameters as { description?: string } | undefined)?.description ?? ""), /line ranges/);
+
+  assert.match(tokens.description ?? "", /canonical docs/);
+  assert.ok(tokens.promptGuidelines?.some((line) => line.includes("docs_dir_path")));
+  assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /canonical_doc_names/);
+});
+
+test("files-tokens returns structured source facts and separated guidance", async () => {
+  const { projectBase } = initFixtureRepo({
+    fixtures: [],
+    docs: {
+      "REQUIREMENTS.md": "---\ntitle: Requirements\n---\n# Requirements\nAlpha\nBeta\n",
+      "WORKFLOW.md": "# Workflow\nStep one\n",
+      "REFERENCES.md": "# References\nEntry one\n",
+    },
+  });
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "files-tokens", projectBase, {
+      files: ["req/docs/REQUIREMENTS.md", "req/docs/MISSING.md"],
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: {
+        request: {
+          base_dir_path: string;
+          requested_input_paths: string[];
+        };
+        summary: {
+          counted_file_count: number;
+          skipped_file_count: number;
+        };
+        files: Array<{
+          canonical_path: string;
+          status: string;
+          start_line_number: number;
+          end_line_number: number;
+          line_count: number;
+          byte_count: number;
+          primary_heading_text?: string;
+        }>;
+        guidance: {
+          source_observations: {
+            skipped_inputs: Array<{ input_path: string; canonical_path: string; reason: string }>;
+          };
+          derived_recommendations: Array<{ kind: string; ordered_paths: string[] }>;
+          actionable_next_steps: Array<{ kind: string; ordered_paths: string[] }>;
+        };
+        execution: {
+          stderr: string;
+        };
+      };
+    };
+
+    const payload = result.details!;
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
+    assert.equal(payload.request.base_dir_path, projectBase);
+    assert.deepEqual(payload.request.requested_input_paths, ["req/docs/REQUIREMENTS.md", "req/docs/MISSING.md"]);
+    assert.equal(payload.summary.counted_file_count, 1);
+    assert.equal(payload.summary.skipped_file_count, 1);
+    assert.equal(payload.files[0]?.canonical_path, "req/docs/REQUIREMENTS.md");
+    assert.equal(payload.files[0]?.start_line_number, 1);
+    assert.equal(payload.files[0]?.end_line_number, payload.files[0]?.line_count);
+    assert.ok((payload.files[0]?.byte_count ?? 0) > 0);
+    assert.equal(payload.files[0]?.primary_heading_text, "Requirements");
+    assert.deepEqual(payload.guidance.source_observations.skipped_inputs, [
+      { input_path: "req/docs/MISSING.md", canonical_path: "req/docs/MISSING.md", reason: "not found" },
+    ]);
+    assert.equal(payload.guidance.derived_recommendations[0]?.kind, "prioritize_high_token_paths");
+    assert.equal(payload.guidance.actionable_next_steps[0]?.kind, "read_top_token_paths_first");
+    assert.match(payload.execution.stderr, /skipped: req\/docs\/MISSING\.md: not found/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
