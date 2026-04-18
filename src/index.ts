@@ -19,6 +19,17 @@ import {
   type TokenToolPayload,
 } from "./core/token-counter.js";
 import {
+  buildDocsCheckToolPayload,
+  buildGitCheckToolPayload,
+  buildPathQueryToolPayload,
+  buildStaticCheckToolPayload,
+  buildStructuredToolExecuteResult,
+  buildToolExecutionSection,
+  buildWorktreeMutationToolPayload,
+  buildWorktreeNameToolPayload,
+  normalizeToolFailure,
+} from "./core/agent-tool-json.js";
+import {
   buildReferenceToolExecutionStderr,
   buildReferenceToolPayload,
   type ReferenceToolPayload,
@@ -50,12 +61,7 @@ import { renderPrompt } from "./core/prompts.js";
 import { ensureHomeResources } from "./core/resources.js";
 import {
   collectSourceFiles,
-  runCompress,
-  runDocsCheck,
-  runFilesCompress,
-  runFilesReferences,
   runFilesStaticCheck,
-  runFilesTokens,
   runGetBasePath,
   runGitCheck,
   runGitPath,
@@ -65,9 +71,6 @@ import {
   runGitWtDelete,
   runGitWtName,
   runProjectStaticCheck,
-  runReferences,
-  runTokens,
-  type ToolResult,
 } from "./core/tool-runner.js";
 import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
@@ -75,7 +78,7 @@ import {
   getSupportedStaticCheckLanguageSupport,
   parseEnableStaticCheck,
 } from "./core/static-check.js";
-import { shellSplit } from "./core/utils.js";
+import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 
 /**
  * @brief Lists bundled prompt commands exposed by the extension.
@@ -143,26 +146,43 @@ function saveProjectConfig(cwd: string, config: UseReqConfig): void {
 }
 
 /**
- * @brief Formats a tool result for editor display.
- * @details Trims trailing whitespace on stdout and stderr independently, then joins non-empty sections with a blank line. Runtime is O(n) in emitted text size. No side effects occur.
- * @param[in] result {ToolResult} Tool result payload.
- * @return {string} Editor-ready textual representation.
+ * @brief Collects the project-scoped static-check selection used by the agent tool.
+ * @details Resolves configured source plus test directories, reuses the same fixture-root exclusions as `runProjectStaticCheck`, and returns canonical relative file paths for structured payload emission. Runtime is O(F) plus project file-discovery cost. Side effects are limited to filesystem reads and git subprocesses delegated through `collectSourceFiles`.
+ * @param[in] projectBase {string} Resolved project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {{ selectionDirectoryPaths: string[]; excludedDirectoryPaths: string[]; selectedPaths: string[] }} Structured static-check selection facts.
  */
-function formatResultForEditor(result: ToolResult): string {
-  const parts: string[] = [];
-  if (result.stdout) parts.push(result.stdout.trimEnd());
-  if (result.stderr) parts.push(result.stderr.trimEnd());
-  return parts.join(parts.length > 1 ? "\n\n" : "");
-}
-
-/**
- * @brief Serializes one structured payload as pretty-printed JSON text.
- * @details Uses two-space indentation and omits a trailing newline so tool `content` payloads remain compact while preserving deterministic field order. Runtime is O(n) in payload size. No side effects occur.
- * @param[in] payload {unknown} Structured JSON-compatible payload.
- * @return {string} Pretty-printed JSON string.
- */
-function formatJsonToolPayload(payload: unknown): string {
-  return JSON.stringify(payload, null, 2);
+function collectProjectStaticCheckSelection(
+  projectBase: string,
+  config: UseReqConfig,
+): {
+  selectionDirectoryPaths: string[];
+  excludedDirectoryPaths: string[];
+  selectedPaths: string[];
+} {
+  const selectionDirectoryPaths = [...config["src-dir"], config["tests-dir"]];
+  const testsDirRel = makeRelativeIfContainsProject(config["tests-dir"], projectBase)
+    .split(path.sep)
+    .join("/")
+    .replace(/^\.?\/?/, "")
+    .replace(/\/+$/, "");
+  const excludedDirectoryPaths = [...new Set([
+    "tests/fixtures",
+    testsDirRel ? `${testsDirRel}/fixtures` : "fixtures",
+  ])];
+  const selectedPaths = collectSourceFiles(selectionDirectoryPaths, projectBase)
+    .filter((filePath) => {
+      const relativePath = path.relative(projectBase, filePath).split(path.sep).join("/");
+      return !excludedDirectoryPaths.some((excludedDirectoryPath) => {
+        return relativePath === excludedDirectoryPath || relativePath.startsWith(`${excludedDirectoryPath}/`);
+      });
+    })
+    .map((filePath) => path.relative(projectBase, filePath).split(path.sep).join("/"));
+  return {
+    selectionDirectoryPaths,
+    excludedDirectoryPaths,
+    selectedPaths,
+  };
 }
 
 /**
@@ -184,7 +204,7 @@ function buildTokenToolExecutionStderr(payload: TokenToolPayload): string {
  * @details Mirrors the structured token payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
  * @param[in] payload {TokenToolPayload} Structured token payload.
  * @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Token-tool execute result.
- * @satisfies REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075
+ * @satisfies REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075, REQ-099, REQ-102
  */
 function buildTokenToolExecuteResult(
   payload: TokenToolPayload,
@@ -198,14 +218,11 @@ function buildTokenToolExecuteResult(
     files: payload.files,
     guidance: payload.guidance,
     execution: {
-      code: 0,
+      code: payload.summary.counted_file_count > 0 ? 0 : 1,
       stderr: buildTokenToolExecutionStderr(payload),
     },
   };
-  return {
-    content: [{ type: "text", text: formatJsonToolPayload(details) }],
-    details,
-  };
+  return buildStructuredToolExecuteResult(details);
 }
 
 /**
@@ -213,7 +230,7 @@ function buildTokenToolExecuteResult(
  * @details Mirrors the structured references payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
  * @param[in] payload {ReferenceToolPayload} Structured references payload.
  * @return {{ content: Array<{ type: "text"; text: string }>; details: ReferenceToolPayload & { execution: { code: number; stderr: string } } }} References-tool execute result.
- * @satisfies REQ-076, REQ-077, REQ-078, REQ-079
+ * @satisfies REQ-076, REQ-077, REQ-078, REQ-079, REQ-099, REQ-102
  */
 function buildReferenceToolExecuteResult(
   payload: ReferenceToolPayload,
@@ -227,14 +244,11 @@ function buildReferenceToolExecuteResult(
     repository: payload.repository,
     files: payload.files,
     execution: {
-      code: 0,
+      code: payload.summary.analyzed_file_count > 0 ? 0 : 1,
       stderr: buildReferenceToolExecutionStderr(payload),
     },
   };
-  return {
-    content: [{ type: "text", text: formatJsonToolPayload(details) }],
-    details,
-  };
+  return buildStructuredToolExecuteResult(details);
 }
 
 /**
@@ -242,7 +256,7 @@ function buildReferenceToolExecuteResult(
  * @details Mirrors the structured compression payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
  * @param[in] payload {CompressToolPayload} Structured compression payload.
  * @return {{ content: Array<{ type: "text"; text: string }>; details: CompressToolPayload & { execution: { code: number; stderr: string } } }} Compression-tool execute result.
- * @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087, REQ-088
+ * @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087, REQ-088, REQ-099, REQ-102
  */
 function buildCompressionToolExecuteResult(
   payload: CompressToolPayload,
@@ -256,14 +270,11 @@ function buildCompressionToolExecuteResult(
     repository: payload.repository,
     files: payload.files,
     execution: {
-      code: 0,
+      code: payload.summary.compressed_file_count > 0 ? 0 : 1,
       stderr: buildCompressToolExecutionStderr(payload),
     },
   };
-  return {
-    content: [{ type: "text", text: formatJsonToolPayload(details) }],
-    details,
-  };
+  return buildStructuredToolExecuteResult(details);
 }
 
 /**
@@ -373,7 +384,7 @@ function buildFindToolPromptGuidelines(scope: FindToolScope): string[] {
  * @details Mirrors the structured find payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
  * @param[in] payload {FindToolPayload} Structured find payload.
  * @return {{ content: Array<{ type: "text"; text: string }>; details: FindToolPayload & { execution: { code: number; stderr: string } } }} Find-tool execute result.
- * @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-097, REQ-098
+ * @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-097, REQ-098, REQ-099, REQ-102
  */
 function buildFindToolExecuteResult(
   payload: FindToolPayload,
@@ -392,10 +403,7 @@ function buildFindToolExecuteResult(
       stderr,
     },
   };
-  return {
-    content: [{ type: "text", text: formatJsonToolPayload(details) }],
-    details,
-  };
+  return buildStructuredToolExecuteResult(details);
 }
 
 /**
@@ -598,37 +606,73 @@ function registerPromptCommands(pi: ExtensionAPI): void {
  * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098
+ * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102
  */
 function registerAgentTools(pi: ExtensionAPI): void {
+  const gitPathSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived configured git root.",
+    },
+  );
   pi.registerTool({
     name: "git-path",
     label: "git-path",
-    description: "Print the configured git root path from .pi/pi-usereq/config.json.",
-    promptSnippet: "Read the configured git repository root for the current project.",
-    promptGuidelines: ["Use this when you need the project git root path for worktree or validation workflows."],
-    parameters: Type.Object({}),
+    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `git-path` value through direct-access fields instead of text-only output.",
+    promptSnippet: "Return the structured configured git-root payload for the current project.",
+    promptGuidelines: [
+      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Output contract: request + result + execution. Result exposes path_key, path_value, and path_present.",
+      "Configuration contract: loadProjectConfig recomputes git-path from the current working directory when the project is inside a repository.",
+      "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
+    ],
+    parameters: gitPathSchema,
     async execute() {
       ensureHomeResources();
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
       const result = runGitPath(projectBase, config);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const payload = buildPathQueryToolPayload(
+        "git-path",
+        process.cwd(),
+        projectBase,
+        result.stdout.trimEnd(),
+        buildToolExecutionSection(result),
+      );
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
+  const basePathSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived configured project base path.",
+    },
+  );
   pi.registerTool({
     name: "get-base-path",
     label: "get-base-path",
-    description: "Print the configured base project path from .pi/pi-usereq/config.json.",
-    promptSnippet: "Read the configured project base path.",
-    promptGuidelines: ["Use this when a workflow must refer to the original project root path."],
-    parameters: Type.Object({}),
+    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `base-path` value through direct-access fields instead of text-only output.",
+    promptSnippet: "Return the structured configured project-base payload.",
+    promptGuidelines: [
+      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Output contract: request + result + execution. Result exposes path_key, path_value, and path_present.",
+      "Configuration contract: loadProjectConfig refreshes base-path from the current working directory before the payload is emitted.",
+      "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
+    ],
+    parameters: basePathSchema,
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
       const result = runGetBasePath(projectBase, config);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const payload = buildPathQueryToolPayload(
+        "get-base-path",
+        process.cwd(),
+        projectBase,
+        result.stdout.trimEnd(),
+        buildToolExecutionSection(result),
+      );
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
@@ -643,7 +687,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
       description: "Input contract: files[]. Output contract: JSON object with request, summary, repository, files, and execution. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts. Missing or unsupported inputs become skipped entries. The tool fails when no source file can be analyzed.",
     },
   );
-  const multiFileSchema = Type.Object({ files: Type.Array(Type.String({ description: "Project or absolute file path" })) });
+  const multiFileSchema = Type.Object(
+    {
+      files: Type.Array(
+        Type.String({ description: "Project-relative or absolute file path resolved from the current working directory when not already absolute" }),
+        { description: "Explicit file list preserved in caller order" },
+      ),
+    },
+    {
+      description: "Input contract: files[]. Output contract: JSON object with request, summary, files, and execution. File entries expose canonical paths, detected language, configured checker modules, selection status, and error facts.",
+    },
+  );
   const filesTokensSchema = Type.Object(
     {
       files: Type.Array(
@@ -676,9 +730,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         requestedPaths: params.files,
         encodingName: TOKEN_COUNTER_ENCODING,
       });
-      if (payload.summary.processable_file_count === 0) {
-        runFilesTokens(params.files);
-      }
       return buildTokenToolExecuteResult(payload);
     },
   });
@@ -702,9 +753,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         baseDir: process.cwd(),
         requestedPaths: params.files,
       });
-      if (payload.summary.processable_file_count === 0 || payload.summary.analyzed_file_count === 0) {
-        runFilesReferences(params.files, process.cwd());
-      }
       return buildReferenceToolExecuteResult(payload);
     },
   });
@@ -742,9 +790,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         requestedPaths: params.files,
         includeLineNumbers: params.enableLineNumbers ?? false,
       });
-      if (payload.summary.compressed_file_count === 0) {
-        runFilesCompress(params.files, process.cwd(), params.enableLineNumbers ?? false);
-      }
       return buildCompressionToolExecuteResult(payload);
     },
   });
@@ -791,7 +836,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
       description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with request, summary, repository, files, and execution. Repository exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, and status facts. The tool fails when no configured source file can be analyzed.",
     },
   );
-  const emptySchema = Type.Object({});
   const tokensSchema = Type.Object(
     {},
     {
@@ -821,9 +865,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         requestedPaths: collectSourceFiles(config["src-dir"], projectBase),
         sourceDirectoryPaths: config["src-dir"],
       });
-      if (payload.summary.analyzed_file_count === 0) {
-        runReferences(projectBase, config);
-      }
       return buildReferenceToolExecuteResult(payload);
     },
   });
@@ -861,9 +902,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         includeLineNumbers: params.enableLineNumbers ?? false,
         sourceDirectoryPaths: config["src-dir"],
       });
-      if (payload.summary.compressed_file_count === 0) {
-        runCompress(projectBase, config, params.enableLineNumbers ?? false);
-      }
       return buildCompressionToolExecuteResult(payload);
     },
   });
@@ -930,9 +968,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         canonicalDocNames,
         encodingName: TOKEN_COUNTER_ENCODING,
       });
-      if (payload.summary.processable_file_count === 0) {
-        runTokens(projectBase, config);
-      }
       return buildTokenToolExecuteResult(payload);
     },
   });
@@ -940,105 +975,255 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "files-static-check",
     label: "files-static-check",
-    description: "Run configured static-check entries for explicit files.",
-    promptSnippet: "Run static analysis for explicit files using pi-usereq configuration.",
-    promptGuidelines: ["Use this for precise file-level verification before broader project scans."],
+    description: "Scope: explicit files. Return a JSON-first payload with request, summary, files, and execution sections. File entries expose canonical paths, detected language, configured checker modules, selection status, and stable error facts.",
+    promptSnippet: "Return the structured explicit-file static-check payload for the current project configuration.",
+    promptGuidelines: [
+      "Input contract: files[]. Scope is explicit caller-selected files resolved from the current working directory.",
+      "Output contract: request + summary + files + execution. File entries expose canonical_path, language_name, configured_checker_modules, status, and error_message.",
+      "Configuration contract: checker selection is derived from the cwd-resolved static-check configuration and file extensions only.",
+      "Failure contract: execution.code mirrors aggregated checker failures; execution.stdout_lines and execution.stderr_lines preserve residual checker diagnostics.",
+    ],
     parameters: multiFileSchema,
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
+      const staticCheckConfig = config["static-check"] ?? {};
       const result = runFilesStaticCheck(params.files, projectBase, config);
-      return { content: [{ type: "text", text: formatResultForEditor(result) }], details: result };
+      const payload = buildStaticCheckToolPayload(
+        "files-static-check",
+        "explicit-files",
+        projectBase,
+        params.files,
+        [],
+        [],
+        staticCheckConfig,
+        buildToolExecutionSection(result),
+      );
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
+  const staticCheckSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Scope is the configured src-dir plus tests-dir selection after fixture exclusion. Output contract: JSON object with request, summary, files, and execution.",
+    },
+  );
   pi.registerTool({
     name: "static-check",
     label: "static-check",
-    description: "Run configured static-check entries for the configured source and test directories.",
-    promptSnippet: "Run project-wide static analysis using pi-usereq configuration.",
-    promptGuidelines: ["Use this after code changes when you need the same verification gate used by useReq workflows."],
-    parameters: emptySchema,
+    description: "Scope: configured source and test directories. Return a JSON-first payload with request, summary, files, and execution sections. File entries expose selected-path facts, checker coverage, selection status, and residual diagnostics metadata.",
+    promptSnippet: "Return the structured project static-check payload for the current configuration.",
+    promptGuidelines: [
+      "Input contract: no params. Scope is src-dir plus tests-dir from the cwd-derived project configuration.",
+      "Output contract: request + summary + files + execution. Request exposes selection_directory_paths and excluded_directory_paths; file entries expose configured_checker_modules and status.",
+      "Selection contract: tests/fixtures and <tests-dir>/fixtures are excluded before checker dispatch.",
+      "Failure contract: execution.code mirrors aggregated checker failures or selection failures; execution.stderr_lines preserve residual diagnostics.",
+    ],
+    parameters: staticCheckSchema,
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runProjectStaticCheck(projectBase, config);
-      return { content: [{ type: "text", text: formatResultForEditor(result) }], details: result };
+      const staticCheckConfig = config["static-check"] ?? {};
+      const selectionDirectoryPaths = [...config["src-dir"], config["tests-dir"]];
+      const testsDirRel = makeRelativeIfContainsProject(config["tests-dir"], projectBase)
+        .split(path.sep)
+        .join("/")
+        .replace(/^\.?\/?/, "")
+        .replace(/\/+$/, "");
+      const excludedDirectoryPaths = [...new Set([
+        "tests/fixtures",
+        testsDirRel ? `${testsDirRel}/fixtures` : "fixtures",
+      ])];
+      let selectedPaths: string[] = [];
+      let execution;
+      try {
+        selectedPaths = collectProjectStaticCheckSelection(projectBase, config).selectedPaths;
+        execution = buildToolExecutionSection(runProjectStaticCheck(projectBase, config));
+      } catch (error) {
+        execution = buildToolExecutionSection(normalizeToolFailure(error));
+      }
+      const payload = buildStaticCheckToolPayload(
+        "static-check",
+        "configured-source-and-test-directories",
+        projectBase,
+        selectedPaths,
+        selectionDirectoryPaths,
+        excludedDirectoryPaths,
+        staticCheckConfig,
+        execution,
+      );
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
+  const gitCheckSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes git-root presence plus clean-versus-error repository status fields.",
+    },
+  );
   pi.registerTool({
     name: "git-check",
     label: "git-check",
-    description: "Verify that the configured git repository has a clean work tree and a valid HEAD.",
-    promptSnippet: "Verify clean git status for the configured repository.",
-    promptGuidelines: ["Use this before workflows that require a clean repository state."],
-    parameters: emptySchema,
+    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes repository validation status through direct fields instead of empty-success text.",
+    promptSnippet: "Return the structured git-validation payload for the configured repository.",
+    promptGuidelines: [
+      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Output contract: request + result + execution. Result exposes git_path_present, status, worktree_status, and head_status.",
+      "Behavior contract: the tool checks work-tree membership, porcelain cleanliness, and symbolic-or-detached HEAD validity.",
+      "Failure contract: execution.code and execution.stderr_lines surface git-path or repository-state errors.",
+    ],
+    parameters: gitCheckSchema,
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runGitCheck(projectBase, config);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      let execution;
+      try {
+        execution = buildToolExecutionSection(runGitCheck(projectBase, config));
+      } catch (error) {
+        execution = buildToolExecutionSection(normalizeToolFailure(error));
+      }
+      const payload = buildGitCheckToolPayload(projectBase, config["git-path"], execution);
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
+  const docsCheckSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Output contract: JSON object with request, summary, files, and execution. File entries expose canonical paths, prompt_command remediation, and presence status for canonical docs.",
+    },
+  );
   pi.registerTool({
     name: "docs-check",
     label: "docs-check",
-    description: "Verify that the configured docs directory contains REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
-    promptSnippet: "Verify the canonical project documentation files exist.",
-    promptGuidelines: ["Use this before docs-maintenance workflows that require all canonical docs files."],
-    parameters: emptySchema,
+    description: "Scope: canonical docs. Return a JSON-first payload with request, summary, files, and execution sections. File entries expose remediation prompt commands and direct presence facts for REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
+    promptSnippet: "Return the structured canonical-document validation payload.",
+    promptGuidelines: [
+      "Input contract: no params. Scope is docs-dir from the cwd-derived project configuration.",
+      "Output contract: request + summary + files + execution. File entries expose file_name, canonical_path, prompt_command, and status.",
+      "Specialization trigger: remediation differs per missing canonical file through prompt_command.",
+      "Failure contract: execution.code is non-zero when any canonical document is missing; execution.stderr_lines enumerate missing files.",
+    ],
+    parameters: docsCheckSchema,
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runDocsCheck(projectBase, config);
-      return { content: [{ type: "text", text: formatResultForEditor(result) }], details: result };
+      const payload = buildDocsCheckToolPayload(projectBase, config["docs-dir"]);
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
+  const gitWtNameSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes worktree_name and the normative useReq naming format string.",
+    },
+  );
   pi.registerTool({
     name: "git-wt-name",
     label: "git-wt-name",
-    description: "Generate the standardized useReq worktree name for the configured repository.",
-    promptSnippet: "Generate the standardized useReq worktree name.",
-    promptGuidelines: ["Use this before creating a dedicated worktree for isolated workflows."],
-    parameters: emptySchema,
+    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the generated worktree name plus its normative format as direct fields.",
+    promptSnippet: "Return the structured worktree-name generation payload.",
+    promptGuidelines: [
+      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Output contract: request + result + execution. Result exposes worktree_name and format_text.",
+      "Behavior contract: generation follows useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>.",
+      "Failure contract: execution.code and execution.stderr_lines surface git-path or branch-resolution errors.",
+    ],
+    parameters: gitWtNameSchema,
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runGitWtName(projectBase, config);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      let execution;
+      try {
+        execution = buildToolExecutionSection(runGitWtName(projectBase, config));
+      } catch (error) {
+        execution = buildToolExecutionSection(normalizeToolFailure(error));
+      }
+      const payload = buildWorktreeNameToolPayload(projectBase, config["git-path"], execution);
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
+  const gitWtCreateSchema = Type.Object(
+    {
+      wtName: Type.String({ description: "Exact target worktree name and branch name" }),
+    },
+    {
+      description: "Input contract: wtName. Output contract: JSON object with request, result, and execution. Result exposes operation, worktree_name, branch_name, derived worktree_path, and status.",
+    },
+  );
   pi.registerTool({
     name: "git-wt-create",
     label: "git-wt-create",
-    description: "Create a dedicated git worktree and copy pi-usereq project configuration into it.",
-    promptSnippet: "Create a dedicated worktree for isolated change workflows.",
-    promptGuidelines: ["Use the exact worktree name returned by git-wt-name or a validated manual name."],
-    parameters: Type.Object({ wtName: Type.String({ description: "Target worktree name" }) }),
+    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested create operation, exact worktree name, derived path, and mutation status.",
+    promptSnippet: "Return the structured worktree-creation payload for the requested name.",
+    promptGuidelines: [
+      "Input contract: wtName is required and must match the exact worktree/branch name to create.",
+      "Output contract: request + result + execution. Result exposes operation=create, worktree_name, branch_name, worktree_path, and status.",
+      "Specialization trigger: worktree_path depends on the configured git root parent directory.",
+      "Failure contract: execution.code and execution.stderr_lines surface invalid-name, git, or finalization errors.",
+    ],
+    parameters: gitWtCreateSchema,
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runGitWtCreate(projectBase, params.wtName, config);
-      return { content: [{ type: "text", text: formatResultForEditor(result) }], details: result };
+      let execution;
+      try {
+        execution = buildToolExecutionSection(runGitWtCreate(projectBase, params.wtName, config));
+      } catch (error) {
+        execution = buildToolExecutionSection(normalizeToolFailure(error));
+      }
+      const payload = buildWorktreeMutationToolPayload(
+        "git-wt-create",
+        projectBase,
+        config["git-path"],
+        params.wtName,
+        execution,
+      );
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 
+  const gitWtDeleteSchema = Type.Object(
+    {
+      wtName: Type.String({ description: "Exact target worktree name and branch name" }),
+    },
+    {
+      description: "Input contract: wtName. Output contract: JSON object with request, result, and execution. Result exposes operation, worktree_name, branch_name, derived worktree_path, and status.",
+    },
+  );
   pi.registerTool({
     name: "git-wt-delete",
     label: "git-wt-delete",
-    description: "Delete a dedicated git worktree and its branch.",
-    promptSnippet: "Delete an exact named worktree and branch.",
-    promptGuidelines: ["Use this only with exact worktree names created for the current repository."],
-    parameters: Type.Object({ wtName: Type.String({ description: "Target worktree name" }) }),
+    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested delete operation, exact worktree name, derived path, and mutation status.",
+    promptSnippet: "Return the structured worktree-deletion payload for the requested name.",
+    promptGuidelines: [
+      "Input contract: wtName is required and must match the exact worktree/branch name to delete.",
+      "Output contract: request + result + execution. Result exposes operation=delete, worktree_name, branch_name, worktree_path, and status.",
+      "Specialization trigger: worktree_path depends on the configured git root parent directory.",
+      "Failure contract: execution.code and execution.stderr_lines surface missing-target or deletion errors.",
+    ],
+    parameters: gitWtDeleteSchema,
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runGitWtDelete(projectBase, params.wtName, config);
-      return { content: [{ type: "text", text: formatResultForEditor(result) }], details: result };
+      let execution;
+      try {
+        execution = buildToolExecutionSection(runGitWtDelete(projectBase, params.wtName, config));
+      } catch (error) {
+        execution = buildToolExecutionSection(normalizeToolFailure(error));
+      }
+      const payload = buildWorktreeMutationToolPayload(
+        "git-wt-delete",
+        projectBase,
+        config["git-path"],
+        params.wtName,
+        execution,
+      );
+      return buildStructuredToolExecuteResult(payload);
     },
   });
 }

@@ -174,6 +174,66 @@ test("inspectExtension surfaces agent-oriented find tool descriptions and schema
   }
 });
 
+test("inspectExtension surfaces agent-oriented compression tool descriptions and schema details", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    const report = await inspectExtension(projectBase);
+    const filesCompress = report.tools.find((tool) => tool.name === "files-compress");
+    const compress = report.tools.find((tool) => tool.name === "compress");
+
+    assert.ok(filesCompress, "missing files-compress tool");
+    assert.ok(compress, "missing compress tool");
+    assert.match(filesCompress.description ?? "", /request, summary, repository, files, and execution sections/);
+    assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
+    assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+    assert.match(compress.description ?? "", /configured project source directories/);
+    assert.ok(compress.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
+    assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("inspectExtension surfaces structured utility tool descriptions and schema details", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    const report = await inspectExtension(projectBase);
+    const gitPath = report.tools.find((tool) => tool.name === "git-path");
+    const filesStaticCheck = report.tools.find((tool) => tool.name === "files-static-check");
+    const gitCheck = report.tools.find((tool) => tool.name === "git-check");
+    const docsCheck = report.tools.find((tool) => tool.name === "docs-check");
+    const gitWtCreate = report.tools.find((tool) => tool.name === "git-wt-create");
+
+    assert.ok(gitPath, "missing git-path tool");
+    assert.ok(filesStaticCheck, "missing files-static-check tool");
+    assert.ok(gitCheck, "missing git-check tool");
+    assert.ok(docsCheck, "missing docs-check tool");
+    assert.ok(gitWtCreate, "missing git-wt-create tool");
+
+    assert.match(gitPath.description ?? "", /JSON-first payload/);
+    assert.ok(gitPath.promptGuidelines?.some((line) => line.includes("Output contract:")));
+    assert.match(String((gitPath.parameters as { description?: string } | undefined)?.description ?? ""), /path_value/);
+
+    assert.match(filesStaticCheck.description ?? "", /selection status/);
+    assert.ok(filesStaticCheck.promptGuidelines?.some((line) => line.includes("Failure contract:")));
+    assert.match(String((filesStaticCheck.parameters as { description?: string } | undefined)?.description ?? ""), /configured checker modules/);
+
+    assert.match(gitCheck.description ?? "", /JSON-first payload/);
+    assert.ok(gitCheck.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
+    assert.match(String((gitCheck.parameters as { description?: string } | undefined)?.description ?? ""), /clean-versus-error repository status/);
+
+    assert.match(docsCheck.description ?? "", /remediation prompt commands/);
+    assert.ok(docsCheck.promptGuidelines?.some((line) => line.includes("Specialization trigger:")));
+    assert.match(String((docsCheck.parameters as { description?: string } | undefined)?.description ?? ""), /prompt_command remediation/);
+
+    assert.match(gitWtCreate.description ?? "", /derived path/);
+    assert.ok(gitWtCreate.promptGuidelines?.some((line) => line.includes("Specialization trigger:")));
+    assert.match(String((gitWtCreate.parameters as { description?: string } | undefined)?.description ?? ""), /worktree_path/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("replaySessionStart captures active tools, statuses, and cwd semantics", async () => {
   const { projectBase } = initFixtureRepo();
   try {
@@ -232,13 +292,20 @@ test("replayTool captures tool results and cwd semantics", async () => {
     const report = await replayTool("git-path", {}, projectBase);
     const toolResult = report.toolResult as {
       content?: Array<{ type: string; text?: string }>;
-      details?: { stdout?: string };
+      details?: {
+        request: { project_base_path: string };
+        result: { path_value: string; path_present: boolean };
+        execution: { code: number };
+      };
     };
 
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
-    assert.equal(toolResult.content?.[0]?.text, projectBase);
-    assert.equal(toolResult.details?.stdout?.trim(), projectBase);
+    assert.deepEqual(JSON.parse(toolResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(toolResult.details)));
+    assert.equal(toolResult.details?.request.project_base_path, projectBase);
+    assert.equal(toolResult.details?.result.path_value, projectBase);
+    assert.equal(toolResult.details?.result.path_present, true);
+    assert.equal(toolResult.details?.execution.code, 0);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

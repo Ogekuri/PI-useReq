@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.13"
+version: "0.0.14"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -144,6 +144,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-096**: MUST expose structured statuses for skipped files, unsupported languages, invalid tag filters, invalid regex patterns, no-match outcomes, and analysis failures, while keeping stderr diagnostics optional.
 - **REQ-097**: MUST mirror the structured find payload into tool `content[0].text` and tool `details`, with execution metadata nested under the mirrored JSON object.
 - **REQ-098**: MUST keep monolithic find `text` fields optional, place them after structured fields, and omit any fact from text-only representation when a dedicated JSON field can carry it.
+- **REQ-099**: MUST make every agent-tool response expose a JSON-first tree whose specialized fields are directly accessible, while monolithic text remains optional and subordinate to the structured payload.
+- **REQ-100**: MUST encode quantitative facts as JSON numbers in unit-specific fields, keep textual fields free of decorative formatting and textual units, and avoid duplicating facts already exposed by specialized fields.
+- **REQ-101**: MUST register every agent tool with machine-oriented metadata describing purpose, required and optional parameters, configuration and invocation variants, output schema and format, specialized behaviors, and stable error conditions.
+- **REQ-102**: MUST make every structured agent-tool execute result mirror the same JSON object into `content[0].text` and `details`, nesting execution metadata under dedicated `execution` fields.
 - **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy`, `pylance`, `ruff`, or `command` checker subcommands directly.
 - **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
 - **REQ-020**: MUST parse static-check enable specs in `LANG=MODULE[,CMD[,PARAM...]]` format and normalize supported language and module names case-insensitively.
@@ -197,6 +201,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-023**: MUST verify harness inspection surfaces agent-oriented `files-references` and `references` tool descriptions with output schema, configuration, specialized behaviors, and failure details.
 - **TST-024**: MUST verify `files-find` and `find` JSON outputs expose request, repository, file, match, location, and Doxygen facts through dedicated structured fields.
 - **TST-025**: MUST verify harness inspection surfaces agent-oriented `files-find` and `find` tool descriptions with input schema, output schema, line-number behavior, regex semantics, supported tags by language, and failure details.
+- **TST-026**: MUST verify `files-compress` and `compress` JSON outputs expose structured request, repository, line, symbol, status, and Doxygen facts through dedicated fields.
+- **TST-027**: MUST verify harness inspection surfaces agent-oriented `files-compress` and `compress` tool descriptions with parameters, line-number behavior, output schema, specialization triggers, and failure conditions.
+- **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON request, result, status, and execution facts through dedicated fields.
+- **TST-029**: MUST verify harness inspection surfaces machine-oriented descriptions for path, static-check, git, docs, and worktree tools, including parameters, output schema, specialization triggers, and failure conditions.
 
 ## 5. Observed Component Model
 

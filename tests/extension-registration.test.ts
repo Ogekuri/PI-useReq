@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
@@ -375,6 +376,26 @@ test("find tools register agent-oriented descriptions and schema details", () =>
   assert.match(String((find.parameters as { description?: string } | undefined)?.description ?? ""), /Regex matches construct names only/);
 });
 
+test("compression tools register agent-oriented descriptions and schema details", () => {
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  const filesCompress = pi.tools.find((tool: RegisteredTool) => tool.name === "files-compress");
+  const compress = pi.tools.find((tool: RegisteredTool) => tool.name === "compress");
+  assert.ok(filesCompress, "missing files-compress tool");
+  assert.ok(compress, "missing compress tool");
+
+  assert.match(filesCompress.description ?? "", /request, summary, repository, files, and execution sections/);
+  assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
+  assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
+  assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+
+  assert.match(compress.description ?? "", /configured project source directories/);
+  assert.ok(compress.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
+  assert.ok(compress.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
+  assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+});
+
 test("files-tokens returns structured source facts and separated guidance", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
@@ -584,6 +605,163 @@ test("references returns a structured repository tree for configured source dire
   }
 });
 
+test("files-compress returns structured line, symbol, and Doxygen facts", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const samplePath = path.join(projectBase, "src", "sample.ts");
+  fs.writeFileSync(samplePath, `/**
+ * @file
+ * @brief Sample source file.
+ */
+
+/**
+ * @brief Builds the sample value.
+ * @param[in] input {string} Caller-supplied value.
+ * @return {string} Upper-cased result.
+ */
+export function buildSample(input: string): string {
+  // stripped comment
+  return input.toUpperCase();
+}
+`, "utf8");
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "files-compress", projectBase, {
+      files: ["src/sample.ts", "src/missing.ts"],
+      enableLineNumbers: true,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: {
+        request: {
+          line_number_mode: string;
+          requested_input_paths: string[];
+        };
+        summary: {
+          compressed_file_count: number;
+          skipped_file_count: number;
+          total_symbol_count: number;
+        };
+        repository: {
+          file_canonical_paths: string[];
+        };
+        files: Array<{
+          canonical_path: string;
+          status: string;
+          line_number_mode: string;
+          source_line_count: number;
+          compressed_line_count: number;
+          file_doxygen?: { brief?: string[] };
+          symbols: Array<{
+            symbol_name: string;
+            symbol_kind: string;
+            line_range: [number, number];
+            doxygen?: { brief?: string[] };
+          }>;
+          compressed_lines: Array<{ source_line_number: number; display_text: string; text: string }>;
+          compressed_source_text?: string;
+          error_reason?: string;
+        }>;
+        execution: {
+          code: number;
+          stderr: string;
+        };
+      };
+    };
+
+    const payload = result.details!;
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
+    assert.equal(payload.request.line_number_mode, "enabled");
+    assert.deepEqual(payload.request.requested_input_paths, ["src/sample.ts", "src/missing.ts"]);
+    assert.equal(payload.summary.compressed_file_count, 1);
+    assert.equal(payload.summary.skipped_file_count, 1);
+    assert.equal(payload.summary.total_symbol_count, 1);
+    assert.ok(payload.repository.file_canonical_paths.includes("src/sample.ts"));
+    assert.equal(payload.files[0]?.canonical_path, "src/sample.ts");
+    assert.equal(payload.files[0]?.status, "compressed");
+    assert.equal(payload.files[0]?.line_number_mode, "enabled");
+    assert.ok((payload.files[0]?.source_line_count ?? 0) > 0);
+    assert.ok((payload.files[0]?.compressed_line_count ?? 0) > 0);
+    assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample source file."]);
+    assert.equal(payload.files[0]?.symbols[0]?.symbol_name, "buildSample");
+    assert.equal(payload.files[0]?.symbols[0]?.symbol_kind, "FUNCTION");
+    assert.deepEqual(payload.files[0]?.symbols[0]?.line_range, [11, 14]);
+    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.brief, ["Builds the sample value."]);
+    assert.equal(payload.files[0]?.compressed_lines[0]?.source_line_number, 11);
+    assert.match(payload.files[0]?.compressed_lines[0]?.display_text ?? "", /^11: export function buildSample/);
+    assert.match(payload.files[0]?.compressed_source_text ?? "", /^11: export function buildSample/m);
+    assert.equal(payload.files[1]?.status, "skipped");
+    assert.equal(payload.files[1]?.error_reason, "not_found");
+    assert.equal(payload.execution.code, 0);
+    assert.match(payload.execution.stderr, /skipped: src\/missing\.ts: not_found/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("compress returns a structured repository-scoped compression payload", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  fs.writeFileSync(
+    path.join(projectBase, "src", "alpha.ts"),
+    "export const ALPHA = 1;\n",
+    "utf8",
+  );
+  fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectBase, "src", "nested", "beta.ts"),
+    "export function buildBeta(): number {\n  return 2;\n}\n",
+    "utf8",
+  );
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "compress", projectBase, {
+      enableLineNumbers: false,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: {
+        request: {
+          scope: string;
+          line_number_mode: string;
+        };
+        summary: {
+          compressed_file_count: number;
+          total_compressed_line_count: number;
+        };
+        repository: {
+          source_directory_paths: string[];
+          file_canonical_paths: string[];
+        };
+        files: Array<{
+          canonical_path: string;
+          line_number_mode: string;
+          compressed_source_text?: string;
+          compressed_lines: Array<{ display_text: string }>;
+        }>;
+        execution: {
+          code: number;
+          stderr: string;
+        };
+      };
+    };
+
+    const payload = result.details!;
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
+    assert.equal(payload.request.scope, "configured-source-directories");
+    assert.equal(payload.request.line_number_mode, "disabled");
+    assert.equal(payload.summary.compressed_file_count, 2);
+    assert.ok((payload.summary.total_compressed_line_count ?? 0) >= 2);
+    assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
+    assert.deepEqual(payload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
+    assert.equal(payload.files[0]?.line_number_mode, "disabled");
+    assert.doesNotMatch(payload.files[1]?.compressed_source_text ?? "", /^\d+:/m);
+    assert.match(payload.files[1]?.compressed_lines[0]?.display_text ?? "", /^export function buildBeta/);
+    assert.equal(payload.execution.code, 0);
+    assert.equal(payload.execution.stderr, "");
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("files-find returns structured match, code-line, and Doxygen facts", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
@@ -779,6 +957,122 @@ export function buildAlpha(): number {
   }
 });
 
+test("path, static-check, git, docs, and worktree tools return structured JSON payloads", async () => {
+  const { projectBase } = initFixtureRepo({
+    fixtures: [],
+    staticCheck: {
+      TypeScript: [{ module: "Dummy" }],
+    },
+  });
+  fs.writeFileSync(path.join(projectBase, "src", "check.ts"), "export const VALUE = 1;\n", "utf8");
+  const add = spawnSync("git", ["add", "."], { cwd: projectBase, encoding: "utf8" });
+  assert.equal(add.status, 0, add.stderr);
+  const commit = spawnSync("git", ["commit", "-m", "add static-check input"], { cwd: projectBase, encoding: "utf8" });
+  assert.equal(commit.status, 0, commit.stderr);
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+
+    const gitPathResult = await executeRegisteredTool(pi, "git-path", projectBase) as {
+      content?: Array<{ text?: string }>;
+      details?: { result: { path_value: string; path_present: boolean }; execution: { code: number } };
+    };
+    assert.deepEqual(JSON.parse(gitPathResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(gitPathResult.details)));
+    assert.equal(gitPathResult.details?.result.path_value, projectBase);
+    assert.equal(gitPathResult.details?.result.path_present, true);
+    assert.equal(gitPathResult.details?.execution.code, 0);
+
+    const basePathResult = await executeRegisteredTool(pi, "get-base-path", projectBase) as {
+      details?: { result: { path_value: string }; execution: { code: number } };
+    };
+    assert.equal(basePathResult.details?.result.path_value, projectBase);
+    assert.equal(basePathResult.details?.execution.code, 0);
+
+    const gitCheckResult = await executeRegisteredTool(pi, "git-check", projectBase) as {
+      details?: { result: { status: string; worktree_status: string; head_status: string }; execution: { code: number } };
+    };
+    assert.equal(gitCheckResult.details?.result.status, "clean");
+    assert.equal(gitCheckResult.details?.result.worktree_status, "clean");
+    assert.equal(gitCheckResult.details?.result.head_status, "valid");
+    assert.equal(gitCheckResult.details?.execution.code, 0);
+
+    const docsCheckResult = await executeRegisteredTool(pi, "docs-check", projectBase) as {
+      details?: {
+        summary: { missing_file_count: number; present_file_count: number };
+        files: Array<{ file_name: string; status: string; prompt_command: string }>;
+        execution: { code: number };
+      };
+    };
+    assert.equal(docsCheckResult.details?.summary.missing_file_count, 0);
+    assert.equal(docsCheckResult.details?.summary.present_file_count, 3);
+    assert.deepEqual(docsCheckResult.details?.files.map((file) => file.file_name), ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"]);
+    assert.ok(docsCheckResult.details?.files.every((file) => file.status === "present"));
+    assert.equal(docsCheckResult.details?.execution.code, 0);
+
+    const filesStaticCheckResult = await executeRegisteredTool(pi, "files-static-check", projectBase, {
+      files: ["src/check.ts", "src/missing.ts"],
+    }) as {
+      details?: {
+        summary: { selected_file_count: number; skipped_file_count: number; total_configured_checker_count: number };
+        files: Array<{ canonical_path: string; language_name?: string; status: string; configured_checker_modules: string[] }>;
+        execution: { code: number };
+      };
+    };
+    assert.equal(filesStaticCheckResult.details?.summary.selected_file_count, 1);
+    assert.equal(filesStaticCheckResult.details?.summary.skipped_file_count, 1);
+    assert.equal(filesStaticCheckResult.details?.summary.total_configured_checker_count, 1);
+    assert.equal(filesStaticCheckResult.details?.files[0]?.canonical_path, "src/check.ts");
+    assert.equal(filesStaticCheckResult.details?.files[0]?.language_name, "TypeScript");
+    assert.deepEqual(filesStaticCheckResult.details?.files[0]?.configured_checker_modules, ["Dummy"]);
+    assert.equal(filesStaticCheckResult.details?.files[1]?.status, "skipped");
+    assert.equal(filesStaticCheckResult.details?.execution.code, 0);
+
+    const staticCheckResult = await executeRegisteredTool(pi, "static-check", projectBase) as {
+      details?: {
+        request: { selection_directory_paths: string[]; excluded_directory_paths: string[] };
+        summary: { selected_file_count: number };
+        files: Array<{ canonical_path: string; status: string }>;
+        execution: { code: number };
+      };
+    };
+    assert.deepEqual(staticCheckResult.details?.request.selection_directory_paths, ["src", "tests"]);
+    assert.ok(staticCheckResult.details?.request.excluded_directory_paths.includes("tests/fixtures"));
+    assert.equal(staticCheckResult.details?.summary.selected_file_count, 1);
+    assert.equal(staticCheckResult.details?.files[0]?.canonical_path, "src/check.ts");
+    assert.equal(staticCheckResult.details?.files[0]?.status, "selected");
+    assert.equal(staticCheckResult.details?.execution.code, 0);
+
+    const gitWtNameResult = await executeRegisteredTool(pi, "git-wt-name", projectBase) as {
+      details?: { result: { worktree_name?: string; format_text: string; status: string }; execution: { code: number } };
+    };
+    const wtName = gitWtNameResult.details?.result.worktree_name ?? "";
+    assert.equal(gitWtNameResult.details?.result.status, "generated");
+    assert.equal(gitWtNameResult.details?.result.format_text, "useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>");
+    assert.match(wtName, /^useReq-/);
+    assert.equal(gitWtNameResult.details?.execution.code, 0);
+
+    const gitWtCreateResult = await executeRegisteredTool(pi, "git-wt-create", projectBase, { wtName }) as {
+      details?: { result: { status: string; worktree_name: string; branch_name: string; worktree_path: string }; execution: { code: number } };
+    };
+    assert.equal(gitWtCreateResult.details?.result.status, "created");
+    assert.equal(gitWtCreateResult.details?.result.worktree_name, wtName);
+    assert.equal(gitWtCreateResult.details?.result.branch_name, wtName);
+    assert.match(gitWtCreateResult.details?.result.worktree_path ?? "", new RegExp(`${wtName}$`));
+    assert.equal(gitWtCreateResult.details?.execution.code, 0);
+
+    const gitWtDeleteResult = await executeRegisteredTool(pi, "git-wt-delete", projectBase, { wtName }) as {
+      details?: { result: { status: string; worktree_name: string; branch_name: string; worktree_path: string }; execution: { code: number } };
+    };
+    assert.equal(gitWtDeleteResult.details?.result.status, "deleted");
+    assert.equal(gitWtDeleteResult.details?.result.worktree_name, wtName);
+    assert.equal(gitWtDeleteResult.details?.result.branch_name, wtName);
+    assert.match(gitWtDeleteResult.details?.result.worktree_path ?? "", new RegExp(`${wtName}$`));
+    assert.equal(gitWtDeleteResult.details?.execution.code, 0);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("configuration menu saves updated docs-dir in project config", async () => {
   const cwd = createTempDir("pi-usereq-menu-");
   fs.mkdirSync(path.join(cwd, ".pi", "pi-usereq"), { recursive: true });
@@ -939,9 +1233,13 @@ test("git-path tool derives the repository root at runtime", async () => {
 
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "git-path", projectBase);
+    const result = await executeRegisteredTool(pi, "git-path", projectBase) as {
+      content?: Array<{ text?: string }>;
+      details?: { result: { path_value: string } };
+    };
 
-    assert.equal(result.content?.[0]?.text, projectBase);
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(result.details)));
+    assert.equal(result.details?.result.path_value, projectBase);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
