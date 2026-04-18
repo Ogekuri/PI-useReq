@@ -19,6 +19,11 @@ import {
   type TokenToolPayload,
 } from "./core/token-counter.js";
 import {
+  buildReferenceToolExecutionStderr,
+  buildReferenceToolPayload,
+  type ReferenceToolPayload,
+} from "./core/reference-payload.js";
+import {
   getDefaultConfig,
   loadConfig,
   saveConfig,
@@ -33,6 +38,7 @@ import {
 import { renderPrompt } from "./core/prompts.js";
 import { ensureHomeResources } from "./core/resources.js";
 import {
+  collectSourceFiles,
   runCompress,
   runDocsCheck,
   runFilesCompress,
@@ -184,6 +190,35 @@ function buildTokenToolExecuteResult(
     execution: {
       code: 0,
       stderr: buildTokenToolExecutionStderr(payload),
+    },
+  };
+  return {
+    content: [{ type: "text", text: formatJsonToolPayload(details) }],
+    details,
+  };
+}
+
+/**
+ * @brief Builds the agent-oriented execute result returned by references tools.
+ * @details Mirrors the structured references payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
+ * @param[in] payload {ReferenceToolPayload} Structured references payload.
+ * @return {{ content: Array<{ type: "text"; text: string }>; details: ReferenceToolPayload & { execution: { code: number; stderr: string } } }} References-tool execute result.
+ * @satisfies REQ-076, REQ-077, REQ-078, REQ-079
+ */
+function buildReferenceToolExecuteResult(
+  payload: ReferenceToolPayload,
+): {
+  content: Array<{ type: "text"; text: string }>;
+  details: ReferenceToolPayload & { execution: { code: number; stderr: string } };
+} {
+  const details = {
+    request: payload.request,
+    summary: payload.summary,
+    repository: payload.repository,
+    files: payload.files,
+    execution: {
+      code: 0,
+      stderr: buildReferenceToolExecutionStderr(payload),
     },
   };
   return {
@@ -392,7 +427,7 @@ function registerPromptCommands(pi: ExtensionAPI): void {
  * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies REQ-005, REQ-010, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075
+ * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080
  */
 function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
@@ -426,6 +461,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
+  const filesReferencesSchema = Type.Object(
+    {
+      files: Type.Array(
+        Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
+        { description: "Explicit source-file list preserved in caller order" },
+      ),
+    },
+    {
+      description: "Input contract: files[]. Output contract: JSON object with request, summary, repository, files, and execution. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts. Missing or unsupported inputs become skipped entries. The tool fails when no source file can be analyzed.",
+    },
+  );
   const multiFileSchema = Type.Object({ files: Type.Array(Type.String({ description: "Project or absolute file path" })) });
   const filesTokensSchema = Type.Object(
     {
@@ -469,13 +515,26 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "files-references",
     label: "files-references",
-    description: "Generate useReq references markdown for explicit files.",
-    promptSnippet: "Generate references markdown for explicit files.",
-    promptGuidelines: ["Use this when you already know the files to index instead of scanning the configured source directories."],
-    parameters: multiFileSchema,
+    description: "Scope: explicit source files. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts.",
+    promptSnippet: "Return the structured references payload for caller-selected source files.",
+    promptGuidelines: [
+      "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
+      "Output contract: request + summary + repository + files + execution. File entries expose canonical paths, absolute paths, file status, line counts, line ranges, imports, symbols, child relationships, standalone comments, and structured Doxygen metadata.",
+      "Numeric contract: line counts, line ranges, symbol counts, import counts, comment counts, and Doxygen counts remain in dedicated numeric fields; text is limited to residual comment or signature content that cannot be split safely.",
+      "Behavior contract: missing inputs, non-file inputs, and unsupported extensions become structured skipped entries; analysis failures become structured error entries; the tool fails only when no source file can be analyzed.",
+    ],
+    parameters: filesReferencesSchema,
     async execute(_toolCallId, params) {
-      const result = runFilesReferences(params.files, process.cwd());
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const payload = buildReferenceToolPayload({
+        toolName: "files-references",
+        scope: "explicit-files",
+        baseDir: process.cwd(),
+        requestedPaths: params.files,
+      });
+      if (payload.summary.processable_file_count === 0 || payload.summary.analyzed_file_count === 0) {
+        runFilesReferences(params.files, process.cwd());
+      }
+      return buildReferenceToolExecuteResult(payload);
     },
   });
 
@@ -515,6 +574,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
+  const referencesSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with request, summary, repository, files, and execution. Repository exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, and status facts. The tool fails when no configured source file can be analyzed.",
+    },
+  );
   const emptySchema = Type.Object({});
   const tokensSchema = Type.Object(
     {},
@@ -526,15 +591,29 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "references",
     label: "references",
-    description: "Generate useReq references markdown for the configured project source directories.",
-    promptSnippet: "Generate project references markdown from configured source directories.",
-    promptGuidelines: ["Use this to refresh REFERENCES.md or inspect the whole configured project source surface."],
-    parameters: emptySchema,
+    description: "Scope: configured project source directories. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. The repository section exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and status facts.",
+    promptSnippet: "Return the structured project references payload from the configured source directories.",
+    promptGuidelines: [
+      "Scope: no params; resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
+      "Output contract: request + summary + repository + files + execution. Repository exposes source_directory_paths, file_canonical_paths, and directory_tree; file entries expose canonical paths, line counts, line ranges, imports, symbols, hierarchy, standalone comments, and structured Doxygen metadata.",
+      "Configuration contract: output changes with cwd-derived project config, src-dir values, and repository source discovery; the tool does not accept explicit file overrides.",
+      "Behavior contract: configured source files are analyzed in deterministic order, analysis failures become structured error entries, and the tool fails when no configured source file can be analyzed.",
+    ],
+    parameters: referencesSchema,
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runReferences(projectBase, config);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const payload = buildReferenceToolPayload({
+        toolName: "references",
+        scope: "configured-source-directories",
+        baseDir: projectBase,
+        requestedPaths: collectSourceFiles(config["src-dir"], projectBase),
+        sourceDirectoryPaths: config["src-dir"],
+      });
+      if (payload.summary.analyzed_file_count === 0) {
+        runReferences(projectBase, config);
+      }
+      return buildReferenceToolExecuteResult(payload);
     },
   });
 

@@ -62,6 +62,45 @@ const DOXYGEN_TAG_PATTERN = new RegExp(
 export type DoxygenFieldMap = Record<string, string[]>;
 
 /**
+ * @brief Enumerates supported structured parameter directions.
+ * @details Normalizes `@param` direction modifiers into one small closed set so agents can branch on parameter flow without reparsing raw tag names. The alias is compile-time only and introduces no runtime cost.
+ */
+export type StructuredDoxygenParamDirection = "in" | "out" | "in,out" | "unspecified";
+
+/**
+ * @brief Describes one structured Doxygen parameter field.
+ * @details Separates parameter direction, optional parameter name, optional declared type, and residual text so agents can access argument contracts without reparsing monolithic tag strings. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface StructuredDoxygenParameterEntry {
+  direction: StructuredDoxygenParamDirection;
+  parameter_name?: string;
+  value_type?: string;
+  description?: string;
+  text?: string;
+}
+
+/**
+ * @brief Describes the structured Doxygen field contract used by LLM-oriented JSON payloads.
+ * @details Converts repeated raw tag strings into tag-specific arrays and specialized parameter records while keeping unsplittable residual text local to the affected field. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface StructuredDoxygenFields {
+  brief?: string[];
+  details?: string[];
+  params?: StructuredDoxygenParameterEntry[];
+  returns?: string[];
+  retvals?: string[];
+  exceptions?: string[];
+  throws?: string[];
+  warnings?: string[];
+  deprecated?: string[];
+  notes?: string[];
+  see_also?: string[];
+  satisfies_requirement_ids?: string[];
+  preconditions?: string[];
+  postconditions?: string[];
+}
+
+/**
  * @brief Parses repository-approved Doxygen fields from one comment block.
  * @details Normalizes line endings, strips comment delimiters, locates supported tags, and accumulates tag payloads in declaration order. Unsupported content is ignored. Runtime is O(n) in comment length. No side effects occur.
  * @param[in] commentText {string} Raw comment text including delimiters.
@@ -165,4 +204,115 @@ export function formatDoxygenFieldsAsMarkdown(doxygenFields: DoxygenFieldMap): s
     }
   }
   return lines;
+}
+
+/**
+ * @brief Counts the total number of parsed Doxygen field values.
+ * @details Sums the value-array lengths across all tags so payload builders can expose aggregate Doxygen density as a numeric fact. Runtime is O(t) in tag count. No side effects occur.
+ * @param[in] doxygenFields {DoxygenFieldMap} Parsed Doxygen fields.
+ * @return {number} Total stored Doxygen value count.
+ */
+export function countDoxygenFieldValues(doxygenFields: DoxygenFieldMap): number {
+  return Object.values(doxygenFields).reduce((sum, values) => sum + values.length, 0);
+}
+
+/**
+ * @brief Parses one raw Doxygen parameter value into structured fields.
+ * @details Supports the repository-preferred `name {type} description` form, the alternate `{type} name description` form, and a residual-text fallback when no safe split is possible. Runtime is O(n) in value length. No side effects occur.
+ * @param[in] value {string} Raw Doxygen parameter value.
+ * @param[in] direction {StructuredDoxygenParamDirection} Normalized parameter direction.
+ * @return {StructuredDoxygenParameterEntry} Structured parameter record.
+ */
+function structureDoxygenParameterValue(value: string, direction: StructuredDoxygenParamDirection): StructuredDoxygenParameterEntry {
+  const trimmed = value.trim();
+  const preferredMatch = trimmed.match(/^([^\s{}]+)(?:\s+\{([^}]+)\})?(?:\s+(.+))?$/);
+  if (preferredMatch) {
+    const [, parameterName, valueType, description] = preferredMatch;
+    if (parameterName) {
+      return {
+        direction,
+        parameter_name: parameterName,
+        value_type: valueType,
+        description: description?.trim() || undefined,
+      };
+    }
+  }
+
+  const alternateMatch = trimmed.match(/^\{([^}]+)\}\s+([^\s{}]+)(?:\s+(.+))?$/);
+  if (alternateMatch) {
+    const [, valueType, parameterName, description] = alternateMatch;
+    return {
+      direction,
+      parameter_name: parameterName,
+      value_type: valueType,
+      description: description?.trim() || undefined,
+    };
+  }
+
+  return {
+    direction,
+    text: trimmed,
+  };
+}
+
+/**
+ * @brief Splits comma-delimited Doxygen value strings into normalized items.
+ * @details Trims surrounding whitespace, drops empty segments, and preserves original declaration order. Runtime is O(n) in aggregate text length. No side effects occur.
+ * @param[in] values {string[] | undefined} Raw Doxygen value strings.
+ * @return {string[]} Normalized item list.
+ */
+function splitCommaSeparatedDoxygenValues(values: string[] | undefined): string[] {
+  return (values ?? [])
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+/**
+ * @brief Extracts normalized requirement IDs from raw `@satisfies` values.
+ * @details Matches repository requirement ID prefixes directly from the raw value text so agents receive requirement links as a dedicated string array. Runtime is O(n) in aggregate text length. No side effects occur.
+ * @param[in] values {string[] | undefined} Raw `@satisfies` values.
+ * @return {string[]} Normalized requirement IDs in declaration order.
+ */
+function extractSatisfiedRequirementIds(values: string[] | undefined): string[] {
+  const matches = (values ?? []).flatMap((value) => value.match(/\b(?:PRJ|CTN|DES|REQ|TST)-\d+\b/g) ?? []);
+  return [...new Set(matches)];
+}
+
+/**
+ * @brief Converts raw parsed Doxygen fields into the structured JSON contract.
+ * @details Reorders raw tags into tag-specific arrays, structures parameter fields, normalizes `@see` aliases, and extracts requirement IDs from `@satisfies`. Runtime is O(t + v) where t is tag count and v is total value count. No side effects occur.
+ * @param[in] doxygenFields {DoxygenFieldMap} Raw parsed Doxygen field map.
+ * @return {StructuredDoxygenFields} Structured Doxygen fields.
+ * @satisfies REQ-078
+ */
+export function structureDoxygenFields(doxygenFields: DoxygenFieldMap): StructuredDoxygenFields {
+  const params = [
+    ...(doxygenFields["param"] ?? []).map((value) => structureDoxygenParameterValue(value, "unspecified")),
+    ...(doxygenFields["param[in]"] ?? []).map((value) => structureDoxygenParameterValue(value, "in")),
+    ...(doxygenFields["param[out]"] ?? []).map((value) => structureDoxygenParameterValue(value, "out")),
+    ...(doxygenFields["param[in,out]"] ?? []).map((value) => structureDoxygenParameterValue(value, "in,out")),
+  ];
+  const seeAlso = [
+    ...splitCommaSeparatedDoxygenValues(doxygenFields["see"]),
+    ...splitCommaSeparatedDoxygenValues(doxygenFields["sa"]),
+  ];
+  const satisfiesRequirementIds = extractSatisfiedRequirementIds(doxygenFields["satisfies"]);
+  const structured: StructuredDoxygenFields = {};
+
+  if (doxygenFields["brief"]?.length) structured.brief = [...doxygenFields["brief"]];
+  if (doxygenFields["details"]?.length) structured.details = [...doxygenFields["details"]];
+  if (params.length) structured.params = params;
+  if (doxygenFields["return"]?.length) structured.returns = [...doxygenFields["return"]];
+  if (doxygenFields["retval"]?.length) structured.retvals = [...doxygenFields["retval"]];
+  if (doxygenFields["exception"]?.length) structured.exceptions = [...doxygenFields["exception"]];
+  if (doxygenFields["throws"]?.length) structured.throws = [...doxygenFields["throws"]];
+  if (doxygenFields["warning"]?.length) structured.warnings = [...doxygenFields["warning"]];
+  if (doxygenFields["deprecated"]?.length) structured.deprecated = [...doxygenFields["deprecated"]];
+  if (doxygenFields["note"]?.length) structured.notes = [...doxygenFields["note"]];
+  if (seeAlso.length) structured.see_also = seeAlso;
+  if (satisfiesRequirementIds.length) structured.satisfies_requirement_ids = satisfiesRequirementIds;
+  if (doxygenFields["pre"]?.length) structured.preconditions = [...doxygenFields["pre"]];
+  if (doxygenFields["post"]?.length) structured.postconditions = [...doxygenFields["post"]];
+  return structured;
 }

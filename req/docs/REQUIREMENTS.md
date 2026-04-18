@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.10"
+version: "0.0.11"
 date: "2026-04-18"
 author: "OpenAI Codex"
 scope:
@@ -67,8 +67,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
 - **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
-- **DES-006**: MUST format references, compressed files, and construct search results as markdown blocks headed by `@@@ <path> | <language>`.
+- **DES-006**: MUST format compressed files and construct search results as markdown blocks headed by `@@@ <path> | <language>`.
 - **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/req-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
+- **DES-008**: MUST format `files-references` and `references` outputs as agent-oriented JSON with deterministic field order and dedicated metadata fields for symbols and Doxygen tags.
 
 ### 3.2 Functions
 - **REQ-001**: MUST recursively copy bundled non-hidden resources into `~/.pi/pi-usereq/resources` and overwrite existing destination files.
@@ -106,10 +107,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
 - **REQ-009**: MUST ensure home resources, apply configured startup tools, and publish `pi-usereq` status text during `session_start`.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
-- **REQ-011**: MUST generate file references by analyzing supported source files and emitting Markdown with file headers, imports, definitions, and a symbol index.
+- **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
 - **REQ-013**: MUST search explicit files by tag filter and name regex, then emit matching constructs with signature, line range, Doxygen fields, and comment-stripped code excerpts.
-- **REQ-014**: MUST make `references` scan configured `src-dir` files and prepend an ASCII tree of discovered repository-relative paths.
+- **REQ-014**: MUST make `references` scan configured `src-dir` files and emit agent-oriented JSON containing repository structure plus the structured per-file reference records used by `files-references`.
 - **REQ-015**: MUST make `compress` scan configured `src-dir` files and emit one compressed markdown block per supported file.
 - **REQ-016**: MUST make `find` scan configured `src-dir` files using the requested tag filter and regular expression.
 - **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the structured `files-tokens` JSON contract, and fail when none exist.
@@ -120,6 +121,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-073**: MUST expose file-derived facts needed for direct access, including canonical path, language, existence, line counts, line ranges, and Doxygen-derived metadata, as dedicated JSON fields when available.
 - **REQ-074**: MUST keep monolithic text summaries optional, place them after structured fields, and omit any fact from text-only representation when the same fact can be emitted as dedicated JSON.
 - **REQ-075**: MUST make `files-tokens` and `tokens` guidance fields explicitly distinguish source observations, derived recommendations, and actionable next-step hints.
+- **REQ-076**: MUST order `files-references` and `references` JSON sections from request metadata to repository summary, file records, and optional residual text.
+- **REQ-077**: MUST expose symbol kind, path, declaration lines, counts, and line ranges as dedicated numeric or array fields, never only inside free-form strings.
+- **REQ-078**: MUST expose parsed Doxygen fields as tag-specific JSON objects or arrays, keeping monolithic `text` only for unsplittable residual content.
+- **REQ-079**: MUST normalize `files-references` and `references` text fields by removing decorative markdown artifacts and preserving only parser-relevant residual content.
+- **REQ-080**: MUST register `files-references` and `references` with agent-oriented descriptions covering purpose, inputs, configuration, output schema, specialized behaviors, and failure conditions.
 - **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy`, `pylance`, `ruff`, or `command` checker subcommands directly.
 - **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
 - **REQ-020**: MUST parse static-check enable specs in `LANG=MODULE[,CMD[,PARAM...]]` format and normalize supported language and module names case-insensitively.
@@ -150,8 +156,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting custom slash commands for tool names and `test-static-check`.
 - **TST-002**: MUST verify resource provisioning copies bundled prompt, docs, and guideline files and prompt rendering replaces all dynamic placeholders.
-- **TST-003**: MUST verify standalone CLI outputs for `files-*` and `--test-static-check` match the Python oracle for every fixture file.
-- **TST-004**: MUST verify project-scan CLI outputs for `references`, `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
+- **TST-003**: MUST verify standalone CLI outputs for `files-tokens`, `files-compress`, `files-find`, and `--test-static-check` match the Python oracle for every fixture file.
+- **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, and adds static-check entries through raw-spec and guided flows.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the `pi-usereq` status line.
 - **TST-007**: MUST verify `git-path` output ignores stale stored `git-path` values and resolves the current repository root.
@@ -169,6 +175,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-019**: MUST verify offline harness command and tool replay invoke registered handlers, preserve requested cwd semantics, and capture prompt payloads, tool results, and UI side effects.
 - **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, and `package.json` declares the `debug:ext*` harness scripts.
 - **TST-021**: MUST verify `scripts/req-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
+- **TST-022**: MUST verify `files-references` and `references` JSON outputs expose repository, file, symbol, location, and Doxygen facts through dedicated structured fields.
+- **TST-023**: MUST verify harness inspection surfaces agent-oriented `files-references` and `references` tool descriptions with output schema, configuration, specialized behaviors, and failure details.
 
 ## 5. Observed Component Model
 
@@ -311,10 +319,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-008 | `src/index.ts` :: `configureStaticCheckMenu` :: supports guided language addition, raw-spec addition, language removal, and supported-language display. |
 | REQ-009 | `src/index.ts` :: `pi.on("session_start", ...)` :: calls `ensureHomeResources()`, `applyConfiguredPiUsereqTools`, and `ctx.ui.setStatus(...)`. |
 | REQ-010 | `src/core/token-counter.ts` :: `new TokenCounter("cl100k_base")`; `formatPackSummary`; `src/core/tool-runner.ts` :: `runFilesTokens` validates files and returns summary plus warnings. |
-| REQ-011 | `src/core/generate-markdown.ts` :: `generateMarkdown`; `src/core/source-analyzer.ts` :: `formatMarkdown` emits header, imports, definitions, and symbol index sections. |
+| REQ-011 | `src/core/reference-payload.ts` :: `buildReferenceToolPayload` :: emits explicit-file JSON with per-file metadata, imports, symbol records, and structured comments/Doxygen fields. |
 | REQ-012 | `src/core/compress.ts` :: `INDENT_SIGNIFICANT = new Set(["python", "haskell", "elixir"])`; `compressSource` drops comments, blank lines, and optionally prefixes line numbers. |
 | REQ-013 | `src/core/find-constructs.ts` :: `findConstructsInFiles` and `formatConstruct` :: filters by tags/regex and emits signature, lines, Doxygen bullets, and stripped code. |
-| REQ-014 | `src/core/tool-runner.ts` :: `runReferences` :: `formatFilesStructureMarkdown(files, base)` prepends `# Files Structure` plus ASCII tree before generated markdown. |
+| REQ-014 | `src/core/tool-runner.ts` :: `runReferences`; `src/core/reference-payload.ts` :: `buildRepositoryTree` :: emit repository structure plus structured per-file reference records as JSON. |
 | REQ-015 | `src/core/tool-runner.ts` :: `runCompress` :: collects configured project files then returns `compressFiles(files, enableLineNumbers, verbose, base)`. |
 | REQ-016 | `src/core/tool-runner.ts` :: `runFind` :: collects configured project files and executes `findConstructsInFiles(files, tagFilter, pattern, ...)`. |
 | REQ-017 | `src/core/tool-runner.ts` :: `runTokens` :: `canonicalNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"]` and fails if no canonical docs exist. |
@@ -338,14 +346,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | --- | --- |
 | TST-001 | `tests/extension-registration.test.ts` :: `extension registers all required prompt commands, tool wrappers, and agent tools` validates command and tool registration sets. |
 | TST-002 | `tests/prompt-rendering.test.ts` :: `embedded resources are copied ...` and `prompt rendering replaces all dynamic placeholders ...`. |
-| TST-003 | `tests/oracle-standalone.test.ts` :: `standalone command outputs match the Python oracle for every fixture` across `files-*` and `--test-static-check`. |
-| TST-004 | `tests/oracle-project.test.ts` :: `project-scan commands match the Python oracle on a git-backed fixture repository`. |
+| TST-003 | `tests/oracle-standalone.test.ts` :: `standalone command outputs match the Python oracle for every fixture` across `files-tokens`, `files-compress`, `files-find`, and `--test-static-check`. |
+| TST-004 | `tests/oracle-project.test.ts` :: `project-scan commands match the Python oracle on a git-backed fixture repository` for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path`. |
 | TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and both static-check menu addition tests. |
 | TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
 | TST-007 | `tests/extension-registration.test.ts` :: `git-path dependent commands derive the repository root at runtime`. |
 | TST-008 | `tests/oracle-project.test.ts` :: `git worktree create/delete wrappers produce expected worktree side effects`. |
 | TST-009 | `package.json` :: `"type": "module"`, `"pi": { "extensions": ["./src/index.ts"] }`, and `"scripts"` entries for `test`, `test:watch`, and `cli`. |
 | TST-010 | `tsconfig.json` :: `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"strict": true`, `"noEmit": true`, and `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
+| TST-022 | `tests/extension-registration.test.ts` :: `files-references returns structured repository, symbol, and Doxygen facts`; `references returns a structured repository tree for configured source directories`. |
+| TST-023 | `tests/extension-registration.test.ts` :: `reference tools register agent-oriented descriptions and schema details`. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

@@ -10,7 +10,10 @@ import { spawnSync } from "node:child_process";
 import { ReqError } from "./errors.js";
 import { loadConfig, saveConfig, type UseReqConfig } from "./config.js";
 import { countFilesMetrics, formatPackSummary } from "./token-counter.js";
-import { generateMarkdown } from "./generate-markdown.js";
+import {
+  buildReferenceToolExecutionStderr,
+  buildReferenceToolPayload,
+} from "./reference-payload.js";
 import { compressFiles } from "./compress-files.js";
 import { findConstructsInFiles } from "./find-constructs.js";
 import { STATIC_CHECK_EXT_TO_LANG, dispatchStaticCheckForFile } from "./static-check.js";
@@ -283,15 +286,30 @@ export function runFilesTokens(files: string[]): ToolResult {
 }
 
 /**
- * @brief Generates reference markdown for explicit files.
- * @details Delegates to `generateMarkdown` using the caller working directory as the relative-output base by default. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @brief Generates the structured references JSON payload for explicit files.
+ * @details Builds the agent-oriented references payload in caller order, preserves skipped and failed inputs as structured file records, emits deterministic JSON to stdout, and mirrors structured diagnostics to stderr. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] files {string[]} Explicit file paths.
- * @param[in] cwd {string} Base directory for relative output formatting. Defaults to `process.cwd()`.
- * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
- * @return {ToolResult} Successful tool result containing rendered markdown.
+ * @param[in] cwd {string} Base directory used for canonical path resolution. Defaults to `process.cwd()`.
+ * @param[in] verbose {boolean} When `true`, emit per-file progress diagnostics to stderr.
+ * @return {ToolResult} Successful tool result containing structured JSON.
+ * @satisfies REQ-011, REQ-076, REQ-077, REQ-078, REQ-079
  */
 export function runFilesReferences(files: string[], cwd = process.cwd(), verbose = false): ToolResult {
-  return ok(`${generateMarkdown(files, verbose, cwd)}\n`);
+  const payload = buildReferenceToolPayload({
+    toolName: "files-references",
+    scope: "explicit-files",
+    baseDir: cwd,
+    requestedPaths: files,
+    verbose,
+  });
+  const stderr = buildReferenceToolExecutionStderr(payload);
+  if (payload.summary.processable_file_count === 0) {
+    fail("Error: no valid source files provided.", 1, "", stderr);
+  }
+  if (payload.summary.analyzed_file_count === 0) {
+    fail("Error: no valid source files processed.", 1, "", stderr);
+  }
+  return ok(`${JSON.stringify(payload, null, 2)}\n`, stderr);
 }
 
 /**
@@ -325,20 +343,32 @@ export function runFilesFind(argsList: string[], enableLineNumbers = false, verb
 }
 
 /**
- * @brief Generates project-wide reference markdown for configured source directories.
- * @details Resolves the project base, collects source files, renders the file tree, and appends analyzer-generated markdown for all collected files. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @brief Generates the structured references JSON payload for configured source directories.
+ * @details Resolves the project base, collects configured source files, builds the agent-oriented references payload, emits deterministic JSON to stdout, and mirrors structured diagnostics to stderr. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
- * @return {ToolResult} Successful tool result containing file-tree and reference markdown.
- * @throws {ReqError} Throws when no source files are found.
+ * @return {ToolResult} Successful tool result containing structured JSON.
+ * @throws {ReqError} Throws when no source files are found or no file can be analyzed.
+ * @satisfies REQ-014, REQ-076, REQ-077, REQ-078, REQ-079
  */
 export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult {
   const [base, srcDirs] = resolveProjectSrcDirs(projectBase, config);
   const files = collectSourceFiles(srcDirs, base);
   if (files.length === 0) fail("Error: no source files found in configured directories.", 1);
-  const markdown = generateMarkdown(files, verbose, base);
-  return ok(`${formatFilesStructureMarkdown(files, base)}\n\n${markdown}\n`);
+  const payload = buildReferenceToolPayload({
+    toolName: "references",
+    scope: "configured-source-directories",
+    baseDir: base,
+    requestedPaths: files,
+    sourceDirectoryPaths: srcDirs,
+    verbose,
+  });
+  const stderr = buildReferenceToolExecutionStderr(payload);
+  if (payload.summary.analyzed_file_count === 0) {
+    fail("Error: no valid source files processed.", 1, "", stderr);
+  }
+  return ok(`${JSON.stringify(payload, null, 2)}\n`, stderr);
 }
 
 /**

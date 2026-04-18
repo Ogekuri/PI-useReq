@@ -20,7 +20,6 @@ test("project-scan commands match the Python oracle on a git-backed fixture repo
     },
   });
 
-  await t.test("references", () => compareCli(["--references"], projectBase));
   await t.test("compress", () => compareCli(["--compress"], projectBase));
   await t.test("compress with line numbers", () => compareCli(["--compress", "--enable-line-numbers"], projectBase));
   await t.test("find", () => {

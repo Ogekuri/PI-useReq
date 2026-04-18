@@ -20,9 +20,6 @@ test("standalone command outputs match the Python oracle for every fixture", asy
     await t.test(`files-tokens ${fileName}`, () => {
       compareCli(["--files-tokens", fixture]);
     });
-    await t.test(`files-references ${fileName}`, () => {
-      compareCli(["--files-references", fixture]);
-    });
     await t.test(`files-compress ${fileName}`, () => {
       compareCli(["--files-compress", fixture]);
     });

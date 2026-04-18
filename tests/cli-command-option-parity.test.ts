@@ -150,18 +150,18 @@ const IMPORTED_CASE_MAPPINGS: ImportedCaseMapping[] = [
   { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_no_base_required", targetId: "oracle::standalone::files-tokens-explicit-files" },
   { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_skip_missing", targetId: "oracle::standalone::files-tokens-explicit-files" },
   { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_all_missing_errors", targetId: "oracle::standalone::files-tokens-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_basic", targetId: "oracle::standalone::files-references-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_no_base_required", targetId: "oracle::standalone::files-references-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_verbose_outputs_progress", targetId: "oracle::standalone::files-references-verbose" },
+  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_basic", targetId: "direct::files-references-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_no_base_required", targetId: "direct::files-references-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_verbose_outputs_progress", targetId: "direct::files-references-verbose" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_basic", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_base_required", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_line_numbers_by_default", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_enable_line_numbers", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_verbose_outputs_progress", targetId: "oracle::standalone::files-compress-verbose" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_rejects_base", targetId: "oracle::project::references-modes" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_with_here", targetId: "oracle::project::references-modes" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_prepends_files_structure", targetId: "oracle::project::references-modes" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_from_config", targetId: "oracle::project::references-modes" },
+  { sourceId: "test_files_commands.py::TestReferencesCommand::test_rejects_base", targetId: "direct::references-modes" },
+  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_with_here", targetId: "direct::references-modes" },
+  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_prepends_files_structure", targetId: "direct::references-modes" },
+  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_from_config", targetId: "direct::references-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_rejects_base", targetId: "oracle::project::compress-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_with_here", targetId: "oracle::project::compress-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_no_line_numbers_by_default", targetId: "oracle::project::compress-modes" },
@@ -248,20 +248,49 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "oracle::standalone::files-references-explicit-files",
+    id: "direct::files-references-explicit-files",
     run(t) {
-      const filePath = createScratchFile(t, "sample.py", "class Foo:\n    pass\n");
-      const result = runNodeCli(["--files-references", filePath], path.dirname(filePath));
+      const filePath = createScratchFile(
+        t,
+        "sample.ts",
+        "/**\n * @file\n * @brief Sample file.\n */\n\n/**\n * @brief Build sample value.\n * @param[in] input {string} Caller text.\n * @return {string} Upper-cased text.\n */\nexport function buildSample(input: string): string {\n  return input.toUpperCase();\n}\n",
+      );
+      const cwd = path.dirname(filePath);
+      const result = runNodeCli(["--files-references", filePath], cwd);
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /> Path: `sample.py`/);
+      const payload = JSON.parse(result.stdout) as {
+        summary: { analyzed_file_count: number };
+        repository: { file_canonical_paths: string[] };
+        files: Array<{
+          canonical_path: string;
+          file_doxygen?: { brief?: string[] };
+          symbols: Array<{
+            symbol_name: string;
+            line_range: [number, number];
+            doxygen?: { params?: Array<{ direction: string; parameter_name?: string; value_type?: string }> };
+          }>;
+        }>;
+      };
+      assert.equal(payload.summary.analyzed_file_count, 1);
+      assert.deepEqual(payload.repository.file_canonical_paths, ["sample.ts"]);
+      assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample file."]);
+      assert.equal(payload.files[0]?.canonical_path, "sample.ts");
+      assert.equal(payload.files[0]?.symbols[0]?.symbol_name, "buildSample");
+      assert.deepEqual(payload.files[0]?.symbols[0]?.line_range, [11, 13]);
+      assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.params, [
+        { direction: "in", parameter_name: "input", value_type: "string", description: "Caller text." },
+      ]);
       assert.equal(result.stderr, "");
     },
   },
   {
-    id: "oracle::standalone::files-references-verbose",
+    id: "direct::files-references-verbose",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "value = 1\n");
-      assertCliParity(["--verbose", "--files-references", filePath], path.dirname(filePath));
+      const result = runNodeCli(["--verbose", "--files-references", filePath], path.dirname(filePath));
+      assert.equal(result.status, 0, result.stderr);
+      assert.doesNotThrow(() => JSON.parse(result.stdout));
+      assert.match(result.stderr, /OK/);
     },
   },
   {
@@ -281,12 +310,36 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "oracle::project::references-modes",
+    id: "direct::references-modes",
     run(t) {
-      const { projectBase } = createFixtureRepo(t);
-      assertCliParity(["--references"], projectBase);
-      assertCliParity(["--here", "--references"], projectBase);
-      assertCliParity(["--base", projectBase, "--references"], projectBase);
+      const { projectBase } = createFixtureRepo(t, { fixtures: [] });
+      fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
+      fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
+      fs.writeFileSync(path.join(projectBase, "src", "nested", "beta.ts"), "export function beta(): number {\n  return 2;\n}\n", "utf8");
+
+      const direct = runNodeCli(["--references"], projectBase);
+      assert.equal(direct.status, 0, direct.stderr);
+      const directPayload = JSON.parse(direct.stdout) as {
+        repository: {
+          source_directory_paths: string[];
+          file_canonical_paths: string[];
+          directory_tree: { children: Array<{ node_name: string; node_kind: string }> };
+        };
+        files: Array<{ canonical_path: string }>;
+      };
+      assert.deepEqual(directPayload.repository.source_directory_paths, ["src"]);
+      assert.deepEqual(directPayload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
+      assert.equal(directPayload.repository.directory_tree.children[0]?.node_name, "src");
+      assert.equal(directPayload.repository.directory_tree.children[0]?.node_kind, "directory");
+      assert.deepEqual(directPayload.files.map((file) => file.canonical_path), ["src/alpha.ts", "src/nested/beta.ts"]);
+
+      const here = runNodeCli(["--here", "--references"], projectBase);
+      assert.equal(here.status, 0, here.stderr);
+      assert.deepEqual(JSON.parse(here.stdout), directPayload);
+
+      const baseRejected = runNodeCli(["--base", projectBase, "--references"], projectBase);
+      assert.notEqual(baseRejected.status, 0);
+      assert.match(baseRejected.stderr, /do not allow --base/);
     },
   },
   {
@@ -710,11 +763,19 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "oracle::fixtures::files-references-fixture-parity",
+    id: "direct::fixtures::files-references-fixture-shape",
     async run(t) {
       for (const fixture of getFixtureFiles()) {
         await t.test(path.basename(fixture), () => {
-          assertCliParity(["--files-references", fixture], path.dirname(fixture));
+          const result = runNodeCli(["--files-references", fixture], path.dirname(fixture));
+          assert.equal(result.status, 0, result.stderr);
+          const payload = JSON.parse(result.stdout) as {
+            summary: { analyzed_file_count: number };
+            files: Array<{ canonical_path: string; status: string }>;
+          };
+          assert.equal(payload.summary.analyzed_file_count, 1);
+          assert.equal(payload.files[0]?.status, "analyzed");
+          assert.equal(payload.files[0]?.canonical_path, path.basename(fixture));
         });
       }
     },

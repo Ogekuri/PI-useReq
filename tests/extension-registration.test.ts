@@ -334,6 +334,26 @@ test("token tools register agent-oriented descriptions and schema details", () =
   assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /canonical_doc_names/);
 });
 
+test("reference tools register agent-oriented descriptions and schema details", () => {
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  const filesReferences = pi.tools.find((tool: RegisteredTool) => tool.name === "files-references");
+  const references = pi.tools.find((tool: RegisteredTool) => tool.name === "references");
+  assert.ok(filesReferences, "missing files-references tool");
+  assert.ok(references, "missing references tool");
+
+  assert.match(filesReferences.description ?? "", /request, summary, repository, files, and execution sections/);
+  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Numeric contract:")));
+  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
+  assert.match(String((filesReferences.parameters as { description?: string } | undefined)?.description ?? ""), /structured Doxygen fields/);
+
+  assert.match(references.description ?? "", /configured project source directories/);
+  assert.ok(references.promptGuidelines?.some((line) => line.includes("source_directory_paths")));
+  assert.ok(references.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
+  assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /directory tree/);
+});
+
 test("files-tokens returns structured source facts and separated guidance", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
@@ -398,6 +418,146 @@ test("files-tokens returns structured source facts and separated guidance", asyn
     assert.equal(payload.guidance.derived_recommendations[0]?.kind, "prioritize_high_token_paths");
     assert.equal(payload.guidance.actionable_next_steps[0]?.kind, "read_top_token_paths_first");
     assert.match(payload.execution.stderr, /skipped: req\/docs\/MISSING\.md: not found/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("files-references returns structured repository, symbol, and Doxygen facts", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const samplePath = path.join(projectBase, "src", "sample.ts");
+  fs.writeFileSync(samplePath, `/**
+ * @file
+ * @brief Sample source file.
+ */
+
+/**
+ * @brief Builds the sample value.
+ * @param[in] input {string} Caller-supplied value.
+ * @return {string} Upper-cased result.
+ * @satisfies REQ-011
+ */
+export function buildSample(input: string): string {
+  return input.toUpperCase();
+}
+`, "utf8");
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "files-references", projectBase, {
+      files: ["src/sample.ts", "src/missing.ts"],
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: {
+        request: {
+          requested_input_paths: string[];
+        };
+        summary: {
+          analyzed_file_count: number;
+          skipped_file_count: number;
+        };
+        repository: {
+          file_canonical_paths: string[];
+        };
+        files: Array<{
+          canonical_path: string;
+          status: string;
+          symbol_count: number;
+          doxygen_field_count: number;
+          file_doxygen?: { brief?: string[] };
+          symbols: Array<{
+            symbol_name: string;
+            qualified_name: string;
+            symbol_kind: string;
+            line_range: [number, number];
+            doxygen?: {
+              brief?: string[];
+              params?: Array<{ direction: string; parameter_name?: string; value_type?: string; description?: string }>;
+              returns?: string[];
+              satisfies_requirement_ids?: string[];
+            };
+          }>;
+        }>;
+        execution: {
+          stderr: string;
+        };
+      };
+    };
+
+    const payload = result.details!;
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
+    assert.deepEqual(payload.request.requested_input_paths, ["src/sample.ts", "src/missing.ts"]);
+    assert.equal(payload.summary.analyzed_file_count, 1);
+    assert.equal(payload.summary.skipped_file_count, 1);
+    assert.deepEqual(payload.repository.file_canonical_paths, ["src/sample.ts"]);
+    assert.deepEqual(payload.files.map((file) => file.status), ["analyzed", "skipped"]);
+    assert.equal(payload.files[0]?.canonical_path, "src/sample.ts");
+    assert.equal(payload.files[0]?.symbol_count, 1);
+    assert.ok((payload.files[0]?.doxygen_field_count ?? 0) >= 2);
+    assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample source file."]);
+    assert.equal(payload.files[0]?.symbols[0]?.symbol_name, "buildSample");
+    assert.equal(payload.files[0]?.symbols[0]?.qualified_name, "buildSample");
+    assert.equal(payload.files[0]?.symbols[0]?.symbol_kind, "FUNCTION");
+    assert.deepEqual(payload.files[0]?.symbols[0]?.line_range, [12, 14]);
+    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.brief, ["Builds the sample value."]);
+    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.params, [
+      { direction: "in", parameter_name: "input", value_type: "string", description: "Caller-supplied value." },
+    ]);
+    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.returns, ["{string} Upper-cased result."]);
+    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.satisfies_requirement_ids, ["REQ-011"]);
+    assert.match(payload.execution.stderr, /skipped: src\/missing\.ts: not found/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("references returns a structured repository tree for configured source directories", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
+  fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
+  fs.writeFileSync(path.join(projectBase, "src", "nested", "beta.ts"), "export function beta(): number {\n  return 2;\n}\n", "utf8");
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: {
+        summary: {
+          analyzed_file_count: number;
+          total_symbol_count: number;
+        };
+        repository: {
+          source_directory_paths: string[];
+          file_canonical_paths: string[];
+          directory_tree: {
+            node_name: string;
+            children: Array<{ node_name: string; node_kind: string; children: Array<{ relative_path: string; node_kind: string }> }>;
+          };
+        };
+        files: Array<{
+          canonical_path: string;
+          line_range: [number, number];
+          symbols: Array<{ symbol_name: string; line_range: [number, number] }>;
+        }>;
+      };
+    };
+
+    const payload = result.details!;
+    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
+    assert.equal(payload.summary.analyzed_file_count, 2);
+    assert.equal(payload.summary.total_symbol_count, 1);
+    assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
+    assert.deepEqual(payload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
+    assert.equal(payload.repository.directory_tree.node_name, ".");
+    assert.equal(payload.repository.directory_tree.children[0]?.node_name, "src");
+    assert.equal(payload.repository.directory_tree.children[0]?.node_kind, "directory");
+    assert.ok(payload.repository.directory_tree.children[0]?.children.some((child) => child.relative_path === "src/alpha.ts"));
+    assert.ok(payload.repository.directory_tree.children[0]?.children.some((child) => child.relative_path === "src/nested"));
+    assert.deepEqual(payload.files.map((file) => file.canonical_path), ["src/alpha.ts", "src/nested/beta.ts"]);
+    assert.deepEqual(payload.files[0]?.line_range, [1, 1]);
+    assert.equal(payload.files[0]?.symbols.length, 0);
+    assert.equal(payload.files[1]?.symbols[0]?.symbol_name, "beta");
+    assert.deepEqual(payload.files[1]?.symbols[0]?.line_range, [1, 3]);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
