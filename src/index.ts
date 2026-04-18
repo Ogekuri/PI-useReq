@@ -14,6 +14,11 @@ import path from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ToolInfo } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import {
+  buildTokenToolPayload,
+  TOKEN_COUNTER_ENCODING,
+  type TokenToolPayload,
+} from "./core/token-counter.js";
+import {
   getDefaultConfig,
   loadConfig,
   saveConfig,
@@ -132,6 +137,45 @@ function formatResultForEditor(result: ToolResult): string {
   if (result.stdout) parts.push(result.stdout.trimEnd());
   if (result.stderr) parts.push(result.stderr.trimEnd());
   return parts.join(parts.length > 1 ? "\n\n" : "");
+}
+
+/**
+ * @brief Serializes one structured payload as pretty-printed JSON text.
+ * @details Uses two-space indentation and omits a trailing newline so tool `content` payloads remain compact while preserving deterministic field order. Runtime is O(n) in payload size. No side effects occur.
+ * @param[in] payload {unknown} Structured JSON-compatible payload.
+ * @return {string} Pretty-printed JSON string.
+ */
+function formatJsonToolPayload(payload: unknown): string {
+  return JSON.stringify(payload, null, 2);
+}
+
+/**
+ * @brief Builds the agent-oriented execute result returned by token-count tools.
+ * @details Mirrors the structured token payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
+ * @param[in] payload {TokenToolPayload} Structured token payload.
+ * @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Token-tool execute result.
+ * @satisfies REQ-069, REQ-070, REQ-071
+ */
+function buildTokenToolExecuteResult(
+  payload: TokenToolPayload,
+): {
+  content: Array<{ type: "text"; text: string }>;
+  details: TokenToolPayload & { execution: { code: number; stderr: string } };
+} {
+  const details = {
+    request: payload.request,
+    summary: payload.summary,
+    files: payload.files,
+    guidance: payload.guidance,
+    execution: {
+      code: 0,
+      stderr: payload.guidance.warnings.join("\n"),
+    },
+  };
+  return {
+    content: [{ type: "text", text: formatJsonToolPayload(details) }],
+    details,
+  };
 }
 
 /**
@@ -334,7 +378,7 @@ function registerPromptCommands(pi: ExtensionAPI): void {
  * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies REQ-005, REQ-044, REQ-045
+ * @satisfies REQ-005, REQ-010, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072
  */
 function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
@@ -369,17 +413,41 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   const multiFileSchema = Type.Object({ files: Type.Array(Type.String({ description: "Project or absolute file path" })) });
+  const filesTokensSchema = Type.Object(
+    {
+      files: Type.Array(
+        Type.String({ description: "Project-relative or absolute file path" }),
+        { description: "Input file list preserved in caller order" },
+      ),
+    },
+    {
+      description: "Counts readable files with cl100k_base. Missing or non-file inputs are skipped. The tool fails when no processable files remain.",
+    },
+  );
 
   pi.registerTool({
     name: "files-tokens",
     label: "files-tokens",
-    description: "Count tokens and characters for explicit files.",
-    promptSnippet: "Count token and character usage for selected files.",
-    promptGuidelines: ["Use this for direct file lists when you need pack token counts before composing prompts."],
-    parameters: multiFileSchema,
+    description: "Analyze explicit files with cl100k_base and return JSON sections request, summary, files, guidance, and execution.",
+    promptSnippet: "Return structured token metrics for caller-selected files.",
+    promptGuidelines: [
+      "Input: files[]; order is preserved; each item may be project-relative or absolute.",
+      "Output: JSON sections request, summary, files, guidance, execution; counts remain numeric.",
+      "Error handling: missing or non-file inputs are skipped; the tool fails when no processable files remain.",
+    ],
+    parameters: filesTokensSchema,
     async execute(_toolCallId, params) {
-      const result = runFilesTokens(params.files);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const payload = buildTokenToolPayload({
+        toolName: "files-tokens",
+        scope: "explicit-files",
+        baseDir: process.cwd(),
+        requestedPaths: params.files,
+        encodingName: TOKEN_COUNTER_ENCODING,
+      });
+      if (payload.summary.processable_file_count === 0) {
+        runFilesTokens(params.files);
+      }
+      return buildTokenToolExecuteResult(payload);
     },
   });
 
@@ -433,6 +501,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   const emptySchema = Type.Object({});
+  const tokensSchema = Type.Object(
+    {},
+    {
+      description: "No params. Uses project config docs-dir, selects canonical docs, reports missing canonical docs, and fails when no processable canonical docs remain.",
+    },
+  );
 
   pi.registerTool({
     name: "references",
@@ -486,15 +560,32 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "tokens",
     label: "tokens",
-    description: "Count tokens and characters for REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md under the configured docs directory.",
-    promptSnippet: "Count canonical documentation token usage.",
-    promptGuidelines: ["Use this before large documentation prompts to estimate context size."],
-    parameters: emptySchema,
+    description: "Analyze canonical docs from the configured docs-dir with cl100k_base and return JSON sections request, summary, files, guidance, and execution.",
+    promptSnippet: "Return structured token metrics for canonical documentation files.",
+    promptGuidelines: [
+      "Input: no params; uses docs-dir plus canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
+      "Output: same JSON sections as files-tokens; counts remain numeric and canonical paths are isolated.",
+      "Error handling: missing canonical docs are reported; the tool fails when no processable canonical docs remain.",
+    ],
+    parameters: tokensSchema,
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const result = runTokens(projectBase, config);
-      return { content: [{ type: "text", text: result.stdout.trimEnd() }], details: result };
+      const docsDir = config["docs-dir"].replace(/[/\\]+$/, "");
+      const canonicalDocNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"];
+      const payload = buildTokenToolPayload({
+        toolName: "tokens",
+        scope: "canonical-docs",
+        baseDir: projectBase,
+        requestedPaths: canonicalDocNames.map((name) => path.join(docsDir, name)),
+        docsDir,
+        canonicalDocNames,
+        encodingName: TOKEN_COUNTER_ENCODING,
+      });
+      if (payload.summary.processable_file_count === 0) {
+        runTokens(projectBase, config);
+      }
+      return buildTokenToolExecuteResult(payload);
     },
   });
 

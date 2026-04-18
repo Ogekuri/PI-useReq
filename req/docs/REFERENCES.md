@@ -172,7 +172,7 @@ import { runSdkSmoke, type ParityMismatch, type SdkSmokeReport } from "./lib/sdk
 
 ---
 
-# extension-debug-harness.ts | TypeScript | 449L | 17 symbols | 6 imports | 20 comments
+# extension-debug-harness.ts | TypeScript | 450L | 17 symbols | 6 imports | 20 comments
 > Path: `scripts/lib/extension-debug-harness.ts`
 - @brief Implements offline extension inspection and replay for the standalone debug harness.
 - @details Loads the extension default export as a black box, records registrations through `RecordingExtensionAPI`, replays `session_start`, command, and tool handlers through recorded public boundaries, and renders a deterministic usage manual. Runtime is O(r + u) where r is the number of registrations and u is the number of replayed side effects. Side effects are limited to dynamic module loading, temporary `process.cwd()` mutation during replay, filesystem existence checks, and any extension-owned side effects triggered by the recorded handlers.
@@ -254,14 +254,14 @@ import {
 - @return {Promise<{ api: RecordingExtensionAPI; paths: HarnessPaths; effectiveProcessCwd: string }>} Recorder plus resolved paths.
 - @satisfies REQ-048
 
-### fn `export function buildDebugManual(snapshot: RecordingExtensionSnapshot): string` (L238-264)
+### fn `export function buildDebugManual(snapshot: RecordingExtensionSnapshot): string` (L239-265)
 - @brief Builds the generated harness usage manual.
 - @details Emits one example for each debug mode plus one concrete replay example for every registered `req-*` command and agent tool. Runtime is O(c + t) in command and tool count. No external state is mutated.
 - @param[in] snapshot {RecordingExtensionSnapshot} Recorded registration snapshot.
 - @return {string} Markdown manual.
 - @satisfies REQ-052
 
-### fn `export async function inspectExtension(cwd?: string, extensionPath?: string): Promise<InspectReport>` (L274-289)
+### fn `export async function inspectExtension(cwd?: string, extensionPath?: string): Promise<InspectReport>` (L275-290)
 - @brief Builds an offline inspection report without replaying runtime handlers.
 - @details Loads and registers the extension as a black box, captures the registration snapshot, and appends the generated usage manual. Runtime is dominated by extension registration. Side effects are limited to registration-time extension behavior.
 - @param[in] cwd {string | undefined} Requested working directory.
@@ -269,7 +269,7 @@ import {
 - @return {Promise<InspectReport>} Offline inspection report.
 - @satisfies REQ-048, REQ-050, REQ-051, REQ-052
 
-### fn `export async function replaySessionStart(` (L301-335)
+### fn `export async function replaySessionStart(` (L302-336)
 - @brief Replays the recorded `session_start` handlers offline.
 - @details Loads and registers the extension as a black box, invokes every recorded `session_start` handler in registration order, and captures final active tools, user messages, and UI side effects. Runtime is dominated by handler execution. Side effects include temporary `process.cwd()` mutation plus extension-owned handler behavior.
 - @param[in] cwd {string | undefined} Requested working directory.
@@ -279,7 +279,7 @@ import {
 - @return {Promise<SessionStartReport>} Offline session-start replay report.
 - @satisfies REQ-048, REQ-049, REQ-050, REQ-051, REQ-053
 
-### fn `export async function replayCommand(` (L349-385)
+### fn `export async function replayCommand(` (L350-386)
 - @brief Replays one recorded command handler offline.
 - @details Loads and registers the extension as a black box, resolves the named command from the recording API, executes its handler under the requested cwd, and captures resulting user messages plus UI side effects. Runtime is dominated by the command handler. Side effects include temporary `process.cwd()` mutation plus extension-owned command behavior.
 - @param[in] commandName {string} Registered command name.
@@ -291,7 +291,7 @@ import {
 - @throws {ReqError} Throws when the named command is not registered.
 - @satisfies REQ-048, REQ-049, REQ-050, REQ-051, REQ-054, REQ-058
 
-### fn `export async function replayTool(` (L399-449)
+### fn `export async function replayTool(` (L400-450)
 - @brief Replays one recorded tool execute handler offline.
 - @details Loads and registers the extension as a black box, resolves the named tool from the recording API, executes its `execute(...)` handler under the requested cwd, records streamed updates, and captures the final return payload plus UI side effects. Runtime is dominated by the tool handler. Side effects include temporary `process.cwd()` mutation plus extension-owned tool behavior.
 - @param[in] toolName {string} Registered tool name.
@@ -318,11 +318,11 @@ import {
 |`loadExtensionFactory`|fn||136-143|export async function loadExtensionFactory(extensionPath:...|
 |`withProcessCwd`|fn||152-161|async function withProcessCwd<T>(cwd: string, action: () ...|
 |`registerExtensionOffline`|fn||171-183|async function registerExtensionOffline(|
-|`buildDebugManual`|fn||238-264|export function buildDebugManual(snapshot: RecordingExten...|
-|`inspectExtension`|fn||274-289|export async function inspectExtension(cwd?: string, exte...|
-|`replaySessionStart`|fn||301-335|export async function replaySessionStart(|
-|`replayCommand`|fn||349-385|export async function replayCommand(|
-|`replayTool`|fn||399-449|export async function replayTool(|
+|`buildDebugManual`|fn||239-265|export function buildDebugManual(snapshot: RecordingExten...|
+|`inspectExtension`|fn||275-290|export async function inspectExtension(cwd?: string, exte...|
+|`replaySessionStart`|fn||302-336|export async function replaySessionStart(|
+|`replayCommand`|fn||350-386|export async function replayCommand(|
+|`replayTool`|fn||400-450|export async function replayTool(|
 
 
 ---
@@ -1790,10 +1790,10 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# token-counter.ts | TypeScript | 129L | 4 symbols | 3 imports | 9 comments
+# token-counter.ts | TypeScript | 418L | 17 symbols | 3 imports | 23 comments
 > Path: `src/core/token-counter.ts`
 - @brief Provides token and character counting utilities for documentation packs.
-- @details Wraps `js-tiktoken` encoding lookup and applies it to in-memory content or file lists. Runtime is linear in processed text size. Side effects are limited to filesystem reads in multi-file helpers.
+- @details Wraps `js-tiktoken` encoding lookup, applies it to in-memory content or file lists, and builds agent-oriented JSON payloads for token-centric tools. Runtime is linear in processed text size. Side effects are limited to filesystem reads in multi-file helpers.
 
 ## Imports
 ```
@@ -1804,39 +1804,115 @@ import { getEncoding } from "js-tiktoken";
 
 ## Definitions
 
-### class `export class TokenCounter` (L15-54)
+- type `export type TokenToolScope = "explicit-files" | "canonical-docs";` (L21)
+- @brief Enumerates supported token-payload scopes.
+- @details Distinguishes explicit-file requests from canonical-document requests while preserving one stable JSON contract. The alias is compile-time only and introduces no runtime cost.
+- type `export type TokenFileStatus = "counted" | "error" | "skipped";` (L27)
+- @brief Enumerates supported per-file token-entry statuses.
+- @details Separates counted files, read-time failures, and skipped inputs so downstream agents can branch without reparsing text warnings. The alias is compile-time only and introduces no runtime cost.
+### iface `export interface CountFileMetricsResult` (L33-38)
+- @brief Describes one per-file token metric record.
+- @details Stores the source path, numeric token count, numeric character count, and optional read-error payload returned by low-level counting helpers. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface TokenToolFileEntry` (L44-55)
+- @brief Describes one file entry in the agent-oriented token payload.
+- @details Preserves caller order, exposes canonicalized path fields, and keeps numeric counts separate from status/error metadata for deterministic downstream parsing. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface TokenToolRequestSection` (L61-70)
+- @brief Describes the request section of the agent-oriented token payload.
+- @details Captures tool identity, scope, path-resolution base, encoding, and requested path inventory so agents can reason about how metrics were selected. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface TokenToolSummarySection` (L76-85)
+- @brief Describes the summary section of the agent-oriented token payload.
+- @details Exposes aggregate counts and averages as numeric fields with explicit units so agents can branch on totals without reparsing formatted strings. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface TokenToolGuidanceSection` (L91-95)
+- @brief Describes the guidance section of the agent-oriented token payload.
+- @details Separates derived ordering hints and warning strings from source-derived facts so agents can choose planning heuristics without reparsing the factual file table. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface TokenToolPayload` (L101-106)
+- @brief Describes the full agent-oriented token payload.
+- @details Orders the top-level sections as request, summary, files, and guidance for deterministic downstream traversal. The interface is compile-time only and introduces no runtime cost.
+
+### iface `export interface BuildTokenToolPayloadOptions` (L112-120)
+- @brief Describes the options required to build one agent-oriented token payload.
+- @details Supplies tool identity, scope, path base, requested paths, and optional canonical-doc metadata while keeping counting behavior configurable through a stable object contract. The interface is compile-time only and introduces no runtime cost.
+
+### class `export class TokenCounter` (L126-166)
 - @brief Encapsulates one tokenizer instance for repeated token counting.
 - @brief Stores the tokenizer implementation used for subsequent counts.
 - @details Caches a `js-tiktoken` encoding object so multiple documents can be counted without repeated encoding lookup. Counting cost is O(n) in content length. The class mutates only instance state during construction.
 - @details The field holds the encoder returned by `getEncoding`. Access complexity is O(1). The value is initialized once per instance.
 
-### fn `export function countFileMetrics(content: string, encodingName = "cl100k_base"): { tokens: number; chars: number }` (L63-69)
+### fn `function canonicalizeTokenPath(filePath: string, baseDir: string): string` (L175-183)
+- @brief Converts one filesystem path into the canonical token-payload path form.
+- @details Emits a slash-normalized relative path when the target is under the supplied base directory; otherwise emits a slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
+- @param[in] filePath {string} Candidate absolute or relative filesystem path.
+- @param[in] baseDir {string} Reference directory used for relative canonicalization.
+- @return {string} Canonicalized path string.
+
+### fn `function roundRatio(numerator: number, denominator: number): number` (L192-197)
+- @brief Rounds one ratio to six decimal places.
+- @details Preserves zero exactly and otherwise limits floating-point noise so token-share fields remain stable across executions. Runtime is O(1). No side effects occur.
+- @param[in] numerator {number} Partial numeric value.
+- @param[in] denominator {number} Total numeric value.
+- @return {number} Rounded ratio in range `[0, 1]` when the denominator is positive; `0` otherwise.
+
+### fn `function orderPathsByMetric(` (L207-232)
+- @brief Orders canonical file paths by one numeric metric while removing duplicates.
+- @details Filters to counted file entries, sorts by the supplied metric direction, breaks ties by canonical path, and preserves only the first occurrence of each path. Runtime is O(n log n). No external state is mutated.
+- @param[in] files {TokenToolFileEntry[]} Token payload file entries.
+- @param[in] metric {(entry: TokenToolFileEntry) => number} Numeric metric selector.
+- @param[in] direction {"asc" | "desc"} Sort direction.
+- @return {string[]} Unique canonical paths ordered by the requested metric.
+
+### fn `export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING): { tokens: number; chars: number }` (L241-247)
 - @brief Counts tokens and characters for one in-memory content string.
 - @details Instantiates a `TokenCounter`, tokenizes the supplied text, and pairs the result with raw character length. Runtime is O(n). No filesystem I/O occurs.
 - @param[in] content {string} Text payload to measure.
 - @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
 - @return {{ tokens: number; chars: number }} Aggregate metrics for the supplied content.
 
-### fn `export function countFilesMetrics(filePaths: string[], encodingName = "cl100k_base")` (L78-97)
+### fn `export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUNTER_ENCODING): CountFileMetricsResult[]` (L256-275)
 - @brief Counts tokens and characters for multiple files.
 - @details Reuses a single `TokenCounter`, reads each file as UTF-8, and returns per-file metrics. Read failures are captured as error strings instead of aborting the entire batch. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] filePaths {string[]} File paths to measure.
 - @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
-- @return {Array<{ file: string; tokens: number; chars: number; error?: string }>} Per-file metrics and optional read errors.
+- @return {CountFileMetricsResult[]} Per-file metrics and optional read errors.
 
-### fn `export function formatPackSummary(results: Array<{ file: string; tokens: number; chars: number; error?: string }>): string` (L105-129)
+### fn `export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): TokenToolPayload` (L284-386)
+- @brief Builds the agent-oriented JSON payload for token-centric tools.
+- @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, and emits derived ordering hints in a separate guidance section. Runtime is O(F log F + S). Side effects are limited to filesystem reads.
+- @param[in] options {BuildTokenToolPayloadOptions} Payload-construction options.
+- @return {TokenToolPayload} Structured token payload ordered as request, summary, files, guidance.
+- @satisfies REQ-010, REQ-017, REQ-069, REQ-070, REQ-071
+
+### fn `export function formatPackSummary(results: CountFileMetricsResult[]): string` (L394-418)
 - @brief Formats per-file token metrics as a human-readable summary block.
 - @details Aggregates totals, emits one status line per file, and appends a summary footer containing file, token, and character counts. Runtime is O(n). No external state is mutated.
-- @param[in] results {Array<{ file: string; tokens: number; chars: number; error?: string }>} Per-file metric records.
+- @param[in] results {CountFileMetricsResult[]} Per-file metric records.
 - @return {string} Multiline summary suitable for CLI or editor output.
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`TokenCounter`|class||15-54|export class TokenCounter|
-|`countFileMetrics`|fn||63-69|export function countFileMetrics(content: string, encodin...|
-|`countFilesMetrics`|fn||78-97|export function countFilesMetrics(filePaths: string[], en...|
-|`formatPackSummary`|fn||105-129|export function formatPackSummary(results: Array<{ file: ...|
+|`TokenToolScope`|type||21||
+|`TokenFileStatus`|type||27||
+|`CountFileMetricsResult`|iface||33-38|export interface CountFileMetricsResult|
+|`TokenToolFileEntry`|iface||44-55|export interface TokenToolFileEntry|
+|`TokenToolRequestSection`|iface||61-70|export interface TokenToolRequestSection|
+|`TokenToolSummarySection`|iface||76-85|export interface TokenToolSummarySection|
+|`TokenToolGuidanceSection`|iface||91-95|export interface TokenToolGuidanceSection|
+|`TokenToolPayload`|iface||101-106|export interface TokenToolPayload|
+|`BuildTokenToolPayloadOptions`|iface||112-120|export interface BuildTokenToolPayloadOptions|
+|`TokenCounter`|class||126-166|export class TokenCounter|
+|`canonicalizeTokenPath`|fn||175-183|function canonicalizeTokenPath(filePath: string, baseDir:...|
+|`roundRatio`|fn||192-197|function roundRatio(numerator: number, denominator: numbe...|
+|`orderPathsByMetric`|fn||207-232|function orderPathsByMetric(|
+|`countFileMetrics`|fn||241-247|export function countFileMetrics(content: string, encodin...|
+|`countFilesMetrics`|fn||256-275|export function countFilesMetrics(filePaths: string[], en...|
+|`buildTokenToolPayload`|fn||284-386|export function buildTokenToolPayload(options: BuildToken...|
+|`formatPackSummary`|fn||394-418|export function formatPackSummary(results: CountFileMetri...|
 
 
 ---
@@ -2250,7 +2326,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 999L | 26 symbols | 10 imports | 27 comments
+# index.ts | TypeScript | 1090L | 28 symbols | 11 imports | 29 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -2262,6 +2338,7 @@ import type { ExtensionAPI, ExtensionCommandContext, ToolInfo } from "@mariozech
 import { Type } from "@sinclair/typebox";
 import {
 import {
+import {
 import { renderPrompt } from "./core/prompts.js";
 import { ensureHomeResources } from "./core/resources.js";
 import {
@@ -2271,39 +2348,52 @@ import { shellSplit } from "./core/utils.js";
 
 ## Definitions
 
-### fn `function getProjectBase(cwd: string): string` (L89-91)
+### fn `function getProjectBase(cwd: string): string` (L94-96)
 - @brief Resolves the effective project base from a working directory.
 - @details Normalizes the provided cwd into an absolute path without consulting configuration. Time complexity is O(1). No I/O side effects occur.
 - @param[in] cwd {string} Current working directory.
 - @return {string} Absolute project base path.
 
-### fn `function loadProjectConfig(cwd: string): UseReqConfig` (L99-109)
+### fn `function loadProjectConfig(cwd: string): UseReqConfig` (L104-114)
 - @brief Loads project configuration and refreshes derived path metadata for the extension runtime.
 - @details Resolves the project base, loads persisted config, updates `base-path`, refreshes `git-path` when the project is inside a repository, and removes stale git metadata otherwise. Runtime is dominated by config I/O and git detection. Side effects are limited to filesystem reads and git subprocess execution.
 - @param[in] cwd {string} Current working directory.
 - @return {UseReqConfig} Effective project configuration.
 
-### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L118-122)
+### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L123-127)
 - @brief Persists project configuration from the extension runtime.
 - @details Recomputes `base-path` from the current working directory and delegates persistence to `saveConfig`. Runtime is O(n) in config size. Side effects include config-file writes.
 - @param[in] cwd {string} Current working directory.
 - @param[in] config {UseReqConfig} Configuration to persist.
 - @return {void} No return value.
 
-### fn `function formatResultForEditor(result: ToolResult): string` (L130-135)
+### fn `function formatResultForEditor(result: ToolResult): string` (L135-140)
 - @brief Formats a tool result for editor display.
 - @details Trims trailing whitespace on stdout and stderr independently, then joins non-empty sections with a blank line. Runtime is O(n) in emitted text size. No side effects occur.
 - @param[in] result {ToolResult} Tool result payload.
 - @return {string} Editor-ready textual representation.
 
-### fn `function buildPromptSessionMessage(content: string):` (L144-154)
+### fn `function formatJsonToolPayload(payload: unknown): string` (L148-150)
+- @brief Serializes one structured payload as pretty-printed JSON text.
+- @details Uses two-space indentation and omits a trailing newline so tool `content` payloads remain compact while preserving deterministic field order. Runtime is O(n) in payload size. No side effects occur.
+- @param[in] payload {unknown} Structured JSON-compatible payload.
+- @return {string} Pretty-printed JSON string.
+
+### fn `function buildTokenToolExecuteResult(` (L159-179)
+- @brief Builds the agent-oriented execute result returned by token-count tools.
+- @details Mirrors the structured token payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
+- @param[in] payload {TokenToolPayload} Structured token payload.
+- @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Token-tool execute result.
+- @satisfies REQ-069, REQ-070, REQ-071
+
+### fn `function buildPromptSessionMessage(content: string):` (L188-198)
 - @brief Builds the first user-message payload for a reset prompt session.
 - @details Creates the timestamped session entry appended during `ctx.newSession(...)` so `req-*` commands seed the cleared session with the rendered prompt content. Runtime is O(n) in prompt length. No external state is mutated.
 - @param[in] content {string} Rendered prompt markdown.
 - @return {{ role: "user"; content: Array<{ type: "text"; text: string }>; timestamp: number }} Session-manager user message payload.
 - @satisfies REQ-067
 
-### fn `async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void>` (L166-178)
+### fn `async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void>` (L210-222)
 - @brief Delivers one rendered prompt according to the configured reset policy.
 - @details When `reset-context` is `true`, waits for idle and uses `ctx.newSession(...)` to create a `/new`-equivalent session seeded with the rendered prompt as the first user message. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement or message dispatch.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2313,26 +2403,26 @@ import { shellSplit } from "./core/utils.js";
 - @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
 - @satisfies REQ-067, REQ-068
 
-### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L187-192)
+### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L231-236)
 - @brief Returns the configurable active-tool inventory visible to the extension.
 - @details Filters runtime tools against the canonical configurable-tool set, thereby combining extension-owned tools with supported embedded pi CLI tools. Output order is sorted by tool name. Runtime is O(t log t). No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {ToolInfo[]} Sorted configurable tool descriptors.
 - @satisfies REQ-007, REQ-063
 
-### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L200-204)
+### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L244-248)
 - @brief Normalizes and returns the configured enabled active tools.
 - @details Reuses repository normalization rules, updates the config object in place, and returns the normalized array. Runtime is O(n) in configured tool count. Side effect: mutates `config["enabled-tools"]`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {string[]} Normalized enabled tool names.
 
-### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L212-217)
+### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L256-261)
 - @brief Classifies one configurable tool as embedded or extension-owned.
 - @details Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated.
 - @param[in] tool {ToolInfo} Runtime tool descriptor.
 - @return {"builtin" | "extension"} Stable tool-kind label.
 
-### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L227-244)
+### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L271-288)
 - @brief Applies the configured active-tool enablement to the current session.
 - @details Preserves non-configurable active tools, removes every configurable tool from the active set, then re-adds only configured tools that exist in the current runtime inventory. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2340,7 +2430,7 @@ import { shellSplit } from "./core/utils.js";
 - @return {void} No return value.
 - @satisfies REQ-009, REQ-064
 
-### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L254-257)
+### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L298-301)
 - @brief Replaces the configured active-tool selection and applies it immediately.
 - @details Normalizes the requested tool names, stores them in config, and synchronizes the active tool set with runtime registration state. Runtime is O(n + t). Side effect: mutates config and active tools.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2348,35 +2438,35 @@ import { shellSplit } from "./core/utils.js";
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 
-### fn `function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string` (L266-269)
+### fn `function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string` (L310-313)
 - @brief Formats one configurable-tool label for selection menus.
 - @details Prefixes the tool name with a checkmark or cross and appends a stable builtin-versus-extension marker derived from runtime metadata. Runtime is O(1). No side effects occur.
 - @param[in] tool {ToolInfo} Tool descriptor.
 - @param[in] enabled {boolean} Enablement state.
 - @return {string} Menu label.
 
-### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L278-306)
+### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L322-350)
 - @brief Renders a textual reference for configurable-tool configuration and runtime state.
 - @details Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Multiline tool-status report.
 
-### fn `function registerPromptCommands(pi: ExtensionAPI): void` (L316-329)
+### fn `function registerPromptCommands(pi: ExtensionAPI): void` (L360-373)
 - @brief Registers bundled prompt commands with the extension.
 - @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and dispatches it either into a `/new`-equivalent reset session or the current session based on `reset-context`. Runtime is O(p) for registration; handler cost depends on prompt rendering plus optional session replacement. Side effects include command registration, session replacement, and message dispatch during execution.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-004, REQ-067, REQ-068
 
-### fn `function registerAgentTools(pi: ExtensionAPI): void` (L339-605)
+### fn `function registerAgentTools(pi: ExtensionAPI): void` (L383-682)
 - @brief Registers pi-usereq agent tools exposed to the model.
 - @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
-- @satisfies REQ-005, REQ-044, REQ-045
+- @satisfies REQ-005, REQ-010, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072
 
-### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L616-680)
+### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L707-771)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with persisted config, renders overview and mutation actions, and updates configuration state in response to UI selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2385,19 +2475,19 @@ import { shellSplit } from "./core/utils.js";
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064
 
-### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L688-694)
+### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L779-785)
 - @brief Formats one static-check configuration entry for UI display.
 - @details Renders command-backed entries as `Command(cmd args...)` and all other modules as `Module(args...)`. Runtime is O(n) in parameter count. No side effects occur.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Human-readable entry summary.
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L702-708)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L793-799)
 - @brief Summarizes configured static-check languages.
 - @details Keeps only languages with at least one configured checker, sorts them, and emits a compact `Language (count)` list. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string or `(none)`.
 
-### fn `function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string` (L718-721)
+### fn `function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string` (L809-812)
 - @brief Builds one static-check language selection label.
 - @details Includes the language name, supported extensions, and the number of configured checkers with singular/plural handling. Runtime is O(n) in extension count. No side effects occur.
 - @param[in] language {string} Canonical language name.
@@ -2405,20 +2495,20 @@ import { shellSplit } from "./core/utils.js";
 - @param[in] configuredCount {number} Number of configured checkers for the language.
 - @return {string} Menu label.
 
-### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L729-750)
+### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L820-841)
 - @brief Renders the static-check configuration reference view.
 - @details Produces a markdown-like summary containing configured entries, supported languages, supported modules, and example specifications. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Reference text for the editor view.
 
-### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L759-866)
+### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L850-957)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {Promise<void>} Promise resolved when the menu closes.
 
-### fn `async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void>` (L876-953)
+### fn `async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void>` (L967-1044)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the status line. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2426,17 +2516,17 @@ import { shellSplit } from "./core/utils.js";
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-066
 
-### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L879-886)
+### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L970-977)
 
-### fn `const refreshStatus = () =>` (L880-886)
+### fn `const refreshStatus = () =>` (L971-977)
 
-### fn `function registerConfigCommands(pi: ExtensionAPI): void` (L961-976)
+### fn `function registerConfigCommands(pi: ExtensionAPI): void` (L1052-1067)
 - @brief Registers configuration-management commands.
 - @details Adds commands for opening the interactive configuration menu and showing the current config JSON in the editor. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L985-999)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L1076-1090)
 - @brief Registers the complete pi-usereq extension.
 - @details Ensures bundled resources exist, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that applies configured active tools and updates the status line. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include resource copying, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -2446,30 +2536,32 @@ import { shellSplit } from "./core/utils.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`getProjectBase`|fn||89-91|function getProjectBase(cwd: string): string|
-|`loadProjectConfig`|fn||99-109|function loadProjectConfig(cwd: string): UseReqConfig|
-|`saveProjectConfig`|fn||118-122|function saveProjectConfig(cwd: string, config: UseReqCon...|
-|`formatResultForEditor`|fn||130-135|function formatResultForEditor(result: ToolResult): string|
-|`buildPromptSessionMessage`|fn||144-154|function buildPromptSessionMessage(content: string):|
-|`deliverPromptCommand`|fn||166-178|async function deliverPromptCommand(pi: ExtensionAPI, ctx...|
-|`getPiUsereqStartupTools`|fn||187-192|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
-|`getConfiguredEnabledPiUsereqTools`|fn||200-204|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
-|`getPiUsereqToolKind`|fn||212-217|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
-|`applyConfiguredPiUsereqTools`|fn||227-244|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
-|`setConfiguredPiUsereqTools`|fn||254-257|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
-|`formatPiUsereqToolLabel`|fn||266-269|function formatPiUsereqToolLabel(tool: ToolInfo, enabled:...|
-|`renderPiUsereqToolsReference`|fn||278-306|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
-|`registerPromptCommands`|fn||316-329|function registerPromptCommands(pi: ExtensionAPI): void|
-|`registerAgentTools`|fn||339-605|function registerAgentTools(pi: ExtensionAPI): void|
-|`configurePiUsereqToolsMenu`|fn||616-680|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
-|`formatStaticCheckEntry`|fn||688-694|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
-|`formatStaticCheckLanguagesSummary`|fn||702-708|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckLanguageLabel`|fn||718-721|function buildStaticCheckLanguageLabel(language: string, ...|
-|`renderStaticCheckReference`|fn||729-750|function renderStaticCheckReference(config: UseReqConfig)...|
-|`configureStaticCheckMenu`|fn||759-866|async function configureStaticCheckMenu(ctx: ExtensionCom...|
-|`configurePiUsereq`|fn||876-953|async function configurePiUsereq(pi: ExtensionAPI, ctx: E...|
-|`ensureSaved`|fn||879-886|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
-|`refreshStatus`|fn||880-886|const refreshStatus = () =>|
-|`registerConfigCommands`|fn||961-976|function registerConfigCommands(pi: ExtensionAPI): void|
-|`piUsereqExtension`|fn||985-999|export default function piUsereqExtension(pi: ExtensionAP...|
+|`getProjectBase`|fn||94-96|function getProjectBase(cwd: string): string|
+|`loadProjectConfig`|fn||104-114|function loadProjectConfig(cwd: string): UseReqConfig|
+|`saveProjectConfig`|fn||123-127|function saveProjectConfig(cwd: string, config: UseReqCon...|
+|`formatResultForEditor`|fn||135-140|function formatResultForEditor(result: ToolResult): string|
+|`formatJsonToolPayload`|fn||148-150|function formatJsonToolPayload(payload: unknown): string|
+|`buildTokenToolExecuteResult`|fn||159-179|function buildTokenToolExecuteResult(|
+|`buildPromptSessionMessage`|fn||188-198|function buildPromptSessionMessage(content: string):|
+|`deliverPromptCommand`|fn||210-222|async function deliverPromptCommand(pi: ExtensionAPI, ctx...|
+|`getPiUsereqStartupTools`|fn||231-236|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
+|`getConfiguredEnabledPiUsereqTools`|fn||244-248|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
+|`getPiUsereqToolKind`|fn||256-261|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
+|`applyConfiguredPiUsereqTools`|fn||271-288|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
+|`setConfiguredPiUsereqTools`|fn||298-301|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
+|`formatPiUsereqToolLabel`|fn||310-313|function formatPiUsereqToolLabel(tool: ToolInfo, enabled:...|
+|`renderPiUsereqToolsReference`|fn||322-350|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
+|`registerPromptCommands`|fn||360-373|function registerPromptCommands(pi: ExtensionAPI): void|
+|`registerAgentTools`|fn||383-682|function registerAgentTools(pi: ExtensionAPI): void|
+|`configurePiUsereqToolsMenu`|fn||707-771|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
+|`formatStaticCheckEntry`|fn||779-785|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
+|`formatStaticCheckLanguagesSummary`|fn||793-799|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckLanguageLabel`|fn||809-812|function buildStaticCheckLanguageLabel(language: string, ...|
+|`renderStaticCheckReference`|fn||820-841|function renderStaticCheckReference(config: UseReqConfig)...|
+|`configureStaticCheckMenu`|fn||850-957|async function configureStaticCheckMenu(ctx: ExtensionCom...|
+|`configurePiUsereq`|fn||967-1044|async function configurePiUsereq(pi: ExtensionAPI, ctx: E...|
+|`ensureSaved`|fn||970-977|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
+|`refreshStatus`|fn||971-977|const refreshStatus = () =>|
+|`registerConfigCommands`|fn||1052-1067|function registerConfigCommands(pi: ExtensionAPI): void|
+|`piUsereqExtension`|fn||1076-1090|export default function piUsereqExtension(pi: ExtensionAP...|
 
