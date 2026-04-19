@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.26"
+version: "0.0.27"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -35,7 +35,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, git validation, worktree lifecycle helpers, and offline extension contract validation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, and support modules. `.github/workflows/` is empty in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, git validation, worktree lifecycle helpers, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, and support modules. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -74,6 +74,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-008**: MUST format `files-references`, `references`, `files-compress`, and `compress` agent-tool outputs as deterministic agent-oriented JSON with dedicated metadata fields for source structure, symbols, and Doxygen tags.
 - **DES-009**: MUST treat `docs/pi.dev/agent-document-manifest.json` as the authoritative API contract for new or modified software that interfaces with the pi.dev CLI.
 - **DES-010**: MUST centralize event-driven context snapshots, run-timing state, and status-bar rendering through shared extension-status helpers.
+- **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a gated GitHub Actions pipeline that validates release tags, publishes to npm, and creates the matching GitHub Release.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -213,6 +214,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-041**: MUST canonicalize environment-dependent path and timestamp segments in archived and observed CLI results with stable placeholder tokens before exact comparison.
 - **REQ-042**: MUST archive explicit-file scenarios for `files-tokens`, `files-references`, `files-compress`, `files-find`, and `test-static-check` across every file under `tests/fixtures/`.
 - **REQ-043**: MUST archive repository scenarios for `references`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, `static-check`, `git-check`, `git-wt-*`, `git-path`, and `get-base-path`.
+- **REQ-138**: MUST make `.github/workflows/release-npm.yml` trigger release automation only for pushed tags matching canonical `v<major>.<minor>.<patch>` syntax.
+- **REQ-139**: MUST skip npm publication and GitHub release creation unless the tagged commit is contained in `origin/master`.
+- **REQ-140**: MUST configure Node.js plus npm registry authentication, install dependencies with `npm ci`, remove manifest `private`, and publish with provenance using `secrets.NPM_TOKEN`.
+- **REQ-141**: MUST create a non-draft non-prerelease GitHub Release for the published tag using generated changelog content.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting custom slash commands for tool names and `test-static-check`.
@@ -253,6 +258,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-027**: MUST verify harness inspection surfaces agent-oriented `files-compress` and `compress` tool descriptions with parameters, line-number behavior, output schema, specialization triggers, and failure conditions.
 - **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON request, result, status, execution, and derived runtime path facts through dedicated fields.
 - **TST-029**: MUST verify harness inspection surfaces machine-oriented descriptions for path, static-check, git, docs, and worktree tools, including parameters, output schema, specialization triggers, and failure conditions.
+- **TST-039**: MUST verify `.github/workflows/release-npm.yml` gates semver-tag releases on `origin/master`, runs `npm ci`, publishes with provenance via `secrets.NPM_TOKEN`, and creates the GitHub Release from generated changelog text.
 
 ## 5. Observed Component Model
 
@@ -282,6 +288,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ### 5.3 Packaging and Tooling Surface
 - `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
 - `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
+- `.github/workflows/release-npm.yml` validates canonical release tags, publishes the package to npm, and creates the matching GitHub Release.
 - `package.json` declares version `0.0.0` while `package-lock.json` resolves the top-level package as version `0.1.0`; this manifest metadata is inconsistent in the current revision.
 
 ## 6. Repository Structure
@@ -323,6 +330,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   ├── oracle-project.test.ts
 │   ├── oracle-standalone.test.ts
 │   ├── prompt-rendering.test.ts
+│   ├── release-workflow.test.ts
 │   └── fixtures/{fixture_c.c,fixture_cpp.cpp,fixture_csharp.cs,fixture_elixir.ex,fixture_go.go,fixture_haskell.hs,fixture_java.java,fixture_javascript.js,fixture_kotlin.kt,fixture_lua.lua,fixture_perl.pl,fixture_php.php,fixture_python.py,fixture_rust.rs,fixture_scala.scala,fixture_shell.sh,fixture_swift.swift,fixture_typescript.ts,fixture_zig.zig}
 ├── req/docs/
 ├── scripts/
@@ -331,6 +339,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   └── lib/{extension-debug-harness.ts,recording-extension-api.ts,sdk-smoke.ts}
 ├── .github/
 │   ├── workflows/
+│   │   └── release-npm.yml
 │   └── skills/{req-analyze,req-change,req-check,req-cover,req-create,req-fix,req-flowchart,req-implement,req-new,req-readme,req-recreate,req-references,req-refactor,req-renumber,req-workflow,req-write}/SKILL.md
 ├── .pi/prompts/{req-analyze.prompt.md,req-change.prompt.md,req-check.prompt.md,req-cover.prompt.md,req-create.prompt.md,req-fix.prompt.md,req-flowchart.prompt.md,req-implement.prompt.md,req-new.prompt.md,req-readme.prompt.md,req-recreate.prompt.md,req-references.prompt.md,req-refactor.prompt.md,req-renumber.prompt.md,req-workflow.prompt.md,req-write.prompt.md}
 ├── .req/docs/{Requirements_Template.md,HDT_Test_Authoring_Guide.md,Document_Source_Code_in_Doxygen_Style.md}
@@ -349,7 +358,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `tests/prompt-rendering.test.ts` covers home-resource synchronization and placeholder replacement in rendered prompts.
 - `tests/oracle-standalone.test.ts` compares standalone `files-*` and `--test-static-check` outputs against the Python `usereq.cli` oracle across all fixture languages.
 - `tests/oracle-project.test.ts` compares project-scoped commands against the Python oracle on a temporary git repository and separately verifies worktree create/delete side effects.
-- Test business logic focuses on parity with the Python oracle, persistent config mutation, startup-tool activation, and worktree lifecycle correctness.
+- `tests/release-workflow.test.ts` verifies semver-tag gating, npm publication steps, and GitHub release creation directives in `.github/workflows/release-npm.yml`.
+- Test business logic focuses on parity with the Python oracle, persistent config mutation, startup-tool activation, worktree lifecycle correctness, and npm release workflow structure.
 
 ## 8. Evidence Matrix
 
@@ -380,6 +390,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-004 | `src/core/static-check.ts` :: classes `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the implementation by module name. |
 | DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runReferences`, `runCompress`, `runFind`, `runProjectStaticCheck`, `runGitCheck`, `runDocsCheck`, `runGitWt*`, `runGitPath`, `runGetBasePath`. |
 | DES-006 | `src/core/compress-files.ts` :: `parts.push(\`@@@ ${outputPath} | ${language}\n> Lines: ...\`)`; `src/core/find-constructs.ts` :: `const header = \`@@@ ${filePath} | ${language}\``. |
+| DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags and `origin/master`, publish with npm authentication, and create the GitHub Release. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -415,6 +426,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-029 | `src/core/tool-runner.ts` :: `runGitPath` and `runGetBasePath` :: print configured path values with trailing newline. |
 | REQ-030 | `src/index.ts` :: `loadProjectConfig` :: sets `config["base-path"] = projectBase`; if inside git, sets resolved root, else deletes `git-path`. |
 | REQ-031 | `src/index.ts` :: `registerConfigCommands` :: `pi-usereq-show-config` writes `JSON.stringify(config, null, 2)` into the editor. |
+| REQ-138 | `.github/workflows/release-npm.yml` :: `on.push.tags` plus release-tag validation restrict automation to canonical `v<major>.<minor>.<patch>` tags. |
+| REQ-139 | `.github/workflows/release-npm.yml` :: branch-check job fetches `origin/master` and gates downstream jobs on containment of `github.sha`. |
+| REQ-140 | `.github/workflows/release-npm.yml` :: publish job uses `actions/setup-node`, `npm ci`, `npm pkg delete private`, and `npm publish --provenance` with `NODE_AUTH_TOKEN`. |
+| REQ-141 | `.github/workflows/release-npm.yml` :: release job uses changelog-builder output as `softprops/action-gh-release` body with non-draft and non-prerelease flags. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -431,6 +446,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-010 | `tsconfig.json` :: `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"strict": true`, `"noEmit": true`, and `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
 | TST-022 | `tests/extension-registration.test.ts` :: `files-references returns structured repository, symbol, and Doxygen facts`; `references returns a structured repository tree for configured source directories`. |
 | TST-023 | `tests/extension-registration.test.ts` :: `reference tools register agent-oriented descriptions and schema details`. |
+| TST-039 | `tests/release-workflow.test.ts` :: workflow-content assertions cover semver gating, `origin/master` containment, npm publication, and GitHub release generation. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

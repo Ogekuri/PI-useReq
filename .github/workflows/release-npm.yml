@@ -1,9 +1,9 @@
-name: Release (markdown)
+name: Release (npm)
 
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+' # push di una versione canonica (es. v1.2.3) senza pre-release
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -11,43 +11,72 @@ permissions:
   attestations: write
 
 jobs:
-  # 1. Controlla se siamo sul branch corretto
-  check-branch:
+  check-release-context:
     runs-on: ubuntu-latest
     outputs:
-      is_master: ${{ steps.check.outputs.is_master }}
+      should_release: ${{ steps.release-context.outputs.should_release }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
-      - name: Check if tag is on master
-        id: check
+      - name: Validate release tag and master ancestry
+        id: release-context
+        shell: bash
         run: |
-          git fetch origin master
-          if git branch -r --contains ${GITHUB_SHA} | grep -q "origin/master"; then
-            echo "✅ Tag ${{ github.ref }} is on master branch. Proceeding with release."
-            echo "is_master=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "❌ Tag ${{ github.ref }} is not on master branch. Skipping release."
-            echo "is_master=false" >> "$GITHUB_OUTPUT"
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag ${GITHUB_REF_NAME} is not canonical semver; skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-  # 2. Effetua la build
-  build-release:
-    needs: check-branch
-    # Esegue questo job SOLO se l'output del job precedente è 'true'
-    if: needs.check-branch.outputs.is_master == 'true'
-    runs-on: ubuntu-latest
+          git fetch --no-tags origin master
+          if git branch -r --contains "${GITHUB_SHA}" | grep -q "origin/master"; then
+            echo "Tag ${GITHUB_REF_NAME} is on origin/master; continuing release."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag ${GITHUB_REF_NAME} is not on origin/master; skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
 
+  publish-npm:
+    needs: check-release-context
+    if: needs.check-release-context.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for npm publishing
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare publishable manifest
+        run: npm pkg delete private
+
+      - name: Publish package to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-github-release:
+    needs: [check-release-context, publish-npm]
+    if: needs.check-release-context.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
-      - name: Build Changelog
+      - name: Build changelog
         id: build_changelog
         uses: mikepenz/release-changelog-builder-action@v6
         with:
@@ -95,16 +124,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release and upload assets
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
           prerelease: false
-          files: src/**/*
-          fail_on_unmatched_files: true
           generate_release_notes: false
           tag_name: ${{ github.ref_name }}
-          name: ${{github.event.repository.name}} ${{ github.ref_name }}
+          name: ${{ github.event.repository.name }} ${{ github.ref_name }}
           body: ${{ steps.build_changelog.outputs.changelog }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

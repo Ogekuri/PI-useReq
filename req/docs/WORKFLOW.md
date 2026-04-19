@@ -35,6 +35,27 @@
     - `configurePiUsereq(...)` [`src/index.ts`]
   - Parent Process: none
   - Threads: no explicit threads detected
+- ID: `PROC:gh-release-check`
+  - Type: Process
+  - Role: GitHub Actions release-gate runner that validates canonical tags and `origin/master` ancestry before any publication step.
+  - Entrypoints:
+    - `check-release-context(...)` [`.github/workflows/release-npm.yml`]
+  - Parent Process: none
+  - Threads: no explicit threads detected
+- ID: `PROC:gh-release-publish`
+  - Type: Process
+  - Role: GitHub Actions npm publication runner that installs dependencies, removes manifest `private`, and publishes the package.
+  - Entrypoints:
+    - `publish-npm(...)` [`.github/workflows/release-npm.yml`]
+  - Parent Process: none
+  - Threads: no explicit threads detected
+- ID: `PROC:gh-release-release`
+  - Type: Process
+  - Role: GitHub Actions release runner that builds changelog text and creates the GitHub Release after successful npm publication.
+  - Entrypoints:
+    - `create-github-release(...)` [`.github/workflows/release-npm.yml`]
+  - Parent Process: none
+  - Threads: no explicit threads detected
 
 ## Execution Units
 ### `PROC:main`
@@ -994,6 +1015,48 @@
   - Filesystem access for home resource cache, bundled prompt reads, and project config persistence.
   - Git and static-check subprocesses reused through the same tool-runner and static-check functions documented under `PROC:main`.
 
+### `PROC:gh-release-check`
+- Entrypoints:
+  - `check-release-context(...)`: GitHub Actions release-gate job root [`.github/workflows/release-npm.yml`]
+- Lifecycle/trigger:
+  - Start trigger: GitHub Actions starts the job for pushed tags matching the workflow tag glob.
+  - Stop trigger: writes the `should_release` job output after tag-shape and branch-containment evaluation.
+  - Looping model: single-pass job with sequential step execution.
+  - Threads: no explicit threads detected.
+- Internal Call-Trace Tree:
+  - `check-release-context(...)`: validate canonical semver tag shape and `origin/master` containment before downstream release work [`.github/workflows/release-npm.yml`]
+    - External boundaries: `actions/checkout@v4`, GitHub Actions runner shell, `git` CLI, and `$GITHUB_OUTPUT`.
+- External Boundaries:
+  - GitHub Actions event routing, hosted-runner lifecycle, checkout action, git subprocesses, and runner output channels.
+
+### `PROC:gh-release-publish`
+- Entrypoints:
+  - `publish-npm(...)`: GitHub Actions npm publication job root [`.github/workflows/release-npm.yml`]
+- Lifecycle/trigger:
+  - Start trigger: GitHub Actions starts the job only when `PROC:gh-release-check` exports `should_release=true`.
+  - Stop trigger: returns runner success after npm publication or runner failure on install or publish errors.
+  - Looping model: single-pass job with sequential step execution.
+  - Threads: no explicit threads detected.
+- Internal Call-Trace Tree:
+  - `publish-npm(...)`: checkout repository content, configure Node.js for npm, install dependencies, remove manifest `private`, and publish the package [`.github/workflows/release-npm.yml`]
+    - External boundaries: `actions/checkout@v4`, `actions/setup-node@v4`, npm CLI, npm registry, OIDC token issuance, and `secrets.NPM_TOKEN`.
+- External Boundaries:
+  - GitHub Actions event routing, hosted-runner lifecycle, checkout action, setup-node action, npm CLI, npm registry, and repository secrets.
+
+### `PROC:gh-release-release`
+- Entrypoints:
+  - `create-github-release(...)`: GitHub Actions GitHub-release job root [`.github/workflows/release-npm.yml`]
+- Lifecycle/trigger:
+  - Start trigger: GitHub Actions starts the job only when `PROC:gh-release-check` exports `should_release=true` and `PROC:gh-release-publish` succeeds.
+  - Stop trigger: returns runner success after changelog generation plus GitHub Release creation or runner failure on action errors.
+  - Looping model: single-pass job with sequential step execution.
+  - Threads: no explicit threads detected.
+- Internal Call-Trace Tree:
+  - `create-github-release(...)`: checkout repository content, build changelog text, and create the GitHub Release for the published tag [`.github/workflows/release-npm.yml`]
+    - External boundaries: `actions/checkout@v4`, `mikepenz/release-changelog-builder-action@v6`, `softprops/action-gh-release@v2`, and `secrets.GITHUB_TOKEN`.
+- External Boundaries:
+  - GitHub Actions event routing, hosted-runner lifecycle, checkout action, changelog-builder action, GitHub Releases API, and repository secrets.
+
 ## Communication Edges
 - `PROC:req-debug` -> `PROC:tool-args-to-params`
   - Mechanism: child-process spawn through resolved `tsx` executable.
@@ -1003,5 +1066,17 @@
   - Mechanism: child-process spawn through resolved `tsx` executable.
   - Endpoint/channel: CLI argv plus inherited stdout/stderr.
   - Payload/data-shape: wrapper-normalized subcommand and forwarded debug-harness options with default `--cwd` and `--extension` values, including rewritten tool `--params` JSON when `--args` was supplied [`scripts/pi-usereq-debug.sh`, `scripts/debug-extension.ts`]
+- `PROC:gh-release-check` -> `PROC:gh-release-publish`
+  - Mechanism: GitHub Actions `needs` dependency plus job-output gating.
+  - Endpoint/channel: `should_release` job output and shared tag-run context.
+  - Payload/data-shape: boolean release-eligibility flag derived from canonical semver validation and `origin/master` containment [`.github/workflows/release-npm.yml`]
+- `PROC:gh-release-check` -> `PROC:gh-release-release`
+  - Mechanism: GitHub Actions `needs` dependency plus job-output gating.
+  - Endpoint/channel: `should_release` job output and shared tag-run context.
+  - Payload/data-shape: boolean release-eligibility flag reused to skip changelog and GitHub Release creation when release gating fails [`.github/workflows/release-npm.yml`]
+- `PROC:gh-release-publish` -> `PROC:gh-release-release`
+  - Mechanism: GitHub Actions `needs` dependency.
+  - Endpoint/channel: upstream job completion state plus shared repository tag context.
+  - Payload/data-shape: successful npm publication completion required before changelog generation and GitHub Release creation [`.github/workflows/release-npm.yml`]
 - Internal thread communication edges: none.
-- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, and `PROC:pi-host` are alternative runtime entry modes over shared modules; only `PROC:req-debug` directly spawns `PROC:tool-args-to-params` and `PROC:debug-ext`.
+- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, `PROC:pi-host`, `PROC:gh-release-check`, `PROC:gh-release-publish`, and `PROC:gh-release-release` are distinct runtime entry modes; only `PROC:req-debug` directly spawns child processes, while the GitHub Actions units coordinate through workflow job dependencies.
