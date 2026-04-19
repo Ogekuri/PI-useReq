@@ -13,6 +13,15 @@ import {
   formatRuntimePathForDisplay,
   getConfigPath,
 } from "./path-context.js";
+import {
+  DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
+  DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
+  DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
+  DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
+  normalizePiNotifyCommand,
+  normalizePiNotifyShortcut,
+  normalizePiNotifySoundLevel,
+} from "./pi-notify.js";
 import { normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 
@@ -36,6 +45,14 @@ export interface UseReqConfig {
   "src-dir": string[];
   "static-check": Record<string, StaticCheckEntry[]>;
   "enabled-tools": string[];
+  "notify-beep-on-end": boolean;
+  "notify-beep-on-esc": boolean;
+  "notify-beep-on-error": boolean;
+  "notify-sound": "none" | "low" | "mid" | "high";
+  "notify-sound-toggle-shortcut": string;
+  PI_NOTIFY_SOUND_LOW_CMD: string;
+  PI_NOTIFY_SOUND_MID_CMD: string;
+  PI_NOTIFY_SOUND_HIGH_CMD: string;
   "base-path"?: string;
   "git-path"?: string;
 }
@@ -68,7 +85,7 @@ export function getProjectConfigPath(projectBase: string): string {
 
 /**
  * @brief Builds the default project configuration.
- * @details Populates canonical docs/test/source directories, the default startup tool set, and the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
+ * @details Populates canonical docs/test/source directories, the default startup tool set, default pi-notify beep and sound-hook values, and the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
  * @satisfies CTN-001, REQ-066
@@ -81,13 +98,21 @@ export function getDefaultConfig(projectBase: string): UseReqConfig {
     "src-dir": [...DEFAULT_SRC_DIRS],
     "static-check": {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
+    "notify-beep-on-end": false,
+    "notify-beep-on-esc": false,
+    "notify-beep-on-error": false,
+    "notify-sound": "none",
+    "notify-sound-toggle-shortcut": DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
+    PI_NOTIFY_SOUND_LOW_CMD: DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
+    PI_NOTIFY_SOUND_MID_CMD: DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
+    PI_NOTIFY_SOUND_HIGH_CMD: DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
     "base-path": normalizedProjectBase,
   };
 }
 
 /**
  * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names, and omits removed prompt-delivery mode fields from the returned object. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names, normalizes pi-notify beep and sound-hook fields, and omits removed prompt-delivery mode fields from the returned object. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
@@ -119,6 +144,14 @@ export function loadConfig(projectBase: string): UseReqConfig {
     ? (data["static-check"] as Record<string, StaticCheckEntry[]>)
     : {};
   const enabledTools = normalizeEnabledPiUsereqTools(data["enabled-tools"]);
+  const notifyBeepOnEnd = data["notify-beep-on-end"] === true;
+  const notifyBeepOnEsc = data["notify-beep-on-esc"] === true;
+  const notifyBeepOnError = data["notify-beep-on-error"] === true;
+  const notifySound = normalizePiNotifySoundLevel(data["notify-sound"]);
+  const notifySoundToggleShortcut = normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]);
+  const lowSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD);
+  const midSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD);
+  const highSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_HIGH_CMD, DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD);
   const basePath = typeof data["base-path"] === "string" ? data["base-path"] : projectBase;
   const gitPath = typeof data["git-path"] === "string" ? data["git-path"] : undefined;
 
@@ -128,6 +161,14 @@ export function loadConfig(projectBase: string): UseReqConfig {
     "src-dir": srcDir,
     "static-check": staticCheck,
     "enabled-tools": enabledTools,
+    "notify-beep-on-end": notifyBeepOnEnd,
+    "notify-beep-on-esc": notifyBeepOnEsc,
+    "notify-beep-on-error": notifyBeepOnError,
+    "notify-sound": notifySound,
+    "notify-sound-toggle-shortcut": notifySoundToggleShortcut,
+    PI_NOTIFY_SOUND_LOW_CMD: lowSoundCommand,
+    PI_NOTIFY_SOUND_MID_CMD: midSoundCommand,
+    PI_NOTIFY_SOUND_HIGH_CMD: highSoundCommand,
     "base-path": basePath,
     "git-path": gitPath,
   };

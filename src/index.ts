@@ -12,6 +12,7 @@ export const VERSION = "0.1.0"
 
 import path from "node:path";
 import type {
+  AgentEndEvent,
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
@@ -57,6 +58,12 @@ import {
   type StaticCheckEntry,
   type UseReqConfig,
 } from "./core/config.js";
+import {
+  cyclePiNotifySoundLevel,
+  formatPiNotifyBeepStatus,
+  runPiNotifyEffects,
+  type PiNotifySoundLevel,
+} from "./core/pi-notify.js";
 import { buildRuntimePathContext, buildRuntimePathFacts } from "./core/path-context.js";
 import {
   PI_USEREQ_STARTUP_TOOL_SET,
@@ -119,6 +126,22 @@ const PROMPT_NAMES = [
   "write",
 ] as const;
 
+/**
+ * @brief Describes the optional shortcut-registration surface used by pi-usereq.
+ * @details Narrows the runtime API to the documented `registerShortcut(...)`
+ * method so the extension can remain compatible with offline harnesses that do
+ * not implement shortcut capture. Compile-time only and introduces no runtime
+ * cost.
+ */
+interface PiShortcutRegistrar {
+  registerShortcut?: (
+    shortcut: string,
+    options: {
+      description?: string;
+      handler: (ctx: ExtensionCommandContext) => Promise<void> | void;
+    },
+  ) => void;
+}
 
 /**
  * @brief Resolves the effective project base from a working directory.
@@ -516,16 +539,18 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
  * @details Applies session-start-specific resource validation, project-config
  * refresh, and startup-tool enablement before forwarding the originating hook
  * name and payload into the shared `updateExtensionStatus(...)` pipeline.
+ * On `agent_end`, also dispatches configured pi-notify beep and sound effects.
  * Runtime is dominated by configuration loading during `session_start`; all
  * other hooks are O(1). Side effects include resource checks, active-tool
- * mutation, status updates, and live-ticker disposal on shutdown.
+ * mutation, status updates, live-ticker disposal on shutdown, stdout writes,
+ * and optional child-process spawning.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -541,6 +566,9 @@ async function handleExtensionStatusEvent(
     setPiUsereqStatusConfig(statusController, config);
   }
   updateExtensionStatus(statusController, hookName, event, ctx);
+  if (hookName === "agent_end" && statusController.config) {
+    runPiNotifyEffects(statusController.config, event as { messages: AgentEndEvent["messages"] });
+  }
   if (hookName === "session_shutdown") {
     disposePiUsereqStatusController(statusController);
   }
@@ -634,6 +662,195 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * @brief Represents one persisted pi-notify beep flag key.
+ * @details Restricts menu toggles to the three independent prompt-end beep
+ * flags stored in project configuration. Compile-time only and introduces no
+ * runtime cost.
+ */
+type PiNotifyBeepConfigKey =
+  | "notify-beep-on-end"
+  | "notify-beep-on-esc"
+  | "notify-beep-on-error";
+
+/**
+ * @brief Renders the notification configuration reference text.
+ * @details Serializes the current beep flags, sound level, shortcut, and
+ * per-level sound commands into a deterministic multiline report for the
+ * editor pane. Runtime is O(n) in command length. No external state is
+ * mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Multiline notification-configuration report.
+ */
+function renderPiNotifyReference(config: UseReqConfig): string {
+  return [
+    "# pi-notify configuration",
+    "",
+    `beep=${formatPiNotifyBeepStatus(config)}`,
+    `sound=${config["notify-sound"]}`,
+    `sound-toggle-shortcut=${config["notify-sound-toggle-shortcut"]}`,
+    `PI_NOTIFY_SOUND_LOW_CMD=${config.PI_NOTIFY_SOUND_LOW_CMD}`,
+    `PI_NOTIFY_SOUND_MID_CMD=${config.PI_NOTIFY_SOUND_MID_CMD}`,
+    `PI_NOTIFY_SOUND_HIGH_CMD=${config.PI_NOTIFY_SOUND_HIGH_CMD}`,
+    "",
+  ].join("\n");
+}
+
+/**
+ * @brief Builds the top-level configuration overview string.
+ * @details Summarizes docs, tests, src, active-tool count, terminal-beep
+ * state, and successful-run sound level into one deterministic line used by
+ * the main menu. Runtime is O(s) in configured source-path count. No external
+ * state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Single-line overview string.
+ */
+function buildPiUsereqConfigOverview(config: UseReqConfig): string {
+  return `Overview: docs=${config["docs-dir"]}, tests=${config["tests-dir"]}, src=${config["src-dir"].join(", ")}, tools=${getConfiguredEnabledPiUsereqTools(config).length}, beep=${formatPiNotifyBeepStatus(config)}, sound=${config["notify-sound"]}`;
+}
+
+/**
+ * @brief Flips one persisted pi-notify beep flag.
+ * @details Negates the selected prompt-end beep flag in place and returns the
+ * resulting boolean value so callers can emit deterministic UI feedback.
+ * Runtime is O(1). Side effect: mutates `config`.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @param[in] key {PiNotifyBeepConfigKey} Beep flag key to toggle.
+ * @return {boolean} Next enabled state.
+ */
+function togglePiNotifyBeepFlag(config: UseReqConfig, key: PiNotifyBeepConfigKey): boolean {
+  config[key] = !config[key];
+  return config[key];
+}
+
+/**
+ * @brief Runs the interactive notification-configuration menu.
+ * @details Exposes prompt-end beep toggles, successful-run sound-level
+ * selection, sound-toggle shortcut input, and per-level sound-command editors.
+ * Runtime depends on user interaction count. Side effects include UI updates
+ * and config mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
+ * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137
+ */
+async function configurePiNotifyMenu(
+  ctx: ExtensionCommandContext,
+  config: UseReqConfig,
+): Promise<boolean> {
+  const originalShortcut = config["notify-sound-toggle-shortcut"];
+  while (true) {
+    const choice = await ctx.ui.select("pi-notify", [
+      `Overview: beep=${formatPiNotifyBeepStatus(config)}, sound=${config["notify-sound"]}, shortcut=${config["notify-sound-toggle-shortcut"]}`,
+      "Show notification config",
+      `Toggle beep on success [${config["notify-beep-on-end"] ? "on" : "off"}]`,
+      `Toggle beep on escape [${config["notify-beep-on-esc"] ? "on" : "off"}]`,
+      `Toggle beep on error [${config["notify-beep-on-error"] ? "on" : "off"}]`,
+      "Set success sound level",
+      "Set sound toggle shortcut",
+      "Set PI_NOTIFY_SOUND_LOW_CMD",
+      "Set PI_NOTIFY_SOUND_MID_CMD",
+      "Set PI_NOTIFY_SOUND_HIGH_CMD",
+      "Back",
+    ]);
+    if (!choice || choice === "Back") {
+      return config["notify-sound-toggle-shortcut"] !== originalShortcut;
+    }
+    if (choice === "Show notification config" || choice.startsWith("Overview:")) {
+      ctx.ui.setEditorText(renderPiNotifyReference(config));
+      continue;
+    }
+    if (choice.startsWith("Toggle beep on success")) {
+      const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-end");
+      ctx.ui.notify(`Beep on success ${enabled ? "enabled" : "disabled"}`, "info");
+      continue;
+    }
+    if (choice.startsWith("Toggle beep on escape")) {
+      const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-esc");
+      ctx.ui.notify(`Beep on escape ${enabled ? "enabled" : "disabled"}`, "info");
+      continue;
+    }
+    if (choice.startsWith("Toggle beep on error")) {
+      const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-error");
+      ctx.ui.notify(`Beep on error ${enabled ? "enabled" : "disabled"}`, "info");
+      continue;
+    }
+    if (choice === "Set success sound level") {
+      const nextLevel = await ctx.ui.select("sound level", ["none", "low", "mid", "high", "Back"]);
+      if (nextLevel && nextLevel !== "Back") {
+        config["notify-sound"] = nextLevel as PiNotifySoundLevel;
+        ctx.ui.notify(`Sound level set to ${nextLevel}`, "info");
+      }
+      continue;
+    }
+    if (choice === "Set sound toggle shortcut") {
+      const value = await ctx.ui.input("sound toggle shortcut", config["notify-sound-toggle-shortcut"]);
+      if (value?.trim()) {
+        config["notify-sound-toggle-shortcut"] = value.trim();
+        ctx.ui.notify(`Sound toggle shortcut set to ${config["notify-sound-toggle-shortcut"]}`, "info");
+      }
+      continue;
+    }
+    if (choice === "Set PI_NOTIFY_SOUND_LOW_CMD") {
+      const value = await ctx.ui.input("PI_NOTIFY_SOUND_LOW_CMD", config.PI_NOTIFY_SOUND_LOW_CMD);
+      if (value?.trim()) {
+        config.PI_NOTIFY_SOUND_LOW_CMD = value.trim();
+        ctx.ui.notify("Updated PI_NOTIFY_SOUND_LOW_CMD", "info");
+      }
+      continue;
+    }
+    if (choice === "Set PI_NOTIFY_SOUND_MID_CMD") {
+      const value = await ctx.ui.input("PI_NOTIFY_SOUND_MID_CMD", config.PI_NOTIFY_SOUND_MID_CMD);
+      if (value?.trim()) {
+        config.PI_NOTIFY_SOUND_MID_CMD = value.trim();
+        ctx.ui.notify("Updated PI_NOTIFY_SOUND_MID_CMD", "info");
+      }
+      continue;
+    }
+    if (choice === "Set PI_NOTIFY_SOUND_HIGH_CMD") {
+      const value = await ctx.ui.input("PI_NOTIFY_SOUND_HIGH_CMD", config.PI_NOTIFY_SOUND_HIGH_CMD);
+      if (value?.trim()) {
+        config.PI_NOTIFY_SOUND_HIGH_CMD = value.trim();
+        ctx.ui.notify("Updated PI_NOTIFY_SOUND_HIGH_CMD", "info");
+      }
+    }
+  }
+}
+
+/**
+ * @brief Registers the configurable successful-run sound shortcut when supported.
+ * @details Loads the current project config, registers one raw pi shortcut when
+ * the runtime exposes `registerShortcut(...)`, cycles persisted sound state on
+ * invocation, saves the config, refreshes the status bar, and emits one info
+ * notification. Runtime is O(1) for registration plus config I/O per shortcut
+ * use. Side effects include shortcut registration, config writes, and status
+ * updates.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @return {void} No return value.
+ * @satisfies REQ-131, REQ-134, REQ-136
+ */
+function registerPiNotifyShortcut(
+  pi: ExtensionAPI,
+  statusController: PiUsereqStatusController,
+): void {
+  const shortcutRegistrar = pi as ExtensionAPI & PiShortcutRegistrar;
+  if (typeof shortcutRegistrar.registerShortcut !== "function") {
+    return;
+  }
+  const config = loadProjectConfig(process.cwd());
+  shortcutRegistrar.registerShortcut(config["notify-sound-toggle-shortcut"], {
+    description: "Cycle pi-usereq prompt-success sound level",
+    handler: async (ctx) => {
+      const nextConfig = loadProjectConfig(ctx.cwd);
+      nextConfig["notify-sound"] = cyclePiNotifySoundLevel(nextConfig["notify-sound"]);
+      saveProjectConfig(ctx.cwd, nextConfig);
+      setPiUsereqStatusConfig(statusController, nextConfig);
+      renderPiUsereqStatus(statusController, ctx);
+      ctx.ui.notify(`pi-usereq sound:${nextConfig["notify-sound"]}`, "info");
+    },
+  });
+}
 
 /**
  * @brief Registers bundled prompt commands with the extension.
@@ -1563,12 +1780,12 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/static-check/active-tool configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/static-check/active-tool/pi-notify configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-109, REQ-110, REQ-111, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126
+ * @satisfies REQ-006, REQ-109, REQ-110, REQ-111, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-131, REQ-133, REQ-134, REQ-137
  */
 async function configurePiUsereq(
   pi: ExtensionAPI,
@@ -1577,6 +1794,7 @@ async function configurePiUsereq(
 ): Promise<void> {
   let config = loadProjectConfig(ctx.cwd);
   const projectBase = getProjectBase(ctx.cwd);
+  const initialShortcut = config["notify-sound-toggle-shortcut"];
   const ensureSaved = () => saveProjectConfig(ctx.cwd, config);
   const refreshStatus = () => {
     setPiUsereqStatusConfig(statusController, config);
@@ -1585,18 +1803,22 @@ async function configurePiUsereq(
 
   while (true) {
     const choice = await ctx.ui.select("pi-usereq", [
-      `Overview: docs=${config["docs-dir"]}, tests=${config["tests-dir"]}, src=${config["src-dir"].join(", ")}, tools=${getConfiguredEnabledPiUsereqTools(config).length}`,
+      buildPiUsereqConfigOverview(config),
       "Set docs-dir",
       "Set tests-dir",
       "Manage src-dir",
       "Manage static-check",
       "Manage active tools",
+      "Manage notifications",
       "Reset defaults",
       "Save and close",
     ]);
     if (!choice || choice === "Save and close") {
       ensureSaved();
       refreshStatus();
+      if (config["notify-sound-toggle-shortcut"] !== initialShortcut) {
+        ctx.ui.notify("Sound toggle shortcut updated; run /reload to apply the new binding", "info");
+      }
       return;
     }
     if (choice === "Set docs-dir") {
@@ -1634,6 +1856,10 @@ async function configurePiUsereq(
     }
     if (choice === "Manage active tools") {
       await configurePiUsereqToolsMenu(pi, ctx, config);
+      continue;
+    }
+    if (choice === "Manage notifications") {
+      await configurePiNotifyMenu(ctx, config);
       continue;
     }
     if (choice === "Reset defaults") {
@@ -1675,14 +1901,16 @@ function registerConfigCommands(
 /**
  * @brief Registers the complete pi-usereq extension.
  * @details Validates installation-owned bundled resources, registers prompt and
- * configuration commands plus agent tools, and installs shared wrappers for all
- * supported pi lifecycle hooks so status telemetry, context usage, and prompt
- * timing remain synchronized with runtime events. Runtime is O(h) in hook count
- * during registration. Side effects include filesystem reads, command/tool
+ * configuration commands plus agent tools, registers the configurable
+ * successful-run sound shortcut when the runtime supports shortcuts, and
+ * installs shared wrappers for all supported pi lifecycle hooks so status
+ * telemetry, context usage, prompt timing, and pi-notify effects remain
+ * synchronized with runtime events. Runtime is O(h) in hook count during
+ * registration. Side effects include filesystem reads, command/tool/shortcut
  * registration, UI updates, active-tool changes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController(() => pi.getActiveTools());
@@ -1690,5 +1918,6 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
   registerPromptCommands(pi);
   registerAgentTools(pi);
   registerConfigCommands(pi, statusController);
+  registerPiNotifyShortcut(pi, statusController);
   registerExtensionStatusHooks(pi, statusController);
 }

@@ -14,6 +14,7 @@ import type {
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
+import { formatPiNotifyBeepStatus } from "./pi-notify.js";
 
 /**
  * @brief Enumerates the foreground colors consumed by pi-usereq status rendering.
@@ -424,17 +425,17 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders docs, tests, src, tools, context, elapsed, and last fields
- * in the canonical order with dim bullet separators and threshold-specific
- * context-bar overlays. Runtime is O(s) in configured source-path count. No
- * external state is mutated.
+ * @details Renders docs, tests, src, tools, context, elapsed, last, beep, and
+ * sound fields in the canonical order with dim bullet separators and
+ * threshold-specific context-bar overlays. Runtime is O(s) in configured
+ * source-path count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] activeTools {readonly string[]} Active runtime tool names.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136
  */
 function buildPiUsereqStatusText(
   config: UseReqConfig,
@@ -450,6 +451,8 @@ function buildPiUsereqStatusText(
   const lastText = state.lastRunDurationMs === undefined
     ? "N/A"
     : formatStatusDuration(state.lastRunDurationMs);
+  const beepText = formatPiNotifyBeepStatus(config);
+  const soundText = config["notify-sound"];
   return [
     formatStatusField(theme, "docs", config["docs-dir"]),
     formatStatusField(theme, "tests", config["tests-dir"]),
@@ -462,6 +465,8 @@ function buildPiUsereqStatusText(
     ),
     formatStatusField(theme, "elapsed", elapsedText),
     formatStatusField(theme, "last", lastText),
+    formatStatusField(theme, "beep", beepText),
+    formatStatusField(theme, "sound", soundText),
   ].join(theme.separator);
 }
 
@@ -536,9 +541,9 @@ export function createPiUsereqStatusController(
 /**
  * @brief Stores the effective project configuration used by status rendering.
  * @details Replaces the controller's cached configuration so later status
- * renders reuse the latest docs, tests, and source-path values without reading
- * from disk on every event. Runtime is O(1). Side effect: mutates
- * `controller.config`.
+ * renders reuse the latest docs, tests, source-path, and pi-notify values
+ * without reading from disk on every event. Runtime is O(1). Side effect:
+ * mutates `controller.config`.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {void} No return value.
@@ -559,7 +564,7 @@ export function setPiUsereqStatusConfig(
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,

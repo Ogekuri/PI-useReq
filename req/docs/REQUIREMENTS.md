@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.25"
+version: "0.0.26"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -121,7 +121,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
-- **REQ-120**: MUST render single-line status fields in this order: `docs`, `tests`, `src`, `tools`, `context`, `elapsed`, `last`.
+- **REQ-120**: MUST render single-line status fields in this order: `docs`, `tests`, `src`, `tools`, `context`, `elapsed`, `last`, `beep`, `sound`.
 - **REQ-121**: MUST render `context` immediately after `tools` with separator ` • ` and a 5-cell bar using `▓` for filled cells.
 - **REQ-122**: MUST compute filled `context` cells by ceiling `usagePercent * 5 / 100`, except 0 percent MUST produce 0 filled cells.
 - **REQ-123**: MUST render `elapsed` immediately after `context`, showing `idle` when no prompt is running and `M:SS` for the active prompt duration.
@@ -130,6 +130,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-126**: MUST render `context` bar cells as yellow `▓` characters on a violet background consistent with the field-label color.
 - **REQ-127**: MUST overlay the literal `claer` in yellow on the `context` bar while preserving the empty bar background when normalized context usage is unavailable or equals 0 percent.
 - **REQ-128**: MUST overlay the literal `full!` in bright red on the `context` bar while preserving the filled yellow bar background when normalized context usage exceeds 90 percent.
+- **REQ-129**: MUST persist independent terminal-beep flags for successful prompt completion, escape-triggered prompt abortion, and error-terminated prompt completion, defaulting each flag to disabled.
+- **REQ-130**: MUST dispatch enabled terminal-beep events through `notifyWindows`, `notifyOSC99`, `notifyOSC9`, or `notifyOSC777` when the matching prompt lifecycle outcome occurs.
+- **REQ-131**: MUST persist a successful-prompt external sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
+- **REQ-132**: MUST execute the configured successful-prompt external sound command only when the prompt ends without abort or error and the sound level is not `none`.
+- **REQ-133**: MUST persist configurable shell-command strings for sound levels `low`, `mid`, and `high`, and MUST substitute `$install-path` with the runtime extension installation path before execution.
+- **REQ-134**: MUST persist a configurable sound-level toggle shortcut, defaulting to `ctrl+s`, and MUST cycle sound levels in the order `none`, `low`, `mid`, `high`, `none`.
+- **REQ-135**: MUST render `beep` immediately after `last`, showing `none` or the comma-ordered enabled event tokens `end`, `esc`, and `err`.
+- **REQ-136**: MUST render `sound` immediately after `beep`, showing one of `none`, `low`, `mid`, or `high`.
+- **REQ-137**: MUST make the configuration UI expose controls for terminal-beep flags, successful-prompt sound level, sound toggle shortcut, and per-level sound commands.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
@@ -214,7 +223,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
 - **TST-031**: MUST verify the status bar renders explicit docs/tests/src paths, active-tool count, and violet/yellow field-value color separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
-- **TST-033**: MUST verify the status bar renders ordered `tools`, `context`, `elapsed`, and `last` fields plus the ceiling-based 5-cell context bar.
+- **TST-033**: MUST verify the status bar renders ordered `tools`, `context`, `elapsed`, `last`, `beep`, and `sound` fields plus the ceiling-based 5-cell context bar.
+- **TST-037**: MUST verify the configuration menu persists terminal-beep flags, sound level, sound toggle shortcut, and per-level sound commands.
+- **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and prompt timing preserves `last` across normal completion but not escape-triggered cancellation.
 - **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `claer` in yellow on the preserved empty context-bar background.
 - **TST-036**: MUST verify context usage above 90 percent renders the literal `full!` in bright red on the preserved filled context-bar background.
