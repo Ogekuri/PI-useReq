@@ -432,11 +432,15 @@ const RESET_CONTEXT_CONSUMED_PROMPT_ENTRY_TYPE = "pi-usereq-reset-context-prompt
 
 /**
  * @brief Resolves the latest queued reset-context prompt that has not yet been consumed.
- * @details Scans the active branch in chronological order, tracks the latest pending prompt custom entry and the latest consumed pending-entry identifier, and returns the pending payload only when it still requires delivery. Runtime is O(n) in branch entry count. No external state is mutated.
- * @param[in] sessionManager {{ getBranch: () => Array<unknown> }} Active session manager.
+ * @details Scans the active branch in chronological order when a session manager is available, tracks the latest pending prompt custom entry and the latest consumed pending-entry identifier, and returns the pending payload only when it still requires delivery. Runtime is O(n) in branch entry count. No external state is mutated.
+ * @param[in] sessionManager {{ getBranch: () => Array<unknown> } | undefined} Active session manager when the runtime exposes one.
  * @return {{ pendingEntryId: string; content: string } | undefined} Pending prompt descriptor or `undefined` when no undelivered prompt exists.
  */
-function getPendingResetContextPrompt(sessionManager: { getBranch: () => Array<unknown> }): { pendingEntryId: string; content: string } | undefined {
+function getPendingResetContextPrompt(sessionManager?: { getBranch: () => Array<unknown> }): { pendingEntryId: string; content: string } | undefined {
+  if (!sessionManager) {
+    return undefined;
+  }
+
   let pendingPrompt: { pendingEntryId: string; content: string } | undefined;
   let consumedPendingEntryId: string | undefined;
 
@@ -554,27 +558,25 @@ function formatPiUsereqStatusField(theme: StatusTheme, fieldName: string, value:
 }
 
 /**
- * @brief Builds the multi-line pi-usereq status-bar payload.
- * @details Renders configured docs, tests, and source paths on the first line, enabled tool names on the second line, and the `reset-context` state on the third line. Empty tool selections render as `none`. Runtime is O(s + t) in configured source-path and tool counts. No external state is mutated.
+ * @brief Builds the single-line pi-usereq status-bar payload.
+ * @details Renders configured docs, tests, and source paths plus compact `tools` and `context` fields in one separator-delimited line. `tools` emits the active-tool count and `context` maps `reset-context` to `reset` or `keep`. Runtime is O(s) in configured source-path count. No external state is mutated.
  * @param[in] theme {StatusTheme} Theme adapter providing foreground coloring.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @param[in] enabledTools {string[]} Normalized enabled tool names.
- * @return {string} Multi-line status-bar text.
+ * @param[in] activeTools {readonly string[]} Active tool names visible in the current runtime.
+ * @return {string} Single-line status-bar text.
  * @satisfies REQ-009, REQ-109, REQ-110, REQ-111, REQ-112
  */
-function formatPiUsereqStatus(theme: StatusTheme, config: UseReqConfig, enabledTools: string[]): string {
+function formatPiUsereqStatus(theme: StatusTheme, config: UseReqConfig, activeTools: readonly string[]): string {
   const separator = theme.fg("dim", " • ");
   const sourcePaths = config["src-dir"].join(",");
-  const toolsValue = enabledTools.length > 0 ? enabledTools.join(",") : "none";
-  const resetContextValue = config["reset-context"] ? "enabled" : "disabled";
-  const firstLine = [
+  const contextValue = config["reset-context"] ? "reset" : "keep";
+  return [
     formatPiUsereqStatusField(theme, "docs", config["docs-dir"]),
     formatPiUsereqStatusField(theme, "tests", config["tests-dir"]),
     formatPiUsereqStatusField(theme, "src", sourcePaths),
+    formatPiUsereqStatusField(theme, "tools", String(activeTools.length)),
+    formatPiUsereqStatusField(theme, "context", contextValue),
   ].join(separator);
-  const secondLine = formatPiUsereqStatusField(theme, "tools", toolsValue);
-  const thirdLine = formatPiUsereqStatusField(theme, "reset-context", resetContextValue);
-  return [firstLine, secondLine, thirdLine].join("\n");
 }
 
 /**
@@ -1608,7 +1610,7 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the multi-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
@@ -1619,8 +1621,7 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
   const projectBase = getProjectBase(ctx.cwd);
   const ensureSaved = () => saveProjectConfig(ctx.cwd, config);
   const refreshStatus = () => {
-    const enabledTools = getConfiguredEnabledPiUsereqTools(config);
-    ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, enabledTools));
+    ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, pi.getActiveTools()));
   };
 
   while (true) {
@@ -1715,7 +1716,7 @@ function registerConfigCommands(pi: ExtensionAPI): void {
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the multi-line status bar. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
+ * @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the single-line status bar. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112
@@ -1729,8 +1730,7 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
     ensureBundledResourcesAccessible();
     const config = loadProjectConfig(ctx.cwd);
     applyConfiguredPiUsereqTools(pi, config);
-    const enabledTools = getConfiguredEnabledPiUsereqTools(config);
-    ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, enabledTools));
+    ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, pi.getActiveTools()));
     const pendingPrompt = getPendingResetContextPrompt(ctx.sessionManager);
     if (!pendingPrompt) {
       return;

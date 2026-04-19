@@ -1316,10 +1316,12 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     [
-      `${formatFakeThemeForeground("accent", "docs:")}${formatFakeThemeForeground("warning", DEFAULT_DOCS_DIR)}${formatFakeThemeForeground("dim", " • ")}${formatFakeThemeForeground("accent", "tests:")}${formatFakeThemeForeground("warning", "tests")}${formatFakeThemeForeground("dim", " • ")}${formatFakeThemeForeground("accent", "src:")}${formatFakeThemeForeground("warning", "src,foobar")}`,
-      `${formatFakeThemeForeground("accent", "tools:")}${formatFakeThemeForeground("warning", "git-path,static-check")}`,
-      `${formatFakeThemeForeground("accent", "reset-context:")}${formatFakeThemeForeground("warning", "disabled")}`,
-    ].join("\n"),
+      `${formatFakeThemeForeground("accent", "docs:")}${formatFakeThemeForeground("warning", DEFAULT_DOCS_DIR)}`,
+      `${formatFakeThemeForeground("accent", "tests:")}${formatFakeThemeForeground("warning", "tests")}`,
+      `${formatFakeThemeForeground("accent", "src:")}${formatFakeThemeForeground("warning", "src,foobar")}`,
+      `${formatFakeThemeForeground("accent", "tools:")}${formatFakeThemeForeground("warning", "2")}`,
+      `${formatFakeThemeForeground("accent", "context:")}${formatFakeThemeForeground("warning", "keep")}`,
+    ].join(formatFakeThemeForeground("dim", " • ")),
   );
 });
 

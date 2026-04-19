@@ -345,7 +345,7 @@ export class RecordingCommandContext {
 
   /**
    * @brief Simulates `ctx.newSession(...)` for offline command replay.
-   * @details Executes the optional setup callback against a minimal session-manager stub that records appended user messages and accepts custom-entry writes, thereby preserving `/new`-equivalent prompt delivery evidence without switching real sessions. Custom entries are acknowledged but not serialized because command replay does not simulate the replacement session branch. Runtime is O(n) in setup work. Side effects are limited to in-memory user-message recording.
+   * @details Executes the optional setup callback against a minimal session-manager stub that records appended user messages and recognizes `pi-usereq-reset-context-prompt` custom entries as deferred prompt payloads, thereby preserving `/new`-equivalent prompt delivery evidence without switching real sessions. Other custom entries are acknowledged without additional serialization. Runtime is O(n) in setup work. Side effects are limited to in-memory user-message recording.
    * @param[in] options {{ parentSession?: string; setup?: (sessionManager: { appendMessage: (message: unknown) => string; appendCustomEntry: (customType: string, data?: unknown) => string }) => Promise<void> } | undefined} Optional new-session options.
    * @return {Promise<{ cancelled: boolean }>} Deterministic non-cancelled result.
    */
@@ -362,7 +362,13 @@ export class RecordingCommandContext {
           }
           return "recorded-entry";
         },
-        appendCustomEntry: (_customType: string, _data?: unknown): string => {
+        appendCustomEntry: (customType: string, data?: unknown): string => {
+          if (
+            customType === "pi-usereq-reset-context-prompt"
+            && typeof (data as { content?: unknown } | undefined)?.content === "string"
+          ) {
+            this.recordSessionUserMessage((data as { content: string }).content);
+          }
           return "recorded-entry";
         },
       });
