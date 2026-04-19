@@ -102,9 +102,18 @@ TODO: update/rewrite the project tree
 
 TODO: complete installation istructions
 
+Install:
 ```bash
-
+pi install npm:pi-usereq
 ```
+
+Or via git:
+```bash
+pi install git:github.com/Ogekuri/PI-useReq
+```
+
+Reload Pi.
+
 
 ### Uninstall
 
