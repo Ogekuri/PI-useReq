@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/Ogekuri/PI-useReq/compare/v0.2.0..v0.3.0) - 2026-04-19
+### 🐛  Bug Fixes
+- Fix .github/workflows/release-npm.yml file.
+
+### 🚜  Changes
+- BREAKING CHANGE: align extension theme tokens with cli themes [useReq] *(settings-menu)*
+  - update requirements for CLI-theme token semantics
+  - switch status overflow overlay from legacy redBright to error
+  - reuse shared settings-list theming with offline fallback
+  - extend menu and status tests for theme-token contracts
+
 ## [0.2.0](https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0) - 2026-04-19
 ### ⛰️  Features
 - Add release-npm.yml file.
@@ -193,6 +204,8 @@
 
 - \[0.1.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 - \[0.2.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.2.0
+- \[0.3.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.3.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
+[0.3.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.2.0..v0.3.0
