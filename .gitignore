@@ -44,6 +44,9 @@
 !req/
 !req/docs/
 !req/docs/**/*.md
+!pi-usereq/
+!pi-usereq/docs/
+!pi-usereq/docs/**/*.md
 !images/
 !images/**/*
 
