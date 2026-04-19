@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.24"
+version: "0.0.25"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -46,6 +46,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-004**: MUST provide git repository validation plus standardized worktree naming, creation, and deletion utilities using configured project and git paths.
 - **PRJ-005**: MUST install bundled prompts, documentation templates, and guidelines under the extension installation path and expose them through shared runtime path context.
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
+- **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain extension-owned context telemetry and status-bar session timing.
 
 ### 2.2 Project Constraints
 - **CTN-001**: MUST persist project configuration at `<base-path>/.pi-usereq/config.json` with default `docs-dir=pi-usereq/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
@@ -64,7 +65,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ### 3.1 Design and Implementation
 - **DES-001**: MUST implement the standalone executable in `src/cli.ts` as flag parsing plus dispatch to `tool-runner.ts` or `runStaticCheck`.
-- **DES-002**: MUST implement extension activation in `src/index.ts` by registering prompt commands, agent tools, configuration commands, and a `session_start` hook.
+- **DES-002**: MUST implement extension activation in `src/index.ts` by registering prompt commands, agent tools, configuration commands, and shared wrappers for supported pi CLI lifecycle hooks.
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
 - **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
@@ -72,6 +73,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
 - **DES-008**: MUST format `files-references`, `references`, `files-compress`, and `compress` agent-tool outputs as deterministic agent-oriented JSON with dedicated metadata fields for source structure, symbols, and Doxygen tags.
 - **DES-009**: MUST treat `docs/pi.dev/agent-document-manifest.json` as the authoritative API contract for new or modified software that interfaces with the pi.dev CLI.
+- **DES-010**: MUST centralize event-driven context snapshots, run-timing state, and status-bar rendering through shared extension-status helpers.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -112,6 +114,20 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-110**: MUST make the single-line status bar render `tools` as the count of active tools.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
 - **REQ-112**: MUST render status-bar field names in violet and field values in yellow.
+- **REQ-113**: MUST register shared event wrappers for `resources_discover`, `session_start`, `session_before_switch`, `session_before_fork`, `session_before_compact`, `session_compact`, and `session_shutdown`.
+- **REQ-114**: MUST register shared event wrappers for `session_before_tree`, `session_tree`, `context`, `before_provider_request`, `before_agent_start`, `agent_start`, and `agent_end`.
+- **REQ-115**: MUST register shared event wrappers for `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, and `tool_execution_update`.
+- **REQ-116**: MUST register shared event wrappers for `tool_execution_end`, `model_select`, `tool_call`, `tool_result`, `user_bash`, and `input`.
+- **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
+- **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
+- **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
+- **REQ-120**: MUST render single-line status fields in this order: `docs`, `tests`, `src`, `tools`, `context`, `elapsed`, `last`.
+- **REQ-121**: MUST render `context` immediately after `tools` with separator ` • ` and a 5-cell bar using `▓` for filled cells.
+- **REQ-122**: MUST compute filled `context` cells by ceiling `usagePercent * 5 / 100`, except 0 percent MUST produce 0 filled cells.
+- **REQ-123**: MUST render `elapsed` immediately after `context`, showing `idle` when no prompt is running and `M:SS` for the active prompt duration.
+- **REQ-124**: MUST render `last` immediately after `elapsed`, showing `N/A` before any normally completed prompt run and otherwise the final `elapsed` value of the latest normally completed run.
+- **REQ-125**: MUST keep `elapsed` and `last` minutes unbounded above 59, zero-pad seconds to two digits, and preserve `last` when escape-triggered cancellation ends the active run.
+- **REQ-126**: MUST render `context` bar cells as yellow `▓` characters on a violet background consistent with the field-label color.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
@@ -195,6 +211,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds static-check entries, and omits prompt-delivery mode controls.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
 - **TST-031**: MUST verify the status bar renders explicit docs/tests/src paths, active-tool count, and violet/yellow field-value color separation.
+- **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
+- **TST-033**: MUST verify the status bar renders ordered `tools`, `context`, `elapsed`, and `last` fields plus the ceiling-based 5-cell context bar.
+- **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and prompt timing preserves `last` across normal completion but not escape-triggered cancellation.
 - **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
 - **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.

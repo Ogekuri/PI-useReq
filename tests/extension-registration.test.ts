@@ -72,12 +72,26 @@ interface FakeSessionManager {
 type FakePiOptions = { sessionManager?: FakeSessionManager };
 
 /**
+ * @brief Describes one fake context-usage snapshot returned by test doubles.
+ * @details Mirrors the subset of pi `ContextUsage` fields consumed by the
+ * extension status controller so tests can script deterministic token and
+ * percentage updates across lifecycle hooks. The alias is compile-time only and
+ * introduces no runtime side effects.
+ */
+type FakeContextUsage = {
+  tokens: number | null;
+  contextWindow: number;
+  percent: number | null;
+};
+
+/**
  * @brief Describes optional fake command-context capabilities used by session-aware tests.
- * @details Allows tests to inject a shared fake session manager and a callback that simulates runtime replacement after `ctx.newSession(...)` completes. The alias is compile-time only and introduces no runtime side effects.
+ * @details Allows tests to inject a shared fake session manager, a callback that simulates runtime replacement after `ctx.newSession(...)` completes, and a scripted `getContextUsage()` provider for lifecycle-status assertions. The alias is compile-time only and introduces no runtime side effects.
  */
 type FakeCtxOptions = {
   sessionManager?: FakeSessionManager;
   onNewSession?: (options?: { parentSession?: string }) => Promise<{ cancelled: boolean } | void> | { cancelled: boolean } | void;
+  getContextUsage?: () => FakeContextUsage | undefined;
 };
 
 /**
@@ -229,16 +243,66 @@ function formatFakeThemeForeground(color: string, text: string): string {
 }
 
 /**
+ * @brief Encodes one fake background fragment derived from a foreground color.
+ * @details Wraps the provided text in stable XML-like markers so tests can
+ * assert the context-bar background contract without terminal escape sequences.
+ * Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] color {string} Foreground color reused as synthetic background.
+ * @param[in] text {string} Raw text payload.
+ * @return {string} Encoded background fragment.
+ */
+function formatFakeThemeBackgroundFromForeground(color: string, text: string): string {
+  return `<bg-from-fg-${color}>${text}</bg-from-fg-${color}>`;
+}
+
+/**
+ * @brief Builds the expected fake pi-usereq status-bar string for assertions.
+ * @details Reconstructs the field order, separators, context bar, and timing
+ * fields emitted by the extension using deterministic fake theme markers.
+ * Runtime is O(s) in source-path count. No external state is mutated.
+ * @param[in] options {{ docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; elapsed: string; last: string }} Expected status facts.
+ * @return {string} Encoded status-bar string.
+ */
+function buildExpectedFakeStatusText(options: {
+  docsDir: string;
+  testsDir: string;
+  srcDir: string[];
+  toolCount: number;
+  contextFilledCells: number;
+  elapsed: string;
+  last: string;
+}): string {
+  const buildField = (fieldName: string, value: string): string =>
+    `${formatFakeThemeForeground("accent", `${fieldName}:`)}${formatFakeThemeForeground("warning", value)}`;
+  const contextBar = Array.from({ length: 5 }, (_value, index) =>
+    formatFakeThemeBackgroundFromForeground(
+      "accent",
+      formatFakeThemeForeground(index < options.contextFilledCells ? "warning" : "dim", "▓"),
+    ),
+  ).join("");
+  return [
+    buildField("docs", options.docsDir),
+    buildField("tests", options.testsDir),
+    buildField("src", options.srcDir.join(",")),
+    buildField("tools", String(options.toolCount)),
+    `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
+    buildField("elapsed", options.elapsed),
+    buildField("last", options.last),
+  ].join(formatFakeThemeForeground("dim", " • "));
+}
+
+/**
  * @brief Creates a fake extension command context with scripted UI interactions.
- * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` injection lets tests emulate runtime replacement after setup logic mutates the fake session manager. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
+ * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, `getContextUsage`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` injection lets tests emulate runtime replacement after setup logic mutates the fake session manager. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
  * @param[in] cwd {string} Working directory exposed to command handlers.
  * @param[in] plan {FakeCtxPlan} Scripted select and input responses.
- * @param[in] options {FakeCtxOptions} Optional fake session-manager and runtime-replacement integrations.
+ * @param[in] options {FakeCtxOptions} Optional fake session-manager, context-usage, and runtime-replacement integrations.
  * @return {any} Fake command context compatible with the tested handlers.
  */
 function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options: FakeCtxOptions = {}) {
   const selects = [...plan.selects];
   const inputs = [...(plan.inputs ?? [])];
+  const getContextUsage = options.getContextUsage ?? (() => undefined);
   const sessionManager = options.sessionManager ?? createFakeSessionManager();
   const state = {
     editorText: "",
@@ -287,10 +351,16 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
       }
       return { cancelled: false };
     },
+    getContextUsage() {
+      return getContextUsage();
+    },
     ui: {
       theme: {
         fg(color: string, text: string) {
           return formatFakeThemeForeground(color, text);
+        },
+        bgFromFg(color: string, text: string) {
+          return formatFakeThemeBackgroundFromForeground(color, text);
         },
       },
       async select(title: string, items: string[]) {
@@ -1253,13 +1323,191 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   assert.deepEqual([...activeTools].sort(), ["git-path", "static-check"]);
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
-    [
-      `${formatFakeThemeForeground("accent", "docs:")}${formatFakeThemeForeground("warning", DEFAULT_DOCS_DIR)}`,
-      `${formatFakeThemeForeground("accent", "tests:")}${formatFakeThemeForeground("warning", "tests")}`,
-      `${formatFakeThemeForeground("accent", "src:")}${formatFakeThemeForeground("warning", "src,foobar")}`,
-      `${formatFakeThemeForeground("accent", "tools:")}${formatFakeThemeForeground("warning", "2")}`,
-    ].join(formatFakeThemeForeground("dim", " • ")),
+    buildExpectedFakeStatusText({
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src", "foobar"],
+      toolCount: 2,
+      contextFilledCells: 0,
+      elapsed: "idle",
+      last: "N/A",
+    }),
   );
+});
+
+test("extension registers wrappers for all pi-usereq status hooks", () => {
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  assert.deepEqual(
+    [...pi.eventHandlers.keys()].sort(),
+    [
+      "agent_end",
+      "agent_start",
+      "before_agent_start",
+      "before_provider_request",
+      "context",
+      "input",
+      "message_end",
+      "message_start",
+      "message_update",
+      "model_select",
+      "resources_discover",
+      "session_before_compact",
+      "session_before_fork",
+      "session_before_switch",
+      "session_before_tree",
+      "session_compact",
+      "session_shutdown",
+      "session_start",
+      "session_tree",
+      "tool_call",
+      "tool_execution_end",
+      "tool_execution_start",
+      "tool_execution_update",
+      "tool_result",
+      "turn_end",
+      "turn_start",
+      "user_bash",
+    ],
+  );
+});
+
+test("context hook refreshes context usage and rounds progress cells upward", async () => {
+  const cwd = createTempDir("pi-usereq-context-status-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const contextUsage = { tokens: 0, contextWindow: 1000, percent: 0 };
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    getContextUsage: () => ({ ...contextUsage }),
+  });
+
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+  contextUsage.tokens = 191;
+  contextUsage.percent = 19.1;
+  await pi.emit("context", { messages: [] }, ctx);
+
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+      contextFilledCells: 1,
+      elapsed: "idle",
+      last: "N/A",
+    }),
+  );
+});
+
+test("agent timing status updates elapsed and last while preserving aborted last values", async () => {
+  const cwd = createTempDir("pi-usereq-timing-status-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+
+  const originalDateNow = Date.now;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let nowMs = 0;
+  const intervalCallbacks: Array<() => void> = [];
+  const clearedHandles: Array<number> = [];
+  Date.now = () => nowMs;
+  globalThis.setInterval = ((callback: TimerHandler) => {
+    intervalCallbacks.push(callback as () => void);
+    return intervalCallbacks.length as ReturnType<typeof setInterval>;
+  }) as typeof setInterval;
+  globalThis.clearInterval = ((handle: ReturnType<typeof setInterval>) => {
+    clearedHandles.push(Number(handle));
+  }) as typeof clearInterval;
+
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(cwd);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+        contextFilledCells: 0,
+        elapsed: "0:00",
+        last: "N/A",
+      }),
+    );
+
+    nowMs = 61_000;
+    intervalCallbacks[0]!();
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+        contextFilledCells: 0,
+        elapsed: "1:01",
+        last: "N/A",
+      }),
+    );
+
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+        contextFilledCells: 0,
+        elapsed: "idle",
+        last: "1:01",
+      }),
+    );
+
+    nowMs = 120_000;
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 125_000;
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "aborted",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+        contextFilledCells: 0,
+        elapsed: "idle",
+        last: "1:01",
+      }),
+    );
+    assert.ok(clearedHandles.length >= 2);
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+  }
 });
 
 test("session_start enables default custom tools and default embedded tools only", async () => {

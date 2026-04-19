@@ -13,6 +13,7 @@ import {
 } from "../scripts/lib/extension-debug-harness.js";
 import { buildParityReport, type SdkContractSnapshot } from "../scripts/lib/sdk-smoke.js";
 import { getProjectConfigPath } from "../src/core/config.js";
+import { PI_USEREQ_STATUS_HOOK_NAMES } from "../src/core/extension-status.js";
 import { initFixtureRepo } from "./helpers.js";
 
 /**
@@ -140,7 +141,7 @@ test("inspectExtension records commands, tools, events, and manual examples", as
 
     assert.ok(report.commands.some((command) => command.name === "req-analyze"));
     assert.ok(report.tools.some((tool) => tool.name === "git-path"));
-    assert.deepEqual(report.eventHandlers, ["session_start"]);
+    assert.deepEqual(report.eventHandlers, [...PI_USEREQ_STATUS_HOOK_NAMES]);
 
     for (const command of report.commands.filter((entry) => entry.name.startsWith("req-"))) {
       assert.match(report.manual, new RegExp(`prompt /${command.name}`));
@@ -247,8 +248,14 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.equal(report.effectiveProcessCwd, projectBase);
     assert.match(
       status,
-      /<accent>docs:<\/accent><warning>pi-usereq\/docs<\/warning><dim> • <\/dim><accent>tests:<\/accent><warning>tests<\/warning><dim> • <\/dim><accent>src:<\/accent><warning>src<\/warning><dim> • <\/dim><accent>tools:<\/accent><warning>2<\/warning><dim> • <\/dim><accent>context:<\/accent><warning>reset<\/warning>/,
+      /<accent>docs:<\/accent><warning>pi-usereq\/docs<\/warning><dim> • <\/dim><accent>tests:<\/accent><warning>tests<\/warning><dim> • <\/dim><accent>src:<\/accent><warning>src<\/warning><dim> • <\/dim><accent>tools:<\/accent><warning>2<\/warning>/,
     );
+    assert.match(
+      status,
+      /<accent>context:<\/accent><bg-from-fg-accent><dim>▓<\/dim><\/bg-from-fg-accent>/,
+    );
+    assert.match(status, /<accent>elapsed:<\/accent><warning>idle<\/warning>/);
+    assert.match(status, /<accent>last:<\/accent><warning>N\/A<\/warning>/);
     assert.equal(report.ui.notifications.length, 0);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });

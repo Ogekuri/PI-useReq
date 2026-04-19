@@ -270,6 +270,19 @@ function formatRecordedThemeForeground(color: string, text: string): string {
 }
 
 /**
+ * @brief Encodes one fake background fragment derived from a foreground color.
+ * @details Wraps the provided text in stable XML-like markers so offline status
+ * snapshots can preserve context-bar background intent without terminal escape
+ * sequences. Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] color {string} Foreground color reused as synthetic background.
+ * @param[in] text {string} Raw text payload.
+ * @return {string} Encoded background fragment.
+ */
+function formatRecordedThemeBackgroundFromForeground(color: string, text: string): string {
+  return `<bg-from-fg-${color}>${text}</bg-from-fg-${color}>`;
+}
+
+/**
  * @brief Records UI activity and session-control side effects for one offline command context.
  * @details Exposes the subset of `ctx.ui` plus command-only session APIs consumed by the extension, dequeues scripted responses for interactive handlers, encodes theme-color output deterministically, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI or session-control operation plus delegated setup cost. Side effects are limited to in-memory state mutation.
  */
@@ -287,6 +300,7 @@ export class RecordingCommandContext {
   public readonly ui: {
     theme: {
       fg: (color: string, text: string) => string;
+      bgFromFg?: (color: string, text: string) => string;
     };
     select: (title: string, items: string[]) => Promise<string | undefined>;
     input: (title: string, placeholder?: string) => Promise<string | undefined>;
@@ -325,6 +339,7 @@ export class RecordingCommandContext {
     this.ui = {
       theme: {
         fg: (color: string, text: string) => formatRecordedThemeForeground(color, text),
+        bgFromFg: (color: string, text: string) => formatRecordedThemeBackgroundFromForeground(color, text),
       },
       select: async (title: string, items: string[]) => this.recordSelect(title, items),
       input: async (title: string, placeholder?: string) => this.recordInput(title, placeholder),
@@ -341,6 +356,17 @@ export class RecordingCommandContext {
    */
   public async waitForIdle(): Promise<void> {
     return Promise.resolve();
+  }
+
+  /**
+   * @brief Simulates `ctx.getContextUsage()` for offline replay.
+   * @details Offline harness replays do not execute a real model turn, so no
+   * context-usage telemetry is available and the recorder deterministically
+   * returns `undefined`. Runtime is O(1). No external state is mutated.
+   * @return {{ tokens: number | null; contextWindow: number; percent: number | null } | undefined} Always `undefined` in offline replay.
+   */
+  public getContextUsage(): { tokens: number | null; contextWindow: number; percent: number | null } | undefined {
+    return undefined;
   }
 
   /**
