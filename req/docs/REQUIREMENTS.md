@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.28"
+version: "0.0.29"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -75,7 +75,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-008**: MUST format `files-references`, `references`, `files-compress`, and `compress` agent-tool outputs as deterministic agent-oriented JSON with dedicated metadata fields for source structure, symbols, and Doxygen tags.
 - **DES-009**: MUST treat `docs/pi.dev/agent-document-manifest.json` as the authoritative API contract for new or modified software that interfaces with the pi.dev CLI.
 - **DES-010**: MUST centralize event-driven context snapshots, run-timing state, and status-bar rendering through shared extension-status helpers.
-- **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a gated GitHub Actions pipeline that validates release tags, publishes to npm, and creates the matching GitHub Release.
+- **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates `build-release`, preserving changelog-driven GitHub Release creation while adding npm publication.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -215,10 +215,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-041**: MUST canonicalize environment-dependent path and timestamp segments in archived and observed CLI results with stable placeholder tokens before exact comparison.
 - **REQ-042**: MUST archive explicit-file scenarios for `files-tokens`, `files-references`, `files-compress`, `files-find`, and `test-static-check` across every file under `tests/fixtures/`.
 - **REQ-043**: MUST archive repository scenarios for `references`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, `static-check`, `git-check`, `git-wt-*`, `git-path`, and `get-base-path`.
-- **REQ-138**: MUST make `.github/workflows/release-npm.yml` trigger release automation only for pushed tags matching canonical `v<major>.<minor>.<patch>` syntax.
-- **REQ-139**: MUST skip npm publication and GitHub release creation unless the tagged commit is contained in `origin/master`.
-- **REQ-140**: MUST configure Node.js plus npm registry authentication, install dependencies with `npm ci`, remove manifest `private`, and publish with provenance using `secrets.NPM_TOKEN`.
-- **REQ-141**: MUST create a non-draft non-prerelease GitHub Release for the published tag using generated changelog content.
+- **REQ-138**: MUST make `.github/workflows/release-npm.yml` trigger release automation from pushed tags matched by the existing workflow filter `v[0-9]+.[0-9]+.[0-9]+`.
+- **REQ-139**: MUST skip downstream release work unless `check-branch` confirms the tagged commit is contained in `origin/master`.
+- **REQ-140**: MUST configure Node.js plus npm registry authentication, run `npm ci`, remove manifest `private`, and publish with provenance and public access using `secrets.NPM_TOKEN`.
+- **REQ-141**: MUST preserve the existing changelog-builder step and use its output as the non-draft non-prerelease GitHub Release body.
+- **REQ-155**: MUST keep `package.json` `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **REQ-142**: MUST default `PI_NOTIFY_SOUND_LOW_CMD` to `paplay --volume=21845 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
 - **REQ-143**: MUST default `PI_NOTIFY_SOUND_MID_CMD` to `paplay --volume=43690 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
 - **REQ-144**: MUST default `PI_NOTIFY_SOUND_HIGH_CMD` to `paplay --volume=65535 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
@@ -272,7 +273,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-027**: MUST verify harness inspection surfaces agent-oriented `files-compress` and `compress` tool descriptions with parameters, line-number behavior, output schema, specialization triggers, and failure conditions.
 - **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON request, result, status, execution, and derived runtime path facts through dedicated fields.
 - **TST-029**: MUST verify harness inspection surfaces machine-oriented descriptions for path, static-check, git, docs, and worktree tools, including parameters, output schema, specialization triggers, and failure conditions.
-- **TST-039**: MUST verify `.github/workflows/release-npm.yml` gates semver-tag releases on `origin/master`, runs `npm ci`, publishes with provenance via `secrets.NPM_TOKEN`, and creates the GitHub Release from generated changelog text.
+- **TST-039**: MUST verify `.github/workflows/release-npm.yml` keeps the existing tag filter, gates downstream release work on `origin/master`, runs npm publication, and creates the GitHub Release from generated changelog text.
+- **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-040**: MUST verify `.pi-usereq/config.json` omits `base-path` and `git-path`, while runtime path tools and status rendering still derive both values correctly.
 - **TST-041**: MUST verify the `pi-usereq` menu exposes `show-config` between `Reset defaults` and `Save and close`, and omits overview rows plus notification reference-only actions.
 
