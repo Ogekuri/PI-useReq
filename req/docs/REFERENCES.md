@@ -1658,7 +1658,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 
 ---
 
-# extension-status.ts | TypeScript | 655L | 30 symbols | 4 imports | 30 comments
+# extension-status.ts | TypeScript | 660L | 30 symbols | 4 imports | 30 comments
 > Path: `src/core/extension-status.ts`
 - @brief Tracks pi-usereq extension status state and renders status-bar telemetry.
 - @details Centralizes hook interception, context-usage snapshots, run timing,
@@ -1677,48 +1677,48 @@ import { formatAbsoluteGitPath, formatBasePathRelativeToGitPath, resolveRuntimeG
 
 ## Definitions
 
-- type `type StatusForegroundColor = "accent" | "warning" | "dim" | "redBright";` (L26)
-- @brief Enumerates the foreground colors consumed by pi-usereq status rendering.
-- @details Restricts the status formatter to the semantic field colors plus the
-bright-red overflow overlay token used by the context bar. Compile-time only
-and introduces no runtime cost.
-### iface `interface RawStatusTheme` (L34-38)
+- type `type StatusForegroundColor = Extract<` (L27)
+- @brief Enumerates the CLI-supported theme tokens consumed by status rendering.
+- @details Restricts the status formatter to documented pi theme tokens so the
+status bar remains compatible with the active CLI theme schema. Compile-time
+only and introduces no runtime cost.
+### iface `interface RawStatusTheme` (L38-42)
 - @brief Describes the raw theme capabilities required for status rendering.
 - @details Accepts the `ctx.ui.theme` foreground renderer plus optional helpers
 that can convert a foreground color into a background-styled fragment for the
 context-usage bar. Compile-time only and introduces no runtime cost.
 
-### iface `interface StatusThemeAdapter` (L46-54)
+### iface `interface StatusThemeAdapter` (L50-58)
 - @brief Describes the normalized theme adapter used by status formatters.
 - @details Exposes deterministic label, value, foreground, background, and
 context-cell renderers so status text generation stays independent from the
 raw theme API. Compile-time only and introduces no runtime cost.
 
-### iface `interface ContextUsageOverlaySpec` (L62-66)
+### iface `interface ContextUsageOverlaySpec` (L66-70)
 - @brief Describes one fixed-width context-bar overlay.
 - @details Stores the literal text plus foreground and background color roles
 used when the context bar must render threshold-specific labels instead of
 block glyphs. Compile-time only and introduces no runtime cost.
 
-- type `export type PiUsereqStatusHookName = (typeof PI_USEREQ_STATUS_HOOK_NAMES)[number];` (L109)
+- type `export type PiUsereqStatusHookName = (typeof PI_USEREQ_STATUS_HOOK_NAMES)[number];` (L113)
 - @brief Represents one hook name handled by the pi-usereq status controller.
 - @details Narrows hook registration and event-update calls to the canonical
 intercepted-hook set. Compile-time only and introduces no runtime cost.
-### iface `export interface PiUsereqStatusState` (L118-122)
+### iface `export interface PiUsereqStatusState` (L122-126)
 - @brief Stores the mutable runtime facts displayed by the status bar.
 - @details Persists the latest context-usage snapshot, the active run start
 timestamp, and the most recent normally completed run duration. Runtime state
 is mutated in-place by controller helpers. Compile-time only and introduces
 no runtime cost.
 
-### iface `export interface PiUsereqStatusController` (L131-137)
+### iface `export interface PiUsereqStatusController` (L135-141)
 - @brief Stores the controller state required for event-driven status updates.
 - @details Keeps the mutable status snapshot, the current configuration, the
 latest extension context used for rendering, the active-tools provider, and
 the interval handle used for live elapsed-time refreshes. Compile-time only
 and introduces no runtime cost.
 
-### fn `function convertForegroundAnsiToBackgroundAnsi(` (L147-155)
+### fn `function convertForegroundAnsiToBackgroundAnsi(` (L151-159)
 - @brief Converts a foreground ANSI sequence into the equivalent background ANSI.
 - @details Supports the standard `38;` foreground prefix emitted by pi themes.
 Returns `undefined` when the input cannot be transformed deterministically.
@@ -1726,7 +1726,7 @@ Runtime is O(n) in ANSI sequence length. No external state is mutated.
 - @param[in] foregroundAnsi {string} Foreground ANSI sequence.
 - @return {string | undefined} Background ANSI sequence when derivable.
 
-### fn `function applyForegroundAsBackground(` (L168-185)
+### fn `function applyForegroundAsBackground(` (L172-189)
 - @brief Applies a foreground-derived background style to one text fragment.
 - @details Prefers a theme-provided `bgFromFg` encoder for deterministic test
 rendering and falls back to ANSI conversion when the runtime theme exposes
@@ -1737,7 +1737,7 @@ mutated.
 - @param[in] text {string} Already-colored foreground fragment.
 - @return {string} Background-decorated text fragment.
 
-### fn `function createStatusThemeAdapter(theme: RawStatusTheme): StatusThemeAdapter` (L196-216)
+### fn `function createStatusThemeAdapter(theme: RawStatusTheme): StatusThemeAdapter` (L200-220)
 - @brief Builds the normalized theme adapter used by pi-usereq status formatters.
 - @details Precomputes label, value, foreground, background, separator, and
 context-cell renderers so status formatting remains stable across real TUI
@@ -1746,11 +1746,11 @@ is mutated.
 - @param[in] theme {RawStatusTheme} Raw theme implementation from `ctx.ui.theme`.
 - @return {StatusThemeAdapter} Normalized status-theme adapter.
 
-### fn `const colorize = (color: StatusForegroundColor, text: string): string =>` (L197-215)
+### fn `const colorize = (color: StatusForegroundColor, text: string): string =>` (L201-219)
 
-### fn `const backgroundize = (color: StatusForegroundColor, text: string): string =>` (L199-215)
+### fn `const backgroundize = (color: StatusForegroundColor, text: string): string =>` (L203-219)
 
-### fn `function normalizeContextUsage(` (L226-243)
+### fn `function normalizeContextUsage(` (L230-247)
 - @brief Normalizes one raw context-usage snapshot.
 - @details Preserves the runtime token and context-window counts, derives a
 percentage when the runtime omits it, and clamps percentages into `[0, 100]`.
@@ -1758,7 +1758,7 @@ Runtime is O(1). No external state is mutated.
 - @param[in] contextUsage {ContextUsage | undefined} Raw runtime snapshot.
 - @return {ContextUsage | undefined} Normalized snapshot.
 
-### fn `function refreshContextUsage(` (L255-260)
+### fn `function refreshContextUsage(` (L259-264)
 - @brief Refreshes the stored context-usage snapshot from the active extension context.
 - @details Calls `ctx.getContextUsage()` on every intercepted event so the
 controller retains the newest context-usage facts available from the pi
@@ -1768,7 +1768,7 @@ runtime. Runtime is O(1). Side effect: mutates `state.contextUsage`.
 - @return {void} No return value.
 - @satisfies REQ-118, REQ-119
 
-### fn `function countFilledContextCells(` (L271-279)
+### fn `function countFilledContextCells(` (L275-283)
 - @brief Counts the filled cells rendered by the 5-cell context bar.
 - @details Uses ceiling semantics for positive percentages so any non-zero
 usage occupies at least one cell and zero usage occupies none. Runtime is
@@ -1777,17 +1777,17 @@ O(1). No external state is mutated.
 - @return {number} Filled-cell count in the inclusive range `[0, 5]`.
 - @satisfies REQ-122
 
-### fn `function resolveContextUsageOverlay(` (L291-310)
+### fn `function resolveContextUsageOverlay(` (L295-314)
 - @brief Resolves the threshold-specific context-bar overlay when required.
 - @details Returns the empty-state `CLEAR` overlay when normalized context
 usage is unavailable or non-positive and returns the high-water `FULL!`
-overlay when usage exceeds 90 percent. Runtime is O(1). No external state is
-mutated.
+overlay with the active theme `error` token when usage exceeds 90 percent.
+Runtime is O(1). No external state is mutated.
 - @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
 - @return {ContextUsageOverlaySpec | undefined} Overlay spec when a replacement label is required.
 - @satisfies REQ-127, REQ-128
 
-### fn `function formatContextUsageOverlay(` (L323-331)
+### fn `function formatContextUsageOverlay(` (L327-335)
 - @brief Formats one threshold-specific context-bar overlay.
 - @details Renders the fixed-width overlay text with the requested foreground
 color and reuses the selected bar color as the background so the bar width
@@ -1798,18 +1798,19 @@ width. No external state is mutated.
 - @return {string} Rendered overlay text.
 - @satisfies REQ-127, REQ-128
 
-### fn `function formatContextUsageBar(` (L344-356)
+### fn `function formatContextUsageBar(` (L349-361)
 - @brief Formats one 5-cell context-usage bar.
 - @details Renders threshold-specific overlays for empty and high-water states;
-otherwise renders filled cells in yellow on an accent-derived background and
-unfilled cells in dim color on the same background to preserve constant bar
-width. Runtime is O(1). No external state is mutated.
+otherwise renders filled cells with the theme `warning` token on an
+accent-derived background and unfilled cells in `dim` on the same background
+to preserve constant bar width. Runtime is O(1). No external state is
+mutated.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
 - @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
 - @return {string} Rendered 5-cell bar or overlay.
 - @satisfies REQ-121, REQ-122, REQ-126, REQ-127, REQ-128
 
-### fn `function formatStatusDuration(durationMs: number): string` (L367-372)
+### fn `function formatStatusDuration(durationMs: number): string` (L372-377)
 - @brief Formats one elapsed-duration value as `M:SS`.
 - @details Floors the input to whole seconds, keeps minutes unbounded above 59,
 and zero-pads seconds to two digits. Runtime is O(1). No external state is
@@ -1818,7 +1819,7 @@ mutated.
 - @return {string} Duration rendered as `M:SS`.
 - @satisfies REQ-125
 
-### fn `function formatStatusField(` (L383-389)
+### fn `function formatStatusField(` (L388-394)
 - @brief Formats one standard status-bar field.
 - @details Renders the field label in accent color and the value in warning
 color. Runtime is O(n) in combined text length. No external state is mutated.
@@ -1827,7 +1828,7 @@ color. Runtime is O(n) in combined text length. No external state is mutated.
 - @param[in] value {string} Unstyled field value.
 - @return {string} Rendered status-field fragment.
 
-### fn `function formatRenderedStatusField(` (L401-407)
+### fn `function formatRenderedStatusField(` (L406-412)
 - @brief Formats one pre-rendered status-bar field value.
 - @details Preserves the accent-colored field label while allowing callers to
 provide a custom styled value such as the context-usage bar. Runtime is O(n)
@@ -1837,7 +1838,7 @@ in combined text length. No external state is mutated.
 - @param[in] renderedValue {string} Pre-rendered field value.
 - @return {string} Rendered status-field fragment.
 
-### fn `function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean` (L418-425)
+### fn `function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean` (L423-430)
 - @brief Detects whether an agent run ended through abort semantics.
 - @details Treats any assistant message whose `stopReason` equals `aborted` as
 an escape-triggered termination that must not overwrite the `last` timer.
@@ -1846,7 +1847,7 @@ Runtime is O(n) in message count. No external state is mutated.
 - @return {boolean} `true` when the run ended in aborted state.
 - @satisfies REQ-125
 
-### fn `function buildPiUsereqStatusText(` (L439-476)
+### fn `function buildPiUsereqStatusText(` (L444-481)
 - @brief Builds the full single-line pi-usereq status-bar payload.
 - @details Renders git, base, docs, tests, src, tools, context, elapsed, last, beep, and sound fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(s) in configured source-path count plus runtime git probing. No external state is mutated.
 - @param[in] cwd {string} Runtime working directory used for git/base path derivation.
@@ -1856,9 +1857,9 @@ Runtime is O(n) in message count. No external state is mutated.
 - @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
 - @param[in] nowMs {number} Current wall-clock time in milliseconds.
 - @return {string} Single-line status-bar text.
-- @satisfies REQ-109, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-147, REQ-148
+- @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-147, REQ-148, REQ-156
 
-### fn `function stopStatusTicker(controller: PiUsereqStatusController): void` (L486-491)
+### fn `function stopStatusTicker(controller: PiUsereqStatusController): void` (L491-496)
 - @brief Stops the live elapsed-time ticker when it is active.
 - @details Clears the interval handle and resets the stored timer reference so
 subsequent runs can reinitialize live status refreshes deterministically.
@@ -1866,7 +1867,7 @@ Runtime is O(1). Side effect: mutates `controller.tickHandle`.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
 
-### fn `function syncPiUsereqStatusTicker(` (L503-519)
+### fn `function syncPiUsereqStatusTicker(` (L508-524)
 - @brief Synchronizes the live elapsed-time ticker with the current run state.
 - @details Starts a 1-second render ticker while a run is active and stops the
 ticker when the run returns to idle. Runtime is O(1). Side effects include
@@ -1876,7 +1877,7 @@ ticks.
 - @return {void} No return value.
 - @satisfies REQ-123
 
-### fn `export function createPiUsereqStatusController(` (L530-544)
+### fn `export function createPiUsereqStatusController(` (L535-549)
 - @brief Creates an empty pi-usereq status controller.
 - @details Initializes the mutable status snapshot, stores the active-tools
 provider used by render-time tool counting, and starts with no config, no
@@ -1885,7 +1886,7 @@ context, and no live ticker. Runtime is O(1). No external state is mutated.
 - @return {PiUsereqStatusController} New status controller.
 - @satisfies DES-010
 
-### fn `export function setPiUsereqStatusConfig(` (L556-561)
+### fn `export function setPiUsereqStatusConfig(` (L561-566)
 - @brief Stores the effective project configuration used by status rendering.
 - @details Replaces the controller's cached configuration so later status
 renders reuse the latest docs, tests, source-path, and pi-notify values
@@ -1895,7 +1896,7 @@ mutates `controller.config`.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
 
-### fn `export function renderPiUsereqStatus(` (L574-594)
+### fn `export function renderPiUsereqStatus(` (L579-599)
 - @brief Renders the current pi-usereq status bar into the active UI context.
 - @details Updates the controller's latest context pointer and writes the
 single-line status text only when configuration is available, including any
@@ -1906,7 +1907,7 @@ source-path count. Side effect: mutates `ctx.ui` status.
 - @return {void} No return value.
 - @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136
 
-### fn `export function updateExtensionStatus(` (L611-639)
+### fn `export function updateExtensionStatus(` (L616-644)
 - @brief Updates mutable status state for one intercepted lifecycle hook.
 - @details Refreshes stored context usage on every hook, starts run timing on
 `agent_start`, captures non-aborted run duration on `agent_end`, clears live
@@ -1921,7 +1922,7 @@ interval scheduling, and footer-status updates.
 - @return {void} No return value.
 - @satisfies REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125
 
-### fn `export function disposePiUsereqStatusController(` (L650-655)
+### fn `export function disposePiUsereqStatusController(` (L655-660)
 - @brief Disposes the pi-usereq status controller.
 - @details Stops the live ticker, clears the cached context pointer, and leaves
 the last captured status snapshot available for inspection until the
@@ -1933,36 +1934,36 @@ limited to interval disposal and in-memory state mutation.
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`StatusForegroundColor`|type||26||
-|`RawStatusTheme`|iface||34-38|interface RawStatusTheme|
-|`StatusThemeAdapter`|iface||46-54|interface StatusThemeAdapter|
-|`ContextUsageOverlaySpec`|iface||62-66|interface ContextUsageOverlaySpec|
-|`PiUsereqStatusHookName`|type||109||
-|`PiUsereqStatusState`|iface||118-122|export interface PiUsereqStatusState|
-|`PiUsereqStatusController`|iface||131-137|export interface PiUsereqStatusController|
-|`convertForegroundAnsiToBackgroundAnsi`|fn||147-155|function convertForegroundAnsiToBackgroundAnsi(|
-|`applyForegroundAsBackground`|fn||168-185|function applyForegroundAsBackground(|
-|`createStatusThemeAdapter`|fn||196-216|function createStatusThemeAdapter(theme: RawStatusTheme):...|
-|`colorize`|fn||197-215|const colorize = (color: StatusForegroundColor, text: str...|
-|`backgroundize`|fn||199-215|const backgroundize = (color: StatusForegroundColor, text...|
-|`normalizeContextUsage`|fn||226-243|function normalizeContextUsage(|
-|`refreshContextUsage`|fn||255-260|function refreshContextUsage(|
-|`countFilledContextCells`|fn||271-279|function countFilledContextCells(|
-|`resolveContextUsageOverlay`|fn||291-310|function resolveContextUsageOverlay(|
-|`formatContextUsageOverlay`|fn||323-331|function formatContextUsageOverlay(|
-|`formatContextUsageBar`|fn||344-356|function formatContextUsageBar(|
-|`formatStatusDuration`|fn||367-372|function formatStatusDuration(durationMs: number): string|
-|`formatStatusField`|fn||383-389|function formatStatusField(|
-|`formatRenderedStatusField`|fn||401-407|function formatRenderedStatusField(|
-|`didAgentEndAbort`|fn||418-425|function didAgentEndAbort(messages: AgentEndEvent["messag...|
-|`buildPiUsereqStatusText`|fn||439-476|function buildPiUsereqStatusText(|
-|`stopStatusTicker`|fn||486-491|function stopStatusTicker(controller: PiUsereqStatusContr...|
-|`syncPiUsereqStatusTicker`|fn||503-519|function syncPiUsereqStatusTicker(|
-|`createPiUsereqStatusController`|fn||530-544|export function createPiUsereqStatusController(|
-|`setPiUsereqStatusConfig`|fn||556-561|export function setPiUsereqStatusConfig(|
-|`renderPiUsereqStatus`|fn||574-594|export function renderPiUsereqStatus(|
-|`updateExtensionStatus`|fn||611-639|export function updateExtensionStatus(|
-|`disposePiUsereqStatusController`|fn||650-655|export function disposePiUsereqStatusController(|
+|`StatusForegroundColor`|type||27||
+|`RawStatusTheme`|iface||38-42|interface RawStatusTheme|
+|`StatusThemeAdapter`|iface||50-58|interface StatusThemeAdapter|
+|`ContextUsageOverlaySpec`|iface||66-70|interface ContextUsageOverlaySpec|
+|`PiUsereqStatusHookName`|type||113||
+|`PiUsereqStatusState`|iface||122-126|export interface PiUsereqStatusState|
+|`PiUsereqStatusController`|iface||135-141|export interface PiUsereqStatusController|
+|`convertForegroundAnsiToBackgroundAnsi`|fn||151-159|function convertForegroundAnsiToBackgroundAnsi(|
+|`applyForegroundAsBackground`|fn||172-189|function applyForegroundAsBackground(|
+|`createStatusThemeAdapter`|fn||200-220|function createStatusThemeAdapter(theme: RawStatusTheme):...|
+|`colorize`|fn||201-219|const colorize = (color: StatusForegroundColor, text: str...|
+|`backgroundize`|fn||203-219|const backgroundize = (color: StatusForegroundColor, text...|
+|`normalizeContextUsage`|fn||230-247|function normalizeContextUsage(|
+|`refreshContextUsage`|fn||259-264|function refreshContextUsage(|
+|`countFilledContextCells`|fn||275-283|function countFilledContextCells(|
+|`resolveContextUsageOverlay`|fn||295-314|function resolveContextUsageOverlay(|
+|`formatContextUsageOverlay`|fn||327-335|function formatContextUsageOverlay(|
+|`formatContextUsageBar`|fn||349-361|function formatContextUsageBar(|
+|`formatStatusDuration`|fn||372-377|function formatStatusDuration(durationMs: number): string|
+|`formatStatusField`|fn||388-394|function formatStatusField(|
+|`formatRenderedStatusField`|fn||406-412|function formatRenderedStatusField(|
+|`didAgentEndAbort`|fn||423-430|function didAgentEndAbort(messages: AgentEndEvent["messag...|
+|`buildPiUsereqStatusText`|fn||444-481|function buildPiUsereqStatusText(|
+|`stopStatusTicker`|fn||491-496|function stopStatusTicker(controller: PiUsereqStatusContr...|
+|`syncPiUsereqStatusTicker`|fn||508-524|function syncPiUsereqStatusTicker(|
+|`createPiUsereqStatusController`|fn||535-549|export function createPiUsereqStatusController(|
+|`setPiUsereqStatusConfig`|fn||561-566|export function setPiUsereqStatusConfig(|
+|`renderPiUsereqStatus`|fn||579-599|export function renderPiUsereqStatus(|
+|`updateExtensionStatus`|fn||616-644|export function updateExtensionStatus(|
+|`disposePiUsereqStatusController`|fn||655-660|export function disposePiUsereqStatusController(|
 
 
 ---
@@ -3079,14 +3080,14 @@ import { isSameOrAncestorPath, normalizePathSlashes } from "./path-context.js";
 
 ---
 
-# settings-menu.ts | TypeScript | 154L | 7 symbols | 2 imports | 8 comments
+# settings-menu.ts | TypeScript | 233L | 11 symbols | 2 imports | 12 comments
 > Path: `src/core/settings-menu.ts`
 - @brief Renders pi-usereq configuration menus with the shared pi.dev settings style.
 - @details Wraps `SettingsList` in one extension-command helper that exposes right-aligned current values, built-in circular scrolling, bottom-line descriptions, and a deterministic bridge for offline test harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
 
 ## Imports
 ```
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import { getSettingsListTheme, type ThemeColor, type ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { Container, SettingsList, Text, type Component, type SettingItem, type SettingsListTheme } from "@mariozechner/pi-tui";
 ```
 
@@ -3104,35 +3105,71 @@ import { Container, SettingsList, Text, type Component, type SettingItem, type S
 - @brief Represents a custom menu component augmented with the offline bridge.
 - @details Extends the generic TUI `Component` contract with one optional bridge field consumed only by deterministic test and debug harness adapters. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function buildPiUsereqSettingsListTheme(theme: { fg: (color: string, text: string) => string; bold: (text: string) => string }): SettingsListTheme` (L47-55)
-- @brief Builds the local settings-list theme used by pi-usereq configuration menus.
-- @details Derives left-label, right-value, description, cursor, and hint styles from the callback-local pi theme so menu rendering stays deterministic even when the global theme singleton is unavailable in tests or offline replay. Runtime is O(1). No external state is mutated.
-- @param[in] theme {{ fg: (color: string, text: string) => string; bold: (text: string) => string }} Callback-local pi theme adapter.
-- @return {SettingsListTheme} Settings-list theme used by pi-usereq menus.
-- @satisfies REQ-151
+- type `type PiUsereqSettingsThemeColor = Extract<ThemeColor, "accent" | "muted" | "dim">;` (L46)
+- @brief Enumerates the CLI-supported theme tokens consumed by settings menus.
+- @details Narrows callback-local theme calls to the documented settings-list
+semantics used by the pi CLI. Compile-time only and introduces no runtime
+cost.
+### iface `interface PiUsereqSettingsTheme` (L55-58)
+- @brief Describes the callback-local theme surface required by settings menus.
+- @details Captures the subset of the custom-UI theme API needed to rebuild
+title and fallback settings-list styling when the shared global theme is not
+available in tests or offline replay. Compile-time only and introduces no
+runtime cost.
 
-### fn `function createImmediateSelectionComponent(choiceId: string, done: (value?: string) => void): Component` (L64-76)
+### fn `function buildFallbackPiUsereqSettingsListTheme(` (L70-82)
+- @brief Builds the fallback settings-list theme matching CLI settings semantics.
+- @details Mirrors the shared CLI settings theme token mapping for labels,
+values, descriptions, cursor, and hints while avoiding the global theme
+singleton used by the live pi runtime. Runtime is O(1). No external state is
+mutated.
+- @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
+- @return {SettingsListTheme} Fallback settings-list theme.
+- @satisfies REQ-151, REQ-156
+
+### fn `function buildPiUsereqSettingsListTheme(` (L95-109)
+- @brief Resolves the settings-list theme used by pi-usereq configuration menus.
+- @details Prefers the shared CLI `getSettingsListTheme()` API so extension
+menus inherit active-theme behavior from pi itself, then falls back to an
+equivalent callback-local mapping when the shared theme singleton is
+unavailable in deterministic tests or offline replay. Runtime is O(1). No
+external state is mutated.
+- @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
+- @return {SettingsListTheme} Settings-list theme used by pi-usereq menus.
+- @satisfies REQ-151, REQ-156
+
+### fn `function formatPiUsereqSettingsMenuTitle(` (L121-126)
+- @brief Formats the settings-menu title with active-theme semantics.
+- @details Applies the callback-local `accent` token and bold styling on every
+rebuild so custom-menu titles stay synchronized with live theme changes.
+Runtime is O(n) in title length. No external state is mutated.
+- @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
+- @param[in] title {string} Menu title.
+- @return {string} Styled title text.
+- @satisfies REQ-151, REQ-156
+
+### fn `function createImmediateSelectionComponent(choiceId: string, done: (value?: string) => void): Component` (L135-147)
 - @brief Closes a settings menu immediately with one selected action identifier.
 - @details Provides the submenu callback used by `SettingsList` so pressing Enter on any menu row resolves the outer custom UI promise with the row identifier. Runtime is O(1). Side effects are limited to one custom-UI completion callback.
 - @param[in] choiceId {string} Stable choice identifier to emit.
 - @param[in] done {(value?: string) => void} Outer custom-UI completion callback.
 - @return {Component} Immediate-completion submenu component.
 
-### fn `function buildSettingItems(` (L85-96)
+### fn `function buildSettingItems(` (L156-167)
 - @brief Builds `SettingsList` items from one menu-choice vector.
 - @details Copies labels, current values, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier. Runtime is O(n) in choice count. No external state is mutated.
 - @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
 - @param[in] done {(value?: string) => void} Outer custom-UI completion callback.
 - @return {SettingItem[]} `SettingsList` item vector.
 
-### fn `export async function showPiUsereqSettingsMenu(` (L107-154)
+### fn `export async function showPiUsereqSettingsMenu(` (L178-233)
 - @brief Renders one shared pi-usereq settings menu and resolves the selected action.
 - @details Uses `ctx.ui.custom(...)` plus `SettingsList` so every configuration menu shares pi.dev styling, right-aligned current values, circular scrolling, and bottom-line descriptions. The returned custom component also exposes an offline bridge for deterministic tests and debug harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in] title {string} Menu title displayed in the heading and offline bridge.
 - @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
 - @return {Promise<string | undefined>} Selected choice identifier or `undefined` when cancelled.
-- @satisfies REQ-151, REQ-152, REQ-153, REQ-154
+- @satisfies REQ-151, REQ-152, REQ-153, REQ-154, REQ-156
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -3140,10 +3177,14 @@ import { Container, SettingsList, Text, type Component, type SettingItem, type S
 |`PiUsereqSettingsMenuChoice`|iface||14-19|export interface PiUsereqSettingsMenuChoice|
 |`PiUsereqSettingsMenuBridge`|iface||25-30|export interface PiUsereqSettingsMenuBridge|
 |`PiUsereqSettingsMenuComponent`|iface||36-38|export interface PiUsereqSettingsMenuComponent extends Co...|
-|`buildPiUsereqSettingsListTheme`|fn||47-55|function buildPiUsereqSettingsListTheme(theme: { fg: (col...|
-|`createImmediateSelectionComponent`|fn||64-76|function createImmediateSelectionComponent(choiceId: stri...|
-|`buildSettingItems`|fn||85-96|function buildSettingItems(|
-|`showPiUsereqSettingsMenu`|fn||107-154|export async function showPiUsereqSettingsMenu(|
+|`PiUsereqSettingsThemeColor`|type||46||
+|`PiUsereqSettingsTheme`|iface||55-58|interface PiUsereqSettingsTheme|
+|`buildFallbackPiUsereqSettingsListTheme`|fn||70-82|function buildFallbackPiUsereqSettingsListTheme(|
+|`buildPiUsereqSettingsListTheme`|fn||95-109|function buildPiUsereqSettingsListTheme(|
+|`formatPiUsereqSettingsMenuTitle`|fn||121-126|function formatPiUsereqSettingsMenuTitle(|
+|`createImmediateSelectionComponent`|fn||135-147|function createImmediateSelectionComponent(choiceId: stri...|
+|`buildSettingItems`|fn||156-167|function buildSettingItems(|
+|`showPiUsereqSettingsMenu`|fn||178-233|export async function showPiUsereqSettingsMenu(|
 
 
 ---

@@ -93,13 +93,27 @@ type FakeContextUsage = {
 };
 
 /**
+ * @brief Describes the fake theme surface used by test command contexts.
+ * @details Constrains tests to the subset of theme callbacks consumed by the
+ * extension and allows strict token-validation doubles for render-contract
+ * assertions. The alias is compile-time only and introduces no runtime side
+ * effects.
+ */
+type FakeThemeAdapter = {
+  fg: (color: string, text: string) => string;
+  bgFromFg: (color: string, text: string) => string;
+  bold: (text: string) => string;
+};
+
+/**
  * @brief Describes optional fake command-context capabilities used by session-aware tests.
- * @details Allows tests to inject a shared fake session manager, a callback that simulates runtime replacement after `ctx.newSession(...)` completes, and a scripted `getContextUsage()` provider for lifecycle-status assertions. The alias is compile-time only and introduces no runtime side effects.
+ * @details Allows tests to inject a shared fake session manager, a callback that simulates runtime replacement after `ctx.newSession(...)` completes, a scripted `getContextUsage()` provider for lifecycle-status assertions, and a custom theme adapter for render-contract validation. The alias is compile-time only and introduces no runtime side effects.
  */
 type FakeCtxOptions = {
   sessionManager?: FakeSessionManager;
   onNewSession?: (options?: { parentSession?: string }) => Promise<{ cancelled: boolean } | void> | { cancelled: boolean } | void;
   getContextUsage?: () => FakeContextUsage | undefined;
+  theme?: FakeThemeAdapter;
 };
 
 /**
@@ -290,7 +304,7 @@ function buildExpectedFakeContextBar(options: {
   if (options.percent > 90) {
     return formatFakeThemeBackgroundFromForeground(
       "warning",
-      formatFakeThemeForeground("redBright", "FULL!"),
+      formatFakeThemeForeground("error", "FULL!"),
     );
   }
   return Array.from({ length: 5 }, (_value, index) =>
@@ -344,7 +358,7 @@ function buildExpectedFakeStatusText(options: {
 
 /**
  * @brief Creates a fake extension command context with scripted UI interactions.
- * @details Materializes deterministic `select`, shared settings-menu `custom`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, `getContextUsage`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` injection lets tests emulate runtime replacement after setup logic mutates the fake session manager. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
+ * @details Materializes deterministic `select`, shared settings-menu `custom`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, `getContextUsage`, theme-color behaviors, and captured custom-menu render output backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` and theme overrides let tests emulate runtime replacement and strict token validation. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
  * @param[in] cwd {string} Working directory exposed to command handlers.
  * @param[in] plan {FakeCtxPlan} Scripted select and input responses.
  * @param[in] options {FakeCtxOptions} Optional fake session-manager, context-usage, and runtime-replacement integrations.
@@ -355,11 +369,17 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
   const inputs = [...(plan.inputs ?? [])];
   const getContextUsage = options.getContextUsage ?? (() => undefined);
   const sessionManager = options.sessionManager ?? createFakeSessionManager();
+  const theme = options.theme ?? {
+    fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
+    bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
+    bold: (text: string) => `<bold>${text}</bold>`,
+  };
   const state = {
     editorText: "",
     statuses: new Map<string, string>(),
     notifications: [] as Array<{ message: string; level: string }>,
     selectCalls: [] as Array<{ title: string; items: string[] }>,
+    customRenderLines: [] as string[][],
     waitForIdleCalls: 0,
     newSessions: [] as Array<{ messages: string[] }>,
   };
@@ -406,14 +426,7 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
       return getContextUsage();
     },
     ui: {
-      theme: {
-        fg(color: string, text: string) {
-          return formatFakeThemeForeground(color, text);
-        },
-        bgFromFg(color: string, text: string) {
-          return formatFakeThemeBackgroundFromForeground(color, text);
-        },
-      },
+      theme,
       async select(title: string, items: string[]) {
         state.selectCalls.push({ title, items: [...items] });
         return selects.shift();
@@ -428,14 +441,11 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
         });
         const component = factory(
           { requestRender: () => undefined },
-          {
-            fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
-            bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
-            bold: (text: string) => `<bold>${text}</bold>`,
-          },
+          theme,
           {},
           (value?: T) => resolveResult(value),
         ) as {
+          render?: (width: number) => string[];
           __piUsereqSettingsMenu?: {
             title: string;
             choices: Array<{ label: string }>;
@@ -445,6 +455,9 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
         };
         const bridge = component.__piUsereqSettingsMenu;
         assert.ok(bridge, "unsupported custom UI component");
+        if (typeof component.render === "function") {
+          state.customRenderLines.push(component.render(120));
+        }
         const response = selects.shift();
         state.selectCalls.push({ title: bridge.title, items: bridge.choices.map((choice) => choice.label) });
         if (response === undefined) {
@@ -1404,6 +1417,41 @@ test("configuration menus expose show-config ordering and omit overview or notif
   ]);
 });
 
+test("configuration menus reuse CLI settings theme semantics", async () => {
+  const cwd = createTempDir("pi-usereq-menu-theme-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const usedColors = new Set<string>();
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    theme: {
+      fg(color: string, text: string) {
+        usedColors.add(color);
+        return formatFakeThemeForeground(color, text);
+      },
+      bgFromFg(color: string, text: string) {
+        assert.ok(["accent", "muted", "dim"].includes(color));
+        return formatFakeThemeBackgroundFromForeground(color, text);
+      },
+      bold(text: string) {
+        return `<bold>${text}</bold>`;
+      },
+    },
+  });
+
+  await command!.handler("", ctx);
+
+  const renderedMenu = (ctx.__state.customRenderLines[0] ?? []).join("\n");
+  assert.match(renderedMenu, /<accent><bold>pi-usereq<\/bold><\/accent>/);
+  assert.match(renderedMenu, /<accent>→ <\/accent>/);
+  assert.match(renderedMenu, /<accent>pi-usereq\/docs<\/accent>/);
+  assert.match(renderedMenu, /<muted>tests<\/muted>/);
+  assert.match(renderedMenu, /<dim>/);
+  assert.deepEqual([...usedColors].sort(), ["accent", "dim", "muted", "warning"]);
+});
+
 test("prompt commands use the current session by default", async () => {
   const cwd = createTempDir("pi-usereq-prompt-current-");
   const pi = createFakePi();
@@ -1563,6 +1611,49 @@ test("context hook renders the FULL! overlay when usage exceeds ninety percent",
   await pi.emit("session_start", { reason: "startup" }, ctx);
   await pi.emit("context", { messages: [] }, ctx);
 
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+      contextFilledCells: 5,
+      contextPercent: 91,
+      elapsed: "idle",
+      last: "N/A",
+    }),
+  );
+});
+
+test("status FULL overlay uses only CLI-supported theme tokens", async () => {
+  const cwd = createTempDir("pi-usereq-context-theme-contract-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const usedColors = new Set<string>();
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    getContextUsage: () => ({ tokens: 910, contextWindow: 1000, percent: 91 }),
+    theme: {
+      fg(color: string, text: string) {
+        assert.ok(["accent", "warning", "dim", "error"].includes(color));
+        usedColors.add(color);
+        return formatFakeThemeForeground(color, text);
+      },
+      bgFromFg(color: string, text: string) {
+        assert.ok(["accent", "warning"].includes(color));
+        return formatFakeThemeBackgroundFromForeground(color, text);
+      },
+      bold(text: string) {
+        return `<bold>${text}</bold>`;
+      },
+    },
+  });
+
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+  await pi.emit("context", { messages: [] }, ctx);
+
+  assert.ok(usedColors.has("error"));
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({

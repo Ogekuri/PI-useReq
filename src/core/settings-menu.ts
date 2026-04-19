@@ -4,7 +4,7 @@
  * @details Wraps `SettingsList` in one extension-command helper that exposes right-aligned current values, built-in circular scrolling, bottom-line descriptions, and a deterministic bridge for offline test harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
  */
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import { getSettingsListTheme, type ThemeColor, type ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { Container, SettingsList, Text, type Component, type SettingItem, type SettingsListTheme } from "@mariozechner/pi-tui";
 
 /**
@@ -38,20 +38,91 @@ export interface PiUsereqSettingsMenuComponent extends Component {
 }
 
 /**
- * @brief Builds the local settings-list theme used by pi-usereq configuration menus.
- * @details Derives left-label, right-value, description, cursor, and hint styles from the callback-local pi theme so menu rendering stays deterministic even when the global theme singleton is unavailable in tests or offline replay. Runtime is O(1). No external state is mutated.
- * @param[in] theme {{ fg: (color: string, text: string) => string; bold: (text: string) => string }} Callback-local pi theme adapter.
- * @return {SettingsListTheme} Settings-list theme used by pi-usereq menus.
- * @satisfies REQ-151
+ * @brief Enumerates the CLI-supported theme tokens consumed by settings menus.
+ * @details Narrows callback-local theme calls to the documented settings-list
+ * semantics used by the pi CLI. Compile-time only and introduces no runtime
+ * cost.
  */
-function buildPiUsereqSettingsListTheme(theme: { fg: (color: string, text: string) => string; bold: (text: string) => string }): SettingsListTheme {
+type PiUsereqSettingsThemeColor = Extract<ThemeColor, "accent" | "muted" | "dim">;
+
+/**
+ * @brief Describes the callback-local theme surface required by settings menus.
+ * @details Captures the subset of the custom-UI theme API needed to rebuild
+ * title and fallback settings-list styling when the shared global theme is not
+ * available in tests or offline replay. Compile-time only and introduces no
+ * runtime cost.
+ */
+interface PiUsereqSettingsTheme {
+  fg: (color: PiUsereqSettingsThemeColor, text: string) => string;
+  bold: (text: string) => string;
+}
+
+/**
+ * @brief Builds the fallback settings-list theme matching CLI settings semantics.
+ * @details Mirrors the shared CLI settings theme token mapping for labels,
+ * values, descriptions, cursor, and hints while avoiding the global theme
+ * singleton used by the live pi runtime. Runtime is O(1). No external state is
+ * mutated.
+ * @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
+ * @return {SettingsListTheme} Fallback settings-list theme.
+ * @satisfies REQ-151, REQ-156
+ */
+function buildFallbackPiUsereqSettingsListTheme(
+  theme: PiUsereqSettingsTheme,
+): SettingsListTheme {
   return {
-    label: (text: string, selected: boolean): string => selected ? theme.fg("accent", text) : text,
-    value: (text: string, _selected: boolean): string => theme.fg("dim", text),
+    label: (text: string, selected: boolean): string =>
+      selected ? theme.fg("accent", text) : text,
+    value: (text: string, selected: boolean): string =>
+      selected ? theme.fg("accent", text) : theme.fg("muted", text),
     description: (text: string): string => theme.fg("dim", text),
-    cursor: theme.fg("accent", "› "),
+    cursor: theme.fg("accent", "→ "),
     hint: (text: string): string => theme.fg("dim", text),
   };
+}
+
+/**
+ * @brief Resolves the settings-list theme used by pi-usereq configuration menus.
+ * @details Prefers the shared CLI `getSettingsListTheme()` API so extension
+ * menus inherit active-theme behavior from pi itself, then falls back to an
+ * equivalent callback-local mapping when the shared theme singleton is
+ * unavailable in deterministic tests or offline replay. Runtime is O(1). No
+ * external state is mutated.
+ * @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
+ * @return {SettingsListTheme} Settings-list theme used by pi-usereq menus.
+ * @satisfies REQ-151, REQ-156
+ */
+function buildPiUsereqSettingsListTheme(
+  theme: PiUsereqSettingsTheme,
+): SettingsListTheme {
+  try {
+    const sharedTheme = getSettingsListTheme();
+    void sharedTheme.label("", false);
+    void sharedTheme.value("", false);
+    void sharedTheme.description("");
+    void sharedTheme.cursor;
+    void sharedTheme.hint("");
+    return sharedTheme;
+  } catch {
+    return buildFallbackPiUsereqSettingsListTheme(theme);
+  }
+}
+
+/**
+ * @brief Formats the settings-menu title with active-theme semantics.
+ * @details Applies the callback-local `accent` token and bold styling on every
+ * rebuild so custom-menu titles stay synchronized with live theme changes.
+ * Runtime is O(n) in title length. No external state is mutated.
+ * @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
+ * @param[in] title {string} Menu title.
+ * @return {string} Styled title text.
+ * @satisfies REQ-151, REQ-156
+ */
+function formatPiUsereqSettingsMenuTitle(
+  theme: PiUsereqSettingsTheme,
+  title: string,
+): string {
+  return theme.fg("accent", theme.bold(title));
 }
 
 /**
@@ -102,7 +173,7 @@ function buildSettingItems(
  * @param[in] title {string} Menu title displayed in the heading and offline bridge.
  * @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
  * @return {Promise<string | undefined>} Selected choice identifier or `undefined` when cancelled.
- * @satisfies REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-151, REQ-152, REQ-153, REQ-154, REQ-156
  */
 export async function showPiUsereqSettingsMenu(
   ctx: ExtensionCommandContext,
@@ -111,6 +182,11 @@ export async function showPiUsereqSettingsMenu(
 ): Promise<string | undefined> {
   return ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
     const container = new Container();
+    const titleText = new Text(
+      formatPiUsereqSettingsMenuTitle(theme, title),
+      0,
+      0,
+    );
     const settingsList = new SettingsList(
       buildSettingItems(choices, done),
       Math.min(Math.max(choices.length, 1), 12),
@@ -118,7 +194,7 @@ export async function showPiUsereqSettingsMenu(
       () => undefined,
       () => done(undefined),
     );
-    container.addChild(new Text(theme.fg("accent", theme.bold(title)), 0, 0));
+    container.addChild(titleText);
     container.addChild(new Text("", 0, 0));
     container.addChild(settingsList);
 
@@ -128,6 +204,7 @@ export async function showPiUsereqSettingsMenu(
       },
       invalidate(): void {
         container.invalidate();
+        titleText.setText(formatPiUsereqSettingsMenuTitle(theme, title));
       },
       handleInput(data: string): void {
         settingsList.handleInput(data);
@@ -137,7 +214,9 @@ export async function showPiUsereqSettingsMenu(
         title,
         choices,
         selectByLabel(label: string): boolean {
-          const choice = choices.find((candidate) => candidate.label === label || candidate.id === label);
+          const choice = choices.find(
+            (candidate) => candidate.label === label || candidate.id === label,
+          );
           if (!choice) {
             return false;
           }

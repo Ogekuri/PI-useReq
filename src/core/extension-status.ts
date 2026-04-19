@@ -12,18 +12,22 @@ import type {
   AgentEndEvent,
   ContextUsage,
   ExtensionContext,
+  ThemeColor,
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
 import { formatPiNotifyBeepStatus } from "./pi-notify.js";
 import { formatAbsoluteGitPath, formatBasePathRelativeToGitPath, resolveRuntimeGitPath } from "./runtime-project-paths.js";
 
 /**
- * @brief Enumerates the foreground colors consumed by pi-usereq status rendering.
- * @details Restricts the status formatter to the semantic field colors plus the
- * bright-red overflow overlay token used by the context bar. Compile-time only
- * and introduces no runtime cost.
+ * @brief Enumerates the CLI-supported theme tokens consumed by status rendering.
+ * @details Restricts the status formatter to documented pi theme tokens so the
+ * status bar remains compatible with the active CLI theme schema. Compile-time
+ * only and introduces no runtime cost.
  */
-type StatusForegroundColor = "accent" | "warning" | "dim" | "redBright";
+type StatusForegroundColor = Extract<
+  ThemeColor,
+  "accent" | "warning" | "dim" | "error"
+>;
 
 /**
  * @brief Describes the raw theme capabilities required for status rendering.
@@ -282,8 +286,8 @@ function countFilledContextCells(
  * @brief Resolves the threshold-specific context-bar overlay when required.
  * @details Returns the empty-state `CLEAR` overlay when normalized context
  * usage is unavailable or non-positive and returns the high-water `FULL!`
- * overlay when usage exceeds 90 percent. Runtime is O(1). No external state is
- * mutated.
+ * overlay with the active theme `error` token when usage exceeds 90 percent.
+ * Runtime is O(1). No external state is mutated.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
  * @return {ContextUsageOverlaySpec | undefined} Overlay spec when a replacement label is required.
  * @satisfies REQ-127, REQ-128
@@ -302,7 +306,7 @@ function resolveContextUsageOverlay(
   if (percent > 90) {
     return {
       backgroundColor: "warning",
-      foregroundColor: "redBright",
+      foregroundColor: "error",
       text: "FULL!",
     };
   }
@@ -333,9 +337,10 @@ function formatContextUsageOverlay(
 /**
  * @brief Formats one 5-cell context-usage bar.
  * @details Renders threshold-specific overlays for empty and high-water states;
- * otherwise renders filled cells in yellow on an accent-derived background and
- * unfilled cells in dim color on the same background to preserve constant bar
- * width. Runtime is O(1). No external state is mutated.
+ * otherwise renders filled cells with the theme `warning` token on an
+ * accent-derived background and unfilled cells in `dim` on the same background
+ * to preserve constant bar width. Runtime is O(1). No external state is
+ * mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
  * @return {string} Rendered 5-cell bar or overlay.
@@ -434,7 +439,7 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-109, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-147, REQ-148
+ * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-147, REQ-148, REQ-156
  */
 function buildPiUsereqStatusText(
   cwd: string,

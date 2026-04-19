@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.29"
+version: "0.0.30"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -115,7 +115,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-109**: MUST make the single-line status bar render `git`, `base`, `docs`, `tests`, and `src` with explicit derived or configured path values, keeping every field name separate from its value.
 - **REQ-110**: MUST make the single-line status bar render `tools` as the count of active tools.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
-- **REQ-112**: MUST render status-bar field names in violet and field values in yellow.
+- **REQ-112**: MUST render status-bar field names with the active theme `accent` token and field values with the active theme `warning` token.
 - **REQ-113**: MUST register shared event wrappers for `resources_discover`, `session_start`, `session_before_switch`, `session_before_fork`, `session_before_compact`, `session_compact`, and `session_shutdown`.
 - **REQ-114**: MUST register shared event wrappers for `session_before_tree`, `session_tree`, `context`, `before_provider_request`, `before_agent_start`, `agent_start`, and `agent_end`.
 - **REQ-115**: MUST register shared event wrappers for `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, and `tool_execution_update`.
@@ -129,9 +129,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-123**: MUST render `elapsed` immediately after `context`, showing `idle` when no prompt is running and `M:SS` for the active prompt duration.
 - **REQ-124**: MUST render `last` immediately after `elapsed`, showing `N/A` before any normally completed prompt run and otherwise the final `elapsed` value of the latest normally completed run.
 - **REQ-125**: MUST keep `elapsed` and `last` minutes unbounded above 59, zero-pad seconds to two digits, and preserve `last` when escape-triggered cancellation ends the active run.
-- **REQ-126**: MUST render `context` bar cells as yellow `▓` characters on a violet background consistent with the field-label color.
-- **REQ-127**: MUST overlay the literal `CLEAR` in yellow on the `context` bar while preserving the empty bar background when normalized context usage is unavailable or equals 0 percent.
-- **REQ-128**: MUST overlay the literal `FULL!` in bright red on the `context` bar while preserving the filled yellow bar background when normalized context usage exceeds 90 percent.
+- **REQ-126**: MUST render `context` bar cells as theme `warning` `▓` glyphs on a background derived from the active theme `accent` token.
+- **REQ-127**: MUST overlay the literal `CLEAR` with the theme `warning` token on an `accent`-derived background when normalized context usage is unavailable or equals 0 percent.
+- **REQ-128**: MUST overlay the literal `FULL!` with the active theme `error` token on a theme `warning` background when normalized context usage exceeds 90 percent.
 - **REQ-129**: MUST persist independent terminal-beep flags for successful prompt completion, escape-triggered prompt abortion, and error-terminated prompt completion, defaulting each flag to disabled.
 - **REQ-130**: MUST dispatch enabled terminal-beep events through `notifyWindows`, `notifyOSC99`, `notifyOSC9`, or `notifyOSC777` when the matching prompt lifecycle outcome occurs.
 - **REQ-131**: MUST persist a successful-prompt external sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
@@ -229,7 +229,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-148**: MUST render status-bar `base` as `.` when `base-path` equals or lacks `git-path`, otherwise as the path relative to `git-path`.
 - **REQ-149**: MUST label notification settings actions as `Selected notify command`, `Sound toggle hotkey bind`, `Notify command (low vol.)`, `Notify command (mid vol.)`, and `Notify command (high vol.)`.
 - **REQ-150**: MUST omit overview rows and reference-only actions from the main and notification configuration menus.
-- **REQ-151**: MUST render `pi-usereq`, notification, static-check, and startup-tool menus with left-aligned labels and right-aligned current values styled in a darker theme consistent with pi.dev settings UI.
+- **REQ-151**: MUST render `pi-usereq`, notification, static-check, and startup-tool menus with left-aligned labels and right-aligned current values using the active CLI settings-list theme semantics.
+- **REQ-156**: MUST restrict extension-owned status and settings rendering to CLI-supported theme APIs and documented theme tokens.
 - **REQ-152**: MUST render a persistent bottom-line description for the currently selected configuration entry.
 - **REQ-153**: MUST use scrollable configuration menus when entry count exceeds the visible row budget.
 - **REQ-154**: MUST wrap configuration-menu selection from last-to-first and first-to-last entries.
@@ -241,14 +242,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds static-check entries, and omits prompt-delivery mode controls.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
-- **TST-031**: MUST verify the status bar renders explicit git/base/docs/tests/src paths, active-tool count, and violet/yellow field-value color separation.
+- **TST-031**: MUST verify the status bar renders explicit git/base/docs/tests/src paths, active-tool count, and active-theme `accent`/`warning` field-value token separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
 - **TST-033**: MUST verify the status bar renders ordered `git`, `base`, `docs`, `tests`, `src`, `tools`, `context`, `elapsed`, `last`, `beep`, and `sound` fields plus the ceiling-based 5-cell context bar.
 - **TST-037**: MUST verify the configuration menu persists terminal-beep flags, selected notify command, sound toggle hotkey bind, and per-level notify commands using the documented menu labels.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and prompt timing preserves `last` across normal completion but not escape-triggered cancellation.
-- **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `CLEAR` in yellow on the preserved empty context-bar background.
-- **TST-036**: MUST verify context usage above 90 percent renders the literal `FULL!` in bright red on the preserved filled context-bar background.
+- **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `CLEAR` with the theme `warning` token on the preserved `accent`-derived context-bar background.
+- **TST-036**: MUST verify context usage above 90 percent renders the literal `FULL!` with the theme `error` token on the preserved theme `warning` background.
+- **TST-043**: MUST verify configuration menus reuse the active CLI settings-list theme semantics for labels, values, descriptions, cursor, and hints.
 - **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
 - **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
