@@ -10,6 +10,7 @@ import {
   getProjectConfigPath,
 } from "../src/core/config.js";
 import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
+import { setPiNotifyHttpsRequestForTests } from "../src/core/pi-notify.js";
 import {
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
@@ -322,10 +323,8 @@ function buildExpectedFakeContextBar(options: {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, separators, context bar, and
- * consolidated elapsed field emitted by the extension using deterministic fake
- * theme markers. Runtime is O(1). No external state is mutated.
- * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; beep?: string; sound?: string }} Expected status facts.
+ * @details Reconstructs the field order, separators, context bar, consolidated elapsed field, and Pushover enable field emitted by the extension using deterministic fake theme markers. Runtime is O(1). No external state is mutated.
+ * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; beep?: string; sound?: string; pushover?: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -338,6 +337,7 @@ function buildExpectedFakeStatusText(options: {
   et: string;
   beep?: string;
   sound?: string;
+  pushover?: string;
 }): string {
   const buildField = (fieldName: string, value: string): string =>
     `${formatFakeThemeForeground("accent", `${fieldName}:`)}${formatFakeThemeForeground("warning", value)}`;
@@ -351,6 +351,7 @@ function buildExpectedFakeStatusText(options: {
     buildField("elapsed", options.et),
     buildField("beep", options.beep ?? "end,esc,err"),
     buildField("sound", options.sound ?? "none"),
+    buildField("pushover", options.pushover ?? "off"),
   ].join(formatFakeThemeForeground("dim", " • "));
 }
 
@@ -1427,6 +1428,7 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "Notify command (low vol.)",
     "Notify command (mid vol.)",
     "Notify command (high vol.)",
+    "Pushover notifications",
     "Back",
   ]);
 });
@@ -1900,6 +1902,273 @@ test("configuration menu can persist pi-notify settings", async () => {
       sound: "high",
     }),
   );
+});
+
+test("configuration menu can persist pushover settings", async () => {
+  const cwd = createTempDir("pi-usereq-menu-pushover-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "notifications",
+      "Pushover notifications",
+      "Notify on success",
+      "User Key/Delivery Group Key",
+      "Token/API Token Key",
+      "Priority",
+      "1=High Priority",
+      "Back",
+      "Back",
+      "Save and close",
+    ],
+    inputs: [
+      "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    ],
+  });
+
+  await command!.handler("", ctx);
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(config["notify-pushover-global-disable"], false);
+  assert.equal(config["notify-pushover-on-success"], true);
+  assert.equal(config["notify-pushover-user-key"], "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
+  assert.equal(config["notify-pushover-api-token"], "ah6bf5u2sj63mcvou6qamiabeoubbe");
+  assert.equal(config["notify-pushover-priority"], 1);
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      contextFilledCells: 0,
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+      pushover: "on",
+    }),
+  );
+});
+
+test("successful req prompt completion sends pushover requests and suppresses invalid scenarios", async () => {
+  const cwd = createTempDir("pi-usereq-pushover-run-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const configPath = getProjectConfigPath(cwd);
+  const writeConfig = (overrides: Record<string, unknown>) => {
+    const config = {
+      ...getDefaultConfig(cwd),
+      ...overrides,
+    };
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  };
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const originalDateNow = Date.now;
+  const recordedRequests: Array<{ url: string; options: Record<string, unknown>; body: string }> = [];
+  let nowMs = 0;
+  setPiNotifyHttpsRequestForTests(((url: URL, options: Record<string, unknown>, callback?: (response: any) => void) => {
+    const record = { url: url.toString(), options, body: "" };
+    recordedRequests.push(record);
+    const fakeResponse = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeResponse;
+      },
+      resume() {
+        return undefined;
+      },
+    };
+    callback?.(fakeResponse);
+    const fakeRequest = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeRequest;
+      },
+      end(body?: string) {
+        record.body = body ?? "";
+      },
+    };
+    return fakeRequest as unknown as ReturnType<typeof import("node:https").request>;
+  }) as typeof import("node:https").request);
+  Date.now = () => nowMs;
+
+  try {
+    writeConfig({
+      "notify-pushover-on-success": true,
+      "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+      "notify-pushover-priority": 1,
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    recordedRequests.length = 0;
+    nowMs = 0;
+    await pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 5_000;
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, ctx);
+
+    assert.equal(recordedRequests.length, 1);
+    assert.equal(recordedRequests[0]?.url, "https://api.pushover.net/1/messages.json");
+    const successParams = new URLSearchParams(recordedRequests[0]?.body ?? "");
+    assert.equal(successParams.get("token"), "ah6bf5u2sj63mcvou6qamiabeoubbe");
+    assert.equal(successParams.get("user"), "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
+    assert.equal(successParams.get("priority"), "1");
+    assert.equal(successParams.get("message"), "Inspect src/index.ts");
+    assert.equal(successParams.get("title"), `analyze @ ${buildExpectedFakeBasePath(cwd)} [0:05]`);
+
+    recordedRequests.length = 0;
+    nowMs = 10_000;
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 14_000;
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "aborted",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.equal(recordedRequests.length, 0);
+
+    recordedRequests.length = 0;
+    nowMs = 20_000;
+    await pi.commands.get("req-create")!.handler("Create docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 23_000;
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "error",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.equal(recordedRequests.length, 0);
+
+    writeConfig({
+      "notify-pushover-on-success": true,
+      "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "notify-pushover-api-token": "",
+      "notify-pushover-priority": 1,
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    recordedRequests.length = 0;
+    nowMs = 30_000;
+    await pi.commands.get("req-write")!.handler("Write docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 32_000;
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.equal(recordedRequests.length, 0);
+  } finally {
+    setPiNotifyHttpsRequestForTests(undefined);
+    Date.now = originalDateNow;
+  }
+});
+
+test("pushover global disable suppresses delivery without clearing enabled state", async () => {
+  const cwd = createTempDir("pi-usereq-pushover-disabled-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "notifications",
+      "Pushover notifications",
+      "Notify on success",
+      "Global disable",
+      "User Key/Delivery Group Key",
+      "Token/API Token Key",
+      "Back",
+      "Back",
+      "Save and close",
+    ],
+    inputs: [
+      "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    ],
+  });
+
+  await command!.handler("", ctx);
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(config["notify-pushover-on-success"], true);
+  assert.equal(config["notify-pushover-global-disable"], true);
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      contextFilledCells: 0,
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+      pushover: "on",
+    }),
+  );
+
+  const recordedRequests: string[] = [];
+  setPiNotifyHttpsRequestForTests(((url: URL, options: Record<string, unknown>, callback?: (response: any) => void) => {
+    void options;
+    recordedRequests.push(url.toString());
+    const fakeResponse = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeResponse;
+      },
+      resume() {
+        return undefined;
+      },
+    };
+    callback?.(fakeResponse);
+    const fakeRequest = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeRequest;
+      },
+      end(_body?: string) {
+        return undefined;
+      },
+    };
+    return fakeRequest as unknown as ReturnType<typeof import("node:https").request>;
+  }) as typeof import("node:https").request);
+
+  try {
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.deepEqual(recordedRequests, []);
+  } finally {
+    setPiNotifyHttpsRequestForTests(undefined);
+  }
 });
 
 test("sound toggle shortcut cycles persisted pi-notify sound levels", async () => {

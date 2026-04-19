@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.34"
+version: "0.0.35"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -142,6 +142,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-135**: MUST render `beep` immediately after `et`, showing `none` or the comma-ordered enabled event tokens `end`, `esc`, and `err`.
 - **REQ-136**: MUST render `sound` immediately after `beep`, showing one of `none`, `low`, `mid`, or `high`.
 - **REQ-137**: MUST make the configuration UI expose controls for terminal-beep flags, selected notify command, sound toggle hotkey bind, and per-level notify commands.
+- **REQ-163**: MUST persist successful-prompt Pushover settings `enabled=false`, `user=""`, `token=""`, and `priority=0` in project configuration.
+- **REQ-164**: MUST make the notifications menu expose a `Pushover notifications` submenu immediately after the sound-notification submenu using the existing settings-list layout, navigation, descriptions, and value-column semantics.
+- **REQ-165**: MUST make the Pushover submenu expose controls for successful-prompt enablement, `User Key/Delivery Group Key`, `Token/API Token Key`, and priority toggle `0=Normal` / `1=High Priority`.
+- **REQ-166**: MUST suppress Pushover delivery whenever notification `global disable` is enabled, even when Pushover completion notifications remain enabled.
+- **REQ-167**: MUST deliver successful-completion Pushover notifications through native Node HTTP or HTTPS requests to `https://api.pushover.net/1/messages.json` and MUST NOT invoke shell commands for Pushover delivery.
+- **REQ-168**: MUST send a Pushover message only when the prompt completes successfully, Pushover completion notifications are enabled, and persisted `user` plus `token` values are non-empty.
+- **REQ-169**: MUST send Pushover `title` as `<prompt> @ <base-path> [<time>]`, `message` as the prompt argument text used for `%%ARGS%%`, and `priority` as the persisted `0` or `1` value.
+- **REQ-170**: MUST render single-line status fields in this order: `base`, `context`, `elapsed`, `beep`, `sound`, `pushover`.
+- **REQ-171**: MUST render `pushover` immediately after `sound`, showing `on` or `off` from the Pushover successful-prompt enable setting.
+- **REQ-172**: MUST make the Pushover submenu expose a `global disable` toggle that suppresses all Pushover delivery without mutating the successful-prompt enable setting.
 - **REQ-159**: MUST increase `Σ` by each normally completed prompt duration and MUST NOT change `Σ` on escape-triggered cancellation.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
@@ -252,6 +262,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-033**: MUST verify the status bar renders ordered `base`, `context`, `elapsed`, `beep`, and `sound` fields plus the ceiling-based 10-cell context bar.
 - **TST-037**: MUST verify the configuration menu persists terminal-beep flags, selected notify command, sound toggle hotkey bind, and per-level notify commands using the documented menu labels.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
+- **TST-047**: MUST verify the notifications menu exposes the Pushover submenu after sound settings and persists Pushover enable, user key, token, and priority values.
+- **TST-048**: MUST verify successful prompt completion sends one native Pushover request with the documented endpoint and payload, and suppresses delivery on abort, error, global disable, or missing credentials.
+- **TST-049**: MUST verify the status bar renders ordered `base`, `context`, `elapsed`, `beep`, `sound`, and `pushover` fields and appends `pushover:on|off` using the Pushover enable setting.
+- **TST-050**: MUST verify the Pushover `global disable` toggle suppresses delivery without changing the persisted successful-prompt enable setting.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
 - **TST-045**: MUST verify default configuration enables terminal-beep flags `end`, `esc`, and `err` before user customization.
 - **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `◀ CLEAR ▶ ` with the theme `warning` token on the preserved `accent`-derived context-bar background.

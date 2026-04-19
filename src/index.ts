@@ -63,7 +63,12 @@ import {
 import {
   cyclePiNotifySoundLevel,
   formatPiNotifyBeepStatus,
+  formatPiNotifyPushoverStatus,
+  normalizePiNotifyPushoverCredential,
+  normalizePiNotifyPushoverPriority,
   runPiNotifyEffects,
+  type PiNotifyPushoverPriority,
+  type PiNotifyPushoverRequest,
   type PiNotifySoundLevel,
 } from "./core/pi-notify.js";
 import {
@@ -555,18 +560,20 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
  * @details Applies session-start-specific resource validation, project-config
  * refresh, and startup-tool enablement before forwarding the originating hook
  * name and payload into the shared `updateExtensionStatus(...)` pipeline.
- * On `agent_end`, also dispatches configured pi-notify beep and sound effects.
- * Runtime is dominated by configuration loading during `session_start`; all
- * other hooks are O(1). Side effects include resource checks, active-tool
- * mutation, status updates, live-ticker disposal on shutdown, stdout writes,
- * and optional child-process spawning.
+ * On `agent_end`, also dispatches configured pi-notify beep, sound, and
+ * prompt-specific Pushover effects when the current run originates from a
+ * bundled prompt command. Runtime is dominated by configuration loading during
+ * `session_start`; all other hooks are O(1). Side effects include resource
+ * checks, active-tool mutation, status updates, live-ticker disposal on
+ * shutdown, stdout writes, optional child-process spawning, and outbound
+ * HTTPS requests.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -582,8 +589,24 @@ async function handleExtensionStatusEvent(
     setPiUsereqStatusConfig(statusController, config);
   }
   updateExtensionStatus(statusController, hookName, event, ctx);
-  if (hookName === "agent_end" && statusController.config) {
-    runPiNotifyEffects(statusController.config, event as { messages: AgentEndEvent["messages"] });
+  if (hookName === "agent_end") {
+    if (statusController.config) {
+      const pushoverRequest: PiNotifyPushoverRequest | undefined = statusController.state.activePromptRequest
+        && statusController.state.lastRunDurationMs !== undefined
+        ? {
+            promptName: statusController.state.activePromptRequest.promptName,
+            promptArgs: statusController.state.activePromptRequest.promptArgs,
+            basePath: path.resolve(ctx.cwd),
+            completionTimeMs: statusController.state.lastRunDurationMs,
+          }
+        : undefined;
+      runPiNotifyEffects(
+        statusController.config,
+        event as { messages: AgentEndEvent["messages"] },
+        pushoverRequest,
+      );
+    }
+    statusController.state.activePromptRequest = undefined;
   }
   if (hookName === "session_shutdown") {
     disposePiUsereqStatusController(statusController);
@@ -690,11 +713,161 @@ function togglePiNotifyBeepFlag(config: UseReqConfig, key: PiNotifyBeepConfigKey
 }
 
 /**
+ * @brief Formats one persisted Pushover priority for menu display.
+ * @details Maps the canonical `0|1` priority domain to deterministic menu text reused by the Pushover configuration UI. Runtime is O(1). No external state is mutated.
+ * @param[in] priority {PiNotifyPushoverPriority} Persisted Pushover priority.
+ * @return {string} Menu-display label.
+ * @satisfies REQ-165
+ */
+function formatPiNotifyPushoverPriority(priority: PiNotifyPushoverPriority): string {
+  return priority === 1 ? "1=High Priority" : "0=Normal";
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for Pushover configuration.
+ * @details Serializes the Pushover global-disable flag, successful-completion enable flag, credential strings, and priority value into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered Pushover-menu choice vector.
+ * @satisfies REQ-163, REQ-165, REQ-166, REQ-172
+ */
+function buildPiNotifyPushoverMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    {
+      id: "pushover-global-disable",
+      label: "Global disable",
+      value: config["notify-pushover-global-disable"] ? "on" : "off",
+      description: "Suppress all Pushover delivery without changing the successful-prompt enable flag.",
+    },
+    {
+      id: "pushover-on-success",
+      label: "Notify on success",
+      value: formatPiNotifyPushoverStatus(config),
+      description: "Toggle Pushover delivery after successful prompt completion only.",
+    },
+    {
+      id: "pushover-user-key",
+      label: "User Key/Delivery Group Key",
+      value: config["notify-pushover-user-key"] || "(empty)",
+      description: "Edit the Pushover user key or delivery group key sent with successful prompt notifications.",
+    },
+    {
+      id: "pushover-api-token",
+      label: "Token/API Token Key",
+      value: config["notify-pushover-api-token"] || "(empty)",
+      description: "Edit the Pushover application token used for successful prompt notifications.",
+    },
+    {
+      id: "pushover-priority",
+      label: "Priority",
+      value: formatPiNotifyPushoverPriority(config["notify-pushover-priority"]),
+      description: "Select whether successful prompt notifications use normal or high Pushover priority.",
+    },
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the notifications menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Opens the shared settings-menu selector for Pushover priority.
+ * @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the existing notification menus and returns the chosen priority or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] currentPriority {PiNotifyPushoverPriority} Persisted priority value.
+ * @return {Promise<PiNotifyPushoverPriority | undefined>} Selected priority or `undefined` when cancelled.
+ * @satisfies REQ-165
+ */
+async function selectPiNotifyPushoverPriority(
+  ctx: ExtensionCommandContext,
+  currentPriority: PiNotifyPushoverPriority,
+): Promise<PiNotifyPushoverPriority | undefined> {
+  const choice = await showPiUsereqSettingsMenu(ctx, "Pushover priority", [
+    {
+      id: "0",
+      label: "0=Normal",
+      value: currentPriority === 0 ? "selected" : "",
+      description: "Send successful prompt notifications with normal Pushover priority.",
+    },
+    {
+      id: "1",
+      label: "1=High Priority",
+      value: currentPriority === 1 ? "selected" : "",
+      description: "Send successful prompt notifications with high Pushover priority.",
+    },
+  ]);
+  if (!choice) {
+    return undefined;
+  }
+  return normalizePiNotifyPushoverPriority(choice);
+}
+
+/**
+ * @brief Runs the interactive Pushover-configuration menu.
+ * @details Exposes the Pushover global-disable flag, successful-completion enable flag, user key, API token, and priority selector through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {Promise<void>} Promise resolved when the menu closes.
+ * @satisfies REQ-163, REQ-165, REQ-166, REQ-172
+ */
+async function configurePiNotifyPushoverMenu(
+  ctx: ExtensionCommandContext,
+  config: UseReqConfig,
+): Promise<void> {
+  while (true) {
+    const choice = await showPiUsereqSettingsMenu(ctx, "Pushover notifications", buildPiNotifyPushoverMenuChoices(config));
+    if (!choice || choice === "back") {
+      return;
+    }
+    if (choice === "pushover-global-disable") {
+      config["notify-pushover-global-disable"] = !config["notify-pushover-global-disable"];
+      ctx.ui.notify(`Pushover global disable ${config["notify-pushover-global-disable"] ? "enabled" : "disabled"}`, "info");
+      continue;
+    }
+    if (choice === "pushover-on-success") {
+      config["notify-pushover-on-success"] = !config["notify-pushover-on-success"];
+      ctx.ui.notify(`Pushover on success ${config["notify-pushover-on-success"] ? "enabled" : "disabled"}`, "info");
+      continue;
+    }
+    if (choice === "pushover-user-key") {
+      const value = await ctx.ui.input(
+        "User Key/Delivery Group Key",
+        config["notify-pushover-user-key"] || "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      );
+      if (value !== undefined) {
+        config["notify-pushover-user-key"] = normalizePiNotifyPushoverCredential(value);
+        ctx.ui.notify("Updated Pushover user key", "info");
+      }
+      continue;
+    }
+    if (choice === "pushover-api-token") {
+      const value = await ctx.ui.input(
+        "Token/API Token Key",
+        config["notify-pushover-api-token"] || "ah6bf5u2sj63mcvou6qamiabeoubbe",
+      );
+      if (value !== undefined) {
+        config["notify-pushover-api-token"] = normalizePiNotifyPushoverCredential(value);
+        ctx.ui.notify("Updated Pushover API token", "info");
+      }
+      continue;
+    }
+    if (choice === "pushover-priority") {
+      const nextPriority = await selectPiNotifyPushoverPriority(ctx, config["notify-pushover-priority"]);
+      if (nextPriority !== undefined) {
+        config["notify-pushover-priority"] = nextPriority;
+        ctx.ui.notify(`Pushover priority set to ${formatPiNotifyPushoverPriority(nextPriority)}`, "info");
+      }
+    }
+  }
+}
+
+/**
  * @brief Builds the shared settings-menu choices for notification configuration.
- * @details Serializes the current beep flags, selected notify command, hotkey bind, and per-level notify commands into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1) plus command-length formatting. No external state is mutated.
+ * @details Serializes the current beep flags, selected notify command, hotkey bind, per-level notify commands, and the Pushover submenu entry into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1) plus command-length formatting. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
- * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-166, REQ-172
  */
 function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
@@ -745,6 +918,12 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       label: "Notify command (high vol.)",
       value: config.PI_NOTIFY_SOUND_HIGH_CMD,
       description: "Edit the shell command used when the selected notify command is `high`.",
+    },
+    {
+      id: "pushover-notifications",
+      label: "Pushover notifications",
+      value: formatPiNotifyPushoverStatus(config),
+      description: "Open the Pushover submenu for successful-completion delivery, credentials, priority, and global disable.",
     },
     {
       id: "back",
@@ -798,11 +977,11 @@ async function selectPiNotifySoundLevel(
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes prompt-end beep toggles, selected notify-command selection, hotkey-bind editing, and per-level notify-command editors through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes prompt-end beep toggles, selected notify-command selection, hotkey-bind editing, per-level notify-command editors, and the nested Pushover submenu through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-163, REQ-164, REQ-165, REQ-166, REQ-172
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
@@ -867,6 +1046,10 @@ async function configurePiNotifyMenu(
         config.PI_NOTIFY_SOUND_HIGH_CMD = value.trim();
         ctx.ui.notify("Updated notify command (high vol.)", "info");
       }
+      continue;
+    }
+    if (choice === "pushover-notifications") {
+      await configurePiNotifyPushoverMenu(ctx, config);
     }
   }
 }
@@ -908,12 +1091,16 @@ function registerPiNotifyShortcut(
 
 /**
  * @brief Registers bundled prompt commands with the extension.
- * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and sends it into the current active session. Runtime is O(p) for registration; handler cost depends on prompt rendering plus prompt dispatch. Side effects include command registration and user-message delivery during execution.
+ * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, records the prompt metadata needed for successful completion notifications, renders the prompt, and sends it into the current active session. Runtime is O(p) for registration; handler cost depends on prompt rendering plus prompt dispatch. Side effects include command registration, status-controller mutation, and user-message delivery during execution.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169
  */
-function registerPromptCommands(pi: ExtensionAPI): void {
+function registerPromptCommands(
+  pi: ExtensionAPI,
+  statusController: PiUsereqStatusController,
+): void {
   PROMPT_NAMES.forEach((promptName) => {
     pi.registerCommand(`req-${promptName}`, {
       description: `Run pi-usereq prompt ${promptName}`,
@@ -921,6 +1108,10 @@ function registerPromptCommands(pi: ExtensionAPI): void {
         ensureBundledResourcesAccessible();
         const projectBase = getProjectBase(ctx.cwd);
         const config = loadProjectConfig(ctx.cwd);
+        statusController.state.pendingPromptRequest = {
+          promptName,
+          promptArgs: args,
+        };
         const content = renderPrompt(promptName, args, projectBase, config);
         await deliverPromptCommand(pi, content);
       },
@@ -1992,7 +2183,7 @@ function buildPiUsereqMenuChoices(
       id: "notifications",
       label: "notifications",
       value: `beep:${formatPiNotifyBeepStatus(config)} • sound:${config["notify-sound"]}`,
-      description: "Manage terminal beep flags, selected notify command, hotkey bind, and per-level notify commands.",
+      description: "Manage terminal beep flags, selected notify command, hotkey bind, per-level notify commands, and the nested Pushover submenu.",
     },
     {
       id: "show-config",
@@ -2192,19 +2383,20 @@ function registerConfigCommands(
  * configuration commands plus agent tools, registers the configurable
  * successful-run sound shortcut when the runtime supports shortcuts, and
  * installs shared wrappers for all supported pi lifecycle hooks so status
- * telemetry, context usage, prompt timing, cumulative runtime, and pi-notify
- * effects remain synchronized with runtime events. Runtime is O(h) in hook
+ * telemetry, context usage, prompt timing, cumulative runtime, prompt-specific
+ * Pushover metadata, and pi-notify effects remain synchronized with runtime
+ * events. Runtime is O(h) in hook
  * count during registration. Side effects include filesystem reads,
  * command/tool/shortcut registration, UI updates, active-tool changes, and
  * timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137, REQ-148, REQ-159
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-170, REQ-171, REQ-172
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();
   ensureBundledResourcesAccessible();
-  registerPromptCommands(pi);
+  registerPromptCommands(pi, statusController);
   registerAgentTools(pi);
   registerConfigCommands(pi, statusController);
   registerPiNotifyShortcut(pi, statusController);

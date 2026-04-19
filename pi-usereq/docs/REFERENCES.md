@@ -4554,3 +4554,38 @@ timer scheduling.
 |`registerConfigCommands`|fn||2177-2187|function registerConfigCommands(|
 |`piUsereqExtension`|fn||2204-2212|export default function piUsereqExtension(pi: ExtensionAP...|
 
+## Delta Update 2026-04-19
+
+### Updated File: `src/core/config.ts`
+- `UseReqConfig` [`src/core/config.ts`]: persisted Pushover fields `notify-pushover-global-disable`, `notify-pushover-on-success`, `notify-pushover-user-key`, `notify-pushover-api-token`, and `notify-pushover-priority` extend the project configuration schema (lines 44-63).
+- `getDefaultConfig(...)` [`src/core/config.ts`]: default Pushover values are `false`, `false`, `""`, `""`, and `0` (lines 98-119).
+- `loadConfig(...)` [`src/core/config.ts`]: persisted Pushover fields are normalized during config load (lines 129-189).
+- `buildPersistedConfig(...)` [`src/core/config.ts`]: Pushover fields are serialized together with existing notification settings (lines 198-228).
+
+### Updated File: `src/core/extension-status.ts`
+- `PiUsereqPromptRequest` [`src/core/extension-status.ts`]: prompt command name and raw `%%ARGS%%` payload tracked across command delivery and runtime execution (lines 120-123).
+- `PiUsereqStatusState` [`src/core/extension-status.ts`]: pending and active prompt-request state extends timer telemetry (lines 129-136).
+- `buildPiUsereqStatusText(...)` [`src/core/extension-status.ts`]: status bar now renders `pushover` after `sound` (lines 490-514).
+- `updateExtensionStatus(...)` [`src/core/extension-status.ts`]: `agent_start` promotes pending prompt metadata into the active run, and shutdown clears prompt-request state (lines 645-680).
+
+### Updated File: `src/core/pi-notify.ts`
+- `PiNotifyPushoverPriority` [`src/core/pi-notify.ts`]: canonical `0|1` Pushover priority type (line 75).
+- `PiNotifyPushoverRequest` [`src/core/pi-notify.ts`]: successful prompt payload for Pushover delivery (lines 81-86).
+- `PiNotifyConfigFields` [`src/core/pi-notify.ts`]: notification config surface now includes Pushover flags, credentials, and priority (line 92).
+- `normalizePiNotifyPushoverCredential(...)` [`src/core/pi-notify.ts`]: credential normalization for user key and API token (lines 160-162).
+- `normalizePiNotifyPushoverPriority(...)` [`src/core/pi-notify.ts`]: priority normalization for persisted `0|1` values (lines 171-173).
+- `formatPiNotifyPushoverStatus(...)` [`src/core/pi-notify.ts`]: footer serialization for the dedicated Pushover enable flag (lines 203-205).
+- `setPiNotifyHttpsRequestForTests(...)` [`src/core/pi-notify.ts`]: deterministic HTTPS transport override for unit tests (lines 505-507).
+- `runPiNotifyEffects(...)` [`src/core/pi-notify.ts`]: successful-run routing now includes optional native Pushover delivery after sound execution (lines 590-617).
+
+### Updated File: `src/index.ts`
+- `handleExtensionStatusEvent(...)` [`src/index.ts`]: `agent_end` builds prompt-specific Pushover request metadata and dispatches it through `runPiNotifyEffects(...)` (lines 578-614).
+- `formatPiNotifyPushoverPriority(...)` [`src/index.ts`]: menu-value formatter for `0=Normal` and `1=High Priority` (lines 722-724).
+- `buildPiNotifyPushoverMenuChoices(...)` [`src/index.ts`]: nested Pushover menu rows for global disable, enable, credentials, and priority (lines 733-772).
+- `selectPiNotifyPushoverPriority(...)` [`src/index.ts`]: shared selector for Pushover priority (lines 782-804).
+- `configurePiNotifyPushoverMenu(...)` [`src/index.ts`]: interactive nested Pushover configuration menu (lines 814-863).
+- `buildPiNotifyMenuChoices(...)` [`src/index.ts`]: notifications menu now exposes the `Pushover notifications` submenu after the sound-command rows (lines 872-935).
+- `configurePiNotifyMenu(...)` [`src/index.ts`]: notifications menu routes the nested Pushover editor (lines 986-1055).
+- `registerPromptCommands(...)` [`src/index.ts`]: each bundled prompt command stores pending prompt metadata before rendering and dispatch (lines 1100-1120).
+- `piUsereqExtension(...)` [`src/index.ts`]: prompt registration now receives the shared status controller so successful prompt metadata survives until `agent_end` (lines 2396-2404).
+

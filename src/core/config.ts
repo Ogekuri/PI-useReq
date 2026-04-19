@@ -19,6 +19,8 @@ import {
   DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
   DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
   normalizePiNotifyCommand,
+  normalizePiNotifyPushoverCredential,
+  normalizePiNotifyPushoverPriority,
   normalizePiNotifyShortcut,
   normalizePiNotifySoundLevel,
 } from "./pi-notify.js";
@@ -50,6 +52,11 @@ export interface UseReqConfig {
   "notify-beep-on-error": boolean;
   "notify-sound": "none" | "low" | "mid" | "high";
   "notify-sound-toggle-shortcut": string;
+  "notify-pushover-global-disable": boolean;
+  "notify-pushover-on-success": boolean;
+  "notify-pushover-user-key": string;
+  "notify-pushover-api-token": string;
+  "notify-pushover-priority": 0 | 1;
   PI_NOTIFY_SOUND_LOW_CMD: string;
   PI_NOTIFY_SOUND_MID_CMD: string;
   PI_NOTIFY_SOUND_HIGH_CMD: string;
@@ -83,10 +90,10 @@ export function getProjectConfigPath(projectBase: string): string {
 
 /**
  * @brief Builds the default project configuration.
- * @details Populates canonical docs/test/source directories, the default startup tool set, and default pi-notify fields while excluding runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
+ * @details Populates canonical docs/test/source directories, the default startup tool set, default pi-notify fields, and default Pushover settings while excluding runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
- * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146
+ * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146, REQ-163
  */
 export function getDefaultConfig(_projectBase: string): UseReqConfig {
   return {
@@ -100,6 +107,11 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     "notify-beep-on-error": true,
     "notify-sound": "none",
     "notify-sound-toggle-shortcut": DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
+    "notify-pushover-global-disable": false,
+    "notify-pushover-on-success": false,
+    "notify-pushover-user-key": "",
+    "notify-pushover-api-token": "",
+    "notify-pushover-priority": 0,
     PI_NOTIFY_SOUND_LOW_CMD: DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
     PI_NOTIFY_SOUND_MID_CMD: DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
     PI_NOTIFY_SOUND_HIGH_CMD: DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
@@ -108,11 +120,11 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
 
 /**
  * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names and pi-notify fields, applies enabled beep defaults for missing flag payloads, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names plus pi-notify and Pushover fields, applies enabled beep defaults for missing flag payloads, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
- * @satisfies CTN-012, REQ-066, REQ-129, REQ-146
+ * @satisfies CTN-012, REQ-066, REQ-129, REQ-146, REQ-163
  */
 export function loadConfig(projectBase: string): UseReqConfig {
   const configPath = getProjectConfigPath(projectBase);
@@ -145,6 +157,11 @@ export function loadConfig(projectBase: string): UseReqConfig {
   const notifyBeepOnError = data["notify-beep-on-error"] !== false;
   const notifySound = normalizePiNotifySoundLevel(data["notify-sound"]);
   const notifySoundToggleShortcut = normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]);
+  const pushoverGlobalDisable = data["notify-pushover-global-disable"] === true;
+  const pushoverOnSuccess = data["notify-pushover-on-success"] === true;
+  const pushoverUserKey = normalizePiNotifyPushoverCredential(data["notify-pushover-user-key"]);
+  const pushoverApiToken = normalizePiNotifyPushoverCredential(data["notify-pushover-api-token"]);
+  const pushoverPriority = normalizePiNotifyPushoverPriority(data["notify-pushover-priority"]);
   const lowSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD);
   const midSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD);
   const highSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_HIGH_CMD, DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD);
@@ -160,6 +177,11 @@ export function loadConfig(projectBase: string): UseReqConfig {
     "notify-beep-on-error": notifyBeepOnError,
     "notify-sound": notifySound,
     "notify-sound-toggle-shortcut": notifySoundToggleShortcut,
+    "notify-pushover-global-disable": pushoverGlobalDisable,
+    "notify-pushover-on-success": pushoverOnSuccess,
+    "notify-pushover-user-key": pushoverUserKey,
+    "notify-pushover-api-token": pushoverApiToken,
+    "notify-pushover-priority": pushoverPriority,
     PI_NOTIFY_SOUND_LOW_CMD: lowSoundCommand,
     PI_NOTIFY_SOUND_MID_CMD: midSoundCommand,
     PI_NOTIFY_SOUND_HIGH_CMD: highSoundCommand,
@@ -168,10 +190,10 @@ export function loadConfig(projectBase: string): UseReqConfig {
 
 /**
  * @brief Builds the persisted configuration payload that excludes runtime-derived fields.
- * @details Copies only the canonical persisted configuration keys into a fresh object so runtime-derived metadata such as `base-path` and `git-path` can never be written to disk. Runtime is O(n) in config size. No external state is mutated.
+ * @details Copies only the canonical persisted configuration keys into a fresh object so runtime-derived metadata such as `base-path` and `git-path` can never be written to disk while preserving notification and Pushover settings verbatim. Runtime is O(n) in config size. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective configuration object.
  * @return {UseReqConfig} Persistable configuration payload.
- * @satisfies CTN-012, REQ-146
+ * @satisfies CTN-012, REQ-146, REQ-163
  */
 function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
   return {
@@ -194,6 +216,11 @@ function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
     "notify-beep-on-error": config["notify-beep-on-error"],
     "notify-sound": config["notify-sound"],
     "notify-sound-toggle-shortcut": config["notify-sound-toggle-shortcut"],
+    "notify-pushover-global-disable": config["notify-pushover-global-disable"],
+    "notify-pushover-on-success": config["notify-pushover-on-success"],
+    "notify-pushover-user-key": config["notify-pushover-user-key"],
+    "notify-pushover-api-token": config["notify-pushover-api-token"],
+    "notify-pushover-priority": config["notify-pushover-priority"],
     PI_NOTIFY_SOUND_LOW_CMD: config.PI_NOTIFY_SOUND_LOW_CMD,
     PI_NOTIFY_SOUND_MID_CMD: config.PI_NOTIFY_SOUND_MID_CMD,
     PI_NOTIFY_SOUND_HIGH_CMD: config.PI_NOTIFY_SOUND_HIGH_CMD,

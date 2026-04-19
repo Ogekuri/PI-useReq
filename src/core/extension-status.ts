@@ -17,7 +17,7 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
 import { normalizePathSlashes } from "./path-context.js";
-import { formatPiNotifyBeepStatus } from "./pi-notify.js";
+import { formatPiNotifyBeepStatus, formatPiNotifyPushoverStatus } from "./pi-notify.js";
 
 /**
  * @brief Enumerates the CLI-supported theme tokens consumed by status rendering.
@@ -114,18 +114,25 @@ export const PI_USEREQ_STATUS_HOOK_NAMES = [
 export type PiUsereqStatusHookName = (typeof PI_USEREQ_STATUS_HOOK_NAMES)[number];
 
 /**
+ * @brief Describes one prompt request tracked across extension command delivery and runtime execution.
+ * @details Stores the bundled prompt command name plus the raw argument string substituted into `%%ARGS%%` so later successful-run side effects can reconstruct prompt-specific completion notifications. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface PiUsereqPromptRequest {
+  promptName: string;
+  promptArgs: string;
+}
+
+/**
  * @brief Stores the mutable runtime facts displayed by the status bar.
- * @details Persists the latest context-usage snapshot, the active run start
- * timestamp, the most recent normally completed run duration, and the
- * accumulated duration of all normally completed runs. Runtime state is
- * mutated in-place by controller helpers. Compile-time only and introduces no
- * runtime cost.
+ * @details Persists the latest context-usage snapshot, the active run start timestamp, the most recent normally completed run duration, the accumulated duration of all normally completed runs, and prompt-request metadata carried from command dispatch into the next runtime execution. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqStatusState {
   contextUsage: ContextUsage | undefined;
   runStartTimeMs: number | undefined;
   lastRunDurationMs: number | undefined;
   totalRunDurationMs: number | undefined;
+  pendingPromptRequest: PiUsereqPromptRequest | undefined;
+  activePromptRequest: PiUsereqPromptRequest | undefined;
 }
 
 /**
@@ -471,16 +478,14 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders base, context, elapsed, beep, and sound fields in the
- * canonical order with dim bullet separators and threshold-specific context-bar
- * overlays. Runtime is O(1). No external state is mutated.
+ * @details Renders base, context, elapsed, beep, sound, and pushover fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(1). No external state is mutated.
  * @param[in] cwd {string} Runtime working directory used for base-path derivation.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-156, REQ-159
+ * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-156, REQ-159, REQ-170, REQ-171
  */
 function buildPiUsereqStatusText(
   cwd: string,
@@ -493,6 +498,7 @@ function buildPiUsereqStatusText(
   const elapsedText = formatElapsedStatusValue(state, nowMs);
   const beepText = formatPiNotifyBeepStatus(config);
   const soundText = config["notify-sound"];
+  const pushoverText = formatPiNotifyPushoverStatus(config);
   return [
     formatStatusField(theme, "base", baseText),
     formatRenderedStatusField(
@@ -503,6 +509,7 @@ function buildPiUsereqStatusText(
     formatStatusField(theme, "elapsed", elapsedText),
     formatStatusField(theme, "beep", beepText),
     formatStatusField(theme, "sound", soundText),
+    formatStatusField(theme, "pushover", pushoverText),
   ].join(theme.separator);
 }
 
@@ -551,9 +558,7 @@ function syncPiUsereqStatusTicker(
 
 /**
  * @brief Creates an empty pi-usereq status controller.
- * @details Initializes the mutable status snapshot and starts with no config,
- * no context, and no live ticker. Runtime is O(1). No external state is
- * mutated.
+ * @details Initializes the mutable status snapshot, including empty prompt-request tracking, and starts with no config, no context, and no live ticker. Runtime is O(1). No external state is mutated.
  * @return {PiUsereqStatusController} New status controller.
  * @satisfies DES-010
  */
@@ -566,6 +571,8 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       runStartTimeMs: undefined,
       lastRunDurationMs: undefined,
       totalRunDurationMs: undefined,
+      pendingPromptRequest: undefined,
+      activePromptRequest: undefined,
     },
     tickHandle: undefined,
   };
@@ -597,7 +604,7 @@ export function setPiUsereqStatusConfig(
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-159
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-159, REQ-170, REQ-171
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,
@@ -623,8 +630,7 @@ export function renderPiUsereqStatus(
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
  * @details Refreshes stored context usage on every hook, starts run timing on
- * `agent_start`, captures non-aborted run duration on `agent_end`, accumulates
- * successful runtime into `Σ`, clears live timing on shutdown, synchronizes
+ * `agent_start`, promotes pending prompt-request metadata into the active run, captures non-aborted run duration on `agent_end`, accumulates successful runtime into `Σ`, clears live timing on shutdown, synchronizes
  * the live ticker, and re-renders the status bar when configuration is
  * available. Runtime is O(n) in `agent_end` message count and otherwise O(1).
  * Side effects include in-memory state mutation, interval scheduling, and
@@ -634,7 +640,7 @@ export function renderPiUsereqStatus(
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169
  */
 export function updateExtensionStatus(
   controller: PiUsereqStatusController,
@@ -648,6 +654,8 @@ export function updateExtensionStatus(
 
   if (hookName === "agent_start") {
     controller.state.runStartTimeMs = nowMs;
+    controller.state.activePromptRequest = controller.state.pendingPromptRequest;
+    controller.state.pendingPromptRequest = undefined;
   }
 
   if (hookName === "agent_end" && controller.state.runStartTimeMs !== undefined) {
@@ -663,6 +671,8 @@ export function updateExtensionStatus(
 
   if (hookName === "session_shutdown") {
     controller.state.runStartTimeMs = undefined;
+    controller.state.pendingPromptRequest = undefined;
+    controller.state.activePromptRequest = undefined;
   }
 
   syncPiUsereqStatusTicker(controller);

@@ -1,10 +1,11 @@
 /**
  * @file
- * @brief Implements pi-usereq terminal-beep and external sound-hook helpers.
- * @details Centralizes configuration defaults, status serialization, agent-end outcome classification, terminal notification dispatch, and successful-run external sound-command execution. Runtime is O(m + c) in `agent_end` message count plus command length. Side effects include stdout writes and detached child-process spawning.
+ * @brief Implements pi-usereq terminal-beep, external sound-hook, and Pushover notification helpers.
+ * @details Centralizes configuration defaults, status serialization, agent-end outcome classification, terminal notification dispatch, successful-run external sound-command execution, and successful-run Pushover delivery. Runtime is O(m + c + b) in `agent_end` message count plus command length and Pushover payload size. Side effects include stdout writes, detached child-process spawning, and outbound HTTPS requests.
  */
 
 import { execFile, spawn } from "node:child_process";
+import * as https from "node:https";
 import type { AgentEndEvent } from "@mariozechner/pi-coding-agent";
 import { getInstallationPath } from "./path-context.js";
 import type { UseReqConfig } from "./config.js";
@@ -62,8 +63,31 @@ export const DEFAULT_PI_NOTIFY_SOUND_MID_CMD = "paplay --volume=43690 %%INSTALLA
 export const DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD = "paplay --volume=65535 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3";
 
 /**
+ * @brief Enumerates supported Pushover priorities.
+ * @details Restricts persisted Pushover delivery to the canonical normal and high-priority values accepted by the user-facing configuration menu. Access complexity is O(1).
+ */
+export const PI_NOTIFY_PUSHOVER_PRIORITIES = [0, 1] as const;
+
+/**
+ * @brief Represents one supported Pushover priority value.
+ * @details Narrows Pushover configuration parsing and request serialization to the canonical `0|1` priority domain. Compile-time only and introduces no runtime cost.
+ */
+export type PiNotifyPushoverPriority = (typeof PI_NOTIFY_PUSHOVER_PRIORITIES)[number];
+
+/**
+ * @brief Describes one successful prompt-completion payload routed to Pushover.
+ * @details Stores the prompt command name, substituted prompt arguments, runtime base path, and successful completion duration used to build one Pushover API request. The interface is compile-time only and introduces no runtime side effects.
+ */
+export interface PiNotifyPushoverRequest {
+  promptName: string;
+  promptArgs: string;
+  basePath: string;
+  completionTimeMs: number;
+}
+
+/**
  * @brief Describes the configuration fields consumed by pi-notify helpers.
- * @details Narrows the full project config to the persisted notification and sound-hook fields used by status rendering, prompt-end routing, and shortcut toggles. Compile-time only and introduces no runtime cost.
+ * @details Narrows the full project config to the persisted notification, sound-hook, and Pushover fields used by status rendering, prompt-end routing, and shortcut toggles. Compile-time only and introduces no runtime cost.
  */
 export type PiNotifyConfigFields = Pick<
   UseReqConfig,
@@ -72,10 +96,21 @@ export type PiNotifyConfigFields = Pick<
   | "notify-beep-on-error"
   | "notify-sound"
   | "notify-sound-toggle-shortcut"
+  | "notify-pushover-global-disable"
+  | "notify-pushover-on-success"
+  | "notify-pushover-user-key"
+  | "notify-pushover-api-token"
+  | "notify-pushover-priority"
   | "PI_NOTIFY_SOUND_LOW_CMD"
   | "PI_NOTIFY_SOUND_MID_CMD"
   | "PI_NOTIFY_SOUND_HIGH_CMD"
 >;
+
+/**
+ * @brief Stores the currently configured native HTTPS request function used for Pushover delivery.
+ * @details Defaults to `node:https.request` and can be replaced by deterministic tests so Pushover dispatch remains observable without real network I/O. Access complexity is O(1). Side effect: mutated only through the dedicated test hook.
+ */
+let piNotifyHttpsRequest: typeof https.request = https.request;
 
 /**
  * @brief Normalizes one persisted sound level.
@@ -116,6 +151,28 @@ export function normalizePiNotifyCommand(value: unknown, fallback: string): stri
 }
 
 /**
+ * @brief Normalizes one persisted Pushover credential string.
+ * @details Accepts any trimmed string so the project config can store raw Pushover user and token values verbatim and falls back to the empty string for missing or invalid payloads. Runtime is O(n) in credential length. No external state is mutated.
+ * @param[in] value {unknown} Raw persisted credential payload.
+ * @return {string} Canonical credential string.
+ * @satisfies REQ-163
+ */
+export function normalizePiNotifyPushoverCredential(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * @brief Normalizes one persisted Pushover priority value.
+ * @details Accepts only canonical `0` and `1` values, treating numeric-string `"1"` as high priority and every other payload as normal priority. Runtime is O(1). No external state is mutated.
+ * @param[in] value {unknown} Raw persisted priority payload.
+ * @return {PiNotifyPushoverPriority} Canonical priority value.
+ * @satisfies REQ-163
+ */
+export function normalizePiNotifyPushoverPriority(value: unknown): PiNotifyPushoverPriority {
+  return value === 1 || value === "1" ? 1 : 0;
+}
+
+/**
  * @brief Formats enabled terminal-beep flags for status rendering.
  * @details Emits the canonical comma-ordered enabled outcome tokens `end`, `esc`, and `err`, or `none` when all prompt-end beep flags are disabled. Runtime is O(1). No external state is mutated.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -134,6 +191,17 @@ export function formatPiNotifyBeepStatus(config: PiNotifyConfigFields): string {
     enabledOutcomes.push("err");
   }
   return enabledOutcomes.length > 0 ? enabledOutcomes.join(",") : "none";
+}
+
+/**
+ * @brief Formats the Pushover enable flag for status rendering.
+ * @details Serializes only the persisted successful-prompt enable setting so the status bar reports the dedicated Pushover toggle independently from any global-disable override. Runtime is O(1). No external state is mutated.
+ * @param[in] config {Pick<UseReqConfig, "notify-pushover-on-success">} Effective Pushover configuration subset.
+ * @return {string} `on` when successful-prompt Pushover delivery is enabled; otherwise `off`.
+ * @satisfies REQ-171
+ */
+export function formatPiNotifyPushoverStatus(config: Pick<UseReqConfig, "notify-pushover-on-success">): string {
+  return config["notify-pushover-on-success"] ? "on" : "off";
 }
 
 /**
@@ -325,6 +393,120 @@ function buildPiNotifyBody(outcome: PiNotifyOutcome): string {
 }
 
 /**
+ * @brief Formats one successful prompt duration for Pushover titles.
+ * @details Floors the supplied completion duration to whole seconds, keeps minutes unbounded above 59, and zero-pads seconds to two digits so Pushover titles align with status-bar elapsed formatting. Runtime is O(1). No external state is mutated.
+ * @param[in] durationMs {number} Successful prompt duration in milliseconds.
+ * @return {string} Duration rendered as `M:SS`.
+ * @satisfies REQ-169
+ */
+function formatPiNotifyPushoverDuration(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+/**
+ * @brief Builds the Pushover notification title for one successful prompt.
+ * @details Serializes the prompt name, absolute runtime base path, and successful completion duration into the canonical `<prompt> @ <base-path> [<time>]` title required by the repository feature contract. Runtime is O(n) in path length. No external state is mutated.
+ * @param[in] request {PiNotifyPushoverRequest} Successful prompt metadata.
+ * @return {string} Pushover title string.
+ * @satisfies REQ-169
+ */
+function buildPiNotifyPushoverTitle(request: PiNotifyPushoverRequest): string {
+  return `${request.promptName} @ ${request.basePath} [${formatPiNotifyPushoverDuration(request.completionTimeMs)}]`;
+}
+
+/**
+ * @brief Builds the Pushover message body for one successful prompt.
+ * @details Reuses the raw prompt argument string substituted into `%%ARGS%%` so the pushed body remains traceable to the executed prompt invocation. Runtime is O(1). No external state is mutated.
+ * @param[in] request {PiNotifyPushoverRequest} Successful prompt metadata.
+ * @return {string} Pushover message body.
+ * @satisfies REQ-169
+ */
+function buildPiNotifyPushoverBody(request: PiNotifyPushoverRequest): string {
+  return request.promptArgs;
+}
+
+/**
+ * @brief Determines whether one successful prompt should trigger Pushover delivery.
+ * @details Requires a captured prompt request, the successful-prompt enable flag, the Pushover global-disable flag to remain false, and non-empty user plus token credentials. Runtime is O(1). No external state is mutated.
+ * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
+ * @param[in] request {PiNotifyPushoverRequest | undefined} Successful prompt metadata.
+ * @return {boolean} `true` when Pushover delivery prerequisites are satisfied.
+ * @satisfies REQ-166, REQ-168, REQ-172
+ */
+function shouldRunPiNotifyPushover(
+  config: PiNotifyConfigFields,
+  request: PiNotifyPushoverRequest | undefined,
+): boolean {
+  return request !== undefined
+    && config["notify-pushover-on-success"]
+    && !config["notify-pushover-global-disable"]
+    && config["notify-pushover-user-key"] !== ""
+    && config["notify-pushover-api-token"] !== "";
+}
+
+/**
+ * @brief Builds the Pushover API payload for one successful prompt.
+ * @details Encodes the configured token, user key, canonical title, priority, and substituted prompt-argument body as `application/x-www-form-urlencoded` fields accepted by the Pushover Message API. Runtime is O(n) in payload size. No external state is mutated.
+ * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
+ * @param[in] request {PiNotifyPushoverRequest} Successful prompt metadata.
+ * @return {URLSearchParams} Encoded Pushover request payload.
+ * @satisfies REQ-167, REQ-169
+ */
+function buildPiNotifyPushoverPayload(
+  config: PiNotifyConfigFields,
+  request: PiNotifyPushoverRequest,
+): URLSearchParams {
+  return new URLSearchParams({
+    token: config["notify-pushover-api-token"],
+    user: config["notify-pushover-user-key"],
+    title: buildPiNotifyPushoverTitle(request),
+    priority: String(config["notify-pushover-priority"]),
+    message: buildPiNotifyPushoverBody(request),
+  });
+}
+
+/**
+ * @brief Dispatches one native HTTPS request to the Pushover Message API.
+ * @details Serializes the request body as URL-encoded form data, posts it to `https://api.pushover.net/1/messages.json`, drains the response, and ignores transport failures so prompt-end handling remains non-blocking. Runtime is dominated by outbound I/O. Side effects include one HTTPS request.
+ * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
+ * @param[in] request {PiNotifyPushoverRequest} Successful prompt metadata.
+ * @return {void} No return value.
+ * @satisfies REQ-167, REQ-169
+ */
+function runPiNotifyPushoverRequest(
+  config: PiNotifyConfigFields,
+  request: PiNotifyPushoverRequest,
+): void {
+  const url = new URL("https://api.pushover.net/1/messages.json");
+  const body = buildPiNotifyPushoverPayload(config, request).toString();
+  const httpRequest = piNotifyHttpsRequest(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      "content-length": String(Buffer.byteLength(body)),
+    },
+  }, (response) => {
+    response.on?.("error", () => undefined);
+    response.resume?.();
+  });
+  httpRequest.on("error", () => undefined);
+  httpRequest.end(body);
+}
+
+/**
+ * @brief Replaces the native HTTPS request function used for Pushover delivery in deterministic tests.
+ * @details Accepts a drop-in `node:https.request` replacement and restores the native implementation when `undefined` is supplied. Runtime is O(1). Side effect: mutates the module-local Pushover transport hook.
+ * @param[in] requestImpl {typeof https.request | undefined} Replacement HTTPS request function.
+ * @return {void} No return value.
+ */
+export function setPiNotifyHttpsRequestForTests(requestImpl: typeof https.request | undefined): void {
+  piNotifyHttpsRequest = requestImpl ?? https.request;
+}
+
+/**
  * @brief Quotes one installation path for shell substitution.
  * @details Emits POSIX single-quoted literals for `sh -lc` execution and CMD double-quoted literals for `cmd.exe /c` execution so `%%INSTALLATION_PATH%%` substitutions preserve whitespace safely. Runtime is O(n) in path length. No external state is mutated.
  * @param[in] installationPath {string} Absolute extension installation path.
@@ -397,16 +579,18 @@ export function runPiNotifySoundCommand(
 }
 
 /**
- * @brief Dispatches prompt-end beep and sound effects for one agent-end payload.
- * @details Classifies the terminal outcome, emits the configured terminal notification only for the enabled outcome flag, and executes the configured external sound command only for successful completion with a non-disabled sound level. Runtime is O(m + c) in message count plus command length. Side effects include stdout writes and child-process spawning.
+ * @brief Dispatches prompt-end beep, sound, and optional Pushover effects for one agent-end payload.
+ * @details Classifies the terminal outcome, emits the configured terminal notification only for the enabled outcome flag, executes the configured external sound command only for successful completion with a non-disabled sound level, and dispatches the native Pushover request when successful-run Pushover prerequisites are satisfied. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include stdout writes, child-process spawning, and outbound HTTPS requests.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
+ * @param[in] pushoverRequest {PiNotifyPushoverRequest | undefined} Optional successful prompt metadata used for Pushover delivery.
  * @return {void} No return value.
- * @satisfies REQ-129, REQ-130, REQ-131, REQ-132, REQ-133
+ * @satisfies REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172
  */
 export function runPiNotifyEffects(
   config: PiNotifyConfigFields,
   event: Pick<AgentEndEvent, "messages">,
+  pushoverRequest?: PiNotifyPushoverRequest,
 ): void {
   const outcome = classifyPiNotifyOutcome(event);
   const shouldNotify = (
@@ -420,11 +604,14 @@ export function runPiNotifyEffects(
   if (outcome !== "end") {
     return;
   }
-  if (config["notify-sound"] === "none") {
+  if (config["notify-sound"] !== "none") {
+    runPiNotifySoundCommand(
+      config,
+      config["notify-sound"] as Exclude<PiNotifySoundLevel, "none">,
+    );
+  }
+  if (!shouldRunPiNotifyPushover(config, pushoverRequest)) {
     return;
   }
-  runPiNotifySoundCommand(
-    config,
-    config["notify-sound"] as Exclude<PiNotifySoundLevel, "none">,
-  );
+  runPiNotifyPushoverRequest(config, pushoverRequest as PiNotifyPushoverRequest);
 }
