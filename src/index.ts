@@ -71,11 +71,7 @@ import {
   type PiNotifyPushoverRequest,
   type PiNotifySoundLevel,
 } from "./core/pi-notify.js";
-import {
-  buildRuntimePathContext,
-  buildRuntimePathFacts,
-  formatRuntimePathForDisplay,
-} from "./core/path-context.js";
+import { formatRuntimePathForDisplay } from "./core/path-context.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import { showPiUsereqSettingsMenu, type PiUsereqSettingsMenuChoice } from "./core/settings-menu.js";
 import {
@@ -165,20 +161,6 @@ function getProjectBase(cwd: string): string {
 }
 
 /**
- * @brief Builds the shared runtime path facts for the current command or tool context.
- * @details Derives installation, execution, base, config, resource, docs, test, source, and optional git paths from the cwd-derived project configuration plus runtime-only repository probing, then converts them into prompt/tool-facing strings. Runtime is O(s + p) where s is configured source-directory count and p is aggregate path length. Side effects are limited to git subprocess execution.
- * @param[in] cwd {string} Current working directory.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {import("./core/path-context.js").RuntimePathFacts} Shared runtime path facts.
- * @satisfies REQ-145, REQ-146
- */
-function buildSharedRuntimePathFacts(cwd: string, config: UseReqConfig): import("./core/path-context.js").RuntimePathFacts {
-  const projectBase = getProjectBase(cwd);
-  const gitPath = resolveRuntimeGitPath(projectBase);
-  return buildRuntimePathFacts(buildRuntimePathContext(projectBase, config, { gitPath }));
-}
-
-/**
  * @brief Loads project configuration for the extension runtime.
  * @details Resolves the project base, loads persisted config, and normalizes configured directory paths without reading or persisting runtime-derived `base-path` or `git-path` metadata. Runtime is dominated by config I/O. Side effects are limited to filesystem reads.
  * @param[in] cwd {string} Current working directory.
@@ -263,10 +245,12 @@ function collectProjectStaticCheckSelection(
  * @return {string} Newline-delimited execution diagnostics.
  */
 function buildTokenToolExecutionStderr(payload: TokenToolPayload): string {
-  const skippedLines = payload.guidance.source_observations.skipped_inputs
-    .map((entry) => `skipped: ${entry.canonical_path}: ${entry.reason}`);
-  const errorLines = payload.guidance.source_observations.error_inputs
-    .map((entry) => `error: ${entry.canonical_path}: ${entry.reason}`);
+  const skippedLines = payload.files
+    .filter((entry) => entry.status === "skipped" && entry.error_message)
+    .map((entry) => `skipped: ${entry.canonical_path}: ${entry.error_message!}`);
+  const errorLines = payload.files
+    .filter((entry) => entry.status === "error" && entry.error_message)
+    .map((entry) => `error: ${entry.canonical_path}: ${entry.error_message!}`);
   return [...skippedLines, ...errorLines].join("\n");
 }
 
@@ -284,10 +268,8 @@ function buildTokenToolExecuteResult(
   details: TokenToolPayload & { execution: { code: number; stderr: string } };
 } {
   const details = {
-    request: payload.request,
     summary: payload.summary,
     files: payload.files,
-    guidance: payload.guidance,
     execution: {
       code: payload.summary.counted_file_count > 0 ? 0 : 1,
       stderr: buildTokenToolExecutionStderr(payload),
@@ -310,7 +292,6 @@ function buildReferenceToolExecuteResult(
   details: ReferenceToolPayload & { execution: { code: number; stderr: string } };
 } {
   const details = {
-    request: payload.request,
     summary: payload.summary,
     repository: payload.repository,
     files: payload.files,
@@ -336,7 +317,6 @@ function buildCompressionToolExecuteResult(
   details: CompressToolPayload & { execution: { code: number; stderr: string } };
 } {
   const details = {
-    request: payload.request,
     summary: payload.summary,
     repository: payload.repository,
     files: payload.files,
@@ -423,7 +403,7 @@ function buildFindToolSchemaDescription(scope: FindToolScope): string {
   const inputContract = scope === "explicit-files"
     ? "Input contract: tag + pattern + files[] + optional enableLineNumbers."
     : "Input contract: tag + pattern + optional enableLineNumbers. Scope is the configured src-dir list resolved from the current project configuration.";
-  return `${inputContract} Output contract: JSON object with request, summary, repository, files, and execution. Repository exposes file_canonical_paths and supported_tags_by_language. File entries expose path facts, supported_tags, structured statuses, file_doxygen, and match records with typed line ranges, stripped code lines, and structured Doxygen fields. Regex matches construct names only.`;
+  return `${inputContract} Output contract: JSON object with summary, repository, files, and execution. Static supported-tag matrices are documented in tool registration metadata instead of runtime responses. File entries expose structured statuses, file_doxygen, and match records with typed line ranges, stripped code lines, and structured Doxygen fields. Regex matches construct names only.`;
 }
 
 /**
@@ -437,13 +417,13 @@ function buildFindToolPromptGuidelines(scope: FindToolScope): string[] {
     ? "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute."
     : "Scope: resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.";
   const outputLine = scope === "explicit-files"
-    ? "Output contract: request + summary + repository + files + execution. Repository exposes requested file scope and supported_tags_by_language; file entries expose status, supported_tags, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields."
-    : "Output contract: request + summary + repository + files + execution. Repository exposes source_directory_paths, file_canonical_paths, and supported_tags_by_language; file entries expose status, supported_tags, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields.";
+    ? "Output contract: summary + repository + files + execution. Repository exposes requested file scope only when it adds dynamic search context; supported tags remain documented in registration metadata. File entries expose status, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields."
+    : "Output contract: summary + repository + files + execution. Repository exposes source_directory_paths and file_canonical_paths when project-scope search context varies; supported tags remain documented in registration metadata. File entries expose status, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields.";
   return [
     scopeLine,
     outputLine,
     "Regex rule: pattern is applied to construct names only with JavaScript RegExp search semantics; it never matches construct bodies; use ^...$ for exact-name matching.",
-    "Tag rule: tag is pipe-separated and case-insensitive; unsupported tags are ignored; if no valid tag remains, request.tag_filter_status becomes invalid.",
+    "Tag rule: tag is pipe-separated and case-insensitive; unsupported tags are ignored; if no valid tag remains, the response search_status becomes invalid_tag_filter.",
     "Line-number behavior: enableLineNumbers changes only display_text and stripped_source_text rendering; numeric source_line_number and line_range facts remain dedicated fields.",
     "Failure contract: invalid tag filters, invalid regex patterns, unsupported extensions, unsupported tag-language combinations, no-match files, and analysis failures are surfaced as structured statuses plus optional execution.stderr diagnostics.",
     ...buildFindToolSupportedTagGuidelines(),
@@ -465,7 +445,6 @@ function buildFindToolExecuteResult(
 } {
   const stderr = buildFindToolExecutionStderr(payload);
   const details = {
-    request: payload.request,
     summary: payload.summary,
     repository: payload.repository,
     files: payload.files,
@@ -1131,17 +1110,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const gitPathSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived runtime git root.",
+      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes path_value and path_present for the cwd-derived runtime git root.",
     },
   );
   pi.registerTool({
     name: "git-path",
     label: "git-path",
-    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `git-path` value through direct-access fields instead of text-only output.",
+    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the resolved `git-path` value through direct-access fields without request echoes.",
     promptSnippet: "Return the structured runtime git-root payload for the current project.",
     promptGuidelines: [
       "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: request + result + execution. Result exposes path_key, path_value, and path_present.",
+      "Output contract: result + execution. Result exposes path_value and path_present.",
       "Behavior contract: git-path is derived at runtime from the current working directory and repository ancestry rules.",
       "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
     ],
@@ -1150,14 +1129,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
       ensureBundledResourcesAccessible();
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const result = runGitPath(projectBase, config);
       const payload = buildPathQueryToolPayload(
         "git-path",
         process.cwd(),
         projectBase,
         result.stdout.trimEnd(),
-        runtimePaths,
         buildToolExecutionSection(result),
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1167,17 +1144,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const basePathSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived runtime base path.",
+      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes path_value and path_present for the cwd-derived runtime base path.",
     },
   );
   pi.registerTool({
     name: "get-base-path",
     label: "get-base-path",
-    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `base-path` value through direct-access fields instead of text-only output.",
+    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the resolved `base-path` value through direct-access fields without request echoes.",
     promptSnippet: "Return the structured runtime project-base payload.",
     promptGuidelines: [
       "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: request + result + execution. Result exposes path_key, path_value, and path_present.",
+      "Output contract: result + execution. Result exposes path_value and path_present.",
       "Behavior contract: base-path equals the current working directory used by the extension command or tool.",
       "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
     ],
@@ -1185,14 +1162,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const result = runGetBasePath(projectBase, config);
       const payload = buildPathQueryToolPayload(
         "get-base-path",
         process.cwd(),
         projectBase,
         result.stdout.trimEnd(),
-        runtimePaths,
         buildToolExecutionSection(result),
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1207,7 +1182,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       ),
     },
     {
-      description: "Input contract: files[]. Output contract: JSON object with request, summary, repository, files, and execution. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts. Missing or unsupported inputs become skipped entries. The tool fails when no source file can be analyzed.",
+      description: "Input contract: files[]. Output contract: JSON object with summary, repository, files, and execution. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts. Missing or unsupported inputs become skipped entries. The tool fails when no source file can be analyzed.",
     },
   );
   const multiFileSchema = Type.Object(
@@ -1218,7 +1193,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       ),
     },
     {
-      description: "Input contract: files[]. Output contract: JSON object with request, summary, files, and execution. File entries expose canonical paths, detected language, configured checker modules, selection status, and error facts.",
+      description: "Input contract: files[]. Output contract: JSON object with summary, files, and execution. File entries expose canonical paths, detected language, configured checker modules, selection status, and error facts.",
     },
   );
   const filesTokensSchema = Type.Object(
@@ -1229,19 +1204,19 @@ function registerAgentTools(pi: ExtensionAPI): void {
       ),
     },
     {
-      description: "Input contract: files[]. Output contract: JSON object with request, summary, files, guidance, and execution. File entries expose path identifiers, access facts, line ranges, sizes, token metrics, and optional heading or Doxygen metadata. Missing or non-file inputs become skipped entries. The tool fails when no processable files remain.",
+      description: "Input contract: files[]. Output contract: JSON object with summary, files, and execution. File entries expose direct-access facts, token metrics, and optional heading or Doxygen metadata. Missing or non-file inputs become skipped entries. The tool fails when no processable files remain.",
     },
   );
 
   pi.registerTool({
     name: "files-tokens",
     label: "files-tokens",
-    description: "Scope: explicit files. Return an LLM-oriented JSON payload with request, summary, files, guidance, and execution sections. File entries expose direct-access path facts, status, line ranges, sizes, token metrics, and optional heading or Doxygen metadata.",
+    description: "Scope: explicit files. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose direct-access path facts, status, size metrics, and optional heading or Doxygen metadata.",
     promptSnippet: "Return the structured token-analysis payload for caller-selected files.",
     promptGuidelines: [
       "Scope: explicit files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
-      "Output contract: request + summary + files + guidance + execution. File entries expose canonical paths, absolute paths, existence, file status, line range, line count, byte count, character count, token count, shares, and optional primary-heading or Doxygen file metadata.",
-      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; descriptive text is limited to stable reasons and guidance labels.",
+      "Output contract: summary + files + execution. File entries expose canonical paths, absolute paths, existence, file status, line range, line count, byte count, character count, token count, shares, and optional primary-heading or Doxygen file metadata.",
+      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; static request metadata and derived guidance are omitted from runtime responses.",
       "Behavior contract: missing or non-file inputs become skipped entries; read failures become error entries; the tool fails only when no processable files remain.",
     ],
     parameters: filesTokensSchema,
@@ -1260,11 +1235,11 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "files-references",
     label: "files-references",
-    description: "Scope: explicit source files. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts.",
+    description: "Scope: explicit source files. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts.",
     promptSnippet: "Return the structured references payload for caller-selected source files.",
     promptGuidelines: [
       "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
-      "Output contract: request + summary + repository + files + execution. File entries expose canonical paths, absolute paths, file status, line counts, line ranges, imports, symbols, child relationships, standalone comments, and structured Doxygen metadata.",
+      "Output contract: summary + repository + files + execution. File entries expose canonical paths, absolute paths, file status, line counts, line ranges, imports, symbols, child relationships, standalone comments, and structured Doxygen metadata.",
       "Numeric contract: line counts, line ranges, symbol counts, import counts, comment counts, and Doxygen counts remain in dedicated numeric fields; text is limited to residual comment or signature content that cannot be split safely.",
       "Behavior contract: missing inputs, non-file inputs, and unsupported extensions become structured skipped entries; analysis failures become structured error entries; the tool fails only when no source file can be analyzed.",
     ],
@@ -1289,18 +1264,18 @@ function registerAgentTools(pi: ExtensionAPI): void {
       enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `compressed_source_text` and `compressed_lines[].display_text` include original source line-number prefixes" })),
     },
     {
-      description: "Input contract: files[] plus optional enableLineNumbers. Output contract: JSON object with request, summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. Missing, unsupported, or invalid inputs become structured skipped entries. The tool fails when no file is compressed.",
+      description: "Input contract: files[] plus optional enableLineNumbers. Output contract: JSON object with summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. Missing, unsupported, or invalid inputs become structured skipped entries. The tool fails when no file is compressed.",
     },
   );
 
   pi.registerTool({
     name: "files-compress",
     label: "files-compress",
-    description: "Scope: explicit files. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
+    description: "Scope: explicit files. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
     promptSnippet: "Return the structured compression payload for caller-selected source files.",
     promptGuidelines: [
       "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
-      "Output contract: request + summary + repository + files + execution. File entries expose canonical paths, absolute paths, line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
+      "Output contract: summary + repository + files + execution. File entries expose canonical paths, absolute paths, line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
       "Line-number behavior: enableLineNumbers changes only rendered display strings; numeric source_line_number facts remain dedicated fields on compressed_lines for direct access.",
       "Behavior contract: missing inputs, non-file inputs, and unsupported extensions become structured skipped entries; compression failures become structured error entries; symbol-analysis failures retain compressed output with symbol_analysis_status=error; the tool fails only when no file is compressed.",
     ],
@@ -1335,7 +1310,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "files-find",
     label: "files-find",
-    description: "Scope: explicit source files. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
+    description: "Scope: explicit source files. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
     promptSnippet: "Return the structured construct-search payload for caller-selected source files.",
     promptGuidelines: buildFindToolPromptGuidelines("explicit-files"),
     parameters: filesFindSchema,
@@ -1356,24 +1331,24 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const referencesSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with request, summary, repository, files, and execution. Repository exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, and status facts. The tool fails when no configured source file can be analyzed.",
+      description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with summary, repository, files, and execution. Repository exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, and status facts. The tool fails when no configured source file can be analyzed.",
     },
   );
   const tokensSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Scope is the configured docs-dir plus canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md. Output contract: same structured JSON shape as files-tokens, plus docs_dir_path and canonical_doc_names in request. Missing canonical docs become skipped entries. The tool fails when no processable canonical docs remain.",
+      description: "Input contract: no params. Scope is the configured docs-dir plus canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md. Output contract: same token-optimized JSON shape as files-tokens. Missing canonical docs become skipped entries. The tool fails when no processable canonical docs remain.",
     },
   );
 
   pi.registerTool({
     name: "references",
     label: "references",
-    description: "Scope: configured project source directories. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. The repository section exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and status facts.",
+    description: "Scope: configured project source directories. Return a token-optimized JSON payload with summary, repository, files, and execution sections. The repository section exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and status facts.",
     promptSnippet: "Return the structured project references payload from the configured source directories.",
     promptGuidelines: [
       "Scope: no params; resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
-      "Output contract: request + summary + repository + files + execution. Repository exposes source_directory_paths, file_canonical_paths, and directory_tree; file entries expose canonical paths, line counts, line ranges, imports, symbols, hierarchy, standalone comments, and structured Doxygen metadata.",
+      "Output contract: summary + repository + files + execution. Repository exposes source_directory_paths, file_canonical_paths, and directory_tree; file entries expose canonical paths, line counts, line ranges, imports, symbols, hierarchy, standalone comments, and structured Doxygen metadata.",
       "Configuration contract: output changes with cwd-derived project config, src-dir values, and repository source discovery; the tool does not accept explicit file overrides.",
       "Behavior contract: configured source files are analyzed in deterministic order, analysis failures become structured error entries, and the tool fails when no configured source file can be analyzed.",
     ],
@@ -1397,18 +1372,18 @@ function registerAgentTools(pi: ExtensionAPI): void {
       enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `compressed_source_text` and `compressed_lines[].display_text` include original source line-number prefixes" })),
     },
     {
-      description: "Input contract: optional enableLineNumbers boolean. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with request, summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. The tool fails when no configured source file is compressed.",
+      description: "Input contract: optional enableLineNumbers boolean. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. The tool fails when no configured source file is compressed.",
     },
   );
 
   pi.registerTool({
     name: "compress",
     label: "compress",
-    description: "Scope: configured project source directories. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
+    description: "Scope: configured project source directories. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
     promptSnippet: "Return the structured project compression payload from the configured source directories.",
     promptGuidelines: [
       "Scope: resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
-      "Output contract: request + summary + repository + files + execution. Repository exposes source_directory_paths and file_canonical_paths; file entries expose line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
+      "Output contract: summary + repository + files + execution. Repository exposes source_directory_paths and file_canonical_paths; file entries expose line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
       "Configuration contract: output changes with cwd-derived project config, src-dir values, and repository source discovery; the tool does not accept explicit file overrides.",
       "Behavior contract: configured source files are processed in deterministic order, compression failures become structured error entries, symbol-analysis failures retain compressed output with symbol_analysis_status=error, and the tool fails only when no configured source file is compressed.",
     ],
@@ -1443,7 +1418,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "find",
     label: "find",
-    description: "Scope: configured project source directories. Return an LLM-oriented JSON payload with request, summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
+    description: "Scope: configured project source directories. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
     promptSnippet: "Return the structured construct-search payload from the configured source directories.",
     promptGuidelines: buildFindToolPromptGuidelines("configured-source-directories"),
     parameters: findSchema,
@@ -1468,12 +1443,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "tokens",
     label: "tokens",
-    description: "Scope: canonical docs from the configured docs-dir. Return the same LLM-oriented JSON contract as files-tokens, plus canonical-doc selection metadata in request for REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
+    description: "Scope: canonical docs from the configured docs-dir. Return the same token-optimized JSON contract as files-tokens, omitting canonical-doc request echoes from runtime responses.",
     promptSnippet: "Return the structured token-analysis payload for canonical documentation files.",
     promptGuidelines: [
       "Scope: no params; resolve docs-dir from project config; target canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
-      "Output contract: request + summary + files + guidance + execution. Request includes docs_dir_path and canonical_doc_names; file entries expose direct-access path facts, line ranges, sizes, token metrics, and optional metadata.",
-      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; guidance separates source observations, derived recommendations, and actionable next-step hints.",
+      "Output contract: summary + files + execution. Static docs-dir and canonical-doc selection facts remain documented in registration metadata; file entries expose direct-access path facts, line ranges, sizes, token metrics, and optional metadata.",
+      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; derived guidance is omitted from runtime responses to reduce token cost.",
       "Behavior contract: missing canonical docs become skipped entries; read failures become error entries; the tool fails only when no processable canonical docs remain.",
     ],
     parameters: tokensSchema,
@@ -1498,11 +1473,11 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "files-static-check",
     label: "files-static-check",
-    description: "Scope: explicit files. Return a JSON-first payload with request, summary, files, and execution sections. File entries expose canonical paths, detected language, configured checker modules, selection status, and stable error facts.",
+    description: "Scope: explicit files. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose canonical paths, detected language, configured checker modules, selection status, and stable error facts.",
     promptSnippet: "Return the structured explicit-file static-check payload for the current project configuration.",
     promptGuidelines: [
       "Input contract: files[]. Scope is explicit caller-selected files resolved from the current working directory.",
-      "Output contract: request + summary + files + execution. File entries expose canonical_path, language_name, configured_checker_modules, status, and error_message.",
+      "Output contract: summary + files + execution. File entries expose canonical_path, language_name, configured_checker_modules, status, and error_message.",
       "Configuration contract: checker selection is derived from the cwd-resolved static-check configuration and file extensions only.",
       "Failure contract: execution.code mirrors aggregated checker failures; execution.stdout_lines and execution.stderr_lines preserve residual checker diagnostics.",
     ],
@@ -1510,7 +1485,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const staticCheckConfig = config["static-check"] ?? {};
       const result = runFilesStaticCheck(params.files, projectBase, config);
       const payload = buildStaticCheckToolPayload(
@@ -1521,7 +1495,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         [],
         [],
         staticCheckConfig,
-        runtimePaths,
         buildToolExecutionSection(result),
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1531,17 +1504,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const staticCheckSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Scope is the configured src-dir plus tests-dir selection after fixture exclusion. Output contract: JSON object with request, summary, files, and execution.",
+      description: "Input contract: no params. Scope is the configured src-dir plus tests-dir selection after fixture exclusion. Output contract: JSON object with summary, files, and execution.",
     },
   );
   pi.registerTool({
     name: "static-check",
     label: "static-check",
-    description: "Scope: configured source and test directories. Return a JSON-first payload with request, summary, files, and execution sections. File entries expose selected-path facts, checker coverage, selection status, and residual diagnostics metadata.",
+    description: "Scope: configured source and test directories. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose selected-path facts, checker coverage, selection status, and residual diagnostics metadata.",
     promptSnippet: "Return the structured project static-check payload for the current configuration.",
     promptGuidelines: [
       "Input contract: no params. Scope is src-dir plus tests-dir from the cwd-derived project configuration.",
-      "Output contract: request + summary + files + execution. Request exposes selection_directory_paths and excluded_directory_paths; file entries expose configured_checker_modules and status.",
+      "Output contract: summary + files + execution. Selection-directory rules remain documented in registration metadata; file entries expose configured_checker_modules and status.",
       "Selection contract: tests/fixtures and <tests-dir>/fixtures are excluded before checker dispatch.",
       "Failure contract: execution.code mirrors aggregated checker failures or selection failures; execution.stderr_lines preserve residual diagnostics.",
     ],
@@ -1549,7 +1522,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       const staticCheckConfig = config["static-check"] ?? {};
       const selectionDirectoryPaths = [...config["src-dir"], config["tests-dir"]];
       const testsDirRel = makeRelativeIfContainsProject(config["tests-dir"], projectBase)
@@ -1577,7 +1549,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         selectionDirectoryPaths,
         excludedDirectoryPaths,
         staticCheckConfig,
-        runtimePaths,
         execution,
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1587,17 +1558,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const gitCheckSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes git-root presence plus clean-versus-error repository status fields.",
+      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes git-path presence plus aggregate repository status fields.",
     },
   );
   pi.registerTool({
     name: "git-check",
     label: "git-check",
-    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes repository validation status through direct fields instead of empty-success text.",
+    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes repository validation status through direct fields without request echoes.",
     promptSnippet: "Return the structured git-validation payload for the runtime repository.",
     promptGuidelines: [
       "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: request + result + execution. Result exposes git_path_present, status, worktree_status, and head_status.",
+      "Output contract: result + execution. Result exposes git_path_present and aggregate status.",
       "Behavior contract: the tool checks work-tree membership, porcelain cleanliness, and symbolic-or-detached HEAD validity.",
       "Failure contract: execution.code and execution.stderr_lines surface git-path or repository-state errors.",
     ],
@@ -1605,14 +1576,13 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitCheck(projectBase, config));
       } catch (error) {
         execution = buildToolExecutionSection(normalizeToolFailure(error));
       }
-      const payload = buildGitCheckToolPayload(projectBase, resolveRuntimeGitPath(projectBase), runtimePaths, execution);
+      const payload = buildGitCheckToolPayload(projectBase, resolveRuntimeGitPath(projectBase), execution);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1620,17 +1590,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const docsCheckSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Output contract: JSON object with request, summary, files, and execution. File entries expose canonical paths, prompt_command remediation, and presence status for canonical docs.",
+      description: "Input contract: no params. Output contract: JSON object with summary, files, and execution. File entries expose canonical paths, prompt_command remediation, and presence status for canonical docs.",
     },
   );
   pi.registerTool({
     name: "docs-check",
     label: "docs-check",
-    description: "Scope: canonical docs. Return a JSON-first payload with request, summary, files, and execution sections. File entries expose remediation prompt commands and direct presence facts for REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
+    description: "Scope: canonical docs. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose remediation prompt commands and direct presence facts for REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
     promptSnippet: "Return the structured canonical-document validation payload.",
     promptGuidelines: [
       "Input contract: no params. Scope is docs-dir from the cwd-derived project configuration.",
-      "Output contract: request + summary + files + execution. File entries expose file_name, canonical_path, prompt_command, and status.",
+      "Output contract: summary + files + execution. File entries expose file_name, canonical_path, prompt_command, and status.",
       "Specialization trigger: remediation differs per missing canonical file through prompt_command.",
       "Failure contract: execution.code is non-zero when any canonical document is missing; execution.stderr_lines enumerate missing files.",
     ],
@@ -1638,8 +1608,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
-      const payload = buildDocsCheckToolPayload(projectBase, config["docs-dir"], runtimePaths);
+      const payload = buildDocsCheckToolPayload(projectBase, config["docs-dir"]);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1647,17 +1616,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const gitWtNameSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes worktree_name and the normative useReq naming format string.",
+      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes worktree_name when generation succeeds.",
     },
   );
   pi.registerTool({
     name: "git-wt-name",
     label: "git-wt-name",
-    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the generated worktree name plus its normative format as direct fields.",
+    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the generated worktree name while static naming rules remain in registration metadata.",
     promptSnippet: "Return the structured worktree-name generation payload.",
     promptGuidelines: [
       "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: request + result + execution. Result exposes worktree_name and format_text.",
+      "Output contract: result + execution. Result exposes worktree_name.",
       "Behavior contract: generation follows useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>.",
       "Failure contract: execution.code and execution.stderr_lines surface git-path or branch-resolution errors.",
     ],
@@ -1665,14 +1634,13 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute() {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitWtName(projectBase, config));
       } catch (error) {
         execution = buildToolExecutionSection(normalizeToolFailure(error));
       }
-      const payload = buildWorktreeNameToolPayload(projectBase, resolveRuntimeGitPath(projectBase), runtimePaths, execution);
+      const payload = buildWorktreeNameToolPayload(projectBase, resolveRuntimeGitPath(projectBase), execution);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1682,17 +1650,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
       wtName: Type.String({ description: "Exact target worktree name and branch name" }),
     },
     {
-      description: "Input contract: wtName. Output contract: JSON object with request, result, and execution. Result exposes operation, worktree_name, branch_name, derived worktree_path, and status.",
+      description: "Input contract: wtName. Output contract: JSON object with result and execution. Result exposes worktree_name and derived worktree_path.",
     },
   );
   pi.registerTool({
     name: "git-wt-create",
     label: "git-wt-create",
-    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested create operation, exact worktree name, derived path, and mutation status.",
+    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the exact worktree name and derived path without static operation echoes.",
     promptSnippet: "Return the structured worktree-creation payload for the requested name.",
     promptGuidelines: [
       "Input contract: wtName is required and must match the exact worktree/branch name to create.",
-      "Output contract: request + result + execution. Result exposes operation=create, worktree_name, branch_name, worktree_path, and status.",
+      "Output contract: result + execution. Result exposes worktree_name and worktree_path.",
       "Specialization trigger: worktree_path depends on the runtime git root parent directory.",
       "Failure contract: execution.code and execution.stderr_lines surface invalid-name, git, or finalization errors.",
     ],
@@ -1700,7 +1668,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitWtCreate(projectBase, params.wtName, config));
@@ -1712,7 +1679,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         projectBase,
         resolveRuntimeGitPath(projectBase),
         params.wtName,
-        runtimePaths,
         execution,
       );
       return buildStructuredToolExecuteResult(payload);
@@ -1724,17 +1690,17 @@ function registerAgentTools(pi: ExtensionAPI): void {
       wtName: Type.String({ description: "Exact target worktree name and branch name" }),
     },
     {
-      description: "Input contract: wtName. Output contract: JSON object with request, result, and execution. Result exposes operation, worktree_name, branch_name, derived worktree_path, and status.",
+      description: "Input contract: wtName. Output contract: JSON object with result and execution. Result exposes worktree_name and derived worktree_path.",
     },
   );
   pi.registerTool({
     name: "git-wt-delete",
     label: "git-wt-delete",
-    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested delete operation, exact worktree name, derived path, and mutation status.",
+    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the exact worktree name and derived path without static operation echoes.",
     promptSnippet: "Return the structured worktree-deletion payload for the requested name.",
     promptGuidelines: [
       "Input contract: wtName is required and must match the exact worktree/branch name to delete.",
-      "Output contract: request + result + execution. Result exposes operation=delete, worktree_name, branch_name, worktree_path, and status.",
+      "Output contract: result + execution. Result exposes worktree_name and worktree_path.",
       "Specialization trigger: worktree_path depends on the runtime git root parent directory.",
       "Failure contract: execution.code and execution.stderr_lines surface missing-target or deletion errors.",
     ],
@@ -1742,7 +1708,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const projectBase = getProjectBase(process.cwd());
       const config = loadProjectConfig(process.cwd());
-      const runtimePaths = buildSharedRuntimePathFacts(process.cwd(), config);
       let execution;
       try {
         execution = buildToolExecutionSection(runGitWtDelete(projectBase, params.wtName, config));
@@ -1754,7 +1719,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         projectBase,
         resolveRuntimeGitPath(projectBase),
         params.wtName,
-        runtimePaths,
         execution,
       );
       return buildStructuredToolExecuteResult(payload);

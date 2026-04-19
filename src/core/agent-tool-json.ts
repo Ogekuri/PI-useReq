@@ -7,23 +7,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { StaticCheckEntry } from "./config.js";
-import type { RuntimePathFacts } from "./path-context.js";
 import { ReqError } from "./errors.js";
 import { STATIC_CHECK_EXT_TO_LANG } from "./static-check.js";
 import type { ToolResult } from "./tool-runner.js";
 
 /**
  * @brief Describes normalized execution metadata shared by structured tool payloads.
- * @details Separates numeric status, line-oriented diagnostics, and optional raw text so downstream agents can branch on stable fields before consulting residual text. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores only the exit code and residual stdout or stderr line arrays needed after response payload construction, omitting duplicate text and count fields to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface ToolExecutionSection {
   code: number;
-  stdout_line_count: number;
-  stderr_line_count: number;
-  stdout_lines: string[];
-  stderr_lines: string[];
-  stdout_text?: string;
-  stderr_text?: string;
+  stdout_lines?: string[];
+  stderr_lines?: string[];
 }
 
 /**
@@ -37,142 +32,85 @@ export interface StructuredToolExecuteResult<T> {
 
 /**
  * @brief Describes the structured payload returned by path-query tools.
- * @details Exposes the requested config key, caller cwd, resolved project base, resolved path value, and shared runtime path facts as direct-access fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only the resolved path facts that can differ at runtime plus residual execution diagnostics, omitting caller-known request echoes and duplicated runtime-path inventories. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PathQueryToolPayload {
-  request: {
-    tool_name: string;
-    scope: "project-config";
-    working_directory_path: string;
-    project_base_path: string;
-    query_key: "git-path" | "base-path";
-  };
   result: {
-    status: "resolved" | "empty";
-    path_key: "git-path" | "base-path";
     path_value: string;
     path_present: boolean;
   };
-  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes the structured payload returned by `git-check`.
- * @details Exposes git-root presence, repository validation status, shared runtime path facts, and normalized execution diagnostics as stable fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only the runtime git-path presence fact plus aggregate repository validation status, omitting intermediate request metadata whose semantics already live in the tool registration. The interface is compile-time only and introduces no runtime cost.
  */
 export interface GitCheckToolPayload {
-  request: {
-    tool_name: "git-check";
-    scope: "project-config";
-    project_base_path: string;
-    configured_git_path: string;
-    git_path_present: boolean;
-  };
   result: {
+    git_path_present: boolean;
     status: "clean" | "error";
-    worktree_status: "clean" | "unknown";
-    head_status: "valid" | "unknown";
     error_message?: string;
   };
-  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes one canonical-doc status record returned by `docs-check`.
- * @details Binds each required filename to its prompt generator, normalized path facts, and presence status so agents can branch per missing document deterministically. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the canonical path, remediation prompt command, and presence status while omitting redundant filesystem probe fields already summarized by the status value. The interface is compile-time only and introduces no runtime cost.
  */
 export interface DocsCheckFileRecord {
   file_name: string;
   canonical_path: string;
-  absolute_path: string;
   prompt_command: string;
-  exists: boolean;
-  is_file: boolean;
   status: "present" | "missing";
 }
 
 /**
  * @brief Describes the structured payload returned by `docs-check`.
- * @details Exposes docs-root selection, per-document presence facts, remediation prompt commands, shared runtime path facts, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes per-document presence facts and remediation commands plus residual execution diagnostics, omitting static request metadata that can be inferred from the tool registration and caller context. The interface is compile-time only and introduces no runtime cost.
  */
 export interface DocsCheckToolPayload {
-  request: {
-    tool_name: "docs-check";
-    scope: "canonical-docs";
-    project_base_path: string;
-    docs_directory_path: string;
-    required_file_count: number;
-    required_file_names: string[];
-  };
   summary: {
     present_file_count: number;
     missing_file_count: number;
   };
   files: DocsCheckFileRecord[];
-  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes the structured payload returned by `git-wt-name`.
- * @details Exposes the generated worktree name, its normative format, shared runtime path facts, and execution diagnostics as direct-access fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only the generated worktree name plus residual execution diagnostics, omitting the static normative format string because it already belongs in registration metadata. The interface is compile-time only and introduces no runtime cost.
  */
 export interface WorktreeNameToolPayload {
-  request: {
-    tool_name: "git-wt-name";
-    scope: "project-config";
-    project_base_path: string;
-    configured_git_path: string;
-  };
   result: {
-    status: "generated" | "error";
     worktree_name?: string;
-    format_text: "useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>";
     error_message?: string;
   };
-  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes the structured payload returned by worktree mutation tools.
- * @details Exposes the requested operation, exact worktree name, derived worktree path, mutation status, shared runtime path facts, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only the exact worktree name and derived path that can vary per invocation plus residual execution diagnostics, omitting static operation descriptors and duplicated branch-name fields. The interface is compile-time only and introduces no runtime cost.
  */
 export interface WorktreeMutationToolPayload {
-  request: {
-    tool_name: "git-wt-create" | "git-wt-delete";
-    scope: "project-config";
-    operation: "create" | "delete";
-    project_base_path: string;
-    configured_git_path: string;
-    worktree_name: string;
-  };
   result: {
-    status: "created" | "deleted" | "error";
     worktree_name: string;
-    branch_name: string;
     worktree_path: string;
     error_message?: string;
   };
-  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
 /**
  * @brief Describes one file-selection record inside a static-check payload.
- * @details Exposes request order, normalized path facts, detected language, configured checker modules, and stable selection status without forcing agents to parse checker output text. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes canonical path, detected language, configured checker modules, and stable selection status without echoing caller inputs or redundant filesystem probe fields. The interface is compile-time only and introduces no runtime cost.
  */
 export interface StaticCheckFileRecord {
-  request_index: number;
-  input_path: string;
   canonical_path: string;
-  absolute_path: string;
-  exists: boolean;
-  is_file: boolean;
   language_name?: string;
-  configured_checker_count: number;
   configured_checker_modules: string[];
   status: "selected" | "skipped" | "unsupported_language" | "no_configured_checkers";
   error_message?: string;
@@ -180,20 +118,9 @@ export interface StaticCheckFileRecord {
 
 /**
  * @brief Describes the structured payload returned by static-check agent tools.
- * @details Exposes scope selection, configured checker coverage, per-file selection facts, shared runtime path facts, and normalized execution diagnostics while keeping residual checker text optional under execution. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes aggregate checker coverage, per-file selection facts, and normalized execution diagnostics while omitting request echoes whose semantics are already available in the tool registration and input parameters. The interface is compile-time only and introduces no runtime cost.
  */
 export interface StaticCheckToolPayload {
-  request: {
-    tool_name: "files-static-check" | "static-check";
-    scope: "explicit-files" | "configured-source-and-test-directories";
-    project_base_path: string;
-    configured_language_count: number;
-    configured_languages: string[];
-    selection_directory_paths: string[];
-    excluded_directory_paths: string[];
-    requested_file_count: number;
-    requested_input_paths: string[];
-  };
   summary: {
     selected_file_count: number;
     skipped_file_count: number;
@@ -202,7 +129,6 @@ export interface StaticCheckToolPayload {
     total_configured_checker_count: number;
   };
   files: StaticCheckFileRecord[];
-  runtime_paths: RuntimePathFacts;
   execution: ToolExecutionSection;
 }
 
@@ -260,9 +186,9 @@ export function buildStructuredToolExecuteResult<T extends { execution: ToolExec
 
 /**
  * @brief Converts one raw `ToolResult` into a normalized execution section.
- * @details Separates numeric exit status, line-oriented stdout/stderr arrays, and optional raw text so downstream agents can consume structured facts before consulting residual text. Runtime is O(n) in output size. No external state is mutated.
+ * @details Preserves only the exit code plus non-empty stdout or stderr line arrays so downstream payloads carry residual diagnostics without duplicating the primary structured response body. Runtime is O(n) in output size. No external state is mutated.
  * @param[in] result {ToolResult} Raw tool result.
- * @return {ToolExecutionSection} Normalized execution metadata.
+ * @return {ToolExecutionSection} Normalized residual execution metadata.
  */
 export function buildToolExecutionSection(result: ToolResult): ToolExecutionSection {
   const stdoutText = result.stdout.trimEnd();
@@ -271,12 +197,8 @@ export function buildToolExecutionSection(result: ToolResult): ToolExecutionSect
   const stderrLines = splitToolOutputLines(stderrText);
   return {
     code: result.code,
-    stdout_line_count: stdoutLines.length,
-    stderr_line_count: stderrLines.length,
-    stdout_lines: stdoutLines,
-    stderr_lines: stderrLines,
-    stdout_text: stdoutText === "" ? undefined : stdoutText,
-    stderr_text: stderrText === "" ? undefined : stderrText,
+    stdout_lines: stdoutLines.length === 0 ? undefined : stdoutLines,
+    stderr_lines: stderrLines.length === 0 ? undefined : stderrLines,
   };
 }
 
@@ -300,12 +222,11 @@ export function normalizeToolFailure(error: unknown): ToolResult {
 
 /**
  * @brief Builds the structured payload returned by `git-path` or `get-base-path`.
- * @details Exposes the resolved runtime path value as a direct-access field and preserves normalized execution metadata separately from path facts. Runtime is O(p) in path length. No external state is mutated.
+ * @details Exposes only the resolved runtime path value plus residual execution metadata, omitting request echoes and duplicated runtime-path inventories from the runtime payload. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] toolName {"git-path" | "get-base-path"} Target tool name.
  * @param[in] workingDirectoryPath {string} Caller working directory.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] resolvedPath {string} Resolved config path value.
- * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {PathQueryToolPayload} Structured path-query payload.
  */
@@ -314,76 +235,55 @@ export function buildPathQueryToolPayload(
   workingDirectoryPath: string,
   projectBasePath: string,
   resolvedPath: string,
-  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): PathQueryToolPayload {
-  const queryKey = toolName === "git-path" ? "git-path" : "base-path";
+  void toolName;
+  void workingDirectoryPath;
+  void projectBasePath;
   return {
-    request: {
-      tool_name: toolName,
-      scope: "project-config",
-      working_directory_path: path.resolve(workingDirectoryPath).split(path.sep).join("/"),
-      project_base_path: path.resolve(projectBasePath).split(path.sep).join("/"),
-      query_key: queryKey,
-    },
     result: {
-      status: resolvedPath === "" ? "empty" : "resolved",
-      path_key: queryKey,
       path_value: resolvedPath,
       path_present: resolvedPath !== "",
     },
-    runtime_paths: runtimePaths,
     execution,
   };
 }
 
 /**
  * @brief Builds the structured payload returned by `git-check`.
- * @details Encodes runtime git-root presence plus clean-versus-error status as direct fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
+ * @details Encodes runtime git-path presence plus aggregate clean-versus-error status while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] configuredGitPath {string | undefined} Runtime git root path.
- * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {GitCheckToolPayload} Structured git-check payload.
  */
 export function buildGitCheckToolPayload(
   projectBasePath: string,
   configuredGitPath: string | undefined,
-  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): GitCheckToolPayload {
-  const errorMessage = execution.stderr_lines[0];
+  void projectBasePath;
+  const errorMessage = execution.stderr_lines?.[0];
   return {
-    request: {
-      tool_name: "git-check",
-      scope: "project-config",
-      project_base_path: path.resolve(projectBasePath).split(path.sep).join("/"),
-      configured_git_path: configuredGitPath ?? "",
-      git_path_present: Boolean(configuredGitPath),
-    },
     result: {
+      git_path_present: Boolean(configuredGitPath),
       status: execution.code === 0 ? "clean" : "error",
-      worktree_status: execution.code === 0 ? "clean" : "unknown",
-      head_status: execution.code === 0 ? "valid" : "unknown",
       error_message: execution.code === 0 ? undefined : errorMessage,
     },
-    runtime_paths: runtimePaths,
     execution,
   };
 }
 
 /**
  * @brief Builds the structured payload returned by `docs-check`.
- * @details Enumerates required canonical documents, binds each missing file to its remediation prompt command, and emits summary counts plus normalized execution metadata. Runtime is O(k) in required file count plus filesystem reads. Side effects are limited to filesystem reads.
+ * @details Enumerates required canonical documents, binds each missing file to its remediation prompt command, and emits summary counts plus residual execution diagnostics while omitting static request metadata. Runtime is O(k) in required file count plus filesystem reads. Side effects are limited to filesystem reads.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] docsDirPath {string} Configured docs directory relative to the project base.
- * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @return {DocsCheckToolPayload} Structured docs-check payload.
  */
 export function buildDocsCheckToolPayload(
   projectBasePath: string,
   docsDirPath: string,
-  runtimePaths: RuntimePathFacts,
 ): DocsCheckToolPayload {
   const normalizedProjectBasePath = path.resolve(projectBasePath);
   const normalizedDocsRootPath = path.join(normalizedProjectBasePath, docsDirPath.replace(/[/\\]+$/, ""));
@@ -398,10 +298,7 @@ export function buildDocsCheckToolPayload(
     return {
       file_name: fileName,
       canonical_path: canonicalizeToolPath(normalizedProjectBasePath, absolutePath),
-      absolute_path: absolutePath.split(path.sep).join("/"),
       prompt_command: promptCommand,
-      exists,
-      is_file: isFile,
       status: isFile ? "present" : "missing",
     };
   });
@@ -414,66 +311,47 @@ export function buildDocsCheckToolPayload(
     code: missingFiles.length === 0 ? 0 : 1,
   });
   return {
-    request: {
-      tool_name: "docs-check",
-      scope: "canonical-docs",
-      project_base_path: normalizedProjectBasePath.split(path.sep).join("/"),
-      docs_directory_path: normalizedDocsRootPath.split(path.sep).join("/"),
-      required_file_count: files.length,
-      required_file_names: files.map((file) => file.file_name),
-    },
     summary: {
       present_file_count: files.length - missingFiles.length,
       missing_file_count: missingFiles.length,
     },
     files,
-    runtime_paths: runtimePaths,
     execution,
   };
 }
 
 /**
  * @brief Builds the structured payload returned by `git-wt-name`.
- * @details Preserves the generated worktree name plus its normative format string as direct-access fields and reports failures through structured execution metadata. Runtime is O(n) in output size. No external state is mutated.
+ * @details Preserves only the generated worktree name and error diagnostics, leaving the static naming format in registration metadata instead of the runtime payload. Runtime is O(n) in output size. No external state is mutated.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] configuredGitPath {string | undefined} Runtime git root path.
- * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {WorktreeNameToolPayload} Structured worktree-name payload.
  */
 export function buildWorktreeNameToolPayload(
   projectBasePath: string,
   configuredGitPath: string | undefined,
-  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): WorktreeNameToolPayload {
-  const worktreeName = execution.stdout_lines[0];
+  void projectBasePath;
+  void configuredGitPath;
+  const worktreeName = execution.stdout_lines?.[0];
   return {
-    request: {
-      tool_name: "git-wt-name",
-      scope: "project-config",
-      project_base_path: path.resolve(projectBasePath).split(path.sep).join("/"),
-      configured_git_path: configuredGitPath ?? "",
-    },
     result: {
-      status: execution.code === 0 && worktreeName ? "generated" : "error",
       worktree_name: worktreeName,
-      format_text: "useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>",
-      error_message: execution.code === 0 ? undefined : execution.stderr_lines[0],
+      error_message: execution.code === 0 ? undefined : execution.stderr_lines?.[0],
     },
-    runtime_paths: runtimePaths,
     execution,
   };
 }
 
 /**
  * @brief Builds the structured payload returned by `git-wt-create` or `git-wt-delete`.
- * @details Exposes the requested operation, exact worktree name, derived worktree path, and mutation outcome as stable JSON fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
+ * @details Exposes only the exact worktree name, derived worktree path, and error diagnostics, omitting static operation and branch-name echoes from the runtime payload. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] toolName {"git-wt-create" | "git-wt-delete"} Target tool name.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] configuredGitPath {string | undefined} Runtime git root path.
  * @param[in] worktreeName {string} Exact requested worktree name.
- * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {WorktreeMutationToolPayload} Structured worktree mutation payload.
  */
@@ -482,40 +360,27 @@ export function buildWorktreeMutationToolPayload(
   projectBasePath: string,
   configuredGitPath: string | undefined,
   worktreeName: string,
-  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): WorktreeMutationToolPayload {
+  void toolName;
+  void projectBasePath;
   const gitRoot = configuredGitPath ? path.resolve(configuredGitPath) : "";
   const worktreePath = gitRoot === ""
     ? ""
     : path.join(path.dirname(gitRoot), worktreeName).split(path.sep).join("/");
-  const operation = toolName === "git-wt-create" ? "create" : "delete";
   return {
-    request: {
-      tool_name: toolName,
-      scope: "project-config",
-      operation,
-      project_base_path: path.resolve(projectBasePath).split(path.sep).join("/"),
-      configured_git_path: configuredGitPath ?? "",
-      worktree_name: worktreeName,
-    },
     result: {
-      status: execution.code === 0
-        ? (operation === "create" ? "created" : "deleted")
-        : "error",
       worktree_name: worktreeName,
-      branch_name: worktreeName,
       worktree_path: worktreePath,
-      error_message: execution.code === 0 ? undefined : execution.stderr_lines[0],
+      error_message: execution.code === 0 ? undefined : execution.stderr_lines?.[0],
     },
-    runtime_paths: runtimePaths,
     execution,
   };
 }
 
 /**
  * @brief Builds one static-check file-selection record.
- * @details Resolves filesystem status, detects the configured language by file extension, counts configured checker entries, and emits a stable selection status without parsing checker output text. Runtime is O(p + c) in path length plus configured checker count. Side effects are limited to filesystem reads.
+ * @details Resolves filesystem status, detects the configured language by file extension, and emits the configured checker modules plus a stable selection status without echoing caller inputs or redundant filesystem facts. Runtime is O(p + c) in path length plus configured checker count. Side effects are limited to filesystem reads.
  * @param[in] inputPath {string} Caller-supplied file path.
  * @param[in] requestIndex {number} Zero-based request position.
  * @param[in] projectBasePath {string} Resolved project base path.
@@ -528,6 +393,7 @@ function buildStaticCheckFileRecord(
   projectBasePath: string,
   staticCheckConfig: Record<string, StaticCheckEntry[]>,
 ): StaticCheckFileRecord {
+  void requestIndex;
   const absolutePath = path.resolve(projectBasePath, inputPath);
   const exists = fs.existsSync(absolutePath);
   const isFile = exists && fs.statSync(absolutePath).isFile();
@@ -549,14 +415,8 @@ function buildStaticCheckFileRecord(
     errorMessage = "no configured checkers";
   }
   return {
-    request_index: requestIndex,
-    input_path: inputPath,
     canonical_path: canonicalizeToolPath(projectBasePath, absolutePath),
-    absolute_path: absolutePath.split(path.sep).join("/"),
-    exists,
-    is_file: isFile,
     language_name: languageName,
-    configured_checker_count: configuredCheckers.length,
     configured_checker_modules: configuredCheckers.map((checker) => checker.module),
     status,
     error_message: errorMessage,
@@ -565,7 +425,7 @@ function buildStaticCheckFileRecord(
 
 /**
  * @brief Builds the structured payload returned by `files-static-check` or `static-check`.
- * @details Exposes configured checker coverage, per-file selection facts, and normalized execution diagnostics while leaving raw checker output under execution for residual inspection only. Runtime is O(F + C). Side effects are limited to filesystem reads.
+ * @details Exposes configured checker coverage, per-file selection facts, and normalized execution diagnostics while omitting request echoes whose semantics already live in registration metadata. Runtime is O(F + C). Side effects are limited to filesystem reads.
  * @param[in] toolName {"files-static-check" | "static-check"} Target tool name.
  * @param[in] scope {"explicit-files" | "configured-source-and-test-directories"} Selection scope label.
  * @param[in] projectBasePath {string} Resolved project base path.
@@ -573,7 +433,6 @@ function buildStaticCheckFileRecord(
  * @param[in] selectionDirectoryPaths {string[]} Directories that produced the selection.
  * @param[in] excludedDirectoryPaths {string[]} Directory roots excluded from project selection.
  * @param[in] staticCheckConfig {Record<string, StaticCheckEntry[]>} Effective static-check configuration.
- * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {StaticCheckToolPayload} Structured static-check payload.
  */
@@ -585,37 +444,27 @@ export function buildStaticCheckToolPayload(
   selectionDirectoryPaths: string[],
   excludedDirectoryPaths: string[],
   staticCheckConfig: Record<string, StaticCheckEntry[]>,
-  runtimePaths: RuntimePathFacts,
   execution: ToolExecutionSection,
 ): StaticCheckToolPayload {
+  void toolName;
+  void scope;
+  void selectionDirectoryPaths;
+  void excludedDirectoryPaths;
   const files = requestedPaths.map((inputPath, index) => buildStaticCheckFileRecord(
     inputPath,
     index,
     projectBasePath,
     staticCheckConfig,
   ));
-  const configuredLanguages = Object.keys(staticCheckConfig).sort((left, right) => left.localeCompare(right));
   return {
-    request: {
-      tool_name: toolName,
-      scope,
-      project_base_path: path.resolve(projectBasePath).split(path.sep).join("/"),
-      configured_language_count: configuredLanguages.length,
-      configured_languages: configuredLanguages,
-      selection_directory_paths: [...selectionDirectoryPaths],
-      excluded_directory_paths: [...excludedDirectoryPaths],
-      requested_file_count: requestedPaths.length,
-      requested_input_paths: [...requestedPaths],
-    },
     summary: {
       selected_file_count: files.filter((file) => file.status === "selected").length,
       skipped_file_count: files.filter((file) => file.status === "skipped").length,
       unsupported_file_count: files.filter((file) => file.status === "unsupported_language").length,
       no_configured_checker_file_count: files.filter((file) => file.status === "no_configured_checkers").length,
-      total_configured_checker_count: files.reduce((sum, file) => sum + file.configured_checker_count, 0),
+      total_configured_checker_count: files.reduce((sum, file) => sum + file.configured_checker_modules.length, 0),
     },
     files,
-    runtime_paths: runtimePaths,
     execution,
   };
 }

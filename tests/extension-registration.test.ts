@@ -606,13 +606,13 @@ test("token tools register agent-oriented descriptions and schema details", () =
   assert.ok(filesTokens, "missing files-tokens tool");
   assert.ok(tokens, "missing tokens tool");
 
-  assert.match(filesTokens.description ?? "", /LLM-oriented JSON payload/);
+  assert.match(filesTokens.description ?? "", /token-optimized JSON payload/);
   assert.ok(filesTokens.promptGuidelines?.some((line) => line.includes("Output contract:")));
-  assert.match(String((filesTokens.parameters as { description?: string } | undefined)?.description ?? ""), /line ranges/);
+  assert.match(String((filesTokens.parameters as { description?: string } | undefined)?.description ?? ""), /token metrics/);
 
   assert.match(tokens.description ?? "", /canonical docs/);
-  assert.ok(tokens.promptGuidelines?.some((line) => line.includes("docs_dir_path")));
-  assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /canonical_doc_names/);
+  assert.ok(tokens.promptGuidelines?.some((line) => line.includes("registration metadata")));
+  assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /token-optimized JSON shape/);
 });
 
 test("reference tools register agent-oriented descriptions and schema details", () => {
@@ -624,7 +624,7 @@ test("reference tools register agent-oriented descriptions and schema details", 
   assert.ok(filesReferences, "missing files-references tool");
   assert.ok(references, "missing references tool");
 
-  assert.match(filesReferences.description ?? "", /request, summary, repository, files, and execution sections/);
+  assert.match(filesReferences.description ?? "", /summary, repository, files, and execution sections/);
   assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Numeric contract:")));
   assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
   assert.match(String((filesReferences.parameters as { description?: string } | undefined)?.description ?? ""), /structured Doxygen fields/);
@@ -644,11 +644,11 @@ test("find tools register agent-oriented descriptions and schema details", () =>
   assert.ok(filesFind, "missing files-find tool");
   assert.ok(find, "missing find tool");
 
-  assert.match(filesFind.description ?? "", /LLM-oriented JSON payload/);
+  assert.match(filesFind.description ?? "", /token-optimized JSON payload/);
   assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Regex rule:")));
   assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
   assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Python]:")));
-  assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /supported_tags_by_language/);
+  assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /Static supported-tag matrices are documented in tool registration metadata/);
 
   assert.match(find.description ?? "", /configured project source directories/);
   assert.ok(find.promptGuidelines?.some((line) => line.includes("source_directory_paths")));
@@ -665,7 +665,7 @@ test("compression tools register agent-oriented descriptions and schema details"
   assert.ok(filesCompress, "missing files-compress tool");
   assert.ok(compress, "missing compress tool");
 
-  assert.match(filesCompress.description ?? "", /request, summary, repository, files, and execution sections/);
+  assert.match(filesCompress.description ?? "", /summary, repository, files, and execution sections/);
   assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
   assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
   assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
@@ -676,7 +676,7 @@ test("compression tools register agent-oriented descriptions and schema details"
   assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
 });
 
-test("files-tokens returns structured source facts and separated guidance", async () => {
+test("files-tokens returns token-optimized structured source facts", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
     docs: {
@@ -693,10 +693,6 @@ test("files-tokens returns structured source facts and separated guidance", asyn
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
-        request: {
-          base_dir_path: string;
-          requested_input_paths: string[];
-        };
         summary: {
           counted_file_count: number;
           skipped_file_count: number;
@@ -709,14 +705,8 @@ test("files-tokens returns structured source facts and separated guidance", asyn
           line_count: number;
           byte_count: number;
           primary_heading_text?: string;
+          error_message?: string;
         }>;
-        guidance: {
-          source_observations: {
-            skipped_inputs: Array<{ input_path: string; canonical_path: string; reason: string }>;
-          };
-          derived_recommendations: Array<{ kind: string; ordered_paths: string[] }>;
-          actionable_next_steps: Array<{ kind: string; ordered_paths: string[] }>;
-        };
         execution: {
           stderr: string;
         };
@@ -725,8 +715,6 @@ test("files-tokens returns structured source facts and separated guidance", asyn
 
     const payload = result.details!;
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.request.base_dir_path, projectBase);
-    assert.deepEqual(payload.request.requested_input_paths, [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`, `${DEFAULT_DOCS_DIR}/MISSING.md`]);
     assert.equal(payload.summary.counted_file_count, 1);
     assert.equal(payload.summary.skipped_file_count, 1);
     assert.equal(payload.files[0]?.canonical_path, `${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`);
@@ -734,11 +722,8 @@ test("files-tokens returns structured source facts and separated guidance", asyn
     assert.equal(payload.files[0]?.end_line_number, payload.files[0]?.line_count);
     assert.ok((payload.files[0]?.byte_count ?? 0) > 0);
     assert.equal(payload.files[0]?.primary_heading_text, "Requirements");
-    assert.deepEqual(payload.guidance.source_observations.skipped_inputs, [
-      { input_path: `${DEFAULT_DOCS_DIR}/MISSING.md`, canonical_path: `${DEFAULT_DOCS_DIR}/MISSING.md`, reason: "not found" },
-    ]);
-    assert.equal(payload.guidance.derived_recommendations[0]?.kind, "prioritize_high_token_paths");
-    assert.equal(payload.guidance.actionable_next_steps[0]?.kind, "read_top_token_paths_first");
+    assert.equal(payload.files[1]?.canonical_path, `${DEFAULT_DOCS_DIR}/MISSING.md`);
+    assert.equal(payload.files[1]?.error_message, "not found");
     assert.match(payload.execution.stderr, new RegExp(`skipped: ${DEFAULT_DOCS_DIR.replace("/", "\\/")}/MISSING\\.md: not found`));
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -771,9 +756,6 @@ export function buildSample(input: string): string {
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
-        request: {
-          requested_input_paths: string[];
-        };
         summary: {
           analyzed_file_count: number;
           skipped_file_count: number;
@@ -808,7 +790,6 @@ export function buildSample(input: string): string {
 
     const payload = result.details!;
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.deepEqual(payload.request.requested_input_paths, ["src/sample.ts", "src/missing.ts"]);
     assert.equal(payload.summary.analyzed_file_count, 1);
     assert.equal(payload.summary.skipped_file_count, 1);
     assert.deepEqual(payload.repository.file_canonical_paths, ["src/sample.ts"]);
@@ -912,10 +893,6 @@ export function buildSample(input: string): string {
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
-        request: {
-          line_number_mode: string;
-          requested_input_paths: string[];
-        };
         summary: {
           compressed_file_count: number;
           skipped_file_count: number;
@@ -950,8 +927,6 @@ export function buildSample(input: string): string {
 
     const payload = result.details!;
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.request.line_number_mode, "enabled");
-    assert.deepEqual(payload.request.requested_input_paths, ["src/sample.ts", "src/missing.ts"]);
     assert.equal(payload.summary.compressed_file_count, 1);
     assert.equal(payload.summary.skipped_file_count, 1);
     assert.equal(payload.summary.total_symbol_count, 1);
@@ -999,10 +974,6 @@ test("compress returns a structured repository-scoped compression payload", asyn
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
-        request: {
-          scope: string;
-          line_number_mode: string;
-        };
         summary: {
           compressed_file_count: number;
           total_compressed_line_count: number;
@@ -1026,8 +997,6 @@ test("compress returns a structured repository-scoped compression payload", asyn
 
     const payload = result.details!;
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.request.scope, "configured-source-directories");
-    assert.equal(payload.request.line_number_mode, "disabled");
     assert.equal(payload.summary.compressed_file_count, 2);
     assert.ok((payload.summary.total_compressed_line_count ?? 0) >= 2);
     assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
@@ -1071,12 +1040,6 @@ export function buildSample(input: string): string {
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
-        request: {
-          tag_filter_values: string[];
-          tag_filter_status: string;
-          line_number_mode: string;
-          requested_input_paths: string[];
-        };
         summary: {
           search_status: string;
           matched_file_count: number;
@@ -1084,7 +1047,7 @@ export function buildSample(input: string): string {
           total_match_count: number;
         };
         repository: {
-          supported_tags_by_language: Record<string, string[]>;
+          file_canonical_paths: string[];
         };
         files: Array<{
           canonical_path: string;
@@ -1117,15 +1080,11 @@ export function buildSample(input: string): string {
 
     const payload = result.details!;
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.deepEqual(payload.request.tag_filter_values, ["FUNCTION"]);
-    assert.equal(payload.request.tag_filter_status, "valid");
-    assert.equal(payload.request.line_number_mode, "enabled");
-    assert.deepEqual(payload.request.requested_input_paths, ["src/sample.ts", "src/missing.ts"]);
     assert.equal(payload.summary.search_status, "matched");
     assert.equal(payload.summary.matched_file_count, 1);
     assert.equal(payload.summary.skipped_file_count, 1);
     assert.equal(payload.summary.total_match_count, 1);
-    assert.ok(payload.repository.supported_tags_by_language.typescript?.includes("FUNCTION"));
+    assert.deepEqual(payload.repository.file_canonical_paths, ["src/sample.ts", "src/missing.ts"]);
     assert.deepEqual(payload.files.map((file) => file.status), ["matched", "skipped"]);
     assert.equal(payload.files[0]?.canonical_path, "src/sample.ts");
     assert.equal(payload.files[0]?.match_count, 1);
@@ -1182,11 +1141,6 @@ export function buildAlpha(): number {
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
-        request: {
-          scope: string;
-          regex_status: string;
-          requested_file_count: number;
-        };
         summary: {
           search_status: string;
           matched_file_count: number;
@@ -1196,7 +1150,6 @@ export function buildAlpha(): number {
         repository: {
           source_directory_paths: string[];
           file_canonical_paths: string[];
-          supported_tags_by_language: Record<string, string[]>;
         };
         files: Array<{
           canonical_path: string;
@@ -1216,16 +1169,12 @@ export function buildAlpha(): number {
 
     const payload = result.details!;
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.request.scope, "configured-source-directories");
-    assert.equal(payload.request.regex_status, "valid");
-    assert.equal(payload.request.requested_file_count, 2);
     assert.equal(payload.summary.search_status, "matched");
     assert.equal(payload.summary.matched_file_count, 1);
     assert.equal(payload.summary.no_match_file_count, 1);
     assert.equal(payload.summary.total_match_count, 1);
     assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
     assert.deepEqual(payload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
-    assert.ok(payload.repository.supported_tags_by_language.typescript?.includes("FUNCTION"));
     assert.deepEqual(payload.files.map((file) => file.status), ["matched", "no_match"]);
     assert.equal(payload.files[0]?.matches[0]?.symbol_name, "buildAlpha");
     assert.match(payload.files[0]?.matches[0]?.code_lines[0]?.display_text ?? "", /^export function buildAlpha/);
@@ -1257,31 +1206,28 @@ test("path, static-check, git, docs, and worktree tools return structured JSON p
       content?: Array<{ text?: string }>;
       details?: {
         result: { path_value: string; path_present: boolean };
-        runtime_paths: { git_path: string };
         execution: { code: number };
       };
     };
     assert.deepEqual(JSON.parse(gitPathResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(gitPathResult.details)));
-    assert.equal(gitPathResult.details?.result.path_value, gitPathResult.details?.runtime_paths.git_path);
+    assert.equal(gitPathResult.details?.result.path_value, projectBase);
     assert.equal(gitPathResult.details?.result.path_present, true);
     assert.equal(gitPathResult.details?.execution.code, 0);
 
     const basePathResult = await executeRegisteredTool(pi, "get-base-path", projectBase) as {
       details?: {
         result: { path_value: string };
-        runtime_paths: { base_path: string };
         execution: { code: number };
       };
     };
-    assert.equal(basePathResult.details?.result.path_value, basePathResult.details?.runtime_paths.base_path);
+    assert.equal(basePathResult.details?.result.path_value, projectBase);
     assert.equal(basePathResult.details?.execution.code, 0);
 
     const gitCheckResult = await executeRegisteredTool(pi, "git-check", projectBase) as {
-      details?: { result: { status: string; worktree_status: string; head_status: string }; execution: { code: number } };
+      details?: { result: { git_path_present: boolean; status: string }; execution: { code: number } };
     };
+    assert.equal(gitCheckResult.details?.result.git_path_present, true);
     assert.equal(gitCheckResult.details?.result.status, "clean");
-    assert.equal(gitCheckResult.details?.result.worktree_status, "clean");
-    assert.equal(gitCheckResult.details?.result.head_status, "valid");
     assert.equal(gitCheckResult.details?.execution.code, 0);
 
     const docsCheckResult = await executeRegisteredTool(pi, "docs-check", projectBase) as {
@@ -1317,43 +1263,34 @@ test("path, static-check, git, docs, and worktree tools return structured JSON p
 
     const staticCheckResult = await executeRegisteredTool(pi, "static-check", projectBase) as {
       details?: {
-        request: { selection_directory_paths: string[]; excluded_directory_paths: string[] };
         summary: { selected_file_count: number };
         files: Array<{ canonical_path: string; status: string }>;
         execution: { code: number };
       };
     };
-    assert.deepEqual(staticCheckResult.details?.request.selection_directory_paths, ["src", "tests"]);
-    assert.ok(staticCheckResult.details?.request.excluded_directory_paths.includes("tests/fixtures"));
     assert.equal(staticCheckResult.details?.summary.selected_file_count, 1);
     assert.equal(staticCheckResult.details?.files[0]?.canonical_path, "src/check.ts");
     assert.equal(staticCheckResult.details?.files[0]?.status, "selected");
     assert.equal(staticCheckResult.details?.execution.code, 0);
 
     const gitWtNameResult = await executeRegisteredTool(pi, "git-wt-name", projectBase) as {
-      details?: { result: { worktree_name?: string; format_text: string; status: string }; execution: { code: number } };
+      details?: { result: { worktree_name?: string }; execution: { code: number } };
     };
     const wtName = gitWtNameResult.details?.result.worktree_name ?? "";
-    assert.equal(gitWtNameResult.details?.result.status, "generated");
-    assert.equal(gitWtNameResult.details?.result.format_text, "useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>");
     assert.match(wtName, /^useReq-/);
     assert.equal(gitWtNameResult.details?.execution.code, 0);
 
     const gitWtCreateResult = await executeRegisteredTool(pi, "git-wt-create", projectBase, { wtName }) as {
-      details?: { result: { status: string; worktree_name: string; branch_name: string; worktree_path: string }; execution: { code: number } };
+      details?: { result: { worktree_name: string; worktree_path: string }; execution: { code: number } };
     };
-    assert.equal(gitWtCreateResult.details?.result.status, "created");
     assert.equal(gitWtCreateResult.details?.result.worktree_name, wtName);
-    assert.equal(gitWtCreateResult.details?.result.branch_name, wtName);
     assert.match(gitWtCreateResult.details?.result.worktree_path ?? "", new RegExp(`${wtName}$`));
     assert.equal(gitWtCreateResult.details?.execution.code, 0);
 
     const gitWtDeleteResult = await executeRegisteredTool(pi, "git-wt-delete", projectBase, { wtName }) as {
-      details?: { result: { status: string; worktree_name: string; branch_name: string; worktree_path: string }; execution: { code: number } };
+      details?: { result: { worktree_name: string; worktree_path: string }; execution: { code: number } };
     };
-    assert.equal(gitWtDeleteResult.details?.result.status, "deleted");
     assert.equal(gitWtDeleteResult.details?.result.worktree_name, wtName);
-    assert.equal(gitWtDeleteResult.details?.result.branch_name, wtName);
     assert.match(gitWtDeleteResult.details?.result.worktree_path ?? "", new RegExp(`${wtName}$`));
     assert.equal(gitWtDeleteResult.details?.execution.code, 0);
   } finally {
@@ -2219,11 +2156,11 @@ test("git-path tool derives the repository root at runtime", async () => {
     piUsereqExtension(pi);
     const result = await executeRegisteredTool(pi, "git-path", projectBase) as {
       content?: Array<{ text?: string }>;
-      details?: { result: { path_value: string }; runtime_paths: { git_path: string } };
+      details?: { result: { path_value: string } };
     };
 
     assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(result.details)));
-    assert.equal(result.details?.result.path_value, result.details?.runtime_paths.git_path);
+    assert.equal(result.details?.result.path_value, projectBase);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

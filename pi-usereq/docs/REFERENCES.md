@@ -918,7 +918,7 @@ import {
 
 ---
 
-# agent-tool-json.ts | TypeScript | 621L | 23 symbols | 7 imports | 24 comments
+# agent-tool-json.ts | TypeScript | 470L | 23 symbols | 6 imports | 24 comments
 > Path: `src/core/agent-tool-json.ts`
 - @brief Builds structured agent-tool JSON payloads for path, git, docs, worktree, and static-check tools.
 - @details Converts extension-tool execution state into deterministic JSON-first payloads optimized for direct LLM traversal. The module normalizes execution metadata, path facts, required-doc status, worktree mutation facts, and static-check file-selection facts without depending on presentation-oriented text. Runtime is O(F) in the number of described files plus path normalization cost. Side effects are limited to filesystem reads.
@@ -928,7 +928,6 @@ import {
 import fs from "node:fs";
 import path from "node:path";
 import type { StaticCheckEntry } from "./config.js";
-import type { RuntimePathFacts } from "./path-context.js";
 import { ReqError } from "./errors.js";
 import { STATIC_CHECK_EXT_TO_LANG } from "./static-check.js";
 import type { ToolResult } from "./tool-runner.js";
@@ -936,143 +935,138 @@ import type { ToolResult } from "./tool-runner.js";
 
 ## Definitions
 
-### iface `export interface ToolExecutionSection` (L19-27)
+### iface `export interface ToolExecutionSection` (L18-22)
 - @brief Describes normalized execution metadata shared by structured tool payloads.
-- @details Separates numeric status, line-oriented diagnostics, and optional raw text so downstream agents can branch on stable fields before consulting residual text. The interface is compile-time only and introduces no runtime cost.
+- @details Stores only the exit code and residual stdout or stderr line arrays needed after response payload construction, omitting duplicate text and count fields to reduce token cost. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface StructuredToolExecuteResult<T>` (L33-36)
+### iface `export interface StructuredToolExecuteResult<T>` (L28-31)
 - @brief Describes the standard execute return wrapper used by structured agent tools.
 - @details Mirrors the same JSON payload into both the text content channel and the machine-readable details channel so agents can consume stable fields without reparsing ad-hoc prose. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface PathQueryToolPayload` (L42-58)
+### iface `export interface PathQueryToolPayload` (L37-43)
 - @brief Describes the structured payload returned by path-query tools.
-- @details Exposes the requested config key, caller cwd, resolved project base, resolved path value, and shared runtime path facts as direct-access fields. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only the resolved path facts that can differ at runtime plus residual execution diagnostics, omitting caller-known request echoes and duplicated runtime-path inventories. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface GitCheckToolPayload` (L64-80)
+### iface `export interface GitCheckToolPayload` (L49-56)
 - @brief Describes the structured payload returned by `git-check`.
-- @details Exposes git-root presence, repository validation status, shared runtime path facts, and normalized execution diagnostics as stable fields. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only the runtime git-path presence fact plus aggregate repository validation status, omitting intermediate request metadata whose semantics already live in the tool registration. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface DocsCheckFileRecord` (L86-94)
+### iface `export interface DocsCheckFileRecord` (L62-67)
 - @brief Describes one canonical-doc status record returned by `docs-check`.
-- @details Binds each required filename to its prompt generator, normalized path facts, and presence status so agents can branch per missing document deterministically. The interface is compile-time only and introduces no runtime cost.
+- @details Stores the canonical path, remediation prompt command, and presence status while omitting redundant filesystem probe fields already summarized by the status value. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface DocsCheckToolPayload` (L100-116)
+### iface `export interface DocsCheckToolPayload` (L73-80)
 - @brief Describes the structured payload returned by `docs-check`.
-- @details Exposes docs-root selection, per-document presence facts, remediation prompt commands, shared runtime path facts, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes per-document presence facts and remediation commands plus residual execution diagnostics, omitting static request metadata that can be inferred from the tool registration and caller context. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface WorktreeNameToolPayload` (L122-137)
+### iface `export interface WorktreeNameToolPayload` (L86-92)
 - @brief Describes the structured payload returned by `git-wt-name`.
-- @details Exposes the generated worktree name, its normative format, shared runtime path facts, and execution diagnostics as direct-access fields. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only the generated worktree name plus residual execution diagnostics, omitting the static normative format string because it already belongs in registration metadata. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface WorktreeMutationToolPayload` (L143-161)
+### iface `export interface WorktreeMutationToolPayload` (L98-105)
 - @brief Describes the structured payload returned by worktree mutation tools.
-- @details Exposes the requested operation, exact worktree name, derived worktree path, mutation status, shared runtime path facts, and execution diagnostics as stable JSON fields. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only the exact worktree name and derived path that can vary per invocation plus residual execution diagnostics, omitting static operation descriptors and duplicated branch-name fields. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface StaticCheckFileRecord` (L167-179)
+### iface `export interface StaticCheckFileRecord` (L111-117)
 - @brief Describes one file-selection record inside a static-check payload.
-- @details Exposes request order, normalized path facts, detected language, configured checker modules, and stable selection status without forcing agents to parse checker output text. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes canonical path, detected language, configured checker modules, and stable selection status without echoing caller inputs or redundant filesystem probe fields. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface StaticCheckToolPayload` (L185-207)
+### iface `export interface StaticCheckToolPayload` (L123-133)
 - @brief Describes the structured payload returned by static-check agent tools.
-- @details Exposes scope selection, configured checker coverage, per-file selection facts, shared runtime path facts, and normalized execution diagnostics while keeping residual checker text optional under execution. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes aggregate checker coverage, per-file selection facts, and normalized execution diagnostics while omitting request echoes whose semantics are already available in the tool registration and input parameters. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function formatJsonToolPayload(payload: unknown): string` (L215-217)
+### fn `function formatJsonToolPayload(payload: unknown): string` (L141-143)
 - @brief Serializes one structured payload as pretty-printed JSON.
 - @details Uses two-space indentation and omits a trailing newline so the mirrored text payload remains deterministic and compact. Runtime is O(n) in payload size. No external state is mutated.
 - @param[in] payload {unknown} Structured JSON-compatible payload.
 - @return {string} Pretty-printed JSON text.
 
-### fn `function splitToolOutputLines(text: string): string[]` (L225-228)
+### fn `function splitToolOutputLines(text: string): string[]` (L151-154)
 - @brief Splits one stdout or stderr text block into normalized non-empty lines.
 - @details Trims trailing newlines, preserves internal line order, and omits empty records so downstream agents can branch on stable arrays without reparsing blank output. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] text {string} Raw output text.
 - @return {string[]} Normalized non-empty output lines.
 
-### fn `function canonicalizeToolPath(baseDir: string, candidatePath: string): string` (L237-244)
+### fn `function canonicalizeToolPath(baseDir: string, candidatePath: string): string` (L163-170)
 - @brief Normalizes one path into a canonical slash-separated form relative to the project base when possible.
 - @details Resolves the candidate against the provided base, emits a relative path for in-project targets, and falls back to an absolute slash-normalized path for external targets. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] baseDir {string} Absolute project base path.
 - @param[in] candidatePath {string} Relative or absolute path candidate.
 - @return {string} Canonical slash-normalized path.
 
-- fn `export function buildStructuredToolExecuteResult<T extends { execution: ToolExecutionSection }>(` (L252)
+- fn `export function buildStructuredToolExecuteResult<T extends { execution: ToolExecutionSection }>(` (L178)
 - @brief Converts one structured tool payload into the standard execute wrapper.
 - @details Mirrors the same payload into `content[0].text` and `details` so agents can use direct JSON fields or raw JSON text interchangeably without divergence. Runtime is O(n) in payload size. No external state is mutated.
 - @param[in] payload {T} Structured payload containing an `execution` section.
 - @return {StructuredToolExecuteResult<T>} Standard execute wrapper with mirrored payload.
-### fn `export function buildToolExecutionSection(result: ToolResult): ToolExecutionSection` (L267-281)
+### fn `export function buildToolExecutionSection(result: ToolResult): ToolExecutionSection` (L193-203)
 - @brief Converts one raw `ToolResult` into a normalized execution section.
-- @details Separates numeric exit status, line-oriented stdout/stderr arrays, and optional raw text so downstream agents can consume structured facts before consulting residual text. Runtime is O(n) in output size. No external state is mutated.
+- @details Preserves only the exit code plus non-empty stdout or stderr line arrays so downstream payloads carry residual diagnostics without duplicating the primary structured response body. Runtime is O(n) in output size. No external state is mutated.
 - @param[in] result {ToolResult} Raw tool result.
-- @return {ToolExecutionSection} Normalized execution metadata.
+- @return {ToolExecutionSection} Normalized residual execution metadata.
 
-### fn `export function normalizeToolFailure(error: unknown): ToolResult` (L290-299)
+### fn `export function normalizeToolFailure(error: unknown): ToolResult` (L212-221)
 - @brief Converts one `ReqError` into a synthetic `ToolResult` for structured payload emission.
 - @details Preserves the numeric exit code and message in stderr so agent tools can return deterministic JSON even when the underlying runner fails. Non-`ReqError` values are rethrown. Runtime is O(1). No external state is mutated.
 - @param[in] error {unknown} Thrown value captured from a runner.
 - @return {ToolResult} Synthetic tool result with empty stdout.
 - @throws {unknown} Rethrows non-`ReqError` failures unchanged.
 
-### fn `export function buildPathQueryToolPayload(` (L312-338)
+### fn `export function buildPathQueryToolPayload(` (L233-250)
 - @brief Builds the structured payload returned by `git-path` or `get-base-path`.
-- @details Exposes the resolved runtime path value as a direct-access field and preserves normalized execution metadata separately from path facts. Runtime is O(p) in path length. No external state is mutated.
+- @details Exposes only the resolved runtime path value plus residual execution metadata, omitting request echoes and duplicated runtime-path inventories from the runtime payload. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] toolName {"git-path" | "get-base-path"} Target tool name.
 - @param[in] workingDirectoryPath {string} Caller working directory.
 - @param[in] projectBasePath {string} Resolved project base path.
 - @param[in] resolvedPath {string} Resolved config path value.
-- @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
 - @param[in] execution {ToolExecutionSection} Normalized execution metadata.
 - @return {PathQueryToolPayload} Structured path-query payload.
 
-### fn `export function buildGitCheckToolPayload(` (L349-373)
+### fn `export function buildGitCheckToolPayload(` (L260-275)
 - @brief Builds the structured payload returned by `git-check`.
-- @details Encodes runtime git-root presence plus clean-versus-error status as direct fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
+- @details Encodes runtime git-path presence plus aggregate clean-versus-error status while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] projectBasePath {string} Resolved project base path.
 - @param[in] configuredGitPath {string | undefined} Runtime git root path.
-- @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
 - @param[in] execution {ToolExecutionSection} Normalized execution metadata.
 - @return {GitCheckToolPayload} Structured git-check payload.
 
-### fn `export function buildDocsCheckToolPayload(` (L383-433)
+### fn `export function buildDocsCheckToolPayload(` (L284-321)
 - @brief Builds the structured payload returned by `docs-check`.
-- @details Enumerates required canonical documents, binds each missing file to its remediation prompt command, and emits summary counts plus normalized execution metadata. Runtime is O(k) in required file count plus filesystem reads. Side effects are limited to filesystem reads.
+- @details Enumerates required canonical documents, binds each missing file to its remediation prompt command, and emits summary counts plus residual execution diagnostics while omitting static request metadata. Runtime is O(k) in required file count plus filesystem reads. Side effects are limited to filesystem reads.
 - @param[in] projectBasePath {string} Resolved project base path.
 - @param[in] docsDirPath {string} Configured docs directory relative to the project base.
-- @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
 - @return {DocsCheckToolPayload} Structured docs-check payload.
 
-### fn `export function buildWorktreeNameToolPayload(` (L444-467)
+### fn `export function buildWorktreeNameToolPayload(` (L331-346)
 - @brief Builds the structured payload returned by `git-wt-name`.
-- @details Preserves the generated worktree name plus its normative format string as direct-access fields and reports failures through structured execution metadata. Runtime is O(n) in output size. No external state is mutated.
+- @details Preserves only the generated worktree name and error diagnostics, leaving the static naming format in registration metadata instead of the runtime payload. Runtime is O(n) in output size. No external state is mutated.
 - @param[in] projectBasePath {string} Resolved project base path.
 - @param[in] configuredGitPath {string | undefined} Runtime git root path.
-- @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
 - @param[in] execution {ToolExecutionSection} Normalized execution metadata.
 - @return {WorktreeNameToolPayload} Structured worktree-name payload.
 
-### fn `export function buildWorktreeMutationToolPayload(` (L480-514)
+### fn `export function buildWorktreeMutationToolPayload(` (L358-379)
 - @brief Builds the structured payload returned by `git-wt-create` or `git-wt-delete`.
-- @details Exposes the requested operation, exact worktree name, derived worktree path, and mutation outcome as stable JSON fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
+- @details Exposes only the exact worktree name, derived worktree path, and error diagnostics, omitting static operation and branch-name echoes from the runtime payload. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] toolName {"git-wt-create" | "git-wt-delete"} Target tool name.
 - @param[in] projectBasePath {string} Resolved project base path.
 - @param[in] configuredGitPath {string | undefined} Runtime git root path.
 - @param[in] worktreeName {string} Exact requested worktree name.
-- @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
 - @param[in] execution {ToolExecutionSection} Normalized execution metadata.
 - @return {WorktreeMutationToolPayload} Structured worktree mutation payload.
 
-### fn `function buildStaticCheckFileRecord(` (L525-564)
+### fn `function buildStaticCheckFileRecord(` (L390-424)
 - @brief Builds one static-check file-selection record.
-- @details Resolves filesystem status, detects the configured language by file extension, counts configured checker entries, and emits a stable selection status without parsing checker output text. Runtime is O(p + c) in path length plus configured checker count. Side effects are limited to filesystem reads.
+- @details Resolves filesystem status, detects the configured language by file extension, and emits the configured checker modules plus a stable selection status without echoing caller inputs or redundant filesystem facts. Runtime is O(p + c) in path length plus configured checker count. Side effects are limited to filesystem reads.
 - @param[in] inputPath {string} Caller-supplied file path.
 - @param[in] requestIndex {number} Zero-based request position.
 - @param[in] projectBasePath {string} Resolved project base path.
 - @param[in] staticCheckConfig {Record<string, StaticCheckEntry[]>} Effective static-check configuration.
 - @return {StaticCheckFileRecord} Structured file-selection record.
 
-### fn `export function buildStaticCheckToolPayload(` (L580-621)
+### fn `export function buildStaticCheckToolPayload(` (L439-470)
 - @brief Builds the structured payload returned by `files-static-check` or `static-check`.
-- @details Exposes configured checker coverage, per-file selection facts, and normalized execution diagnostics while leaving raw checker output under execution for residual inspection only. Runtime is O(F + C). Side effects are limited to filesystem reads.
+- @details Exposes configured checker coverage, per-file selection facts, and normalized execution diagnostics while omitting request echoes whose semantics already live in registration metadata. Runtime is O(F + C). Side effects are limited to filesystem reads.
 - @param[in] toolName {"files-static-check" | "static-check"} Target tool name.
 - @param[in] scope {"explicit-files" | "configured-source-and-test-directories"} Selection scope label.
 - @param[in] projectBasePath {string} Resolved project base path.
@@ -1080,36 +1074,35 @@ import type { ToolResult } from "./tool-runner.js";
 - @param[in] selectionDirectoryPaths {string[]} Directories that produced the selection.
 - @param[in] excludedDirectoryPaths {string[]} Directory roots excluded from project selection.
 - @param[in] staticCheckConfig {Record<string, StaticCheckEntry[]>} Effective static-check configuration.
-- @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
 - @param[in] execution {ToolExecutionSection} Normalized execution metadata.
 - @return {StaticCheckToolPayload} Structured static-check payload.
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`ToolExecutionSection`|iface||19-27|export interface ToolExecutionSection|
-|`StructuredToolExecuteResult`|iface||33-36|export interface StructuredToolExecuteResult<T>|
-|`PathQueryToolPayload`|iface||42-58|export interface PathQueryToolPayload|
-|`GitCheckToolPayload`|iface||64-80|export interface GitCheckToolPayload|
-|`DocsCheckFileRecord`|iface||86-94|export interface DocsCheckFileRecord|
-|`DocsCheckToolPayload`|iface||100-116|export interface DocsCheckToolPayload|
-|`WorktreeNameToolPayload`|iface||122-137|export interface WorktreeNameToolPayload|
-|`WorktreeMutationToolPayload`|iface||143-161|export interface WorktreeMutationToolPayload|
-|`StaticCheckFileRecord`|iface||167-179|export interface StaticCheckFileRecord|
-|`StaticCheckToolPayload`|iface||185-207|export interface StaticCheckToolPayload|
-|`formatJsonToolPayload`|fn||215-217|function formatJsonToolPayload(payload: unknown): string|
-|`splitToolOutputLines`|fn||225-228|function splitToolOutputLines(text: string): string[]|
-|`canonicalizeToolPath`|fn||237-244|function canonicalizeToolPath(baseDir: string, candidateP...|
-|`buildStructuredToolExecuteResult`|fn||252|export function buildStructuredToolExecuteResult<T extend...|
-|`buildToolExecutionSection`|fn||267-281|export function buildToolExecutionSection(result: ToolRes...|
-|`normalizeToolFailure`|fn||290-299|export function normalizeToolFailure(error: unknown): Too...|
-|`buildPathQueryToolPayload`|fn||312-338|export function buildPathQueryToolPayload(|
-|`buildGitCheckToolPayload`|fn||349-373|export function buildGitCheckToolPayload(|
-|`buildDocsCheckToolPayload`|fn||383-433|export function buildDocsCheckToolPayload(|
-|`buildWorktreeNameToolPayload`|fn||444-467|export function buildWorktreeNameToolPayload(|
-|`buildWorktreeMutationToolPayload`|fn||480-514|export function buildWorktreeMutationToolPayload(|
-|`buildStaticCheckFileRecord`|fn||525-564|function buildStaticCheckFileRecord(|
-|`buildStaticCheckToolPayload`|fn||580-621|export function buildStaticCheckToolPayload(|
+|`ToolExecutionSection`|iface||18-22|export interface ToolExecutionSection|
+|`StructuredToolExecuteResult`|iface||28-31|export interface StructuredToolExecuteResult<T>|
+|`PathQueryToolPayload`|iface||37-43|export interface PathQueryToolPayload|
+|`GitCheckToolPayload`|iface||49-56|export interface GitCheckToolPayload|
+|`DocsCheckFileRecord`|iface||62-67|export interface DocsCheckFileRecord|
+|`DocsCheckToolPayload`|iface||73-80|export interface DocsCheckToolPayload|
+|`WorktreeNameToolPayload`|iface||86-92|export interface WorktreeNameToolPayload|
+|`WorktreeMutationToolPayload`|iface||98-105|export interface WorktreeMutationToolPayload|
+|`StaticCheckFileRecord`|iface||111-117|export interface StaticCheckFileRecord|
+|`StaticCheckToolPayload`|iface||123-133|export interface StaticCheckToolPayload|
+|`formatJsonToolPayload`|fn||141-143|function formatJsonToolPayload(payload: unknown): string|
+|`splitToolOutputLines`|fn||151-154|function splitToolOutputLines(text: string): string[]|
+|`canonicalizeToolPath`|fn||163-170|function canonicalizeToolPath(baseDir: string, candidateP...|
+|`buildStructuredToolExecuteResult`|fn||178|export function buildStructuredToolExecuteResult<T extend...|
+|`buildToolExecutionSection`|fn||193-203|export function buildToolExecutionSection(result: ToolRes...|
+|`normalizeToolFailure`|fn||212-221|export function normalizeToolFailure(error: unknown): Too...|
+|`buildPathQueryToolPayload`|fn||233-250|export function buildPathQueryToolPayload(|
+|`buildGitCheckToolPayload`|fn||260-275|export function buildGitCheckToolPayload(|
+|`buildDocsCheckToolPayload`|fn||284-321|export function buildDocsCheckToolPayload(|
+|`buildWorktreeNameToolPayload`|fn||331-346|export function buildWorktreeNameToolPayload(|
+|`buildWorktreeMutationToolPayload`|fn||358-379|export function buildWorktreeMutationToolPayload(|
+|`buildStaticCheckFileRecord`|fn||390-424|function buildStaticCheckFileRecord(|
+|`buildStaticCheckToolPayload`|fn||439-470|export function buildStaticCheckToolPayload(|
 
 
 ---
@@ -1154,7 +1147,7 @@ import { compressFileDetailed, detectLanguage } from "./compress.js";
 
 ---
 
-# compress-payload.ts | TypeScript | 648L | 22 symbols | 5 imports | 23 comments
+# compress-payload.ts | TypeScript | 640L | 22 symbols | 5 imports | 23 comments
 > Path: `src/core/compress-payload.ts`
 - @brief Builds agent-oriented JSON payloads for `files-compress` and `compress`.
 - @details Converts compression results into deterministic JSON sections ordered for LLM traversal, including request metadata, repository scope, structured file metrics, structured compressed lines, symbols, and Doxygen fields. Runtime is O(F log F + S) where F is file count and S is total source size. Side effects are limited to filesystem reads and optional stderr logging.
@@ -1210,48 +1203,48 @@ import {
 - @brief Describes the repository section of the compression payload.
 - @details Stores the base path, configured source-directory scope, and canonical file list used during compression. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface CompressToolPayload` (L170-175)
+### iface `export interface CompressToolPayload` (L170-174)
 - @brief Describes the full agent-oriented compression payload.
-- @details Orders the top-level sections as request, summary, repository, and files so execution metadata can be appended deterministically by the tool wrapper. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only aggregate compression totals, repository scope, and per-file compression records, omitting request echoes that are already known to the caller or encoded in tool registration metadata. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface BuildCompressToolPayloadOptions` (L181-189)
+### iface `export interface BuildCompressToolPayloadOptions` (L180-188)
 - @brief Describes the options required to build one compression payload.
 - @details Supplies tool identity, scope, base directory, requested paths, line-number mode, and optional configured source directories while keeping payload construction deterministic. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function canonicalizeCompressionPath(targetPath: string, baseDir: string): string` (L198-206)
+### fn `function canonicalizeCompressionPath(targetPath: string, baseDir: string): string` (L197-205)
 - @brief Canonicalizes one filesystem path relative to the payload base directory.
 - @details Emits a slash-normalized relative path when the target is under the base directory; otherwise emits the normalized absolute path. Runtime is O(p) in path length. No side effects occur.
 - @param[in] targetPath {string} Absolute or relative filesystem path.
 - @param[in] baseDir {string} Base directory used for relative canonicalization.
 - @return {string} Canonicalized path string.
 
-### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): CompressLineRange` (L215-221)
+### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): CompressLineRange` (L214-220)
 - @brief Builds one structured line-range record.
 - @details Duplicates the inclusive range as start, end, and tuple fields so callers can address whichever shape is most convenient. Runtime is O(1). No side effects occur.
 - @param[in] startLineNumber {number} Inclusive start line number.
 - @param[in] endLineNumber {number} Inclusive end line number.
 - @return {CompressLineRange} Structured line-range record.
 
-### fn `function resolveSymbolName(element: SourceElement): string` (L229-231)
+### fn `function resolveSymbolName(element: SourceElement): string` (L228-230)
 - @brief Resolves one stable symbol name from an analyzed element.
 - @details Prefers explicit analyzer name metadata, then falls back to the derived signature or the first source line so every symbol retains a direct-access identifier. Runtime is O(1). No side effects occur.
 - @param[in] element {SourceElement} Source element.
 - @return {string} Stable symbol name.
 
-### fn `function resolveParentElement(definitions: SourceElement[], child: SourceElement): SourceElement | undefined` (L240-249)
+### fn `function resolveParentElement(definitions: SourceElement[], child: SourceElement): SourceElement | undefined` (L239-248)
 - @brief Resolves the direct parent element for one child symbol.
 - @details Matches by parent name plus inclusive line containment and chooses the deepest enclosing definition. Runtime is O(n) in definition count. No side effects occur.
 - @param[in] definitions {SourceElement[]} Sorted definition elements.
 - @param[in] child {SourceElement} Candidate child symbol.
 - @return {SourceElement | undefined} Matched parent definition when available.
 
-### fn `function mapCompressedLines(compressedLines: CompressedLineEntry[]): CompressToolLineEntry[]` (L257-264)
+### fn `function mapCompressedLines(compressedLines: CompressedLineEntry[]): CompressToolLineEntry[]` (L256-263)
 - @brief Maps structured compression lines into the payload line-entry contract.
 - @details Performs a shallow field copy so the payload remains decoupled from the core compression result type. Runtime is O(n) in compressed line count. No side effects occur.
 - @param[in] compressedLines {CompressedLineEntry[]} Structured compression lines.
 - @return {CompressToolLineEntry[]} Payload line entries.
 
-### fn `function analyzeCompressedFileSymbols(` (L276-360)
+### fn `function analyzeCompressedFileSymbols(` (L275-359)
 - @brief Builds structured symbol entries for one successfully analyzed file.
 - @details Extracts definition elements, computes parent-child relationships, attaches structured Doxygen metadata, and repeats the canonical file path inside each symbol record for direct-access agent indexing. Runtime is O(n log n) in definition count. No side effects occur.
 - @param[in] analyzer {SourceAnalyzer} Shared analyzer instance.
@@ -1261,7 +1254,7 @@ import {
 - @return {{ languageName: string | undefined; symbols: CompressToolSymbolEntry[]; fileDoxygen: StructuredDoxygenFields | undefined; fileDescriptionText: string | undefined; doxygenFieldCount: number }} Structured symbol-analysis result.
 - @throws {Error} Throws when source analysis or enrichment fails.
 
-### fn `function analyzeCompressFile(` (L374-505)
+### fn `function analyzeCompressFile(` (L373-504)
 - @brief Analyzes one path into a structured compression file entry.
 - @details Resolves path identity, performs compression, attempts supplementary symbol and Doxygen extraction, preserves stable skip or error reasons, and keeps compression success independent from symbol-analysis success. Runtime is dominated by file I/O and analyzer cost. Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] analyzer {SourceAnalyzer} Shared analyzer instance.
@@ -1273,14 +1266,14 @@ import {
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
 - @return {CompressToolFileEntry} Structured file entry.
 
-### fn `export function buildCompressToolPayload(options: BuildCompressToolPayloadOptions): CompressToolPayload` (L514-628)
+### fn `export function buildCompressToolPayload(options: BuildCompressToolPayloadOptions): CompressToolPayload` (L513-620)
 - @brief Builds the full agent-oriented compression payload.
-- @details Validates requested paths against the filesystem, compresses processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits repository scope metadata. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+- @details Validates requested paths against the filesystem, compresses processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits repository scope metadata without echoing request facts already known to the caller. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] options {BuildCompressToolPayloadOptions} Payload-construction options.
-- @return {CompressToolPayload} Structured compression payload ordered as request, summary, repository, and files.
+- @return {CompressToolPayload} Structured compression payload ordered as summary, repository, and files.
 - @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087
 
-### fn `export function buildCompressToolExecutionStderr(payload: CompressToolPayload): string` (L637-648)
+### fn `export function buildCompressToolExecutionStderr(payload: CompressToolPayload): string` (L629-640)
 - @brief Builds execution diagnostics for one compression payload.
 - @details Serializes skipped inputs, hard compression failures, and supplementary symbol-analysis warnings into stable stderr lines while keeping successful compressed files silent. Runtime is O(n) in issue count. No side effects occur.
 - @param[in] payload {CompressToolPayload} Structured compression payload.
@@ -1301,17 +1294,17 @@ import {
 |`CompressToolRequestSection`|iface||126-136|export interface CompressToolRequestSection|
 |`CompressToolSummarySection`|iface||142-153|export interface CompressToolSummarySection|
 |`CompressToolRepositorySection`|iface||159-164|export interface CompressToolRepositorySection|
-|`CompressToolPayload`|iface||170-175|export interface CompressToolPayload|
-|`BuildCompressToolPayloadOptions`|iface||181-189|export interface BuildCompressToolPayloadOptions|
-|`canonicalizeCompressionPath`|fn||198-206|function canonicalizeCompressionPath(targetPath: string, ...|
-|`buildLineRange`|fn||215-221|function buildLineRange(startLineNumber: number, endLineN...|
-|`resolveSymbolName`|fn||229-231|function resolveSymbolName(element: SourceElement): string|
-|`resolveParentElement`|fn||240-249|function resolveParentElement(definitions: SourceElement[...|
-|`mapCompressedLines`|fn||257-264|function mapCompressedLines(compressedLines: CompressedLi...|
-|`analyzeCompressedFileSymbols`|fn||276-360|function analyzeCompressedFileSymbols(|
-|`analyzeCompressFile`|fn||374-505|function analyzeCompressFile(|
-|`buildCompressToolPayload`|fn||514-628|export function buildCompressToolPayload(options: BuildCo...|
-|`buildCompressToolExecutionStderr`|fn||637-648|export function buildCompressToolExecutionStderr(payload:...|
+|`CompressToolPayload`|iface||170-174|export interface CompressToolPayload|
+|`BuildCompressToolPayloadOptions`|iface||180-188|export interface BuildCompressToolPayloadOptions|
+|`canonicalizeCompressionPath`|fn||197-205|function canonicalizeCompressionPath(targetPath: string, ...|
+|`buildLineRange`|fn||214-220|function buildLineRange(startLineNumber: number, endLineN...|
+|`resolveSymbolName`|fn||228-230|function resolveSymbolName(element: SourceElement): string|
+|`resolveParentElement`|fn||239-248|function resolveParentElement(definitions: SourceElement[...|
+|`mapCompressedLines`|fn||256-263|function mapCompressedLines(compressedLines: CompressedLi...|
+|`analyzeCompressedFileSymbols`|fn||275-359|function analyzeCompressedFileSymbols(|
+|`analyzeCompressFile`|fn||373-504|function analyzeCompressFile(|
+|`buildCompressToolPayload`|fn||513-620|export function buildCompressToolPayload(options: BuildCo...|
+|`buildCompressToolExecutionStderr`|fn||629-640|export function buildCompressToolExecutionStderr(payload:...|
 
 
 ---
@@ -2109,7 +2102,7 @@ import { SourceAnalyzer, SourceElement, ElementType } from "./source-analyzer.js
 
 ---
 
-# find-payload.ts | TypeScript | 915L | 32 symbols | 6 imports | 33 comments
+# find-payload.ts | TypeScript | 892L | 31 symbols | 6 imports | 32 comments
 > Path: `src/core/find-payload.ts`
 - @brief Builds agent-oriented JSON payloads for `files-find` and `find`.
 - @details Converts construct-search results into deterministic JSON sections ordered for LLM traversal, including request metadata, repository scope, file statuses, structured matches, structured Doxygen fields, typed line ranges, and normalized stripped code lines. Runtime is O(F log F + S + M) where F is file count, S is analyzed source size, and M is matched construct count. Side effects are limited to filesystem reads and optional stderr logging.
@@ -2161,87 +2154,82 @@ import {
 - @brief Describes the request section of the find payload.
 - @details Captures tool identity, scope, base directory, line-number mode, tag filter, regex, validation statuses, and requested path inventory so agents can reason about how the search was executed. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface FindToolSummarySection` (L161-171)
+### iface `export interface FindToolSummarySection` (L161-172)
 - @brief Describes the summary section of the find payload.
-- @details Exposes aggregate file, match, line, and Doxygen counts as numeric fields plus one stable search-status discriminator. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes aggregate file, match, line, and Doxygen counts as numeric fields plus one stable search-status discriminator and the normalized validation error when request parsing fails. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface FindToolRepositorySection` (L177-183)
+### iface `export interface FindToolRepositorySection` (L178-183)
 - @brief Describes the repository section of the find payload.
-- @details Stores the base path, configured source-directory scope, canonical file list, and supported-tag matrix needed to specialize later searches without rereading tool descriptions. The interface is compile-time only and introduces no runtime cost.
+- @details Stores the base path, configured source-directory scope, and canonical file list used during search while omitting the static supported-tag matrix because that data belongs in tool registration metadata. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface FindToolPayload` (L189-194)
+### iface `export interface FindToolPayload` (L189-193)
 - @brief Describes the full agent-oriented find payload.
-- @details Orders the top-level sections as request, summary, repository, and files so execution metadata can be appended deterministically by the tool wrapper. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only aggregate search totals, repository scope, and per-file match records, omitting request echoes and static supported-tag matrices that already belong in registration metadata. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface BuildFindToolPayloadOptions` (L200-210)
+### iface `export interface BuildFindToolPayloadOptions` (L199-209)
 - @brief Describes the options required to build one find payload.
 - @details Supplies tool identity, scope, base directory, tag filter, regex, requested paths, line-number mode, and optional configured source directories while keeping payload construction deterministic. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface ValidatedRegex` (L216-220)
+### iface `interface ValidatedRegex` (L215-219)
 - @brief Describes the result of validating one regex pattern.
 - @details Separates valid compiled regex instances from invalid user input while preserving a stable machine-readable status and error message. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface ValidatedTagFilter` (L226-231)
+### iface `interface ValidatedTagFilter` (L225-230)
 - @brief Describes the result of validating one tag filter.
 - @details Separates normalized tag values from invalid or empty filters while preserving a stable status and error message. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function canonicalizeFindPath(targetPath: string, baseDir: string): string` (L240-248)
+### fn `function canonicalizeFindPath(targetPath: string, baseDir: string): string` (L239-247)
 - @brief Canonicalizes one filesystem path relative to the payload base directory.
 - @details Emits a slash-normalized relative path when the target is under the base directory; otherwise emits the normalized absolute path. Runtime is O(p) in path length. No side effects occur.
 - @param[in] targetPath {string} Absolute or relative filesystem path.
 - @param[in] baseDir {string} Base directory used for relative canonicalization.
 - @return {string} Canonicalized path string.
 
-### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): FindLineRange` (L257-263)
+### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): FindLineRange` (L256-262)
 - @brief Builds one structured line-range record.
 - @details Duplicates the inclusive range as start, end, and tuple fields so callers can address whichever shape is most convenient. Runtime is O(1). No side effects occur.
 - @param[in] startLineNumber {number} Inclusive start line number.
 - @param[in] endLineNumber {number} Inclusive end line number.
 - @return {FindLineRange} Structured line-range record.
 
-### fn `function buildSupportedTagsByLanguage(): Record<string, string[]>` (L270-276)
-- @brief Returns the supported-tag matrix ordered for deterministic JSON emission.
-- @details Sorts languages alphabetically and tag arrays lexicographically so downstream agents can reuse the matrix without reparsing human prose. Runtime is O(l * t log t). No side effects occur.
-- @return {Record<string, string[]>} Supported tags keyed by canonical language identifier.
-
-### fn `function resolveSymbolName(element: SourceElement): string` (L284-286)
+### fn `function resolveSymbolName(element: SourceElement): string` (L270-272)
 - @brief Resolves one stable symbol name from an analyzed element.
 - @details Prefers explicit analyzer name metadata, then falls back to the derived signature or the first source line so every matched construct retains a direct-access identifier. Runtime is O(1). No side effects occur.
 - @param[in] element {SourceElement} Source element.
 - @return {string} Stable symbol name.
 
-### fn `function resolveParentElement(definitions: SourceElement[], element: SourceElement): SourceElement | undefined` (L295-304)
+### fn `function resolveParentElement(definitions: SourceElement[], element: SourceElement): SourceElement | undefined` (L281-290)
 - @brief Resolves the direct parent definition for one source element.
 - @details Matches by parent name plus inclusive line containment and chooses the deepest enclosing definition. Runtime is O(n) in definition count. No side effects occur.
 - @param[in] definitions {SourceElement[]} Sorted definition elements.
 - @param[in] element {SourceElement} Candidate child element.
 - @return {SourceElement | undefined} Matched parent definition when available.
 
-### fn `function mapCodeLines(lineEntries: StrippedConstructLineEntry[]): FindToolCodeLineEntry[]` (L312-319)
+### fn `function mapCodeLines(lineEntries: StrippedConstructLineEntry[]): FindToolCodeLineEntry[]` (L298-305)
 - @brief Converts stripped-code line entries into the payload line-entry contract.
 - @details Performs a shallow field copy so the payload remains decoupled from the lower-level strip helper type. Runtime is O(n) in stripped line count. No side effects occur.
 - @param[in] lineEntries {StrippedConstructLineEntry[]} Normalized stripped-code line entries.
 - @return {FindToolCodeLineEntry[]} Payload line entries.
 
-### fn `function buildStrippedSourceText(lineEntries: FindToolCodeLineEntry[]): string | undefined` (L327-332)
+### fn `function buildStrippedSourceText(lineEntries: FindToolCodeLineEntry[]): string | undefined` (L313-318)
 - @brief Joins stripped-code line entries into one optional monolithic text field.
 - @details Preserves rendered display strings in line order so agents that need a contiguous excerpt can read one field without losing access to the structured line array. Runtime is O(n) in stripped line count. No side effects occur.
 - @param[in] lineEntries {FindToolCodeLineEntry[]} Structured stripped-code line entries.
 - @return {string | undefined} Joined stripped-source text, or `undefined` when no lines remain.
 
-### fn `function validateTagFilter(tagFilter: string): ValidatedTagFilter` (L340-356)
+### fn `function validateTagFilter(tagFilter: string): ValidatedTagFilter` (L326-342)
 - @brief Validates and normalizes one tag filter.
 - @details Parses the raw pipe-delimited filter, sorts the resulting unique tag values, and marks the filter invalid when no recognized tag remains after normalization. Runtime is O(n log n) in requested tag count. No side effects occur.
 - @param[in] tagFilter {string} Raw pipe-delimited tag filter.
 - @return {ValidatedTagFilter} Validation result containing the normalized tag set and status.
 
-### fn `function validateRegexPattern(pattern: string): ValidatedRegex` (L364-376)
+### fn `function validateRegexPattern(pattern: string): ValidatedRegex` (L350-362)
 - @brief Validates and compiles one construct-name regex pattern.
 - @details Uses the JavaScript `RegExp` engine with search-style `.test(...)` evaluation and records a stable error message when compilation fails. Runtime is O(n) in pattern length. No side effects occur.
 - @param[in] pattern {string} Raw user pattern.
 - @return {ValidatedRegex} Validation result containing the compiled regex when valid.
 
-### fn `function elementMatches(element: SourceElement, tagSet: Set<string>, regex: RegExp): boolean` (L386-394)
+### fn `function elementMatches(element: SourceElement, tagSet: Set<string>, regex: RegExp): boolean` (L372-380)
 - @brief Tests whether one element matches a validated tag filter and regex.
 - @details Rejects unnamed elements and elements outside the requested tag set before applying the precompiled regex to the construct name. Runtime is O(1) plus regex evaluation. No side effects occur.
 - @param[in] element {SourceElement} Candidate source element.
@@ -2249,13 +2237,13 @@ import {
 - @param[in] regex {RegExp} Precompiled construct-name regex.
 - @return {boolean} `true` when the element matches both filters.
 
-### fn `function countLogicalLines(fileContent: string): number` (L402-407)
+### fn `function countLogicalLines(fileContent: string): number` (L388-393)
 - @brief Counts logical source lines from one file content string.
 - @details Preserves the repository's line-count convention that excludes the terminal empty split produced by trailing newlines. Runtime is O(n) in content length. No side effects occur.
 - @param[in] fileContent {string} Raw file content.
 - @return {number} Logical source-line count.
 
-### fn `function buildSkippedFileEntry(` (L422-457)
+### fn `function buildSkippedFileEntry(` (L408-443)
 - @brief Builds one skipped file entry for a request path.
 - @details Preserves path identity, filesystem status, language metadata when detectable, supported tags for the language, and a stable skip reason without attempting search analysis. Runtime is O(t) in supported-tag count. No side effects occur.
 - @param[in] inputPath {string} Caller-supplied path.
@@ -2268,7 +2256,7 @@ import {
 - @param[in] isFile {boolean} Filesystem file-kind flag.
 - @return {FindToolFileEntry} Structured skipped file entry.
 
-### fn `function buildMatchEntry(` (L471-514)
+### fn `function buildMatchEntry(` (L457-500)
 - @brief Builds one matched construct entry from an analyzed element.
 - @details Resolves symbol identity, hierarchy hints, structured Doxygen fields, numeric declaration lines, and stripped code excerpts while keeping monolithic source text optional. Runtime is O(n) in construct span length plus Doxygen size. No side effects occur.
 - @param[in] element {SourceElement} Matched element.
@@ -2280,7 +2268,7 @@ import {
 - @param[in] includeLineNumbers {boolean} When `true`, rendered display strings include absolute source line prefixes.
 - @return {FindToolMatchEntry} Structured match entry.
 
-### fn `function analyzeFindFile(` (L530-716)
+### fn `function analyzeFindFile(` (L516-702)
 - @brief Analyzes one path into a structured find file entry.
 - @details Resolves path identity, validates language and tag support, parses the file with `SourceAnalyzer`, builds structured match entries, and preserves stable status facts for no-match or failure outcomes. Runtime is dominated by file I/O and analyzer cost. Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] analyzer {SourceAnalyzer} Shared analyzer instance.
@@ -2294,14 +2282,14 @@ import {
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
 - @return {FindToolFileEntry} Structured file entry.
 
-### fn `export function buildFindToolPayload(options: BuildFindToolPayloadOptions): FindToolPayload` (L725-881)
+### fn `export function buildFindToolPayload(options: BuildFindToolPayloadOptions): FindToolPayload` (L711-858)
 - @brief Builds the full agent-oriented find payload.
-- @details Validates request parameters, analyzes requested files in caller order when the request is valid, preserves skipped and no-match outcomes in structured file entries, computes aggregate numeric totals, and emits a structured supported-tag matrix. Runtime is O(F log F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
+- @details Validates request parameters, analyzes requested files in caller order when the request is valid, preserves skipped and no-match outcomes in structured file entries, computes aggregate numeric totals, and omits request echoes plus the static supported-tag matrix already encoded in registration metadata. Runtime is O(F log F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] options {BuildFindToolPayloadOptions} Payload-construction options.
-- @return {FindToolPayload} Structured find payload ordered as request, summary, repository, and files.
+- @return {FindToolPayload} Structured find payload ordered as summary, repository, and files.
 - @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-096, REQ-098
 
-### fn `export function buildFindToolExecutionStderr(payload: FindToolPayload): string` (L890-915)
+### fn `export function buildFindToolExecutionStderr(payload: FindToolPayload): string` (L867-892)
 - @brief Builds deterministic stderr diagnostics from a find payload.
 - @details Serializes invalid request states, skipped inputs, no-match files, and analysis failures into stable newline-delimited diagnostics while leaving successful matched files silent. Runtime is O(n) in file-entry count. No side effects occur.
 - @param[in] payload {FindToolPayload} Structured find payload.
@@ -2321,28 +2309,27 @@ import {
 |`FindToolMatchEntry`|iface||84-103|export interface FindToolMatchEntry extends FindLineRange|
 |`FindToolFileEntry`|iface||109-131|export interface FindToolFileEntry extends FindLineRange|
 |`FindToolRequestSection`|iface||137-155|export interface FindToolRequestSection|
-|`FindToolSummarySection`|iface||161-171|export interface FindToolSummarySection|
-|`FindToolRepositorySection`|iface||177-183|export interface FindToolRepositorySection|
-|`FindToolPayload`|iface||189-194|export interface FindToolPayload|
-|`BuildFindToolPayloadOptions`|iface||200-210|export interface BuildFindToolPayloadOptions|
-|`ValidatedRegex`|iface||216-220|interface ValidatedRegex|
-|`ValidatedTagFilter`|iface||226-231|interface ValidatedTagFilter|
-|`canonicalizeFindPath`|fn||240-248|function canonicalizeFindPath(targetPath: string, baseDir...|
-|`buildLineRange`|fn||257-263|function buildLineRange(startLineNumber: number, endLineN...|
-|`buildSupportedTagsByLanguage`|fn||270-276|function buildSupportedTagsByLanguage(): Record<string, s...|
-|`resolveSymbolName`|fn||284-286|function resolveSymbolName(element: SourceElement): string|
-|`resolveParentElement`|fn||295-304|function resolveParentElement(definitions: SourceElement[...|
-|`mapCodeLines`|fn||312-319|function mapCodeLines(lineEntries: StrippedConstructLineE...|
-|`buildStrippedSourceText`|fn||327-332|function buildStrippedSourceText(lineEntries: FindToolCod...|
-|`validateTagFilter`|fn||340-356|function validateTagFilter(tagFilter: string): ValidatedT...|
-|`validateRegexPattern`|fn||364-376|function validateRegexPattern(pattern: string): Validated...|
-|`elementMatches`|fn||386-394|function elementMatches(element: SourceElement, tagSet: S...|
-|`countLogicalLines`|fn||402-407|function countLogicalLines(fileContent: string): number|
-|`buildSkippedFileEntry`|fn||422-457|function buildSkippedFileEntry(|
-|`buildMatchEntry`|fn||471-514|function buildMatchEntry(|
-|`analyzeFindFile`|fn||530-716|function analyzeFindFile(|
-|`buildFindToolPayload`|fn||725-881|export function buildFindToolPayload(options: BuildFindTo...|
-|`buildFindToolExecutionStderr`|fn||890-915|export function buildFindToolExecutionStderr(payload: Fin...|
+|`FindToolSummarySection`|iface||161-172|export interface FindToolSummarySection|
+|`FindToolRepositorySection`|iface||178-183|export interface FindToolRepositorySection|
+|`FindToolPayload`|iface||189-193|export interface FindToolPayload|
+|`BuildFindToolPayloadOptions`|iface||199-209|export interface BuildFindToolPayloadOptions|
+|`ValidatedRegex`|iface||215-219|interface ValidatedRegex|
+|`ValidatedTagFilter`|iface||225-230|interface ValidatedTagFilter|
+|`canonicalizeFindPath`|fn||239-247|function canonicalizeFindPath(targetPath: string, baseDir...|
+|`buildLineRange`|fn||256-262|function buildLineRange(startLineNumber: number, endLineN...|
+|`resolveSymbolName`|fn||270-272|function resolveSymbolName(element: SourceElement): string|
+|`resolveParentElement`|fn||281-290|function resolveParentElement(definitions: SourceElement[...|
+|`mapCodeLines`|fn||298-305|function mapCodeLines(lineEntries: StrippedConstructLineE...|
+|`buildStrippedSourceText`|fn||313-318|function buildStrippedSourceText(lineEntries: FindToolCod...|
+|`validateTagFilter`|fn||326-342|function validateTagFilter(tagFilter: string): ValidatedT...|
+|`validateRegexPattern`|fn||350-362|function validateRegexPattern(pattern: string): Validated...|
+|`elementMatches`|fn||372-380|function elementMatches(element: SourceElement, tagSet: S...|
+|`countLogicalLines`|fn||388-393|function countLogicalLines(fileContent: string): number|
+|`buildSkippedFileEntry`|fn||408-443|function buildSkippedFileEntry(|
+|`buildMatchEntry`|fn||457-500|function buildMatchEntry(|
+|`analyzeFindFile`|fn||516-702|function analyzeFindFile(|
+|`buildFindToolPayload`|fn||711-858|export function buildFindToolPayload(options: BuildFindTo...|
+|`buildFindToolExecutionStderr`|fn||867-892|export function buildFindToolExecutionStderr(payload: Fin...|
 
 
 ---
@@ -2793,7 +2780,7 @@ import { readBundledPrompt } from "./resources.js";
 
 ---
 
-# reference-payload.ts | TypeScript | 818L | 28 symbols | 5 imports | 27 comments
+# reference-payload.ts | TypeScript | 810L | 28 symbols | 5 imports | 27 comments
 > Path: `src/core/reference-payload.ts`
 - @brief Builds agent-oriented JSON payloads for `files-references` and `references`.
 - @details Converts analyzed source files into deterministic JSON sections ordered for LLM traversal, including repository structure, per-file metrics, imports, symbols, structured Doxygen fields, and structured comment evidence. Runtime is O(F log F + S) where F is file count and S is total source size. Side effects are limited to filesystem reads and optional stderr logging.
@@ -2855,77 +2842,77 @@ import {
 - @brief Describes the repository section of the references payload.
 - @details Stores the base path, configured source-directory scope, canonical file list, and structured directory tree used during analysis. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface ReferenceToolPayload` (L187-192)
+### iface `export interface ReferenceToolPayload` (L187-191)
 - @brief Describes the full agent-oriented references payload.
-- @details Orders the top-level sections as request, summary, repository, and files for deterministic downstream traversal. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only aggregate analysis totals, repository structure, and per-file reference records, omitting request echoes that are already known to the caller or encoded in the tool registration. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface BuildReferenceToolPayloadOptions` (L198-205)
+### iface `export interface BuildReferenceToolPayloadOptions` (L197-204)
 - @brief Describes the options required to build one references payload.
 - @details Supplies tool identity, scope, base directory, requested paths, and optional configured source directories while keeping payload construction deterministic. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function canonicalizeReferencePath(targetPath: string, baseDir: string): string` (L214-222)
+### fn `function canonicalizeReferencePath(targetPath: string, baseDir: string): string` (L213-221)
 - @brief Canonicalizes one filesystem path relative to the payload base directory.
 - @details Emits a slash-normalized relative path when the target is under the base directory; otherwise emits the normalized absolute path. Runtime is O(p) in path length. No side effects occur.
 - @param[in] targetPath {string} Absolute or relative filesystem path.
 - @param[in] baseDir {string} Base directory used for relative canonicalization.
 - @return {string} Canonicalized path string.
 
-### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): ReferenceLineRange` (L231-237)
+### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): ReferenceLineRange` (L230-236)
 - @brief Builds one structured line-range record.
 - @details Duplicates the inclusive range as start, end, and tuple fields so callers can address whichever shape is most convenient. Runtime is O(1). No side effects occur.
 - @param[in] startLineNumber {number} Inclusive start line number.
 - @param[in] endLineNumber {number} Inclusive end line number.
 - @return {ReferenceLineRange} Structured line-range record.
 
-### fn `function extractCommentText(commentElement: SourceElement, maxLength = 0): string` (L246-266)
+### fn `function extractCommentText(commentElement: SourceElement, maxLength = 0): string` (L245-265)
 - @brief Extracts normalized plain text from one comment element.
 - @details Removes language comment markers, drops delimiter-only lines, joins content with spaces, and optionally truncates the result. Runtime is O(n) in comment length. No side effects occur.
 - @param[in] commentElement {SourceElement} Comment element.
 - @param[in] maxLength {number} Optional maximum output length; `0` disables truncation.
 - @return {string} Cleaned comment text.
 
-### fn `function extractCommentLines(commentElement: SourceElement): string[]` (L274-288)
+### fn `function extractCommentLines(commentElement: SourceElement): string[]` (L273-287)
 - @brief Extracts cleaned individual lines from one comment element.
 - @details Removes language comment markers while preserving line granularity for structured comment payloads. Runtime is O(n) in comment length. No side effects occur.
 - @param[in] commentElement {SourceElement} Comment element.
 - @return {string[]} Cleaned comment lines.
 
-### fn `function buildCommentMaps(elements: SourceElement[]): [Record<number, SourceElement[]>, SourceElement[], string]` (L296-346)
+### fn `function buildCommentMaps(elements: SourceElement[]): [Record<number, SourceElement[]>, SourceElement[], string]` (L295-345)
 - @brief Associates nearby comment blocks with definitions and standalone comment groups.
 - @details Reuses the repository comment-attachment heuristic that binds comments within three lines of a definition while preserving early file-description text. Runtime is O(n log n). No side effects occur.
 - @param[in] elements {SourceElement[]} Analyzed source elements.
 - @return {[Record<number, SourceElement[]>, SourceElement[], string]} Attached-comment map, standalone comments, and compact file description.
 
-### fn `function resolveSymbolName(element: SourceElement): string` (L354-356)
+### fn `function resolveSymbolName(element: SourceElement): string` (L353-355)
 - @brief Resolves one stable symbol name from an analyzed element.
 - @details Prefers explicit analyzer name metadata, then falls back to the derived signature or the first source line so every symbol retains a direct-access identifier. Runtime is O(1). No side effects occur.
 - @param[in] element {SourceElement} Source element.
 - @return {string} Stable symbol name.
 
-### fn `function resolveParentElement(definitions: SourceElement[], child: SourceElement): SourceElement | undefined` (L365-374)
+### fn `function resolveParentElement(definitions: SourceElement[], child: SourceElement): SourceElement | undefined` (L364-373)
 - @brief Resolves the direct parent element for one child symbol.
 - @details Matches by parent name plus inclusive line containment and chooses the deepest enclosing definition. Runtime is O(n) in definition count. No side effects occur.
 - @param[in] definitions {SourceElement[]} Sorted definition elements.
 - @param[in] child {SourceElement} Candidate child symbol.
 - @return {SourceElement | undefined} Matched parent definition when available.
 
-### fn `function buildCommentEntry(commentElement: SourceElement): ReferenceCommentEntry` (L382-389)
+### fn `function buildCommentEntry(commentElement: SourceElement): ReferenceCommentEntry` (L381-388)
 - @brief Builds one structured comment record from a comment element.
 - @details Preserves numeric line-range metadata plus normalized text and per-line fragments. Runtime is O(n) in comment length. No side effects occur.
 - @param[in] commentElement {SourceElement} Source comment element.
 - @return {ReferenceCommentEntry} Structured comment record.
 
-### fn `function buildRepositoryTree(canonicalPaths: string[]): ReferenceRepositoryTreeNode` (L397-456)
+### fn `function buildRepositoryTree(canonicalPaths: string[]): ReferenceRepositoryTreeNode` (L396-455)
 - @brief Builds one structured repository tree from canonical file paths.
 - @details Materializes a nested directory map and converts it into recursively ordered JSON nodes without decorative ASCII formatting. Runtime is O(n log n) in path count. No side effects occur.
 - @param[in] canonicalPaths {string[]} Canonical file paths.
 - @return {ReferenceRepositoryTreeNode} Structured repository tree rooted at `.`.
 
-### fn `const ensureDirectory = (parent: ReferenceRepositoryTreeNode, nodeName: string, relativePath: string): ReferenceRepositoryTreeNode =>` (L406-420)
+### fn `const ensureDirectory = (parent: ReferenceRepositoryTreeNode, nodeName: string, relativePath: string): ReferenceRepositoryTreeNode =>` (L405-419)
 
-### fn `const finalizeNode = (node: ReferenceRepositoryTreeNode): ReferenceRepositoryTreeNode =>` (L442-453)
+### fn `const finalizeNode = (node: ReferenceRepositoryTreeNode): ReferenceRepositoryTreeNode =>` (L441-452)
 
-### fn `function analyzeReferenceFile(` (L469-662)
+### fn `function analyzeReferenceFile(` (L468-661)
 - @brief Builds one analyzed file entry for the references payload.
 - @details Parses the file with `SourceAnalyzer`, extracts structured imports and symbols, attaches structured Doxygen fields, and preserves standalone comment evidence. Runtime is O(S log S) in file size and symbol count. Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] analyzer {SourceAnalyzer} Shared source analyzer instance.
@@ -2936,14 +2923,14 @@ import {
 - @param[in] verbose {boolean} When `true`, emit per-file progress diagnostics to stderr.
 - @return {ReferenceToolFileEntry} Structured file entry.
 
-### fn `export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOptions): ReferenceToolPayload` (L671-796)
+### fn `export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOptions): ReferenceToolPayload` (L670-788)
 - @brief Builds the full agent-oriented references payload.
-- @details Validates requested paths against the filesystem, analyzes processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits a structured repository tree. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+- @details Validates requested paths against the filesystem, analyzes processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits structured repository data without echoing request metadata already known to the caller. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] options {BuildReferenceToolPayloadOptions} Payload-construction options.
-- @return {ReferenceToolPayload} Structured references payload ordered as request, summary, repository, and files.
+- @return {ReferenceToolPayload} Structured references payload ordered as summary, repository, and files.
 - @satisfies REQ-011, REQ-014, REQ-076, REQ-077, REQ-078, REQ-079
 
-### fn `export function buildReferenceToolExecutionStderr(payload: ReferenceToolPayload): string` (L804-818)
+### fn `export function buildReferenceToolExecutionStderr(payload: ReferenceToolPayload): string` (L796-810)
 - @brief Builds deterministic stderr diagnostics from a references payload.
 - @details Serializes skipped-input and analysis-error entries into stable newline-delimited diagnostics while leaving fully analyzed payloads silent. Runtime is O(n) in file-entry count. No side effects occur.
 - @param[in] payload {ReferenceToolPayload} Structured references payload.
@@ -2964,22 +2951,22 @@ import {
 |`ReferenceToolSummarySection`|iface||146-157|export interface ReferenceToolSummarySection|
 |`ReferenceRepositoryTreeNode`|iface||163-169|export interface ReferenceRepositoryTreeNode|
 |`ReferenceToolRepositorySection`|iface||175-181|export interface ReferenceToolRepositorySection|
-|`ReferenceToolPayload`|iface||187-192|export interface ReferenceToolPayload|
-|`BuildReferenceToolPayloadOptions`|iface||198-205|export interface BuildReferenceToolPayloadOptions|
-|`canonicalizeReferencePath`|fn||214-222|function canonicalizeReferencePath(targetPath: string, ba...|
-|`buildLineRange`|fn||231-237|function buildLineRange(startLineNumber: number, endLineN...|
-|`extractCommentText`|fn||246-266|function extractCommentText(commentElement: SourceElement...|
-|`extractCommentLines`|fn||274-288|function extractCommentLines(commentElement: SourceElemen...|
-|`buildCommentMaps`|fn||296-346|function buildCommentMaps(elements: SourceElement[]): [Re...|
-|`resolveSymbolName`|fn||354-356|function resolveSymbolName(element: SourceElement): string|
-|`resolveParentElement`|fn||365-374|function resolveParentElement(definitions: SourceElement[...|
-|`buildCommentEntry`|fn||382-389|function buildCommentEntry(commentElement: SourceElement)...|
-|`buildRepositoryTree`|fn||397-456|function buildRepositoryTree(canonicalPaths: string[]): R...|
-|`ensureDirectory`|fn||406-420|const ensureDirectory = (parent: ReferenceRepositoryTreeN...|
-|`finalizeNode`|fn||442-453|const finalizeNode = (node: ReferenceRepositoryTreeNode):...|
-|`analyzeReferenceFile`|fn||469-662|function analyzeReferenceFile(|
-|`buildReferenceToolPayload`|fn||671-796|export function buildReferenceToolPayload(options: BuildR...|
-|`buildReferenceToolExecutionStderr`|fn||804-818|export function buildReferenceToolExecutionStderr(payload...|
+|`ReferenceToolPayload`|iface||187-191|export interface ReferenceToolPayload|
+|`BuildReferenceToolPayloadOptions`|iface||197-204|export interface BuildReferenceToolPayloadOptions|
+|`canonicalizeReferencePath`|fn||213-221|function canonicalizeReferencePath(targetPath: string, ba...|
+|`buildLineRange`|fn||230-236|function buildLineRange(startLineNumber: number, endLineN...|
+|`extractCommentText`|fn||245-265|function extractCommentText(commentElement: SourceElement...|
+|`extractCommentLines`|fn||273-287|function extractCommentLines(commentElement: SourceElemen...|
+|`buildCommentMaps`|fn||295-345|function buildCommentMaps(elements: SourceElement[]): [Re...|
+|`resolveSymbolName`|fn||353-355|function resolveSymbolName(element: SourceElement): string|
+|`resolveParentElement`|fn||364-373|function resolveParentElement(definitions: SourceElement[...|
+|`buildCommentEntry`|fn||381-388|function buildCommentEntry(commentElement: SourceElement)...|
+|`buildRepositoryTree`|fn||396-455|function buildRepositoryTree(canonicalPaths: string[]): R...|
+|`ensureDirectory`|fn||405-419|const ensureDirectory = (parent: ReferenceRepositoryTreeN...|
+|`finalizeNode`|fn||441-452|const finalizeNode = (node: ReferenceRepositoryTreeNode):...|
+|`analyzeReferenceFile`|fn||468-661|function analyzeReferenceFile(|
+|`buildReferenceToolPayload`|fn||670-788|export function buildReferenceToolPayload(options: BuildR...|
+|`buildReferenceToolExecutionStderr`|fn||796-810|export function buildReferenceToolExecutionStderr(payload...|
 
 
 ---
@@ -3483,7 +3470,7 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# token-counter.ts | TypeScript | 729L | 29 symbols | 5 imports | 35 comments
+# token-counter.ts | TypeScript | 611L | 28 symbols | 5 imports | 34 comments
 > Path: `src/core/token-counter.ts`
 - @brief Provides token, size, and structure counting utilities for agent-oriented file payloads.
 - @details Wraps `js-tiktoken` encoding lookup, extracts per-file structural facts, and builds machine-oriented JSON payloads for token-centric tools. Runtime is linear in processed text size plus sort cost for derived ordering hints. Side effects are limited to filesystem reads in file-based helpers.
@@ -3545,80 +3532,72 @@ import { parseDoxygenComment, type DoxygenFieldMap } from "./doxygen-parser.js";
 - @brief Describes the guidance section of the agent-oriented token payload.
 - @details Separates source observations, derived recommendations, and actionable next-step hints so downstream agents can choose between raw evidence and planning heuristics without reparsing mixed prose. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface TokenToolPayload` (L180-185)
+### iface `export interface TokenToolPayload` (L180-183)
 - @brief Describes the full agent-oriented token payload.
-- @details Orders the top-level sections as request, summary, files, and guidance for deterministic downstream traversal. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes only aggregate numeric totals plus per-file metrics, omitting request echoes and derived guidance that can be inferred from tool registration or recomputed by the caller. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface BuildTokenToolPayloadOptions` (L191-199)
+### iface `export interface BuildTokenToolPayloadOptions` (L189-197)
 - @brief Describes the options required to build one agent-oriented token payload.
 - @details Supplies tool identity, scope, path base, requested paths, and optional canonical-doc metadata while keeping counting behavior configurable through a stable object contract. The interface is compile-time only and introduces no runtime cost.
 
-### class `export class TokenCounter` (L205-245)
+### class `export class TokenCounter` (L203-243)
 - @brief Encapsulates one tokenizer instance for repeated token counting.
 - @brief Stores the tokenizer implementation used for subsequent counts.
 - @details Caches a `js-tiktoken` encoding object so multiple documents can be counted without repeated encoding lookup. Counting cost is O(n) in content length. The class mutates only instance state during construction.
 - @details The field holds the encoder returned by `getEncoding`. Access complexity is O(1). The value is initialized once per instance.
 
-### fn `function canonicalizeTokenPath(filePath: string, baseDir: string): string` (L254-262)
+### fn `function canonicalizeTokenPath(filePath: string, baseDir: string): string` (L252-260)
 - @brief Converts one filesystem path into the canonical token-payload path form.
 - @details Emits a slash-normalized relative path when the target is under the supplied base directory; otherwise emits a slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] filePath {string} Candidate absolute or relative filesystem path.
 - @param[in] baseDir {string} Reference directory used for relative canonicalization.
 - @return {string} Canonicalized path string.
 
-### fn `function countLines(content: string): number` (L270-276)
+### fn `function countLines(content: string): number` (L268-274)
 - @brief Counts logical lines in one text payload.
 - @details Counts newline separators while treating a trailing newline as line termination instead of an extra empty logical line. Runtime is O(n) in text length. No side effects occur.
 - @param[in] content {string} Text payload.
 - @return {number} Logical line count; `0` for empty content.
 
-### fn `function stripMarkdownFrontMatter(content: string): string` (L284-287)
+### fn `function stripMarkdownFrontMatter(content: string): string` (L282-285)
 - @brief Strips YAML front matter from markdown content before heading extraction.
 - @details Removes the first `--- ... ---` block only when it appears at the file start so heading detection can operate on semantic markdown content instead of metadata. Runtime is O(n) in content length. No side effects occur.
 - @param[in] content {string} Markdown payload.
 - @return {string} Markdown body without the leading front matter block.
 
-### fn `function extractPrimaryHeadingText(content: string, filePath: string): string | undefined` (L296-303)
+### fn `function extractPrimaryHeadingText(content: string, filePath: string): string | undefined` (L294-301)
 - @brief Extracts the first level-one markdown heading when present.
 - @details Restricts extraction to markdown-like files, skips YAML front matter, and returns the first `# ` heading payload without surrounding whitespace. Runtime is O(n) in content length. No side effects occur.
 - @param[in] content {string} File content.
 - @param[in] filePath {string} Source path used for extension-based markdown detection.
 - @return {string | undefined} First heading text, or `undefined` when absent or the file is not markdown-like.
 
-### fn `function inferLanguageName(filePath: string): string | undefined` (L311-320)
+### fn `function inferLanguageName(filePath: string): string | undefined` (L309-318)
 - @brief Infers a file language label optimized for agent payloads.
 - @details Reuses source-language detection when available, normalizes markdown extensions explicitly, and falls back to the lowercase extension name without the leading dot. Runtime is O(1). No side effects occur.
 - @param[in] filePath {string} File path whose extension should be classified.
 - @return {string | undefined} Normalized language label, or `undefined` when the path has no usable extension.
 
-### fn `function extractLeadingDoxygenFields(content: string): DoxygenFieldMap | undefined` (L328-346)
+### fn `function extractLeadingDoxygenFields(content: string): DoxygenFieldMap | undefined` (L326-344)
 - @brief Extracts leading Doxygen file fields when present.
 - @details Tests common leading-comment syntaxes, normalizes an optional shebang away before matching, and returns the first non-empty parsed Doxygen map. Runtime is O(n) in comment length. No side effects occur.
 - @param[in] content {string} File content.
 - @return {DoxygenFieldMap | undefined} Parsed Doxygen field map, or `undefined` when no supported file-level fields are present.
 
-### fn `function roundRatio(numerator: number, denominator: number): number` (L355-360)
+### fn `function roundRatio(numerator: number, denominator: number): number` (L353-358)
 - @brief Rounds one ratio to six decimal places.
 - @details Preserves zero exactly and otherwise limits floating-point noise so share fields remain stable across executions. Runtime is O(1). No side effects occur.
 - @param[in] numerator {number} Partial numeric value.
 - @param[in] denominator {number} Total numeric value.
 - @return {number} Rounded ratio in range `[0, 1]` when the denominator is positive; `0` otherwise.
 
-### fn `function orderPathsByMetric(` (L370-395)
-- @brief Orders canonical file paths by one numeric metric while removing duplicates.
-- @details Filters to counted file entries, sorts by the supplied metric direction, breaks ties by canonical path, and preserves only the first occurrence of each path. Runtime is O(n log n). No external state is mutated.
-- @param[in] files {TokenToolFileEntry[]} Token payload file entries.
-- @param[in] metric {(entry: TokenToolFileEntry) => number} Numeric metric selector.
-- @param[in] direction {"asc" | "desc"} Sort direction.
-- @return {string[]} Unique canonical paths ordered by the requested metric.
-
-### fn `function probeRequestedPath(absolutePath: string): { exists: boolean; isFile: boolean; reason?: string }` (L403-417)
+### fn `function probeRequestedPath(absolutePath: string): { exists: boolean; isFile: boolean; reason?: string }` (L366-380)
 - @brief Probes one requested path before token counting.
 - @details Resolves whether the target exists and is a regular file while capturing a stable skip reason for missing or non-file inputs. Runtime is dominated by one filesystem stat. Side effects are limited to filesystem reads.
 - @param[in] absolutePath {string} Absolute path to inspect.
 - @return {{ exists: boolean; isFile: boolean; reason?: string }} Path probe result.
 
-### fn `function buildCountFileMetricsResult(filePath: string, content: string, counter: TokenCounter): CountFileMetricsResult` (L427-442)
+### fn `function buildCountFileMetricsResult(filePath: string, content: string, counter: TokenCounter): CountFileMetricsResult` (L390-405)
 - @brief Builds one rich per-file metrics record from readable content.
 - @details Combines token, character, byte, and line counts with file-extension, inferred-language, heading, and Doxygen metadata extraction so agents can consume direct-access facts without reparsing the raw file. Runtime is O(n) in content length. No external state is mutated.
 - @param[in] filePath {string} Absolute or project-local file path.
@@ -3626,14 +3605,14 @@ import { parseDoxygenComment, type DoxygenFieldMap } from "./doxygen-parser.js";
 - @param[in] counter {TokenCounter} Reused token counter instance.
 - @return {CountFileMetricsResult} Structured per-file metrics record.
 
-### fn `export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING):` (L451-464)
+### fn `export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING):` (L414-427)
 - @brief Counts tokens, characters, bytes, and lines for one in-memory content string.
 - @details Instantiates a `TokenCounter`, tokenizes the supplied text, and pairs the result with raw character length, UTF-8 byte size, and logical line count. Runtime is O(n). No filesystem I/O occurs.
 - @param[in] content {string} Text payload to measure.
 - @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
 - @return {{ tokens: number; chars: number; bytes: number; lines: number }} Aggregate metrics for the supplied content.
 
-### fn `export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUNTER_ENCODING): CountFileMetricsResult[]` (L474-495)
+### fn `export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUNTER_ENCODING): CountFileMetricsResult[]` (L437-458)
 - @brief Counts tokens, characters, bytes, and lines for multiple files.
 - @details Reuses a single `TokenCounter`, reads each file as UTF-8, and returns per-file metrics plus direct-access metadata such as heading and Doxygen file fields. Read failures are captured as error strings instead of aborting the entire batch. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] filePaths {string[]} File paths to measure.
@@ -3641,14 +3620,14 @@ import { parseDoxygenComment, type DoxygenFieldMap } from "./doxygen-parser.js";
 - @return {CountFileMetricsResult[]} Per-file metrics and optional read errors.
 - @satisfies REQ-010, REQ-070, REQ-073
 
-### fn `export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): TokenToolPayload` (L504-697)
+### fn `export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): TokenToolPayload` (L467-579)
 - @brief Builds the agent-oriented JSON payload for token-centric tools.
-- @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, separates raw observations from derived guidance, and emits direct-access file facts such as line ranges, sizes, headings, and optional Doxygen file fields. Runtime is O(F log F + S). Side effects are limited to filesystem reads.
+- @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, and emits direct-access file facts such as sizes, headings, and optional Doxygen file fields while omitting request echoes and derived guidance. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] options {BuildTokenToolPayloadOptions} Payload-construction options.
-- @return {TokenToolPayload} Structured token payload ordered as request, summary, files, guidance.
+- @return {TokenToolPayload} Structured token payload ordered as summary then files.
 - @satisfies REQ-010, REQ-017, REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075
 
-### fn `export function formatPackSummary(results: CountFileMetricsResult[]): string` (L705-729)
+### fn `export function formatPackSummary(results: CountFileMetricsResult[]): string` (L587-611)
 - @brief Formats per-file token metrics as a human-readable summary block.
 - @details Aggregates totals, emits one status line per file, and appends a summary footer containing file, token, and character counts. Runtime is O(n). No external state is mutated.
 - @param[in] results {CountFileMetricsResult[]} Per-file metric records.
@@ -3669,23 +3648,22 @@ import { parseDoxygenComment, type DoxygenFieldMap } from "./doxygen-parser.js";
 |`TokenToolRecommendation`|iface||150-154|export interface TokenToolRecommendation|
 |`TokenToolNextStepHint`|iface||160-164|export interface TokenToolNextStepHint|
 |`TokenToolGuidanceSection`|iface||170-174|export interface TokenToolGuidanceSection|
-|`TokenToolPayload`|iface||180-185|export interface TokenToolPayload|
-|`BuildTokenToolPayloadOptions`|iface||191-199|export interface BuildTokenToolPayloadOptions|
-|`TokenCounter`|class||205-245|export class TokenCounter|
-|`canonicalizeTokenPath`|fn||254-262|function canonicalizeTokenPath(filePath: string, baseDir:...|
-|`countLines`|fn||270-276|function countLines(content: string): number|
-|`stripMarkdownFrontMatter`|fn||284-287|function stripMarkdownFrontMatter(content: string): string|
-|`extractPrimaryHeadingText`|fn||296-303|function extractPrimaryHeadingText(content: string, fileP...|
-|`inferLanguageName`|fn||311-320|function inferLanguageName(filePath: string): string | un...|
-|`extractLeadingDoxygenFields`|fn||328-346|function extractLeadingDoxygenFields(content: string): Do...|
-|`roundRatio`|fn||355-360|function roundRatio(numerator: number, denominator: numbe...|
-|`orderPathsByMetric`|fn||370-395|function orderPathsByMetric(|
-|`probeRequestedPath`|fn||403-417|function probeRequestedPath(absolutePath: string): { exis...|
-|`buildCountFileMetricsResult`|fn||427-442|function buildCountFileMetricsResult(filePath: string, co...|
-|`countFileMetrics`|fn||451-464|export function countFileMetrics(content: string, encodin...|
-|`countFilesMetrics`|fn||474-495|export function countFilesMetrics(filePaths: string[], en...|
-|`buildTokenToolPayload`|fn||504-697|export function buildTokenToolPayload(options: BuildToken...|
-|`formatPackSummary`|fn||705-729|export function formatPackSummary(results: CountFileMetri...|
+|`TokenToolPayload`|iface||180-183|export interface TokenToolPayload|
+|`BuildTokenToolPayloadOptions`|iface||189-197|export interface BuildTokenToolPayloadOptions|
+|`TokenCounter`|class||203-243|export class TokenCounter|
+|`canonicalizeTokenPath`|fn||252-260|function canonicalizeTokenPath(filePath: string, baseDir:...|
+|`countLines`|fn||268-274|function countLines(content: string): number|
+|`stripMarkdownFrontMatter`|fn||282-285|function stripMarkdownFrontMatter(content: string): string|
+|`extractPrimaryHeadingText`|fn||294-301|function extractPrimaryHeadingText(content: string, fileP...|
+|`inferLanguageName`|fn||309-318|function inferLanguageName(filePath: string): string | un...|
+|`extractLeadingDoxygenFields`|fn||326-344|function extractLeadingDoxygenFields(content: string): Do...|
+|`roundRatio`|fn||353-358|function roundRatio(numerator: number, denominator: numbe...|
+|`probeRequestedPath`|fn||366-380|function probeRequestedPath(absolutePath: string): { exis...|
+|`buildCountFileMetricsResult`|fn||390-405|function buildCountFileMetricsResult(filePath: string, co...|
+|`countFileMetrics`|fn||414-427|export function countFileMetrics(content: string, encodin...|
+|`countFilesMetrics`|fn||437-458|export function countFilesMetrics(filePaths: string[], en...|
+|`buildTokenToolPayload`|fn||467-579|export function buildTokenToolPayload(options: BuildToken...|
+|`formatPackSummary`|fn||587-611|export function formatPackSummary(results: CountFileMetri...|
 
 
 ---
@@ -4096,7 +4074,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 2212L | 50 symbols | 21 imports | 53 comments
+# index.ts | TypeScript | 2368L | 53 symbols | 21 imports | 56 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -4113,7 +4091,7 @@ import {
 import {
 import {
 import {
-import { buildRuntimePathContext, buildRuntimePathFacts } from "./core/path-context.js";
+import { formatRuntimePathForDisplay } from "./core/path-context.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import { showPiUsereqSettingsMenu, type PiUsereqSettingsMenuChoice } from "./core/settings-menu.js";
 import {
@@ -4128,35 +4106,27 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 
 ## Definitions
 
-### iface `interface PiShortcutRegistrar` (L137-145)
+### iface `interface PiShortcutRegistrar` (L143-151)
 - @brief Describes the optional shortcut-registration surface used by pi-usereq.
 - @details Narrows the runtime API to the documented `registerShortcut(...)`
 method so the extension can remain compatible with offline harnesses that do
 not implement shortcut capture. Compile-time only and introduces no runtime
 cost.
 
-### fn `function getProjectBase(cwd: string): string` (L153-155)
+### fn `function getProjectBase(cwd: string): string` (L159-161)
 - @brief Resolves the effective project base from a working directory.
 - @details Normalizes the provided cwd into an absolute path without consulting configuration. Time complexity is O(1). No I/O side effects occur.
 - @param[in] cwd {string} Current working directory.
 - @return {string} Absolute project base path.
 
-### fn `function buildSharedRuntimePathFacts(cwd: string, config: UseReqConfig): import("./core/path-context.js").RuntimePathFacts` (L165-169)
-- @brief Builds the shared runtime path facts for the current command or tool context.
-- @details Derives installation, execution, base, config, resource, docs, test, source, and optional git paths from the cwd-derived project configuration plus runtime-only repository probing, then converts them into prompt/tool-facing strings. Runtime is O(s + p) where s is configured source-directory count and p is aggregate path length. Side effects are limited to git subprocess execution.
-- @param[in] cwd {string} Current working directory.
-- @param[in] config {UseReqConfig} Effective project configuration.
-- @return {import("./core/path-context.js").RuntimePathFacts} Shared runtime path facts.
-- @satisfies REQ-145, REQ-146
-
-### fn `function loadProjectConfig(cwd: string): UseReqConfig` (L178-181)
+### fn `function loadProjectConfig(cwd: string): UseReqConfig` (L170-173)
 - @brief Loads project configuration for the extension runtime.
 - @details Resolves the project base, loads persisted config, and normalizes configured directory paths without reading or persisting runtime-derived `base-path` or `git-path` metadata. Runtime is dominated by config I/O. Side effects are limited to filesystem reads.
 - @param[in] cwd {string} Current working directory.
 - @return {UseReqConfig} Effective project configuration.
 - @satisfies REQ-030, REQ-145, REQ-146
 
-### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L196-199)
+### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L183-186)
 - @brief Persists project configuration from the extension runtime.
 - @details Resolves the project base, normalizes configured directory paths into project-relative form, and delegates persistence to `saveConfig` without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
 - @param[in] cwd {string} Current working directory.
@@ -4164,7 +4134,7 @@ cost.
 - @return {void} No return value.
 - @satisfies REQ-146
 
-### fn `function formatProjectConfigPathForMenu(cwd: string): string` (L210-212)
+### fn `function formatProjectConfigPathForMenu(cwd: string): string` (L197-199)
 - @brief Formats the current project config path for top-level menu display.
 - @details Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived
 project base and formats it relative to the user home when possible. Runtime
@@ -4173,65 +4143,65 @@ is O(p) in path length. No external state is mutated.
 - @return {string} User-home-relative or absolute config path display value.
 - @satisfies REQ-162
 
-### fn `function collectProjectStaticCheckSelection(` (L221-252)
+### fn `function collectProjectStaticCheckSelection(` (L208-239)
 - @brief Collects the project-scoped static-check selection used by the agent tool.
 - @details Resolves configured source plus test directories, reuses the same fixture-root exclusions as `runProjectStaticCheck`, and returns canonical relative file paths for structured payload emission. Runtime is O(F) plus project file-discovery cost. Side effects are limited to filesystem reads and git subprocesses delegated through `collectSourceFiles`.
 - @param[in] projectBase {string} Resolved project base path.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {{ selectionDirectoryPaths: string[]; excludedDirectoryPaths: string[]; selectedPaths: string[] }} Structured static-check selection facts.
 
-### fn `function buildTokenToolExecutionStderr(payload: TokenToolPayload): string` (L242-248)
+### fn `function buildTokenToolExecutionStderr(payload: TokenToolPayload): string` (L247-255)
 - @brief Builds execution diagnostics for one token-tool payload.
 - @details Serializes skipped-input and read-error observations into stable stderr lines while leaving successful counted files silent. Runtime is O(n) in issue count. No side effects occur.
 - @param[in] payload {TokenToolPayload} Structured token payload.
 - @return {string} Newline-delimited execution diagnostics.
 
-### fn `function buildTokenToolExecuteResult(` (L257-274)
+### fn `function buildTokenToolExecuteResult(` (L264-279)
 - @brief Builds the agent-oriented execute result returned by token-count tools.
 - @details Mirrors the structured token payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
 - @param[in] payload {TokenToolPayload} Structured token payload.
 - @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Token-tool execute result.
 - @satisfies REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075, REQ-099, REQ-102
 
-### fn `function buildReferenceToolExecuteResult(` (L283-300)
+### fn `function buildReferenceToolExecuteResult(` (L288-304)
 - @brief Builds the agent-oriented execute result returned by references tools.
 - @details Mirrors the structured references payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
 - @param[in] payload {ReferenceToolPayload} Structured references payload.
 - @return {{ content: Array<{ type: "text"; text: string }>; details: ReferenceToolPayload & { execution: { code: number; stderr: string } } }} References-tool execute result.
 - @satisfies REQ-076, REQ-077, REQ-078, REQ-079, REQ-099, REQ-102
 
-### fn `function buildCompressionToolExecuteResult(` (L309-326)
+### fn `function buildCompressionToolExecuteResult(` (L313-329)
 - @brief Builds the agent-oriented execute result returned by compression tools.
 - @details Mirrors the structured compression payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
 - @param[in] payload {CompressToolPayload} Structured compression payload.
 - @return {{ content: Array<{ type: "text"; text: string }>; details: CompressToolPayload & { execution: { code: number; stderr: string } } }} Compression-tool execute result.
 - @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087, REQ-088, REQ-099, REQ-102
 
-### fn `function buildFindToolSupportedTagGuidelines(): string[]` (L387-391)
+### fn `function buildFindToolSupportedTagGuidelines(): string[]` (L390-394)
 - @brief Builds the supported-tag guidance lines embedded in find-tool registrations.
 - @details Emits one deterministic line per supported language containing its canonical registration label and sorted tag list so downstream agents can specialize requests without invoking the tool first. Runtime is O(l * t log t). No side effects occur.
 - @return {string[]} Supported-tag guidance lines.
 
-### fn `function buildFindToolSchemaDescription(scope: FindToolScope): string` (L399-404)
+### fn `function buildFindToolSchemaDescription(scope: FindToolScope): string` (L402-407)
 - @brief Builds the schema description for one find-tool registration.
 - @details Specializes the input-scope sentence for explicit-file or configured-directory searches while keeping the JSON output contract stable and fully machine-readable. Runtime is O(1). No side effects occur.
 - @param[in] scope {FindToolScope} Find-tool scope.
 - @return {string} Parameter-schema description.
 
-### fn `function buildFindToolPromptGuidelines(scope: FindToolScope): string[]` (L412-428)
+### fn `function buildFindToolPromptGuidelines(scope: FindToolScope): string[]` (L415-431)
 - @brief Builds the prompt-guideline set for one find-tool registration.
 - @details Encodes scope selection, output schema, regex semantics, line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
 - @param[in] scope {FindToolScope} Find-tool scope.
 - @return {string[]} Prompt-guideline strings.
 
-### fn `function buildFindToolExecuteResult(` (L437-455)
+### fn `function buildFindToolExecuteResult(` (L440-457)
 - @brief Builds the agent-oriented execute result returned by find tools.
 - @details Mirrors the structured find payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
 - @param[in] payload {FindToolPayload} Structured find payload.
 - @return {{ content: Array<{ type: "text"; text: string }>; details: FindToolPayload & { execution: { code: number; stderr: string } } }} Find-tool execute result.
 - @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-097, REQ-098, REQ-099, REQ-102
 
-### fn `async function deliverPromptCommand(pi: ExtensionAPI, content: string): Promise<void>` (L465-467)
+### fn `async function deliverPromptCommand(pi: ExtensionAPI, content: string): Promise<void>` (L467-469)
 - @brief Delivers one rendered prompt into the active session.
 - @details Writes the rendered prompt directly through `pi.sendUserMessage(...)` without creating replacement sessions or pre-reset flows. Runtime is O(n) in prompt length. Side effects are limited to user-message delivery.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4239,26 +4209,26 @@ is O(p) in path length. No external state is mutated.
 - @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
 - @satisfies REQ-004, REQ-067, REQ-068
 
-### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L476-481)
+### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L478-483)
 - @brief Returns the configurable active-tool inventory visible to the extension.
 - @details Filters runtime tools against the canonical configurable-tool set, thereby combining extension-owned tools with supported embedded pi CLI tools. Output order is sorted by tool name. Runtime is O(t log t). No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {ToolInfo[]} Sorted configurable tool descriptors.
 - @satisfies REQ-007, REQ-063
 
-### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L489-493)
+### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L491-495)
 - @brief Normalizes and returns the configured enabled active tools.
 - @details Reuses repository normalization rules, updates the config object in place, and returns the normalized array. Runtime is O(n) in configured tool count. Side effect: mutates `config["enabled-tools"]`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {string[]} Normalized enabled tool names.
 
-### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L501-506)
+### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L503-508)
 - @brief Classifies one configurable tool as embedded or extension-owned.
 - @details Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated.
 - @param[in] tool {ToolInfo} Runtime tool descriptor.
 - @return {"builtin" | "extension"} Stable tool-kind label.
 
-### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L516-533)
+### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L518-535)
 - @brief Applies the configured active-tool enablement to the current session.
 - @details Preserves non-configurable active tools, removes every configurable tool from the active set, then re-adds only configured tools that exist in the current runtime inventory. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4266,25 +4236,27 @@ is O(p) in path length. No external state is mutated.
 - @return {void} No return value.
 - @satisfies REQ-009, REQ-064
 
-### fn `async function handleExtensionStatusEvent(` (L553-573)
+### fn `async function handleExtensionStatusEvent(` (L557-593)
 - @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
 - @details Applies session-start-specific resource validation, project-config
 refresh, and startup-tool enablement before forwarding the originating hook
 name and payload into the shared `updateExtensionStatus(...)` pipeline.
-On `agent_end`, also dispatches configured pi-notify beep and sound effects.
-Runtime is dominated by configuration loading during `session_start`; all
-other hooks are O(1). Side effects include resource checks, active-tool
-mutation, status updates, live-ticker disposal on shutdown, stdout writes,
-and optional child-process spawning.
+On `agent_end`, also dispatches configured pi-notify beep, sound, and
+prompt-specific Pushover effects when the current run originates from a
+bundled prompt command. Runtime is dominated by configuration loading during
+`session_start`; all other hooks are O(1). Side effects include resource
+checks, active-tool mutation, status updates, live-ticker disposal on
+shutdown, stdout writes, optional child-process spawning, and outbound
+HTTPS requests.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
 - @param[in] event {unknown} Hook payload forwarded by pi.
 - @param[in] ctx {ExtensionContext} Active extension context.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {Promise<void>} Promise resolved when hook processing completes.
-- @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133
+- @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172
 
-### fn `function registerExtensionStatusHooks(` (L586-599)
+### fn `function registerExtensionStatusHooks(` (L606-619)
 - @brief Registers shared wrappers for every supported pi lifecycle hook.
 - @details Installs one generic wrapper per intercepted hook so every resource,
 session, agent, model, tool, bash, and input event is routed through the
@@ -4295,7 +4267,7 @@ count. Side effects include hook registration.
 - @return {void} No return value.
 - @satisfies DES-002, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117
 
-### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L609-612)
+### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L629-632)
 - @brief Replaces the configured active-tool selection and applies it immediately.
 - @details Normalizes the requested tool names, stores them in config, and synchronizes the active tool set with runtime registration state. Runtime is O(n + t). Side effect: mutates config and active tools.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4303,33 +4275,63 @@ count. Side effects include hook registration.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 
-### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L621-649)
+### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L641-669)
 - @brief Renders a textual reference for configurable-tool configuration and runtime state.
 - @details Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Multiline tool-status report.
 
-- type `type PiNotifyBeepConfigKey =` (L657)
+- type `type PiNotifyBeepConfigKey =` (L677)
 - @brief Represents one persisted pi-notify beep flag key.
 - @details Restricts menu toggles to the three independent prompt-end beep
 flags stored in project configuration. Compile-time only and introduces no
 runtime cost.
-### fn `function togglePiNotifyBeepFlag(config: UseReqConfig, key: PiNotifyBeepConfigKey): boolean` (L669-672)
+### fn `function togglePiNotifyBeepFlag(config: UseReqConfig, key: PiNotifyBeepConfigKey): boolean` (L689-692)
 - @brief Flips one persisted pi-notify beep flag.
 - @details Negates the selected prompt-end beep flag in place and returns the resulting boolean value so callers can emit deterministic UI feedback. Runtime is O(1). Side effect: mutates `config`.
 - @param[in] key {PiNotifyBeepConfigKey} Beep flag key to toggle.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {boolean} Next enabled state.
 
-### fn `function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L681-738)
+### fn `function formatPiNotifyPushoverPriority(priority: PiNotifyPushoverPriority): string` (L701-703)
+- @brief Formats one persisted Pushover priority for menu display.
+- @details Maps the canonical `0|1` priority domain to deterministic menu text reused by the Pushover configuration UI. Runtime is O(1). No external state is mutated.
+- @param[in] priority {PiNotifyPushoverPriority} Persisted Pushover priority.
+- @return {string} Menu-display label.
+- @satisfies REQ-165
+
+### fn `function buildPiNotifyPushoverMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L712-751)
+- @brief Builds the shared settings-menu choices for Pushover configuration.
+- @details Serializes the Pushover global-disable flag, successful-completion enable flag, credential strings, and priority value into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
+- @param[in] config {UseReqConfig} Effective project configuration.
+- @return {PiUsereqSettingsMenuChoice[]} Ordered Pushover-menu choice vector.
+- @satisfies REQ-163, REQ-165, REQ-166, REQ-172
+
+### fn `async function selectPiNotifyPushoverPriority(` (L761-783)
+- @brief Opens the shared settings-menu selector for Pushover priority.
+- @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the existing notification menus and returns the chosen priority or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+- @param[in] ctx {ExtensionCommandContext} Active command context.
+- @param[in] currentPriority {PiNotifyPushoverPriority} Persisted priority value.
+- @return {Promise<PiNotifyPushoverPriority | undefined>} Selected priority or `undefined` when cancelled.
+- @satisfies REQ-165
+
+### fn `async function configurePiNotifyPushoverMenu(` (L793-842)
+- @brief Runs the interactive Pushover-configuration menu.
+- @details Exposes the Pushover global-disable flag, successful-completion enable flag, user key, API token, and priority selector through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+- @param[in] ctx {ExtensionCommandContext} Active command context.
+- @param[in,out] config {UseReqConfig} Mutable configuration object.
+- @return {Promise<void>} Promise resolved when the menu closes.
+- @satisfies REQ-163, REQ-165, REQ-166, REQ-172
+
+### fn `function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L851-914)
 - @brief Builds the shared settings-menu choices for notification configuration.
-- @details Serializes the current beep flags, selected notify command, hotkey bind, and per-level notify commands into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1) plus command-length formatting. No external state is mutated.
+- @details Serializes the current beep flags, selected notify command, hotkey bind, per-level notify commands, and the Pushover submenu entry into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1) plus command-length formatting. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
-- @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152
+- @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-166, REQ-172
 
-### fn `async function selectPiNotifySoundLevel(` (L748-779)
+### fn `async function selectPiNotifySoundLevel(` (L924-955)
 - @brief Opens the shared settings-menu selector for the selected notify command.
 - @details Reuses the pi-usereq settings-menu renderer so notify-command selection remains stylistically aligned with the main configuration UI and returns the chosen sound level or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -4337,15 +4339,15 @@ runtime cost.
 - @return {Promise<PiNotifySoundLevel | undefined>} Selected sound level or `undefined` when cancelled.
 - @satisfies REQ-131, REQ-137, REQ-149, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiNotifyMenu(` (L789-854)
+### fn `async function configurePiNotifyMenu(` (L965-1034)
 - @brief Runs the interactive notification-configuration menu.
-- @details Exposes prompt-end beep toggles, selected notify-command selection, hotkey-bind editing, and per-level notify-command editors through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+- @details Exposes prompt-end beep toggles, selected notify-command selection, hotkey-bind editing, per-level notify-command editors, and the nested Pushover submenu through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
-- @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154
+- @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-163, REQ-164, REQ-165, REQ-166, REQ-172
 
-### fn `function registerPiNotifyShortcut(` (L869-889)
+### fn `function registerPiNotifyShortcut(` (L1049-1069)
 - @brief Registers the configurable successful-run sound shortcut when supported.
 - @details Loads the current project config, registers one raw pi shortcut when
 the runtime exposes `registerShortcut(...)`, cycles persisted sound state on
@@ -4358,21 +4360,22 @@ updates.
 - @return {void} No return value.
 - @satisfies REQ-131, REQ-134, REQ-136
 
-### fn `function registerPromptCommands(pi: ExtensionAPI): void` (L898-911)
+### fn `function registerPromptCommands(` (L1079-1099)
 - @brief Registers bundled prompt commands with the extension.
-- @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and sends it into the current active session. Runtime is O(p) for registration; handler cost depends on prompt rendering plus prompt dispatch. Side effects include command registration and user-message delivery during execution.
+- @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, records the prompt metadata needed for successful completion notifications, renders the prompt, and sends it into the current active session. Runtime is O(p) for registration; handler cost depends on prompt rendering plus prompt dispatch. Side effects include command registration, status-controller mutation, and user-message delivery during execution.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
+- @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
-- @satisfies REQ-004, REQ-067, REQ-068
+- @satisfies REQ-004, REQ-067, REQ-068, REQ-169
 
-### fn `function registerAgentTools(pi: ExtensionAPI): void` (L921-1220)
+### fn `function registerAgentTools(pi: ExtensionAPI): void` (L1109-1408)
 - @brief Registers pi-usereq agent tools exposed to the model.
 - @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102
 
-### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1564-1604)
+### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1737-1777)
 - @brief Builds the shared settings-menu choices for startup-tool management.
 - @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4380,7 +4383,7 @@ updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
 - @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1614-1630)
+### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1787-1803)
 - @brief Builds the shared settings-menu choices for per-tool startup toggles.
 - @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4388,7 +4391,7 @@ updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
 - @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1641-1692)
+### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1814-1865)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with persisted config, renders startup-tool actions through the shared settings-menu UI, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4397,44 +4400,44 @@ updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L1700-1706)
+### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L1873-1879)
 - @brief Formats one static-check configuration entry for UI display.
 - @details Renders command-backed entries as `Command(cmd args...)` and all other modules as `Module(args...)`. Runtime is O(n) in parameter count. No side effects occur.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Human-readable entry summary.
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L1714-1720)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L1887-1893)
 - @brief Summarizes configured static-check languages.
 - @details Keeps only languages with at least one configured checker, sorts them, and emits a compact `Language (count)` list. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string or `(none)`.
 
-### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L1728-1756)
+### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L1901-1929)
 - @brief Renders the static-check configuration reference view.
 - @details Produces a markdown-like summary containing configured entries, supported languages, the Command-only user module surface, and canonical example specifications. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Reference text for the editor view.
 
-### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1765-1800)
+### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1938-1973)
 - @brief Builds the shared settings-menu choices for static-check management.
 - @details Serializes Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting user-facing module selection. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
 - @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1808-1827)
+### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1981-2000)
 - @brief Builds the shared settings-menu choices for supported static-check languages.
 - @details Exposes every supported language as one row whose right-side value reports extensions plus the current configured checker count for Command-oriented configuration flows. Runtime is O(l log l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
 
-### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1835-1852)
+### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2008-2025)
 - @brief Builds the shared settings-menu choices for configured static-check languages.
 - @details Exposes only languages that currently have at least one configured checker so removal remains deterministic. Runtime is O(l log l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
 
-### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1862-1928)
+### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L2035-2101)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user inspect support, add Command entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -4442,7 +4445,7 @@ updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `function buildPiUsereqMenuChoices(` (L1956-2017)
+### fn `function buildPiUsereqMenuChoices(` (L2111-2172)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
 - @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the display-only config path beside `show-config`. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] cwd {string} Current working directory.
@@ -4450,21 +4453,21 @@ updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162
 
-### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2028-2049)
+### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2181-2202)
 - @brief Builds the shared settings-menu choices for source-directory management.
 - @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2058-2073)
+### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2211-2226)
 - @brief Builds the shared settings-menu choices for removing one source-directory entry.
 - @details Exposes every configured `src-dir` entry as one removable row and appends a `Back` action for cancellation. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L2082-2167)
+### fn `async function configurePiUsereq(` (L2237-2322)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads project config, exposes docs/test/source/static-check/startup-tool/notification actions through the shared settings-menu renderer, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4473,11 +4476,11 @@ updates.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162
 
-### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L2092-2096)
+### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L2245-2249)
 
-### fn `const refreshStatus = () =>` (L2093-2096)
+### fn `const refreshStatus = () =>` (L2246-2249)
 
-### fn `function registerConfigCommands(` (L2175-2185)
+### fn `function registerConfigCommands(` (L2332-2342)
 - @brief Registers configuration-management commands.
 - @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4485,107 +4488,75 @@ updates.
 - @return {void} No return value.
 - @satisfies REQ-006, REQ-031
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L2201-2209)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L2360-2368)
 - @brief Registers the complete pi-usereq extension.
 - @details Validates installation-owned bundled resources, registers prompt and
 configuration commands plus agent tools, registers the configurable
 successful-run sound shortcut when the runtime supports shortcuts, and
 installs shared wrappers for all supported pi lifecycle hooks so status
-telemetry, context usage, prompt timing, cumulative runtime, and pi-notify
-effects remain synchronized with runtime events. Runtime is O(h) in hook
+telemetry, context usage, prompt timing, cumulative runtime, prompt-specific
+Pushover metadata, and pi-notify effects remain synchronized with runtime
+events. Runtime is O(h) in hook
 count during registration. Side effects include filesystem reads,
 command/tool/shortcut registration, UI updates, active-tool changes, and
 timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
-- @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137, REQ-148, REQ-159
+- @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-170, REQ-171, REQ-172
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`PiShortcutRegistrar`|iface||137-145|interface PiShortcutRegistrar|
-|`getProjectBase`|fn||153-155|function getProjectBase(cwd: string): string|
-|`buildSharedRuntimePathFacts`|fn||165-169|function buildSharedRuntimePathFacts(cwd: string, config:...|
-|`loadProjectConfig`|fn||178-181|function loadProjectConfig(cwd: string): UseReqConfig|
-|`saveProjectConfig`|fn||196-199|function saveProjectConfig(cwd: string, config: UseReqCon...|
-|`formatProjectConfigPathForMenu`|fn||210-212|function formatProjectConfigPathForMenu(cwd: string): st...|
-|`collectProjectStaticCheckSelection`|fn||221-252|function collectProjectStaticCheckSelection(|
-|`buildTokenToolExecutionStderr`|fn||242-248|function buildTokenToolExecutionStderr(payload: TokenTool...|
-|`buildTokenToolExecuteResult`|fn||257-274|function buildTokenToolExecuteResult(|
-|`buildReferenceToolExecuteResult`|fn||283-300|function buildReferenceToolExecuteResult(|
-|`buildCompressionToolExecuteResult`|fn||309-326|function buildCompressionToolExecuteResult(|
-|`buildFindToolSupportedTagGuidelines`|fn||387-391|function buildFindToolSupportedTagGuidelines(): string[]|
-|`buildFindToolSchemaDescription`|fn||399-404|function buildFindToolSchemaDescription(scope: FindToolSc...|
-|`buildFindToolPromptGuidelines`|fn||412-428|function buildFindToolPromptGuidelines(scope: FindToolSco...|
-|`buildFindToolExecuteResult`|fn||437-455|function buildFindToolExecuteResult(|
-|`deliverPromptCommand`|fn||465-467|async function deliverPromptCommand(pi: ExtensionAPI, con...|
-|`getPiUsereqStartupTools`|fn||476-481|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
-|`getConfiguredEnabledPiUsereqTools`|fn||489-493|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
-|`getPiUsereqToolKind`|fn||501-506|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
-|`applyConfiguredPiUsereqTools`|fn||516-533|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
-|`handleExtensionStatusEvent`|fn||553-573|async function handleExtensionStatusEvent(|
-|`registerExtensionStatusHooks`|fn||586-599|function registerExtensionStatusHooks(|
-|`setConfiguredPiUsereqTools`|fn||609-612|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
-|`renderPiUsereqToolsReference`|fn||621-649|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
-|`PiNotifyBeepConfigKey`|type||657||
-|`togglePiNotifyBeepFlag`|fn||669-672|function togglePiNotifyBeepFlag(config: UseReqConfig, key...|
-|`buildPiNotifyMenuChoices`|fn||681-738|function buildPiNotifyMenuChoices(config: UseReqConfig): ...|
-|`selectPiNotifySoundLevel`|fn||748-779|async function selectPiNotifySoundLevel(|
-|`configurePiNotifyMenu`|fn||789-854|async function configurePiNotifyMenu(|
-|`registerPiNotifyShortcut`|fn||869-889|function registerPiNotifyShortcut(|
-|`registerPromptCommands`|fn||898-911|function registerPromptCommands(pi: ExtensionAPI): void|
-|`registerAgentTools`|fn||921-1220|function registerAgentTools(pi: ExtensionAPI): void|
-|`buildPiUsereqToolsMenuChoices`|fn||1564-1604|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
-|`buildPiUsereqToolToggleChoices`|fn||1614-1630|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
-|`configurePiUsereqToolsMenu`|fn||1641-1692|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
-|`formatStaticCheckEntry`|fn||1700-1706|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
-|`formatStaticCheckLanguagesSummary`|fn||1714-1720|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`renderStaticCheckReference`|fn||1728-1756|function renderStaticCheckReference(config: UseReqConfig)...|
-|`buildStaticCheckMenuChoices`|fn||1765-1800|function buildStaticCheckMenuChoices(config: UseReqConfig...|
-|`buildSupportedStaticCheckLanguageChoices`|fn||1808-1827|function buildSupportedStaticCheckLanguageChoices(config:...|
-|`buildConfiguredStaticCheckLanguageChoices`|fn||1835-1852|function buildConfiguredStaticCheckLanguageChoices(config...|
-|`configureStaticCheckMenu`|fn||1862-1928|async function configureStaticCheckMenu(ctx: ExtensionCom...|
-|`buildPiUsereqMenuChoices`|fn||1956-2017|function buildPiUsereqMenuChoices(|
-|`buildSrcDirMenuChoices`|fn||2028-2049|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
-|`buildSrcDirRemovalChoices`|fn||2058-2073|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||2082-2167|async function configurePiUsereq(|
-|`ensureSaved`|fn||2092-2096|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
-|`refreshStatus`|fn||2093-2096|const refreshStatus = () =>|
-|`registerConfigCommands`|fn||2177-2187|function registerConfigCommands(|
-|`piUsereqExtension`|fn||2204-2212|export default function piUsereqExtension(pi: ExtensionAP...|
-
-## Delta Update 2026-04-19
-
-### Updated File: `src/core/config.ts`
-- `UseReqConfig` [`src/core/config.ts`]: persisted Pushover fields `notify-pushover-global-disable`, `notify-pushover-on-success`, `notify-pushover-user-key`, `notify-pushover-api-token`, and `notify-pushover-priority` extend the project configuration schema (lines 44-63).
-- `getDefaultConfig(...)` [`src/core/config.ts`]: default Pushover values are `false`, `false`, `""`, `""`, and `0` (lines 98-119).
-- `loadConfig(...)` [`src/core/config.ts`]: persisted Pushover fields are normalized during config load (lines 129-189).
-- `buildPersistedConfig(...)` [`src/core/config.ts`]: Pushover fields are serialized together with existing notification settings (lines 198-228).
-
-### Updated File: `src/core/extension-status.ts`
-- `PiUsereqPromptRequest` [`src/core/extension-status.ts`]: prompt command name and raw `%%ARGS%%` payload tracked across command delivery and runtime execution (lines 120-123).
-- `PiUsereqStatusState` [`src/core/extension-status.ts`]: pending and active prompt-request state extends timer telemetry (lines 129-136).
-- `buildPiUsereqStatusText(...)` [`src/core/extension-status.ts`]: status bar now renders `pushover` after `sound` (lines 490-514).
-- `updateExtensionStatus(...)` [`src/core/extension-status.ts`]: `agent_start` promotes pending prompt metadata into the active run, and shutdown clears prompt-request state (lines 645-680).
-
-### Updated File: `src/core/pi-notify.ts`
-- `PiNotifyPushoverPriority` [`src/core/pi-notify.ts`]: canonical `0|1` Pushover priority type (line 75).
-- `PiNotifyPushoverRequest` [`src/core/pi-notify.ts`]: successful prompt payload for Pushover delivery (lines 81-86).
-- `PiNotifyConfigFields` [`src/core/pi-notify.ts`]: notification config surface now includes Pushover flags, credentials, and priority (line 92).
-- `normalizePiNotifyPushoverCredential(...)` [`src/core/pi-notify.ts`]: credential normalization for user key and API token (lines 160-162).
-- `normalizePiNotifyPushoverPriority(...)` [`src/core/pi-notify.ts`]: priority normalization for persisted `0|1` values (lines 171-173).
-- `formatPiNotifyPushoverStatus(...)` [`src/core/pi-notify.ts`]: footer serialization for the dedicated Pushover enable flag (lines 203-205).
-- `setPiNotifyHttpsRequestForTests(...)` [`src/core/pi-notify.ts`]: deterministic HTTPS transport override for unit tests (lines 505-507).
-- `runPiNotifyEffects(...)` [`src/core/pi-notify.ts`]: successful-run routing now includes optional native Pushover delivery after sound execution (lines 590-617).
-
-### Updated File: `src/index.ts`
-- `handleExtensionStatusEvent(...)` [`src/index.ts`]: `agent_end` builds prompt-specific Pushover request metadata and dispatches it through `runPiNotifyEffects(...)` (lines 578-614).
-- `formatPiNotifyPushoverPriority(...)` [`src/index.ts`]: menu-value formatter for `0=Normal` and `1=High Priority` (lines 722-724).
-- `buildPiNotifyPushoverMenuChoices(...)` [`src/index.ts`]: nested Pushover menu rows for global disable, enable, credentials, and priority (lines 733-772).
-- `selectPiNotifyPushoverPriority(...)` [`src/index.ts`]: shared selector for Pushover priority (lines 782-804).
-- `configurePiNotifyPushoverMenu(...)` [`src/index.ts`]: interactive nested Pushover configuration menu (lines 814-863).
-- `buildPiNotifyMenuChoices(...)` [`src/index.ts`]: notifications menu now exposes the `Pushover notifications` submenu after the sound-command rows (lines 872-935).
-- `configurePiNotifyMenu(...)` [`src/index.ts`]: notifications menu routes the nested Pushover editor (lines 986-1055).
-- `registerPromptCommands(...)` [`src/index.ts`]: each bundled prompt command stores pending prompt metadata before rendering and dispatch (lines 1100-1120).
-- `piUsereqExtension(...)` [`src/index.ts`]: prompt registration now receives the shared status controller so successful prompt metadata survives until `agent_end` (lines 2396-2404).
-
+|`PiShortcutRegistrar`|iface||143-151|interface PiShortcutRegistrar|
+|`getProjectBase`|fn||159-161|function getProjectBase(cwd: string): string|
+|`loadProjectConfig`|fn||170-173|function loadProjectConfig(cwd: string): UseReqConfig|
+|`saveProjectConfig`|fn||183-186|function saveProjectConfig(cwd: string, config: UseReqCon...|
+|`formatProjectConfigPathForMenu`|fn||197-199|function formatProjectConfigPathForMenu(cwd: string): string|
+|`collectProjectStaticCheckSelection`|fn||208-239|function collectProjectStaticCheckSelection(|
+|`buildTokenToolExecutionStderr`|fn||247-255|function buildTokenToolExecutionStderr(payload: TokenTool...|
+|`buildTokenToolExecuteResult`|fn||264-279|function buildTokenToolExecuteResult(|
+|`buildReferenceToolExecuteResult`|fn||288-304|function buildReferenceToolExecuteResult(|
+|`buildCompressionToolExecuteResult`|fn||313-329|function buildCompressionToolExecuteResult(|
+|`buildFindToolSupportedTagGuidelines`|fn||390-394|function buildFindToolSupportedTagGuidelines(): string[]|
+|`buildFindToolSchemaDescription`|fn||402-407|function buildFindToolSchemaDescription(scope: FindToolSc...|
+|`buildFindToolPromptGuidelines`|fn||415-431|function buildFindToolPromptGuidelines(scope: FindToolSco...|
+|`buildFindToolExecuteResult`|fn||440-457|function buildFindToolExecuteResult(|
+|`deliverPromptCommand`|fn||467-469|async function deliverPromptCommand(pi: ExtensionAPI, con...|
+|`getPiUsereqStartupTools`|fn||478-483|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
+|`getConfiguredEnabledPiUsereqTools`|fn||491-495|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
+|`getPiUsereqToolKind`|fn||503-508|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
+|`applyConfiguredPiUsereqTools`|fn||518-535|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
+|`handleExtensionStatusEvent`|fn||557-593|async function handleExtensionStatusEvent(|
+|`registerExtensionStatusHooks`|fn||606-619|function registerExtensionStatusHooks(|
+|`setConfiguredPiUsereqTools`|fn||629-632|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
+|`renderPiUsereqToolsReference`|fn||641-669|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
+|`PiNotifyBeepConfigKey`|type||677||
+|`togglePiNotifyBeepFlag`|fn||689-692|function togglePiNotifyBeepFlag(config: UseReqConfig, key...|
+|`formatPiNotifyPushoverPriority`|fn||701-703|function formatPiNotifyPushoverPriority(priority: PiNotif...|
+|`buildPiNotifyPushoverMenuChoices`|fn||712-751|function buildPiNotifyPushoverMenuChoices(config: UseReqC...|
+|`selectPiNotifyPushoverPriority`|fn||761-783|async function selectPiNotifyPushoverPriority(|
+|`configurePiNotifyPushoverMenu`|fn||793-842|async function configurePiNotifyPushoverMenu(|
+|`buildPiNotifyMenuChoices`|fn||851-914|function buildPiNotifyMenuChoices(config: UseReqConfig): ...|
+|`selectPiNotifySoundLevel`|fn||924-955|async function selectPiNotifySoundLevel(|
+|`configurePiNotifyMenu`|fn||965-1034|async function configurePiNotifyMenu(|
+|`registerPiNotifyShortcut`|fn||1049-1069|function registerPiNotifyShortcut(|
+|`registerPromptCommands`|fn||1079-1099|function registerPromptCommands(|
+|`registerAgentTools`|fn||1109-1408|function registerAgentTools(pi: ExtensionAPI): void|
+|`buildPiUsereqToolsMenuChoices`|fn||1737-1777|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
+|`buildPiUsereqToolToggleChoices`|fn||1787-1803|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
+|`configurePiUsereqToolsMenu`|fn||1814-1865|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
+|`formatStaticCheckEntry`|fn||1873-1879|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
+|`formatStaticCheckLanguagesSummary`|fn||1887-1893|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`renderStaticCheckReference`|fn||1901-1929|function renderStaticCheckReference(config: UseReqConfig)...|
+|`buildStaticCheckMenuChoices`|fn||1938-1973|function buildStaticCheckMenuChoices(config: UseReqConfig...|
+|`buildSupportedStaticCheckLanguageChoices`|fn||1981-2000|function buildSupportedStaticCheckLanguageChoices(config:...|
+|`buildConfiguredStaticCheckLanguageChoices`|fn||2008-2025|function buildConfiguredStaticCheckLanguageChoices(config...|
+|`configureStaticCheckMenu`|fn||2035-2101|async function configureStaticCheckMenu(ctx: ExtensionCom...|
+|`buildPiUsereqMenuChoices`|fn||2111-2172|function buildPiUsereqMenuChoices(|
+|`buildSrcDirMenuChoices`|fn||2181-2202|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
+|`buildSrcDirRemovalChoices`|fn||2211-2226|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
+|`configurePiUsereq`|fn||2237-2322|async function configurePiUsereq(|
+|`ensureSaved`|fn||2245-2249|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
+|`refreshStatus`|fn||2246-2249|const refreshStatus = () =>|
+|`registerConfigCommands`|fn||2332-2342|function registerConfigCommands(|
+|`piUsereqExtension`|fn||2360-2368|export default function piUsereqExtension(pi: ExtensionAP...|

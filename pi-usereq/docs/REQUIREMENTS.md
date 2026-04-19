@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.35"
+version: "0.0.36"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -153,6 +153,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-171**: MUST render `pushover` immediately after `sound`, showing `on` or `off` from the Pushover successful-prompt enable setting.
 - **REQ-172**: MUST make the Pushover submenu expose a `global disable` toggle that suppresses all Pushover delivery without mutating the successful-prompt enable setting.
 - **REQ-159**: MUST increase `Σ` by each normally completed prompt duration and MUST NOT change `Σ` on escape-triggered cancellation.
+- **REQ-173**: MUST optimize every agent-tool response for minimum token usage by excluding caller-known, static, duplicated, and registration-described facts from runtime payloads.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
@@ -161,40 +162,40 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-015**: MUST make CLI project-scope compression scan configured `src-dir` files and emit one compressed markdown block per supported file.
 - **REQ-016**: MUST make `find` scan configured `src-dir` files using the requested tag filter and regular expression.
 - **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the structured `files-tokens` JSON contract, and fail when none exist.
-- **REQ-069**: MUST order `files-tokens` and `tokens` JSON sections as `request`, `summary`, `files`, and `guidance`, and order fields inside each section from canonical identifiers to source facts, metrics, and derived guidance.
+- **REQ-069**: MUST make `files-tokens` and `tokens` runtime payloads expose only `summary`, `files`, and `execution`, omitting request echoes and derived guidance from runtime responses.
 - **REQ-070**: MUST emit counts, sizes, line counts, line ranges, and derived totals as JSON numbers with explicit unit-specific field names, keeping display strings optional and never as the sole carrier of numeric facts.
 - **REQ-071**: MUST normalize `files-tokens` and `tokens` text fields by removing decorative formatting, isolating canonical paths, separating source-derived facts from guidance, and stripping non-semantic presentation artifacts.
-- **REQ-072**: MUST register `files-tokens` and `tokens` with agent-oriented descriptions covering purpose, inputs, output schema, output format, specialized behaviors, configuration options, invocation modes, and failure conditions.
+- **REQ-072**: MUST register `files-tokens` and `tokens` with agent-oriented descriptions carrying static scope, encoding, canonical-doc selection, and failure facts omitted from runtime responses.
 - **REQ-073**: MUST expose file-derived facts needed for direct access, including canonical path, language, existence, line counts, line ranges, and Doxygen-derived metadata, as dedicated JSON fields when available.
 - **REQ-074**: MUST keep monolithic text summaries optional, place them after structured fields, and omit any fact from text-only representation when the same fact can be emitted as dedicated JSON.
-- **REQ-075**: MUST make `files-tokens` and `tokens` guidance fields explicitly distinguish source observations, derived recommendations, and actionable next-step hints.
-- **REQ-076**: MUST order `files-references` and `references` JSON sections from request metadata to repository summary, file records, and optional residual text.
+- **REQ-075**: MUST surface `files-tokens` and `tokens` skip or read-error observations through per-file status fields and execution diagnostics instead of a dedicated guidance section.
+- **REQ-076**: MUST make `files-references` and `references` runtime payloads expose only `summary`, `repository`, `files`, and `execution`, omitting request echoes from runtime responses.
 - **REQ-077**: MUST expose symbol kind, path, declaration lines, counts, and line ranges as dedicated numeric or array fields, never only inside free-form strings.
 - **REQ-078**: MUST expose parsed Doxygen fields as tag-specific JSON objects or arrays, keeping monolithic `text` only for unsplittable residual content.
 - **REQ-079**: MUST normalize `files-references` and `references` text fields by removing decorative markdown artifacts and preserving only parser-relevant residual content.
-- **REQ-080**: MUST register `files-references` and `references` with agent-oriented descriptions covering purpose, inputs, configuration, output schema, specialized behaviors, and failure conditions.
-- **REQ-081**: MUST make agent-tool `files-compress` and `compress` return structured JSON sections ordered as `request`, `summary`, `repository`, `files`, and `execution`.
+- **REQ-080**: MUST register `files-references` and `references` with agent-oriented descriptions carrying static scope, configuration, and failure facts omitted from runtime responses.
+- **REQ-081**: MUST make agent-tool `files-compress` and `compress` return structured JSON sections ordered as `summary`, `repository`, `files`, and `execution`.
 - **REQ-082**: MUST expose canonical paths, absolute paths, language IDs, source line counts, source line ranges, compressed line counts, and removed line counts as dedicated typed compression fields.
 - **REQ-083**: MUST expose compressed excerpts through structured `compressed_lines` arrays and a separate `compressed_source_text` field, never only inside markdown headers, fences, or prefixed display strings.
 - **REQ-084**: MUST expose file-level and symbol-level Doxygen fields as structured tag-specific JSON objects, and emit symbol records with declaration kind, canonical path, signatures, and numeric declaration line ranges.
 - **REQ-085**: MUST keep residual monolithic text optional, place it after structured fields, and omit decorative markdown artifacts from compression JSON field values.
-- **REQ-086**: MUST register `files-compress` and `compress` with agent-oriented descriptions covering scope, parameters, line-number behavior, output schema, project-scope selection rules, output format, and failure conditions.
+- **REQ-086**: MUST register `files-compress` and `compress` with agent-oriented descriptions carrying static scope, line-number behavior, selection rules, and failure facts omitted from runtime responses.
 - **REQ-087**: MUST expose skipped inputs, unsupported extensions, compression failures, and zero-processable requests as structured statuses and stable error reasons, while keeping stderr diagnostics optional.
 - **REQ-088**: MUST mirror the structured compression payload into tool `content[0].text` and tool `details`, with execution metadata nested under the mirrored JSON object.
-- **REQ-089**: MUST make agent-tool `files-find` and `find` return structured JSON sections ordered as `request`, `summary`, `repository`, `files`, and `execution`.
+- **REQ-089**: MUST make agent-tool `files-find` and `find` return structured JSON sections ordered as `summary`, `repository`, `files`, and `execution`.
 - **REQ-090**: MUST expose find request scope facts as dedicated fields, including tag filter, regex pattern, line-number mode, requested paths, configured source directories, and supported tags by language.
 - **REQ-091**: MUST expose per-file and per-match find facts as dedicated fields, including canonical path, language, construct kind, symbol name, signature, declaration order, numeric line ranges, and stripped code lines.
 - **REQ-092**: MUST expose parsed find Doxygen fields as tag-specific JSON objects or arrays for file-level and construct-level metadata, keeping monolithic residual text only when safe splitting is impossible.
 - **REQ-093**: MUST emit find counts, file totals, match totals, line numbers, and line ranges as JSON numbers with explicit unit-specific field names, never only inside display strings.
 - **REQ-094**: MUST normalize `files-find` and `find` text fields by removing markdown headers, fences, bullets, and other presentation-only artifacts from structured JSON values.
-- **REQ-095**: MUST register `files-find` and `find` with agent-oriented descriptions covering purpose, scope, input schema, output schema, `enableLineNumbers`, regex semantics, supported tags by language, and failure conditions.
+- **REQ-095**: MUST register `files-find` and `find` with agent-oriented descriptions carrying static regex semantics, supported tags by language, and failure facts omitted from runtime responses.
 - **REQ-096**: MUST expose structured statuses for skipped files, unsupported languages, invalid tag filters, invalid regex patterns, no-match outcomes, and analysis failures, while keeping stderr diagnostics optional.
 - **REQ-097**: MUST mirror the structured find payload into tool `content[0].text` and tool `details`, with execution metadata nested under the mirrored JSON object.
 - **REQ-098**: MUST keep monolithic find `text` fields optional, place them after structured fields, and omit any fact from text-only representation when a dedicated JSON field can carry it.
-- **REQ-099**: MUST make every agent-tool response expose a JSON-first tree whose specialized fields are directly accessible, while monolithic text remains optional and subordinate to the structured payload.
-- **REQ-100**: MUST encode quantitative facts as JSON numbers in unit-specific fields, keep textual fields free of decorative formatting and textual units, and avoid duplicating facts already exposed by specialized fields.
-- **REQ-101**: MUST register every agent tool with machine-oriented metadata describing purpose, required and optional parameters, configuration and invocation variants, output schema and format, specialized behaviors, and stable error conditions.
-- **REQ-102**: MUST make every structured agent-tool execute result mirror the same JSON object into `content[0].text` and `details`, nesting execution metadata under dedicated `execution` fields.
+- **REQ-099**: MUST make every agent-tool response expose a JSON-first tree whose runtime fields are directly accessible and whose caller-known or registration-described facts are omitted.
+- **REQ-100**: MUST encode quantitative facts as JSON numbers in unit-specific fields, keep textual fields free of decorative formatting, and avoid duplicate or derivable facts in runtime payloads.
+- **REQ-101**: MUST register every agent tool with machine-oriented metadata describing purpose, parameters, static scope facts, omitted response facts, output schema, specialized behaviors, and stable error conditions.
+- **REQ-102**: MUST make every structured agent-tool execute result mirror the same JSON object into `content[0].text` and `details`, nesting only residual execution metadata under dedicated `execution` fields.
 - **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy` or `command` checker subcommands directly.
 - **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
 - **REQ-020**: MUST parse user `--enable-static-check` specs in `LANG=Command,CMD[,PARAM...]` format and normalize supported language names plus `Command` case-insensitively.
@@ -287,13 +288,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-019**: MUST verify offline harness command and tool replay invoke registered handlers, preserve requested cwd semantics, and capture prompt payloads, tool results, and UI side effects.
 - **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, and `package.json` declares the `debug:ext*` harness scripts.
 - **TST-021**: MUST verify `scripts/pi-usereq-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
-- **TST-022**: MUST verify `files-references` and `references` JSON outputs expose repository, file, symbol, location, and Doxygen facts through dedicated structured fields.
-- **TST-023**: MUST verify harness inspection surfaces agent-oriented `files-references` and `references` tool descriptions with output schema, configuration, specialized behaviors, and failure details.
-- **TST-024**: MUST verify `files-find` and `find` JSON outputs expose request, repository, file, match, location, and Doxygen facts through dedicated structured fields.
+- **TST-022**: MUST verify `files-references` and `references` JSON outputs expose repository, file, symbol, location, and Doxygen facts through dedicated structured fields while omitting request echoes.
+- **TST-023**: MUST verify harness inspection surfaces agent-oriented `files-references` and `references` tool descriptions with output schema, static scope facts, specialized behaviors, and failure details.
+- **TST-024**: MUST verify `files-find` and `find` JSON outputs expose summary, repository, file, match, location, and Doxygen facts through dedicated structured fields while omitting request echoes.
 - **TST-025**: MUST verify harness inspection surfaces agent-oriented `files-find` and `find` tool descriptions with input schema, output schema, line-number behavior, regex semantics, supported tags by language, and failure details.
-- **TST-026**: MUST verify `files-compress` and `compress` JSON outputs expose structured request, repository, line, symbol, status, and Doxygen facts through dedicated fields.
+- **TST-026**: MUST verify `files-compress` and `compress` JSON outputs expose structured summary, repository, line, symbol, status, and Doxygen facts through dedicated fields while omitting request echoes.
 - **TST-027**: MUST verify harness inspection surfaces agent-oriented `files-compress` and `compress` tool descriptions with parameters, line-number behavior, output schema, specialization triggers, and failure conditions.
-- **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON request, result, status, execution, and derived runtime path facts through dedicated fields.
+- **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON result, summary, file, and execution facts while omitting request echoes and runtime-path duplication.
 - **TST-029**: MUST verify harness inspection surfaces machine-oriented descriptions for path, static-check, git, docs, and worktree tools, including parameters, output schema, specialization triggers, and failure conditions.
 - **TST-039**: MUST verify `.github/workflows/release-npm.yml` keeps the existing tag filter, gates downstream release work on `origin/master`, runs npm publication, and creates the GitHub Release from generated changelog text.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.

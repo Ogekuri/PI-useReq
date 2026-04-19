@@ -175,13 +175,11 @@ export interface TokenToolGuidanceSection {
 
 /**
  * @brief Describes the full agent-oriented token payload.
- * @details Orders the top-level sections as request, summary, files, and guidance for deterministic downstream traversal. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only aggregate numeric totals plus per-file metrics, omitting request echoes and derived guidance that can be inferred from tool registration or recomputed by the caller. The interface is compile-time only and introduces no runtime cost.
  */
 export interface TokenToolPayload {
-  request: TokenToolRequestSection;
   summary: TokenToolSummarySection;
   files: TokenToolFileEntry[];
-  guidance: TokenToolGuidanceSection;
 }
 
 /**
@@ -360,41 +358,6 @@ function roundRatio(numerator: number, denominator: number): number {
 }
 
 /**
- * @brief Orders canonical file paths by one numeric metric while removing duplicates.
- * @details Filters to counted file entries, sorts by the supplied metric direction, breaks ties by canonical path, and preserves only the first occurrence of each path. Runtime is O(n log n). No external state is mutated.
- * @param[in] files {TokenToolFileEntry[]} Token payload file entries.
- * @param[in] metric {(entry: TokenToolFileEntry) => number} Numeric metric selector.
- * @param[in] direction {"asc" | "desc"} Sort direction.
- * @return {string[]} Unique canonical paths ordered by the requested metric.
- */
-function orderPathsByMetric(
-  files: TokenToolFileEntry[],
-  metric: (entry: TokenToolFileEntry) => number,
-  direction: "asc" | "desc",
-): string[] {
-  const sorted = files
-    .filter((entry) => entry.status === "counted")
-    .sort((left, right) => {
-      const leftMetric = metric(left);
-      const rightMetric = metric(right);
-      if (leftMetric === rightMetric) {
-        return left.canonical_path.localeCompare(right.canonical_path);
-      }
-      return direction === "desc" ? rightMetric - leftMetric : leftMetric - rightMetric;
-    });
-  const seen = new Set<string>();
-  const orderedPaths: string[] = [];
-  for (const entry of sorted) {
-    if (seen.has(entry.canonical_path)) {
-      continue;
-    }
-    seen.add(entry.canonical_path);
-    orderedPaths.push(entry.canonical_path);
-  }
-  return orderedPaths;
-}
-
-/**
  * @brief Probes one requested path before token counting.
  * @details Resolves whether the target exists and is a regular file while capturing a stable skip reason for missing or non-file inputs. Runtime is dominated by one filesystem stat. Side effects are limited to filesystem reads.
  * @param[in] absolutePath {string} Absolute path to inspect.
@@ -496,9 +459,9 @@ export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUN
 
 /**
  * @brief Builds the agent-oriented JSON payload for token-centric tools.
- * @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, separates raw observations from derived guidance, and emits direct-access file facts such as line ranges, sizes, headings, and optional Doxygen file fields. Runtime is O(F log F + S). Side effects are limited to filesystem reads.
+ * @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, and emits direct-access file facts such as sizes, headings, and optional Doxygen file fields while omitting request echoes and derived guidance. Runtime is O(F + S). Side effects are limited to filesystem reads.
  * @param[in] options {BuildTokenToolPayloadOptions} Payload-construction options.
- * @return {TokenToolPayload} Structured token payload ordered as request, summary, files, guidance.
+ * @return {TokenToolPayload} Structured token payload ordered as summary then files.
  * @satisfies REQ-010, REQ-017, REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075
  */
 export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): TokenToolPayload {
@@ -596,71 +559,7 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
   const countedFileCount = filesWithShares.filter((entry) => entry.status === "counted").length;
   const errorFileCount = filesWithShares.filter((entry) => entry.status === "error").length;
   const skippedFileCount = filesWithShares.filter((entry) => entry.status === "skipped").length;
-  const countedPathsByTokenCountDesc = orderPathsByMetric(filesWithShares, (entry) => entry.token_count, "desc");
-  const countedPathsByTokenCountAsc = orderPathsByMetric(filesWithShares, (entry) => entry.token_count, "asc");
-  const countedPathsByLineCountDesc = orderPathsByMetric(filesWithShares, (entry) => entry.line_count, "desc");
-  const dominantTokenFileEntry = filesWithShares
-    .filter((entry) => entry.status === "counted")
-    .sort((left, right) => {
-      if (left.token_count === right.token_count) {
-        return left.canonical_path.localeCompare(right.canonical_path);
-      }
-      return right.token_count - left.token_count;
-    })[0];
-  const skippedInputs = filesWithShares
-    .filter((entry) => entry.status === "skipped" && entry.error_message)
-    .map((entry) => ({
-      input_path: entry.input_path,
-      canonical_path: entry.canonical_path,
-      reason: entry.error_message!,
-    }));
-  const errorInputs = filesWithShares
-    .filter((entry) => entry.status === "error" && entry.error_message)
-    .map((entry) => ({
-      input_path: entry.input_path,
-      canonical_path: entry.canonical_path,
-      reason: entry.error_message!,
-    }));
-  const derivedRecommendations: TokenToolRecommendation[] = countedPathsByTokenCountDesc.length > 0
-    ? [
-      {
-        kind: "prioritize_high_token_paths",
-        basis_metric_name: "token_count",
-        ordered_paths: countedPathsByTokenCountDesc,
-      },
-      {
-        kind: "defer_low_token_paths",
-        basis_metric_name: "token_count",
-        ordered_paths: countedPathsByTokenCountAsc,
-      },
-    ]
-    : [];
-  const actionableNextSteps: TokenToolNextStepHint[] = countedPathsByTokenCountDesc.length > 0
-    ? [
-      {
-        kind: "read_top_token_paths_first",
-        ordered_paths: countedPathsByTokenCountDesc.slice(0, 3),
-        goal: "minimize context-truncation risk during initial review",
-      },
-      {
-        kind: "reserve_low_token_paths_for_follow_up",
-        ordered_paths: countedPathsByTokenCountAsc.slice(0, 3),
-        goal: "defer lower-cost files until high-cost files have been reviewed",
-      },
-    ]
-    : [];
   return {
-    request: {
-      tool_name: options.toolName,
-      scope: options.scope,
-      encoding_name: encodingName,
-      base_dir_path: baseDir.split(path.sep).join("/"),
-      requested_file_count: options.requestedPaths.length,
-      requested_input_paths: options.requestedPaths,
-      requested_canonical_paths: requestedEntries.map((entry) => entry.canonicalPath),
-      docs_dir_path: options.docsDir,
-      canonical_doc_names: options.canonicalDocNames,
-    },
     summary: {
       processable_file_count: countedFileCount + errorFileCount,
       counted_file_count: countedFileCount,
@@ -676,23 +575,6 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
       average_line_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalLineCount / countedFileCount).toFixed(6)),
     },
     files: filesWithShares,
-    guidance: {
-      source_observations: {
-        counted_paths_by_token_count_desc: countedPathsByTokenCountDesc,
-        counted_paths_by_line_count_desc: countedPathsByLineCountDesc,
-        skipped_inputs: skippedInputs,
-        error_inputs: errorInputs,
-        dominant_token_file: dominantTokenFileEntry
-          ? {
-            canonical_path: dominantTokenFileEntry.canonical_path,
-            token_count: dominantTokenFileEntry.token_count,
-            token_share: dominantTokenFileEntry.token_share,
-          }
-          : undefined,
-      },
-      derived_recommendations: derivedRecommendations,
-      actionable_next_steps: actionableNextSteps,
-    },
   };
 }
 

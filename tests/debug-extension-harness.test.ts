@@ -165,9 +165,9 @@ test("inspectExtension surfaces agent-oriented find tool descriptions and schema
 
     assert.ok(filesFind, "missing files-find tool");
     assert.ok(find, "missing find tool");
-    assert.match(filesFind.description ?? "", /LLM-oriented JSON payload/);
+    assert.match(filesFind.description ?? "", /token-optimized JSON payload/);
     assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
-    assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /supported_tags_by_language/);
+    assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /Static supported-tag matrices are documented in tool registration metadata/);
     assert.match(find.description ?? "", /configured project source directories/);
     assert.ok(find.promptGuidelines?.some((line) => line.includes("Regex rule:")));
     assert.match(String((find.parameters as { description?: string } | undefined)?.description ?? ""), /Regex matches construct names only/);
@@ -185,7 +185,7 @@ test("inspectExtension surfaces agent-oriented compression tool descriptions and
 
     assert.ok(filesCompress, "missing files-compress tool");
     assert.ok(compress, "missing compress tool");
-    assert.match(filesCompress.description ?? "", /request, summary, repository, files, and execution sections/);
+    assert.match(filesCompress.description ?? "", /summary, repository, files, and execution sections/);
     assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
     assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
     assert.match(compress.description ?? "", /configured project source directories/);
@@ -212,7 +212,7 @@ test("inspectExtension surfaces structured utility tool descriptions and schema 
     assert.ok(docsCheck, "missing docs-check tool");
     assert.ok(gitWtCreate, "missing git-wt-create tool");
 
-    assert.match(gitPath.description ?? "", /JSON-first payload/);
+    assert.match(gitPath.description ?? "", /token-optimized JSON payload/);
     assert.ok(gitPath.promptGuidelines?.some((line) => line.includes("Output contract:")));
     assert.match(String((gitPath.parameters as { description?: string } | undefined)?.description ?? ""), /path_value/);
 
@@ -220,9 +220,9 @@ test("inspectExtension surfaces structured utility tool descriptions and schema 
     assert.ok(filesStaticCheck.promptGuidelines?.some((line) => line.includes("Failure contract:")));
     assert.match(String((filesStaticCheck.parameters as { description?: string } | undefined)?.description ?? ""), /configured checker modules/);
 
-    assert.match(gitCheck.description ?? "", /JSON-first payload/);
+    assert.match(gitCheck.description ?? "", /token-optimized JSON payload/);
     assert.ok(gitCheck.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
-    assert.match(String((gitCheck.parameters as { description?: string } | undefined)?.description ?? ""), /clean-versus-error repository status/);
+    assert.match(String((gitCheck.parameters as { description?: string } | undefined)?.description ?? ""), /aggregate repository status fields/);
 
     assert.match(docsCheck.description ?? "", /remediation prompt commands/);
     assert.ok(docsCheck.promptGuidelines?.some((line) => line.includes("Specialization trigger:")));
@@ -247,18 +247,15 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
     const normalizedBasePath = projectBase.split(path.sep).join("/");
-    assert.ok(
-      status.includes(
-        `<accent>base:</accent><warning>${normalizedBasePath}</warning><dim> • </dim><accent>docs:</accent><warning>pi-usereq/docs</warning><dim> • </dim><accent>src:</accent><warning>src</warning><dim> • </dim><accent>tests:</accent><warning>tests</warning>`,
-      ),
-    );
-    assert.match(
-      status,
-      /<accent>context:<\/accent><bg-from-fg-accent><warning>CLEAR<\/warning><\/bg-from-fg-accent>/,
-    );
-    assert.match(status, /<accent>et:<\/accent><warning>▶idle,↻--:--,Σ--:--<\/warning>/);
+    assert.match(status, new RegExp(`<accent>base:</accent><warning>${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</warning>`));
+    assert.match(status, /<accent>context:<\/accent><bg-from-fg-accent><warning>◀ CLEAR ▶ <\/warning><\/bg-from-fg-accent>/);
+    assert.match(status, /<accent>elapsed:<\/accent><warning> ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--<\/warning>/);
     assert.match(status, /<accent>beep:<\/accent><warning>end,esc,err<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
+    assert.match(status, /<accent>pushover:<\/accent><warning>off<\/warning>/);
+    assert.doesNotMatch(status, /<accent>docs:<\/accent>/);
+    assert.doesNotMatch(status, /<accent>src:<\/accent>/);
+    assert.doesNotMatch(status, /<accent>tests:<\/accent>/);
     assert.doesNotMatch(status, /<accent>git:<\/accent>/);
     assert.doesNotMatch(status, /<accent>tools:<\/accent>/);
     assert.equal(report.ui.notifications.length, 0);
@@ -298,7 +295,7 @@ test("replayCommand captures interactive UI side effects", async () => {
     assert.deepEqual(report.activeTools, []);
     assert.ok(report.ui.notifications.some((entry) => entry.message === "Disabled all configurable active tools"));
     assert.doesNotMatch(report.ui.statuses["pi-usereq"] ?? "", /<accent>tools:<\/accent>/);
-    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>et:<\/accent><warning>▶idle,↻--:--,Σ--:--<\/warning>/);
+    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>elapsed:<\/accent><warning> ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--<\/warning>/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -311,9 +308,7 @@ test("replayTool captures tool results and cwd semantics", async () => {
     const toolResult = report.toolResult as {
       content?: Array<{ type: string; text?: string }>;
       details?: {
-        request: { project_base_path: string };
         result: { path_value: string; path_present: boolean };
-        runtime_paths: { git_path: string };
         execution: { code: number };
       };
     };
@@ -321,8 +316,7 @@ test("replayTool captures tool results and cwd semantics", async () => {
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
     assert.deepEqual(JSON.parse(toolResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(toolResult.details)));
-    assert.equal(toolResult.details?.request.project_base_path, projectBase);
-    assert.equal(toolResult.details?.result.path_value, toolResult.details?.runtime_paths.git_path);
+    assert.equal(toolResult.details?.result.path_value, projectBase);
     assert.equal(toolResult.details?.result.path_present, true);
     assert.equal(toolResult.details?.execution.code, 0);
   } finally {

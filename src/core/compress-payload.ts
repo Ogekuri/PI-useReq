@@ -165,10 +165,9 @@ export interface CompressToolRepositorySection {
 
 /**
  * @brief Describes the full agent-oriented compression payload.
- * @details Orders the top-level sections as request, summary, repository, and files so execution metadata can be appended deterministically by the tool wrapper. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only aggregate compression totals, repository scope, and per-file compression records, omitting request echoes that are already known to the caller or encoded in tool registration metadata. The interface is compile-time only and introduces no runtime cost.
  */
 export interface CompressToolPayload {
-  request: CompressToolRequestSection;
   summary: CompressToolSummarySection;
   repository: CompressToolRepositorySection;
   files: CompressToolFileEntry[];
@@ -506,9 +505,9 @@ function analyzeCompressFile(
 
 /**
  * @brief Builds the full agent-oriented compression payload.
- * @details Validates requested paths against the filesystem, compresses processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits repository scope metadata. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @details Validates requested paths against the filesystem, compresses processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits repository scope metadata without echoing request facts already known to the caller. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] options {BuildCompressToolPayloadOptions} Payload-construction options.
- * @return {CompressToolPayload} Structured compression payload ordered as request, summary, repository, and files.
+ * @return {CompressToolPayload} Structured compression payload ordered as summary, repository, and files.
  * @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087
  */
 export function buildCompressToolPayload(options: BuildCompressToolPayloadOptions): CompressToolPayload {
@@ -593,18 +592,11 @@ export function buildCompressToolPayload(options: BuildCompressToolPayloadOption
   const compressedFiles = files.filter((file) => file.status === "compressed");
   const symbolAnalysisErrorCount = compressedFiles.filter((file) => file.symbol_analysis_status === "error").length;
 
+  void toolName;
+  void scope;
+  void lineNumberMode;
+  void canonicalRequestedPaths;
   return {
-    request: {
-      tool_name: toolName,
-      scope,
-      base_dir_path: absoluteBaseDir,
-      line_number_mode: lineNumberMode,
-      source_directory_count: sourceDirectoryPaths.length,
-      source_directory_paths: [...sourceDirectoryPaths],
-      requested_file_count: requestedPaths.length,
-      requested_input_paths: [...requestedPaths],
-      requested_canonical_paths: canonicalRequestedPaths,
-    },
     summary: {
       processable_file_count: files.filter((file) => file.status !== "skipped").length,
       compressed_file_count: compressedFiles.length,

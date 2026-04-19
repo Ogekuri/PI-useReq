@@ -182,10 +182,9 @@ export interface ReferenceToolRepositorySection {
 
 /**
  * @brief Describes the full agent-oriented references payload.
- * @details Orders the top-level sections as request, summary, repository, and files for deterministic downstream traversal. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only aggregate analysis totals, repository structure, and per-file reference records, omitting request echoes that are already known to the caller or encoded in the tool registration. The interface is compile-time only and introduces no runtime cost.
  */
 export interface ReferenceToolPayload {
-  request: ReferenceToolRequestSection;
   summary: ReferenceToolSummarySection;
   repository: ReferenceToolRepositorySection;
   files: ReferenceToolFileEntry[];
@@ -663,9 +662,9 @@ function analyzeReferenceFile(
 
 /**
  * @brief Builds the full agent-oriented references payload.
- * @details Validates requested paths against the filesystem, analyzes processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits a structured repository tree. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @details Validates requested paths against the filesystem, analyzes processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits structured repository data without echoing request metadata already known to the caller. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] options {BuildReferenceToolPayloadOptions} Payload-construction options.
- * @return {ReferenceToolPayload} Structured references payload ordered as request, summary, repository, and files.
+ * @return {ReferenceToolPayload} Structured references payload ordered as summary, repository, and files.
  * @satisfies REQ-011, REQ-014, REQ-076, REQ-077, REQ-078, REQ-079
  */
 export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOptions): ReferenceToolPayload {
@@ -761,17 +760,10 @@ export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOpti
   const repositoryFileCanonicalPaths = [...new Set(analyzedFiles.map((file) => file.canonical_path))]
     .sort((left, right) => left.localeCompare(right));
 
+  void toolName;
+  void scope;
+  void canonicalRequestedPaths;
   return {
-    request: {
-      tool_name: toolName,
-      scope,
-      base_dir_path: absoluteBaseDir,
-      source_directory_count: sourceDirectoryPaths.length,
-      source_directory_paths: sourceDirectoryPaths.map((sourceDirectoryPath) => canonicalizeReferencePath(sourceDirectoryPath, absoluteBaseDir)),
-      requested_file_count: requestedPaths.length,
-      requested_input_paths: [...requestedPaths],
-      requested_canonical_paths: canonicalRequestedPaths,
-    },
     summary: {
       processable_file_count: processableFiles.length,
       analyzed_file_count: analyzedFiles.length,

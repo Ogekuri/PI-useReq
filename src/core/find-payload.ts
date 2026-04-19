@@ -156,10 +156,11 @@ export interface FindToolRequestSection {
 
 /**
  * @brief Describes the summary section of the find payload.
- * @details Exposes aggregate file, match, line, and Doxygen counts as numeric fields plus one stable search-status discriminator. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes aggregate file, match, line, and Doxygen counts as numeric fields plus one stable search-status discriminator and the normalized validation error when request parsing fails. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolSummarySection {
   search_status: FindSearchStatus;
+  validation_error_message?: string;
   processable_file_count: number;
   matched_file_count: number;
   no_match_file_count: number;
@@ -172,22 +173,20 @@ export interface FindToolSummarySection {
 
 /**
  * @brief Describes the repository section of the find payload.
- * @details Stores the base path, configured source-directory scope, canonical file list, and supported-tag matrix needed to specialize later searches without rereading tool descriptions. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the base path, configured source-directory scope, and canonical file list used during search while omitting the static supported-tag matrix because that data belongs in tool registration metadata. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolRepositorySection {
   root_directory_path: string;
   source_directory_paths: string[];
   file_count: number;
   file_canonical_paths: string[];
-  supported_tags_by_language: Record<string, string[]>;
 }
 
 /**
  * @brief Describes the full agent-oriented find payload.
- * @details Orders the top-level sections as request, summary, repository, and files so execution metadata can be appended deterministically by the tool wrapper. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only aggregate search totals, repository scope, and per-file match records, omitting request echoes and static supported-tag matrices that already belong in registration metadata. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolPayload {
-  request: FindToolRequestSection;
   summary: FindToolSummarySection;
   repository: FindToolRepositorySection;
   files: FindToolFileEntry[];
@@ -260,19 +259,6 @@ function buildLineRange(startLineNumber: number, endLineNumber: number): FindLin
     end_line_number: endLineNumber,
     line_range: [startLineNumber, endLineNumber],
   };
-}
-
-/**
- * @brief Returns the supported-tag matrix ordered for deterministic JSON emission.
- * @details Sorts languages alphabetically and tag arrays lexicographically so downstream agents can reuse the matrix without reparsing human prose. Runtime is O(l * t log t). No side effects occur.
- * @return {Record<string, string[]>} Supported tags keyed by canonical language identifier.
- */
-function buildSupportedTagsByLanguage(): Record<string, string[]> {
-  return Object.fromEntries(
-    Object.entries(LANGUAGE_TAGS)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([language, tagSet]) => [language, [...tagSet].sort()]),
-  );
 }
 
 /**
@@ -717,9 +703,9 @@ function analyzeFindFile(
 
 /**
  * @brief Builds the full agent-oriented find payload.
- * @details Validates request parameters, analyzes requested files in caller order when the request is valid, preserves skipped and no-match outcomes in structured file entries, computes aggregate numeric totals, and emits a structured supported-tag matrix. Runtime is O(F log F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
+ * @details Validates request parameters, analyzes requested files in caller order when the request is valid, preserves skipped and no-match outcomes in structured file entries, computes aggregate numeric totals, and omits request echoes plus the static supported-tag matrix already encoded in registration metadata. Runtime is O(F log F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] options {BuildFindToolPayloadOptions} Payload-construction options.
- * @return {FindToolPayload} Structured find payload ordered as request, summary, repository, and files.
+ * @return {FindToolPayload} Structured find payload ordered as summary, repository, and files.
  * @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-096, REQ-098
  */
 export function buildFindToolPayload(options: BuildFindToolPayloadOptions): FindToolPayload {
@@ -835,28 +821,20 @@ export function buildFindToolPayload(options: BuildFindToolPayloadOptions): Find
   const processableFiles = files.filter((file) => file.status !== "skipped");
   const repositoryFileCanonicalPaths = files.map((file) => file.canonical_path);
 
+  void toolName;
+  void scope;
+  void lineNumberMode;
+  void tagFilter;
+  void pattern;
+  void canonicalRequestedPaths;
   return {
-    request: {
-      tool_name: toolName,
-      scope,
-      base_dir_path: absoluteBaseDir,
-      line_number_mode: lineNumberMode,
-      tag_filter_text: tagFilter,
-      tag_filter_values: tagValidation.tagValues,
-      tag_filter_status: tagValidation.status,
-      tag_filter_error_message: tagValidation.errorMessage,
-      name_regex_text: pattern,
-      regex_engine: "javascript-regexp-search",
-      regex_status: regexValidation.status,
-      regex_error_message: regexValidation.errorMessage,
-      source_directory_count: sourceDirectoryPaths.length,
-      source_directory_paths: sourceDirectoryPaths.map((sourceDirectoryPath) => canonicalizeFindPath(sourceDirectoryPath, absoluteBaseDir)),
-      requested_file_count: requestedPaths.length,
-      requested_input_paths: [...requestedPaths],
-      requested_canonical_paths: canonicalRequestedPaths,
-    },
     summary: {
       search_status: searchStatus,
+      validation_error_message: tagValidation.status === "invalid"
+        ? tagValidation.errorMessage
+        : regexValidation.status === "invalid"
+          ? regexValidation.errorMessage
+          : undefined,
       processable_file_count: processableFiles.length,
       matched_file_count: matchedFiles.length,
       no_match_file_count: files.filter((file) => file.status === "no_match").length,
@@ -874,7 +852,6 @@ export function buildFindToolPayload(options: BuildFindToolPayloadOptions): Find
       source_directory_paths: sourceDirectoryPaths.map((sourceDirectoryPath) => canonicalizeFindPath(sourceDirectoryPath, absoluteBaseDir)),
       file_count: repositoryFileCanonicalPaths.length,
       file_canonical_paths: repositoryFileCanonicalPaths,
-      supported_tags_by_language: buildSupportedTagsByLanguage(),
     },
     files,
   };
@@ -889,11 +866,11 @@ export function buildFindToolPayload(options: BuildFindToolPayloadOptions): Find
  */
 export function buildFindToolExecutionStderr(payload: FindToolPayload): string {
   const diagnostics: string[] = [];
-  if (payload.request.tag_filter_status === "invalid") {
-    diagnostics.push(`error: tag_filter: ${payload.request.tag_filter_error_message ?? "invalid tag filter"}`);
+  if (payload.summary.search_status === "invalid_tag_filter") {
+    diagnostics.push(`error: tag_filter: ${payload.summary.validation_error_message ?? "invalid tag filter"}`);
   }
-  if (payload.request.regex_status === "invalid") {
-    diagnostics.push(`error: name_regex: ${payload.request.regex_error_message ?? "invalid regex"}`);
+  if (payload.summary.search_status === "invalid_regex") {
+    diagnostics.push(`error: name_regex: ${payload.summary.validation_error_message ?? "invalid regex"}`);
   }
   payload.files.forEach((file) => {
     if (file.status === "skipped") {
