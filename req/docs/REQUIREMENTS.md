@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.23"
+version: "0.0.24"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -42,13 +42,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ### 2.1 Project Functions
 - **PRJ-001**: MUST expose prompt commands that render bundled prompt templates with configuration-derived path substitutions and internal tool-reference adaptation.
 - **PRJ-002**: MUST expose CLI and agent-tool interfaces for token counting, references generation, compression, construct search, and static-check execution on explicit files or configured project sources.
-- **PRJ-003**: MUST provide an interactive pi configuration surface for docs path, tests path, source directories, static-check entries, `reset-context`, and active-tool enablement for custom and supported embedded pi CLI tools.
+- **PRJ-003**: MUST provide an interactive pi configuration surface for docs path, tests path, source directories, static-check entries, and active-tool enablement for custom and supported embedded pi CLI tools.
 - **PRJ-004**: MUST provide git repository validation plus standardized worktree naming, creation, and deletion utilities using configured project and git paths.
 - **PRJ-005**: MUST install bundled prompts, documentation templates, and guidelines under the extension installation path and expose them through shared runtime path context.
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 
 ### 2.2 Project Constraints
-- **CTN-001**: MUST persist project configuration at `<base-path>/.pi-usereq/config.json` with default `docs-dir=pi-usereq/docs`, `tests-dir=tests`, `src-dir=["src"]`, and `reset-context=true`.
+- **CTN-001**: MUST persist project configuration at `<base-path>/.pi-usereq/config.json` with default `docs-dir=pi-usereq/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
 - **CTN-002**: MUST collect project-wide source files through `git ls-files --cached --others --exclude-standard`; non-git project scans therefore fail instead of falling back to directory walking.
 - **CTN-003**: MUST limit project-wide source discovery to extensions listed in `STATIC_CHECK_EXT_TO_LANG`; analyzer-only aliases such as `.cc`, `.cxx`, `.hpp`, and `.exs` remain undiscoverable.
 - **CTN-004**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from project-wide static-check execution.
@@ -99,18 +99,18 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-061**: MUST make `scripts/pi-usereq-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
 - **REQ-062**: MUST make `scripts/pi-usereq-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
 - **REQ-065**: MUST make `scripts/pi-usereq-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
-- **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, `src-dir`, and `reset-context`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
+- **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, and `src-dir`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
 - **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for configurable custom and embedded pi CLI active tools.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `grep`, and `ls`.
 - **REQ-064**: MUST default all custom tools except `find` and embedded `read`, `bash`, `edit`, and `write` to enabled, and custom `find` plus embedded `grep` and `ls` to disabled.
-- **REQ-066**: MUST expose `reset-context` as a project configuration boolean with persisted values `true` and `false`.
-- **REQ-067**: MUST make `req-<prompt>` commands perform a `/new`-equivalent pre-reset before prompt delivery when `reset-context` is `true`, using pi CLI reset APIs when available.
-- **REQ-068**: MUST make `req-<prompt>` commands skip the pre-reset and send the rendered prompt into the current session when `reset-context` is `false`.
+- **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted project configuration.
+- **REQ-067**: MUST send every rendered `req-<prompt>` payload into the current active session.
+- **REQ-068**: MUST use one prompt-delivery path that never creates replacement sessions or pre-reset flows.
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish single-line `pi-usereq` status text during `session_start`.
 - **REQ-109**: MUST make the single-line status bar render `docs`, `tests`, and `src` fields with explicit configured path values, keeping every field name separate from its value.
 - **REQ-110**: MUST make the single-line status bar render `tools` as the count of active tools.
-- **REQ-111**: MUST make the single-line status bar render `context` as `reset` when `reset-context` is `true` and `keep` when `reset-context` is `false`.
+- **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
 - **REQ-112**: MUST render status-bar field names in violet and field values in yellow.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
@@ -192,9 +192,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-002**: MUST verify installed bundled prompt, template, and guideline resources remain readable from `installation-path` and prompt rendering replaces all dynamic placeholders with runtime path context.
 - **TST-003**: MUST verify standalone CLI outputs for `files-tokens`, `files-compress`, `files-find`, and `--test-static-check` match the Python oracle for every fixture file.
 - **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
-- **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, and adds static-check entries through raw-spec and guided flows.
+- **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds static-check entries, and omits prompt-delivery mode controls.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
-- **TST-031**: MUST verify the status bar renders explicit docs/tests/src paths, active-tool count, compact `context` state, and violet/yellow field-value color separation.
+- **TST-031**: MUST verify the status bar renders explicit docs/tests/src paths, active-tool count, and violet/yellow field-value color separation.
 - **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
 - **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.

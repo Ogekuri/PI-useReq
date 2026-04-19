@@ -189,7 +189,7 @@ function toJsonValue(value: unknown): JsonValue | undefined {
 
 /**
  * @brief Normalizes `SessionManager.appendMessage(...)` payloads into recorder user-message content.
- * @details Collapses single- or multi-part text arrays into one string so reset-session prompt delivery remains comparable with `pi.sendUserMessage(...)` snapshots; non-text payloads remain JSON-compatible. Runtime is O(n) in content size. No external state is mutated.
+ * @details Collapses single- or multi-part text arrays into one comparable string and preserves non-text payloads as JSON-compatible values. Runtime is O(n) in content size. No external state is mutated.
  * @param[in] message {unknown} Session-manager message payload supplied during `ctx.newSession(...setup)`.
  * @return {JsonValue} Normalized user-message content.
  */
@@ -305,7 +305,7 @@ export class RecordingCommandContext {
   private readonly inputCalls: RecordingInputCall[] = [];
   /**
    * @brief Stores the callback used to record user messages appended during new-session setup.
-   * @details The callback normalizes `/new`-equivalent prompt delivery into the shared recorder snapshot without mutating real session state. Access complexity is O(1).
+   * @details The callback normalizes setup-stage user-message payloads into the shared recorder snapshot without mutating real session state. Access complexity is O(1).
    */
   private readonly recordSessionUserMessage: (content: JsonValue) => void;
 
@@ -345,7 +345,7 @@ export class RecordingCommandContext {
 
   /**
    * @brief Simulates `ctx.newSession(...)` for offline command replay.
-   * @details Executes the optional setup callback against a minimal session-manager stub that records appended user messages and recognizes `pi-usereq-reset-context-prompt` custom entries as deferred prompt payloads, thereby preserving `/new`-equivalent prompt delivery evidence without switching real sessions. Other custom entries are acknowledged without additional serialization. Runtime is O(n) in setup work. Side effects are limited to in-memory user-message recording.
+   * @details Executes the optional setup callback against a minimal session-manager stub that records appended user messages while acknowledging custom entries without additional serialization. Runtime is O(n) in setup work. Side effects are limited to in-memory user-message recording.
    * @param[in] options {{ parentSession?: string; setup?: (sessionManager: { appendMessage: (message: unknown) => string; appendCustomEntry: (customType: string, data?: unknown) => string }) => Promise<void> } | undefined} Optional new-session options.
    * @return {Promise<{ cancelled: boolean }>} Deterministic non-cancelled result.
    */
@@ -362,13 +362,7 @@ export class RecordingCommandContext {
           }
           return "recorded-entry";
         },
-        appendCustomEntry: (customType: string, data?: unknown): string => {
-          if (
-            customType === "pi-usereq-reset-context-prompt"
-            && typeof (data as { content?: unknown } | undefined)?.content === "string"
-          ) {
-            this.recordSessionUserMessage((data as { content: string }).content);
-          }
+        appendCustomEntry: (_customType: string, _data?: unknown): string => {
           return "recorded-entry";
         },
       });

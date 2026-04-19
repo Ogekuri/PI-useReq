@@ -553,10 +553,8 @@
             - `RecordingExtensionAPI.getAllTools(...)`: expose supported builtin plus extension tool inventory [`scripts/lib/recording-extension-api.ts`]
         - `getConfiguredEnabledPiUsereqTools(...)`: canonicalize configured enabled tools for status rendering [`src/index.ts`]
           - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
-        - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, tool-count, and context status payload [`src/index.ts`]
+        - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, and tool-count status payload [`src/index.ts`]
           - `formatPiUsereqStatusField(...)`: render one colored status field [`src/index.ts`]
-        - `getPendingResetContextPrompt(...)`: resolve any undelivered reset-context prompt queued during new-session setup when a session manager is available [`src/index.ts`]
-        - External boundaries: `RecordingExtensionAPI.appendEntry(...)` and `RecordingExtensionAPI.sendUserMessage(...)` consume and deliver the pending reset-context prompt when the replayed session starts with a queued marker.
     - `replayCommand(...)`: replay a recorded command handler and capture prompt/UI side effects [`scripts/lib/extension-debug-harness.ts`]
       - `registerExtensionOffline(...)`: rebuild the recorded extension registration surface [`scripts/lib/extension-debug-harness.ts`]
       - `RecordingCommandContext(...)`: initialize the recorded command-context UI adapter and deterministic theme-color encoding [`scripts/lib/recording-extension-api.ts`]
@@ -565,14 +563,13 @@
         - `getProjectBase(...)`: resolve command project base [`src/index.ts`]
         - `loadProjectConfig(...)`: load command runtime config [`src/index.ts`]
         - `renderPrompt(...)`: render prompt-command payloads with conditional pi.dev API-contract guidance [`src/core/prompts.ts`]
-        - `deliverPromptCommand(...)`: dispatch prompt replay according to `reset-context` [`src/index.ts`]
-          - `RecordingCommandContext.waitForIdle(...)`: resolve the offline idle gate before session replacement [`scripts/lib/recording-extension-api.ts`]
-          - `RecordingCommandContext.newSession(...)`: emulate `/new`-equivalent prompt-session replacement and surface reset-context prompt custom entries as recorded user messages [`scripts/lib/recording-extension-api.ts`]
+        - `deliverPromptCommand(...)`: dispatch prompt replay into the current recorded session [`src/index.ts`]
+          - External boundaries: `RecordingExtensionAPI.sendUserMessage(...)` records the delivered prompt payload.
         - `configurePiUsereq(...)`: execute the interactive configuration menu [`src/index.ts`]
           - `saveProjectConfig(...)`: persist menu updates on save-and-close [`src/index.ts`]
           - `getConfiguredEnabledPiUsereqTools(...)`: canonicalize configured enabled tools for status rendering [`src/index.ts`]
             - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
-          - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, tool-count, and context status payload [`src/index.ts`]
+          - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, and tool-count status payload [`src/index.ts`]
             - `formatPiUsereqStatusField(...)`: render one colored status field [`src/index.ts`]
     - `replayTool(...)`: replay a recorded tool execute handler and capture content/details [`scripts/lib/extension-debug-harness.ts`]
       - `registerExtensionOffline(...)`: rebuild the recorded extension registration surface [`scripts/lib/extension-debug-harness.ts`]
@@ -713,8 +710,8 @@
         - `injectPiDevConformanceBlock(...)`: add conditional pi.dev manifest review and API-contract guidance for prompt workflows [`src/core/prompts.ts`]
           - `buildPiDevConformanceBlock(...)`: resolve manifest-gated pi.dev review and API-compliance rules [`src/core/prompts.ts`]
         - `adaptPromptForInternalTools(...)`: rewrite tool names for internal wrappers [`src/core/prompts.ts`]
-      - `deliverPromptCommand(...)`: dispatch the rendered prompt according to `reset-context` [`src/index.ts`]
-        - External boundaries: `ctx.waitForIdle(...)` and `ctx.newSession(...)`; reset-enabled delivery performs the `/new`-equivalent reset and writes a pending prompt marker during new-session setup so the replacement session can deliver the prompt during `session_start`, while reset-disabled delivery sends the prompt into the current session through `pi.sendUserMessage(...)`.
+      - `deliverPromptCommand(...)`: dispatch the rendered prompt into the current active session [`src/index.ts`]
+        - External boundaries: `pi.sendUserMessage(...)` delivers the rendered prompt payload.
     - `registerAgentTools(...)`: register structured pi tools whose execute callbacks reuse internal runner families and agent-oriented payload builders [`src/index.ts`]
       - `ensureBundledResourcesAccessible(...)`: validate installation-owned bundled resources for tool executes that need bundled assets [`src/core/resources.ts`]
         - `getBundledResourceRoot(...)`: resolve installation-owned resource root [`src/core/resources.ts`]
@@ -821,10 +818,8 @@
       - `getPiUsereqStartupTools(...)`: enumerate configurable tools from runtime inventory [`src/index.ts`]
     - `getConfiguredEnabledPiUsereqTools(...)`: canonicalize configured enabled tools for status rendering [`src/index.ts`]
       - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
-    - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, tool-count, and context status payload [`src/index.ts`]
+    - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, and tool-count status payload [`src/index.ts`]
       - `formatPiUsereqStatusField(...)`: render one colored status field [`src/index.ts`]
-    - `getPendingResetContextPrompt(...)`: resolve any undelivered reset-context prompt queued during new-session setup when a session manager is available [`src/index.ts`]
-    - External boundaries: `pi.appendEntry(...)` and `pi.sendUserMessage(...)` consume and deliver the pending reset-context prompt when the replacement session starts with a queued marker.
   - `configurePiUsereq(...)`: interactive configuration menu runtime root [`src/index.ts`]
     - `loadProjectConfig(...)`: load config and normalize base/git paths for command context [`src/index.ts`]
       - `getProjectBase(...)`: resolve project base from command context cwd [`src/index.ts`]
@@ -843,7 +838,7 @@
         - `getProjectConfigPath(...)`: resolve config file path [`src/core/config.ts`]
     - `getConfiguredEnabledPiUsereqTools(...)`: canonicalize enabled active tools for UI and status [`src/index.ts`]
       - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
-    - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, tool-count, and context status payload [`src/index.ts`]
+    - `formatPiUsereqStatus(...)`: render the colored single-line docs, tests, source, and tool-count status payload [`src/index.ts`]
       - `formatPiUsereqStatusField(...)`: render one colored status field [`src/index.ts`]
     - `configureStaticCheckMenu(...)`: interactive static-check editor [`src/index.ts`]
       - `formatStaticCheckLanguagesSummary(...)`: summarize configured checker languages [`src/index.ts`]
@@ -882,7 +877,7 @@
         - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
       - `getPiUsereqStartupTools(...)`: enumerate configurable tools from runtime inventory [`src/index.ts`]
 - External Boundaries:
-  - pi ExtensionAPI plus command-context session controls for command registration, tool registration, session events, `/new`-equivalent session replacement, active-tool mutation, editor updates, notifications, selections, and text input.
+  - pi ExtensionAPI plus command-context APIs for command registration, tool registration, user-message delivery, session events, active-tool mutation, editor updates, notifications, selections, and text input.
   - Filesystem access for home resource cache, bundled prompt reads, and project config persistence.
   - Git and static-check subprocesses reused through the same tool-runner and static-check functions documented under `PROC:main`.
 

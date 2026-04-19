@@ -419,95 +419,15 @@ function buildFindToolExecuteResult(
 }
 
 /**
- * @brief Identifies queued reset-context prompt payload entries.
- * @details The custom entry type is written during `ctx.newSession(...setup)` so the replacement session can detect one pending prompt delivery request during `session_start`. Access complexity is O(1).
- */
-const RESET_CONTEXT_PENDING_PROMPT_ENTRY_TYPE = "pi-usereq-reset-context-prompt";
-
-/**
- * @brief Identifies consumed reset-context prompt payload entries.
- * @details The custom entry type records the pending-entry identifier already delivered by the replacement session, preventing duplicate prompt sends on later `session_start` events such as reload or resume. Access complexity is O(1).
- */
-const RESET_CONTEXT_CONSUMED_PROMPT_ENTRY_TYPE = "pi-usereq-reset-context-prompt-consumed";
-
-/**
- * @brief Resolves the latest queued reset-context prompt that has not yet been consumed.
- * @details Scans the active branch in chronological order when a session manager is available, tracks the latest pending prompt custom entry and the latest consumed pending-entry identifier, and returns the pending payload only when it still requires delivery. Runtime is O(n) in branch entry count. No external state is mutated.
- * @param[in] sessionManager {{ getBranch: () => Array<unknown> } | undefined} Active session manager when the runtime exposes one.
- * @return {{ pendingEntryId: string; content: string } | undefined} Pending prompt descriptor or `undefined` when no undelivered prompt exists.
- */
-function getPendingResetContextPrompt(sessionManager?: { getBranch: () => Array<unknown> }): { pendingEntryId: string; content: string } | undefined {
-  if (!sessionManager) {
-    return undefined;
-  }
-
-  let pendingPrompt: { pendingEntryId: string; content: string } | undefined;
-  let consumedPendingEntryId: string | undefined;
-
-  for (const entry of sessionManager.getBranch()) {
-    if (!entry || typeof entry !== "object") {
-      continue;
-    }
-    const candidate = entry as {
-      id?: unknown;
-      type?: unknown;
-      customType?: unknown;
-      data?: unknown;
-    };
-    if (candidate.type !== "custom" || typeof candidate.customType !== "string") {
-      continue;
-    }
-    if (candidate.customType === RESET_CONTEXT_PENDING_PROMPT_ENTRY_TYPE) {
-      const pendingEntryId = typeof candidate.id === "string" ? candidate.id : undefined;
-      const content = typeof (candidate.data as { content?: unknown } | undefined)?.content === "string"
-        ? (candidate.data as { content: string }).content
-        : undefined;
-      if (pendingEntryId && content) {
-        pendingPrompt = { pendingEntryId, content };
-      }
-      continue;
-    }
-    if (candidate.customType === RESET_CONTEXT_CONSUMED_PROMPT_ENTRY_TYPE) {
-      const pendingEntryId = typeof (candidate.data as { pendingEntryId?: unknown } | undefined)?.pendingEntryId === "string"
-        ? (candidate.data as { pendingEntryId: string }).pendingEntryId
-        : undefined;
-      if (pendingEntryId) {
-        consumedPendingEntryId = pendingEntryId;
-      }
-    }
-  }
-
-  if (!pendingPrompt || pendingPrompt.pendingEntryId === consumedPendingEntryId) {
-    return undefined;
-  }
-  return pendingPrompt;
-}
-
-/**
- * @brief Delivers one rendered prompt according to the configured reset policy.
- * @details When `reset-context` is `true`, waits for idle and creates a `/new`-equivalent session whose setup callback writes a pending prompt marker into the replacement session so the new runtime instance can send the rendered prompt during `session_start`. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement, custom-entry persistence, and user-message delivery.
+ * @brief Delivers one rendered prompt into the active session.
+ * @details Writes the rendered prompt directly through `pi.sendUserMessage(...)` without creating replacement sessions or pre-reset flows. Runtime is O(n) in prompt length. Side effects are limited to user-message delivery.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
- * @param[in] ctx {ExtensionCommandContext} Active command context.
- * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] content {string} Rendered prompt markdown.
  * @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
  * @satisfies REQ-004, REQ-067, REQ-068
  */
-async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void> {
-  if (!config["reset-context"]) {
-    pi.sendUserMessage(content);
-    return;
-  }
-
-  await ctx.waitForIdle();
-  const newSessionResult = await ctx.newSession({
-    setup: async (sessionManager) => {
-      sessionManager.appendCustomEntry(RESET_CONTEXT_PENDING_PROMPT_ENTRY_TYPE, { content });
-    },
-  });
-  if (newSessionResult.cancelled) {
-    return;
-  }
+async function deliverPromptCommand(pi: ExtensionAPI, content: string): Promise<void> {
+  pi.sendUserMessage(content);
 }
 
 /**
@@ -559,7 +479,7 @@ function formatPiUsereqStatusField(theme: StatusTheme, fieldName: string, value:
 
 /**
  * @brief Builds the single-line pi-usereq status-bar payload.
- * @details Renders configured docs, tests, and source paths plus compact `tools` and `context` fields in one separator-delimited line. `tools` emits the active-tool count and `context` maps `reset-context` to `reset` or `keep`. Runtime is O(s) in configured source-path count. No external state is mutated.
+ * @details Renders configured docs, tests, source paths, and active-tool count in one separator-delimited line. Runtime is O(s) in configured source-path count. No external state is mutated.
  * @param[in] theme {StatusTheme} Theme adapter providing foreground coloring.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] activeTools {readonly string[]} Active tool names visible in the current runtime.
@@ -569,13 +489,11 @@ function formatPiUsereqStatusField(theme: StatusTheme, fieldName: string, value:
 function formatPiUsereqStatus(theme: StatusTheme, config: UseReqConfig, activeTools: readonly string[]): string {
   const separator = theme.fg("dim", " • ");
   const sourcePaths = config["src-dir"].join(",");
-  const contextValue = config["reset-context"] ? "reset" : "keep";
   return [
     formatPiUsereqStatusField(theme, "docs", config["docs-dir"]),
     formatPiUsereqStatusField(theme, "tests", config["tests-dir"]),
     formatPiUsereqStatusField(theme, "src", sourcePaths),
     formatPiUsereqStatusField(theme, "tools", String(activeTools.length)),
-    formatPiUsereqStatusField(theme, "context", contextValue),
   ].join(separator);
 }
 
@@ -684,7 +602,7 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
 
 /**
  * @brief Registers bundled prompt commands with the extension.
- * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and dispatches it either into a `/new`-equivalent reset session or the current session based on `reset-context`. Runtime is O(p) for registration; handler cost depends on prompt rendering plus optional session replacement. Side effects include command registration, session replacement, and message dispatch during execution.
+ * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and sends it into the current active session. Runtime is O(p) for registration; handler cost depends on prompt rendering plus prompt dispatch. Side effects include command registration and user-message delivery during execution.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies REQ-004, REQ-067, REQ-068
@@ -698,7 +616,7 @@ function registerPromptCommands(pi: ExtensionAPI): void {
         const projectBase = getProjectBase(ctx.cwd);
         const config = loadProjectConfig(ctx.cwd);
         const content = renderPrompt(promptName, args, projectBase, config);
-        await deliverPromptCommand(pi, ctx, config, content);
+        await deliverPromptCommand(pi, content);
       },
     });
   });
@@ -1610,11 +1528,11 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/static-check/active-tool configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-066, REQ-109, REQ-110, REQ-111, REQ-112
+ * @satisfies REQ-006, REQ-109, REQ-110, REQ-111, REQ-112
  */
 async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
   let config = loadProjectConfig(ctx.cwd);
@@ -1626,11 +1544,10 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
 
   while (true) {
     const choice = await ctx.ui.select("pi-usereq", [
-      `Overview: docs=${config["docs-dir"]}, tests=${config["tests-dir"]}, src=${config["src-dir"].join(", ")}, reset-context=${config["reset-context"]}, tools=${getConfiguredEnabledPiUsereqTools(config).length}`,
+      `Overview: docs=${config["docs-dir"]}, tests=${config["tests-dir"]}, src=${config["src-dir"].join(", ")}, tools=${getConfiguredEnabledPiUsereqTools(config).length}`,
       "Set docs-dir",
       "Set tests-dir",
       "Manage src-dir",
-      `Toggle reset-context (${config["reset-context"]})`,
       "Manage static-check",
       "Manage active tools",
       "Reset defaults",
@@ -1668,10 +1585,6 @@ async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext)
           if (config["src-dir"].length === 0) config["src-dir"] = ["src"];
         }
       }
-      continue;
-    }
-    if (choice.startsWith("Toggle reset-context")) {
-      config["reset-context"] = !config["reset-context"];
       continue;
     }
     if (choice === "Manage static-check") {
@@ -1716,7 +1629,7 @@ function registerConfigCommands(pi: ExtensionAPI): void {
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the single-line status bar. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
+ * @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the single-line status bar. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112
@@ -1731,13 +1644,5 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
     const config = loadProjectConfig(ctx.cwd);
     applyConfiguredPiUsereqTools(pi, config);
     ctx.ui.setStatus("pi-usereq", formatPiUsereqStatus(ctx.ui.theme, config, pi.getActiveTools()));
-    const pendingPrompt = getPendingResetContextPrompt(ctx.sessionManager);
-    if (!pendingPrompt) {
-      return;
-    }
-    pi.appendEntry(RESET_CONTEXT_CONSUMED_PROMPT_ENTRY_TYPE, {
-      pendingEntryId: pendingPrompt.pendingEntryId,
-    });
-    pi.sendUserMessage(pendingPrompt.content);
   });
 }

@@ -332,7 +332,7 @@ import {
 
 ---
 
-# recording-extension-api.ts | TypeScript | 722L | 22 symbols | 2 imports | 52 comments
+# recording-extension-api.ts | TypeScript | 716L | 22 symbols | 2 imports | 52 comments
 > Path: `scripts/lib/recording-extension-api.ts`
 - @brief Implements recording adapters for offline extension registration and replay.
 - @details Provides a minimal pi-compatible extension API plus command-context UI recorder used by the standalone debug harness. The module captures registered commands, registered tools, event handlers, active-tool state, user-message payloads, and UI side effects without invoking the official pi runtime. Runtime cost is O(n) in the number of recorded registrations and side effects. Side effects are limited to in-memory state mutation.
@@ -404,7 +404,7 @@ import {
 
 ### fn `function normalizeSessionUserMessageContent(message: unknown): JsonValue` (L196-210)
 - @brief Normalizes `SessionManager.appendMessage(...)` payloads into recorder user-message content.
-- @details Collapses single- or multi-part text arrays into one string so reset-session prompt delivery remains comparable with `pi.sendUserMessage(...)` snapshots; non-text payloads remain JSON-compatible. Runtime is O(n) in content size. No external state is mutated.
+- @details Collapses single- or multi-part text arrays into one comparable string and preserves non-text payloads as JSON-compatible values. Runtime is O(n) in content size. No external state is mutated.
 - @param[in] message {unknown} Session-manager message payload supplied during `ctx.newSession(...setup)`.
 - @return {JsonValue} Normalized user-message content.
 
@@ -434,17 +434,17 @@ import {
 - @param[in] text {string} Raw text payload.
 - @return {string} Encoded themed fragment.
 
-### class `export class RecordingCommandContext` (L276-460)
+### class `export class RecordingCommandContext` (L276-454)
 - @brief Records UI activity and session-control side effects for one offline command context.
 - @brief Stores the working directory exposed to handlers through `ctx.cwd`.
 - @details Exposes the subset of `ctx.ui` plus command-only session APIs consumed by the extension, dequeues scripted responses for interactive handlers, encodes theme-color output deterministically, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI or session-control operation plus delegated setup cost. Side effects are limited to in-memory state mutation.
 - @details The value is immutable after construction and is consumed by extension code that resolves project-local configuration and prompt paths. Access complexity is O(1).
 
-### iface `export interface RecordingExtensionSnapshot` (L466-472)
+### iface `export interface RecordingExtensionSnapshot` (L460-466)
 - @brief Aggregates the offline registration snapshot maintained by `RecordingExtensionAPI`.
 - @details Combines command metadata, tool metadata, event names, active tools, and sent user messages for deterministic inspection and parity comparison. The interface is compile-time only and introduces no runtime cost.
 
-### class `export class RecordingExtensionAPI` (L478-722)
+### class `export class RecordingExtensionAPI` (L472-716)
 - @brief Records extension registrations and runtime-like mutations for offline replay.
 - @details Implements the subset of the pi extension API exercised by `src/index.ts`, synthesizes provenance metadata, preserves registration order, and exposes lookup helpers for harness commands. Runtime is O(1) per registration or mutation plus payload serialization. Side effects are limited to in-memory state mutation.
 
@@ -470,9 +470,9 @@ import {
 |`buildBuiltinSourceInfo`|fn||236-244|function buildBuiltinSourceInfo(name: string): RecordingS...|
 |`buildBuiltinToolDefinition`|fn||252-259|function buildBuiltinToolDefinition(name: string): Record...|
 |`formatRecordedThemeForeground`|fn||268-270|function formatRecordedThemeForeground(color: string, tex...|
-|`RecordingCommandContext`|class||276-460|export class RecordingCommandContext|
-|`RecordingExtensionSnapshot`|iface||466-472|export interface RecordingExtensionSnapshot|
-|`RecordingExtensionAPI`|class||478-722|export class RecordingExtensionAPI|
+|`RecordingCommandContext`|class||276-454|export class RecordingCommandContext|
+|`RecordingExtensionSnapshot`|iface||460-466|export interface RecordingExtensionSnapshot|
+|`RecordingExtensionAPI`|class||472-716|export class RecordingExtensionAPI|
 
 
 ---
@@ -1428,7 +1428,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ---
 
-# config.ts | TypeScript | 212L | 8 symbols | 6 imports | 13 comments
+# config.ts | TypeScript | 204L | 8 symbols | 6 imports | 12 comments
 > Path: `src/core/config.ts`
 - @brief Loads, normalizes, and persists pi-usereq project configuration.
 - @details Defines the configuration schema, default directory conventions, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq`.
@@ -1449,44 +1449,46 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @brief Describes one static-check module configuration entry.
 - @details Each record identifies the checker module and optional command or parameter list used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
 
-### iface `export interface UseReqConfig` (L33-42)
+### iface `export interface UseReqConfig` (L33-41)
 - @brief Defines the persisted pi-usereq project configuration schema.
-- @details Captures documentation paths, source/test directory selection, prompt-session reset policy, static-check configuration, enabled startup tools, and git/base-path metadata. The interface is compile-time only and introduces no runtime side effects.
+- @details Captures documentation paths, source/test directory selection, static-check configuration, enabled startup tools, and git/base-path metadata. The interface is compile-time only and introduces no runtime side effects.
 
-### fn `export function getProjectConfigPath(projectBase: string): string` (L72-74)
+### fn `export function getProjectConfigPath(projectBase: string): string` (L65-67)
 - @brief Computes the per-project config file path.
 - @details Joins the project base with `.pi-usereq/config.json`, producing the canonical persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {string} Absolute config file path.
 
-### fn `export function getDefaultConfig(projectBase: string): UseReqConfig` (L82-93)
+### fn `export function getDefaultConfig(projectBase: string): UseReqConfig` (L76-86)
 - @brief Builds the default project configuration.
-- @details Populates canonical docs/test/source directories, enables prompt-session reset plus the default startup tool set, and records the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
+- @details Populates canonical docs/test/source directories, the default startup tool set, and the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {UseReqConfig} Fresh default configuration object.
+- @satisfies CTN-001, REQ-066
 
-### fn `export function loadConfig(projectBase: string): UseReqConfig` (L102-142)
+### fn `export function loadConfig(projectBase: string): UseReqConfig` (L96-134)
 - @brief Loads and sanitizes the persisted project configuration.
-- @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates core field shapes, applies fallbacks for directory and reset fields, and normalizes enabled tool names. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+- @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names, and omits removed prompt-delivery mode fields from the returned object. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {UseReqConfig} Sanitized effective configuration.
 - @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
+- @satisfies REQ-066
 
-### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L151-155)
+### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L143-147)
 - @brief Persists the project configuration to disk.
 - @details Creates the parent `.pi-usereq` directory when necessary and writes formatted JSON terminated by a newline. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Configuration object to persist.
 - @return {void} No return value.
 
-### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L164-174)
+### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L156-166)
 - @brief Normalizes persisted directory fields to project-relative forms.
 - @details Rewrites docs, tests, and source directories using project containment heuristics, strips trailing separators, and restores defaults for empty results. Runtime is O(n) in configured path count plus path-length processing. No filesystem writes occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Configuration object to normalize.
 - @return {UseReqConfig} Normalized configuration copy.
 
-### fn `export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string>` (L184-212)
+### fn `export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string>` (L176-204)
 - @brief Builds placeholder replacements for bundled prompt rendering.
 - @details Computes runtime path context from the execution path, derives installation-owned template and guideline paths, enumerates visible guideline files from the installed resource tree, and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -1498,13 +1500,13 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
 |`StaticCheckEntry`|iface||23-27|export interface StaticCheckEntry|
-|`UseReqConfig`|iface||33-42|export interface UseReqConfig|
-|`getProjectConfigPath`|fn||72-74|export function getProjectConfigPath(projectBase: string)...|
-|`getDefaultConfig`|fn||82-93|export function getDefaultConfig(projectBase: string): Us...|
-|`loadConfig`|fn||102-142|export function loadConfig(projectBase: string): UseReqCo...|
-|`saveConfig`|fn||151-155|export function saveConfig(projectBase: string, config: U...|
-|`normalizeConfigPaths`|fn||164-174|export function normalizeConfigPaths(projectBase: string,...|
-|`buildPromptReplacementPaths`|fn||184-212|export function buildPromptReplacementPaths(projectBase: ...|
+|`UseReqConfig`|iface||33-41|export interface UseReqConfig|
+|`getProjectConfigPath`|fn||65-67|export function getProjectConfigPath(projectBase: string)...|
+|`getDefaultConfig`|fn||76-86|export function getDefaultConfig(projectBase: string): Us...|
+|`loadConfig`|fn||96-134|export function loadConfig(projectBase: string): UseReqCo...|
+|`saveConfig`|fn||143-147|export function saveConfig(projectBase: string, config: U...|
+|`normalizeConfigPaths`|fn||156-166|export function normalizeConfigPaths(projectBase: string,...|
+|`buildPromptReplacementPaths`|fn||176-204|export function buildPromptReplacementPaths(projectBase: ...|
 
 
 ---
@@ -3387,7 +3389,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 1743L | 38 symbols | 17 imports | 43 comments
+# index.ts | TypeScript | 1648L | 37 symbols | 17 imports | 40 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -3499,40 +3501,32 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 - @return {{ content: Array<{ type: "text"; text: string }>; details: FindToolPayload & { execution: { code: number; stderr: string } } }} Find-tool execute result.
 - @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-097, REQ-098, REQ-099, REQ-102
 
-### fn `function getPendingResetContextPrompt(sessionManager?: { getBranch: () => Array<unknown> }): { pendingEntryId: string; content: string } | undefined` (L439-484)
-- @brief Resolves the latest queued reset-context prompt that has not yet been consumed.
-- @details Scans the active branch in chronological order when a session manager is available, tracks the latest pending prompt custom entry and the latest consumed pending-entry identifier, and returns the pending payload only when it still requires delivery. Runtime is O(n) in branch entry count. No external state is mutated.
-- @param[in] sessionManager {{ getBranch: () => Array<unknown> } | undefined} Active session manager when the runtime exposes one.
-- @return {{ pendingEntryId: string; content: string } | undefined} Pending prompt descriptor or `undefined` when no undelivered prompt exists.
-
-### fn `async function deliverPromptCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig, content: string): Promise<void>` (L496-511)
-- @brief Delivers one rendered prompt according to the configured reset policy.
-- @details When `reset-context` is `true`, waits for idle and creates a `/new`-equivalent session whose setup callback writes a pending prompt marker into the replacement session so the new runtime instance can send the rendered prompt during `session_start`. When `reset-context` is `false`, sends the prompt into the current session without clearing prior context. Runtime is dominated by session replacement or prompt dispatch. Side effects include session replacement, custom-entry persistence, and user-message delivery.
+### fn `async function deliverPromptCommand(pi: ExtensionAPI, content: string): Promise<void>` (L429-431)
+- @brief Delivers one rendered prompt into the active session.
+- @details Writes the rendered prompt directly through `pi.sendUserMessage(...)` without creating replacement sessions or pre-reset flows. Runtime is O(n) in prompt length. Side effects are limited to user-message delivery.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
-- @param[in] ctx {ExtensionCommandContext} Active command context.
-- @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] content {string} Rendered prompt markdown.
 - @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
 - @satisfies REQ-004, REQ-067, REQ-068
 
-### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L520-525)
+### fn `function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[]` (L440-445)
 - @brief Returns the configurable active-tool inventory visible to the extension.
 - @details Filters runtime tools against the canonical configurable-tool set, thereby combining extension-owned tools with supported embedded pi CLI tools. Output order is sorted by tool name. Runtime is O(t log t). No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {ToolInfo[]} Sorted configurable tool descriptors.
 - @satisfies REQ-007, REQ-063
 
-### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L533-537)
+### fn `function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[]` (L453-457)
 - @brief Normalizes and returns the configured enabled active tools.
 - @details Reuses repository normalization rules, updates the config object in place, and returns the normalized array. Runtime is O(n) in configured tool count. Side effect: mutates `config["enabled-tools"]`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {string[]} Normalized enabled tool names.
 
-### iface `interface StatusTheme` (L543-545)
+### iface `interface StatusTheme` (L463-465)
 - @brief Describes the theme subset required by pi-usereq status rendering.
 - @details Restricts status formatting to foreground-color application so runtime contexts, offline replays, and tests can satisfy the same structural contract without depending on the full UI theme API. Compile-time only and introduces no runtime cost.
 
-### fn `function formatPiUsereqStatusField(theme: StatusTheme, fieldName: string, value: string): string` (L556-558)
+### fn `function formatPiUsereqStatusField(theme: StatusTheme, fieldName: string, value: string): string` (L476-478)
 - @brief Formats one status-bar field as colored name-plus-value text.
 - @details Renders the field name with the accent color and the value with the warning color while keeping the separator outside both fragments. Runtime is O(n) in combined text length. No external state is mutated.
 - @param[in] theme {StatusTheme} Theme adapter providing foreground coloring.
@@ -3541,22 +3535,22 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 - @return {string} Colored field fragment.
 - @satisfies REQ-112
 
-### fn `function formatPiUsereqStatus(theme: StatusTheme, config: UseReqConfig, activeTools: readonly string[]): string` (L569-580)
+### fn `function formatPiUsereqStatus(theme: StatusTheme, config: UseReqConfig, activeTools: readonly string[]): string` (L489-498)
 - @brief Builds the single-line pi-usereq status-bar payload.
-- @details Renders configured docs, tests, and source paths plus compact `tools` and `context` fields in one separator-delimited line. `tools` emits the active-tool count and `context` maps `reset-context` to `reset` or `keep`. Runtime is O(s) in configured source-path count. No external state is mutated.
+- @details Renders configured docs, tests, source paths, and active-tool count in one separator-delimited line. Runtime is O(s) in configured source-path count. No external state is mutated.
 - @param[in] theme {StatusTheme} Theme adapter providing foreground coloring.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] activeTools {readonly string[]} Active tool names visible in the current runtime.
 - @return {string} Single-line status-bar text.
 - @satisfies REQ-009, REQ-109, REQ-110, REQ-111, REQ-112
 
-### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L588-593)
+### fn `function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension"` (L506-511)
 - @brief Classifies one configurable tool as embedded or extension-owned.
 - @details Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated.
 - @param[in] tool {ToolInfo} Runtime tool descriptor.
 - @return {"builtin" | "extension"} Stable tool-kind label.
 
-### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L603-620)
+### fn `function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): void` (L521-538)
 - @brief Applies the configured active-tool enablement to the current session.
 - @details Preserves non-configurable active tools, removes every configurable tool from the active set, then re-adds only configured tools that exist in the current runtime inventory. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -3564,7 +3558,7 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 - @return {void} No return value.
 - @satisfies REQ-009, REQ-064
 
-### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L630-633)
+### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L548-551)
 - @brief Replaces the configured active-tool selection and applies it immediately.
 - @details Normalizes the requested tool names, stores them in config, and synchronizes the active tool set with runtime registration state. Runtime is O(n + t). Side effect: mutates config and active tools.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -3572,35 +3566,35 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 
-### fn `function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string` (L642-645)
+### fn `function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string` (L560-563)
 - @brief Formats one configurable-tool label for selection menus.
 - @details Prefixes the tool name with a checkmark or cross and appends a stable builtin-versus-extension marker derived from runtime metadata. Runtime is O(1). No side effects occur.
 - @param[in] tool {ToolInfo} Tool descriptor.
 - @param[in] enabled {boolean} Enablement state.
 - @return {string} Menu label.
 
-### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L654-682)
+### fn `function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string` (L572-600)
 - @brief Renders a textual reference for configurable-tool configuration and runtime state.
 - @details Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Multiline tool-status report.
 
-### fn `function registerPromptCommands(pi: ExtensionAPI): void` (L692-705)
+### fn `function registerPromptCommands(pi: ExtensionAPI): void` (L610-623)
 - @brief Registers bundled prompt commands with the extension.
-- @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and dispatches it either into a `/new`-equivalent reset session or the current session based on `reset-context`. Runtime is O(p) for registration; handler cost depends on prompt rendering plus optional session replacement. Side effects include command registration, session replacement, and message dispatch during execution.
+- @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, renders the prompt, and sends it into the current active session. Runtime is O(p) for registration; handler cost depends on prompt rendering plus prompt dispatch. Side effects include command registration and user-message delivery during execution.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-004, REQ-067, REQ-068
 
-### fn `function registerAgentTools(pi: ExtensionAPI): void` (L715-1014)
+### fn `function registerAgentTools(pi: ExtensionAPI): void` (L633-932)
 - @brief Registers pi-usereq agent tools exposed to the model.
 - @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102
 
-### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1359-1423)
+### fn `async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1277-1341)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with persisted config, renders overview and mutation actions, and updates configuration state in response to UI selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -3609,19 +3603,19 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064
 
-### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L1431-1437)
+### fn `function formatStaticCheckEntry(entry: StaticCheckEntry): string` (L1349-1355)
 - @brief Formats one static-check configuration entry for UI display.
 - @details Renders command-backed entries as `Command(cmd args...)` and all other modules as `Module(args...)`. Runtime is O(n) in parameter count. No side effects occur.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Human-readable entry summary.
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L1445-1451)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L1363-1369)
 - @brief Summarizes configured static-check languages.
 - @details Keeps only languages with at least one configured checker, sorts them, and emits a compact `Language (count)` list. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string or `(none)`.
 
-### fn `function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string` (L1461-1464)
+### fn `function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string` (L1379-1382)
 - @brief Builds one static-check language selection label.
 - @details Includes the language name, supported extensions, and the number of configured checkers with singular/plural handling. Runtime is O(n) in extension count. No side effects occur.
 - @param[in] language {string} Canonical language name.
@@ -3629,40 +3623,40 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 - @param[in] configuredCount {number} Number of configured checkers for the language.
 - @return {string} Menu label.
 
-### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L1472-1493)
+### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L1390-1411)
 - @brief Renders the static-check configuration reference view.
 - @details Produces a markdown-like summary containing configured entries, supported languages, supported modules, and example specifications. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Reference text for the editor view.
 
-### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1502-1609)
+### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1420-1527)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {Promise<void>} Promise resolved when the menu closes.
 
-### fn `async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void>` (L1619-1692)
+### fn `async function configurePiUsereq(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void>` (L1537-1605)
 - @brief Runs the top-level pi-usereq configuration menu.
-- @details Loads project config, exposes docs/test/source/reset/static-check/active-tool configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+- @details Loads project config, exposes docs/test/source/static-check/active-tool configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
-- @satisfies REQ-006, REQ-066, REQ-109, REQ-110, REQ-111, REQ-112
+- @satisfies REQ-006, REQ-109, REQ-110, REQ-111, REQ-112
 
-### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L1622-1625)
+### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L1540-1543)
 
-### fn `const refreshStatus = () =>` (L1623-1625)
+### fn `const refreshStatus = () =>` (L1541-1543)
 
-### fn `function registerConfigCommands(pi: ExtensionAPI): void` (L1700-1715)
+### fn `function registerConfigCommands(pi: ExtensionAPI): void` (L1613-1628)
 - @brief Registers configuration-management commands.
 - @details Adds commands for opening the interactive configuration menu and showing the current config JSON in the editor. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L1724-1743)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L1637-1648)
 - @brief Registers the complete pi-usereq extension.
-- @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the single-line status bar. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, active-tool changes, and prompt-command session replacement.
+- @details Validates installation-owned bundled resources, registers prompt and configuration commands plus agent tools, and installs a `session_start` hook that refreshes runtime path context, applies configured active tools, and updates the single-line status bar. Runtime is O(1) for registration; session-start behavior depends on config loading. Side effects include filesystem reads, command/tool registration, UI updates, and active-tool changes.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112
@@ -3683,29 +3677,28 @@ import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 |`buildFindToolSchemaDescription`|fn||363-368|function buildFindToolSchemaDescription(scope: FindToolSc...|
 |`buildFindToolPromptGuidelines`|fn||376-392|function buildFindToolPromptGuidelines(scope: FindToolSco...|
 |`buildFindToolExecuteResult`|fn||401-419|function buildFindToolExecuteResult(|
-|`getPendingResetContextPrompt`|fn||439-484|function getPendingResetContextPrompt(sessionManager?: { ...|
-|`deliverPromptCommand`|fn||496-511|async function deliverPromptCommand(pi: ExtensionAPI, ctx...|
-|`getPiUsereqStartupTools`|fn||520-525|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
-|`getConfiguredEnabledPiUsereqTools`|fn||533-537|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
-|`StatusTheme`|iface||543-545|interface StatusTheme|
-|`formatPiUsereqStatusField`|fn||556-558|function formatPiUsereqStatusField(theme: StatusTheme, fi...|
-|`formatPiUsereqStatus`|fn||569-580|function formatPiUsereqStatus(theme: StatusTheme, config:...|
-|`getPiUsereqToolKind`|fn||588-593|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
-|`applyConfiguredPiUsereqTools`|fn||603-620|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
-|`setConfiguredPiUsereqTools`|fn||630-633|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
-|`formatPiUsereqToolLabel`|fn||642-645|function formatPiUsereqToolLabel(tool: ToolInfo, enabled:...|
-|`renderPiUsereqToolsReference`|fn||654-682|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
-|`registerPromptCommands`|fn||692-705|function registerPromptCommands(pi: ExtensionAPI): void|
-|`registerAgentTools`|fn||715-1014|function registerAgentTools(pi: ExtensionAPI): void|
-|`configurePiUsereqToolsMenu`|fn||1359-1423|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
-|`formatStaticCheckEntry`|fn||1431-1437|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
-|`formatStaticCheckLanguagesSummary`|fn||1445-1451|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckLanguageLabel`|fn||1461-1464|function buildStaticCheckLanguageLabel(language: string, ...|
-|`renderStaticCheckReference`|fn||1472-1493|function renderStaticCheckReference(config: UseReqConfig)...|
-|`configureStaticCheckMenu`|fn||1502-1609|async function configureStaticCheckMenu(ctx: ExtensionCom...|
-|`configurePiUsereq`|fn||1619-1692|async function configurePiUsereq(pi: ExtensionAPI, ctx: E...|
-|`ensureSaved`|fn||1622-1625|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
-|`refreshStatus`|fn||1623-1625|const refreshStatus = () =>|
-|`registerConfigCommands`|fn||1700-1715|function registerConfigCommands(pi: ExtensionAPI): void|
-|`piUsereqExtension`|fn||1724-1743|export default function piUsereqExtension(pi: ExtensionAP...|
+|`deliverPromptCommand`|fn||429-431|async function deliverPromptCommand(pi: ExtensionAPI, con...|
+|`getPiUsereqStartupTools`|fn||440-445|function getPiUsereqStartupTools(pi: ExtensionAPI): ToolI...|
+|`getConfiguredEnabledPiUsereqTools`|fn||453-457|function getConfiguredEnabledPiUsereqTools(config: UseReq...|
+|`StatusTheme`|iface||463-465|interface StatusTheme|
+|`formatPiUsereqStatusField`|fn||476-478|function formatPiUsereqStatusField(theme: StatusTheme, fi...|
+|`formatPiUsereqStatus`|fn||489-498|function formatPiUsereqStatus(theme: StatusTheme, config:...|
+|`getPiUsereqToolKind`|fn||506-511|function getPiUsereqToolKind(tool: ToolInfo): "builtin" |...|
+|`applyConfiguredPiUsereqTools`|fn||521-538|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
+|`setConfiguredPiUsereqTools`|fn||548-551|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
+|`formatPiUsereqToolLabel`|fn||560-563|function formatPiUsereqToolLabel(tool: ToolInfo, enabled:...|
+|`renderPiUsereqToolsReference`|fn||572-600|function renderPiUsereqToolsReference(pi: ExtensionAPI, c...|
+|`registerPromptCommands`|fn||610-623|function registerPromptCommands(pi: ExtensionAPI): void|
+|`registerAgentTools`|fn||633-932|function registerAgentTools(pi: ExtensionAPI): void|
+|`configurePiUsereqToolsMenu`|fn||1277-1341|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
+|`formatStaticCheckEntry`|fn||1349-1355|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
+|`formatStaticCheckLanguagesSummary`|fn||1363-1369|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckLanguageLabel`|fn||1379-1382|function buildStaticCheckLanguageLabel(language: string, ...|
+|`renderStaticCheckReference`|fn||1390-1411|function renderStaticCheckReference(config: UseReqConfig)...|
+|`configureStaticCheckMenu`|fn||1420-1527|async function configureStaticCheckMenu(ctx: ExtensionCom...|
+|`configurePiUsereq`|fn||1537-1605|async function configurePiUsereq(pi: ExtensionAPI, ctx: E...|
+|`ensureSaved`|fn||1540-1543|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
+|`refreshStatus`|fn||1541-1543|const refreshStatus = () =>|
+|`registerConfigCommands`|fn||1613-1628|function registerConfigCommands(pi: ExtensionAPI): void|
+|`piUsereqExtension`|fn||1637-1648|export default function piUsereqExtension(pi: ExtensionAP...|
 

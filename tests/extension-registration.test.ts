@@ -47,15 +47,15 @@ type FakePi = ReturnType<typeof createFakePi>;
 type FakeCtxPlan = { selects: string[]; inputs?: string[] };
 
 /**
- * @brief Describes one fake session entry stored by reset-aware prompt tests.
- * @details Mirrors the minimal subset of session-manager entry shapes consumed by the suite so reset-context flows can persist pending prompt markers and setup messages across simulated runtime replacement. The alias is compile-time only and introduces no runtime side effects.
+ * @brief Describes one fake session entry stored by session-aware tests.
+ * @details Mirrors the minimal subset of session-manager entry shapes consumed by the suite so setup messages and custom entries remain inspectable across simulated runtime interactions. The alias is compile-time only and introduces no runtime side effects.
  */
 type FakeSessionEntry =
   | { id: string; type: "custom"; customType: string; data?: unknown }
   | { id: string; type: "message"; message: unknown };
 
 /**
- * @brief Describes the fake session-manager surface consumed by prompt-reset tests.
+ * @brief Describes the fake session-manager surface consumed by session-aware tests.
  * @details Exposes only the mutation and read APIs required by `ctx.newSession(...setup)`, `ctx.sessionManager`, and `pi.appendEntry(...)`. The interface is compile-time only and introduces no runtime cost.
  */
 interface FakeSessionManager {
@@ -72,7 +72,7 @@ interface FakeSessionManager {
 type FakePiOptions = { sessionManager?: FakeSessionManager };
 
 /**
- * @brief Describes optional fake command-context capabilities used by prompt-reset tests.
+ * @brief Describes optional fake command-context capabilities used by session-aware tests.
  * @details Allows tests to inject a shared fake session manager and a callback that simulates runtime replacement after `ctx.newSession(...)` completes. The alias is compile-time only and introduces no runtime side effects.
  */
 type FakeCtxOptions = {
@@ -102,7 +102,7 @@ function extractSessionMessageText(message: unknown): string {
 }
 
 /**
- * @brief Creates a fake session manager for reset-aware prompt tests.
+ * @brief Creates a fake session manager for session-aware tests.
  * @details Stores appended custom entries and setup messages in deterministic insertion order, returns stable synthetic entry identifiers, and exposes branch reads used by `session_start` handlers. Runtime is O(1) per mutation plus O(n) per snapshot copy. Side effects are limited to in-memory state mutation.
  * @return {FakeSessionManager} Fake session manager.
  */
@@ -244,6 +244,7 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
     editorText: "",
     statuses: new Map<string, string>(),
     notifications: [] as Array<{ message: string; level: string }>,
+    selectCalls: [] as Array<{ title: string; items: string[] }>,
     waitForIdleCalls: 0,
     newSessions: [] as Array<{ messages: string[] }>,
   };
@@ -292,7 +293,8 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
           return formatFakeThemeForeground(color, text);
         },
       },
-      async select(_title: string, _items: string[]) {
+      async select(title: string, items: string[]) {
+        state.selectCalls.push({ title, items: [...items] });
         return selects.shift();
       },
       async input(_title: string, _placeholder?: string) {
@@ -1194,88 +1196,25 @@ test("configuration menu saves updated docs-dir in project config", async () => 
   assert.equal(config["docs-dir"], "docs/custom");
 });
 
-test("configuration menu can toggle reset-context", async () => {
-  const cwd = createTempDir("pi-usereq-menu-reset-");
+test("configuration menu omits prompt-delivery controls and persisted config omits removed fields", async () => {
+  const cwd = createTempDir("pi-usereq-menu-current-session-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
+  const ctx = createFakeCtx(cwd, { selects: ["Save and close"] });
 
-  await command!.handler("", createFakeCtx(cwd, { selects: ["Toggle reset-context (true)", "Save and close"] }));
+  await command!.handler("", ctx);
+
+  const menuItems = ctx.__state.selectCalls[0]?.items ?? [];
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["reset-context"], false);
+  assert.equal(menuItems.some((item) => item.includes("reset-context")), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(config, "reset-context"), false);
 });
 
-test("req-workflow queues one pending reset-context prompt during new-session setup", async () => {
-  const cwd = createTempDir("pi-usereq-prompt-reset-");
-  const pi = createFakePi();
-  piUsereqExtension(pi);
-  const command = pi.commands.get("req-workflow");
-  assert.ok(command);
-  const ctx = createFakeCtx(cwd);
-
-  await command!.handler("", ctx);
-
-  const branch = ctx.sessionManager.getBranch();
-  const pendingPromptEntry = branch.find((entry) => {
-    return entry.type === "custom"
-      && entry.customType === "pi-usereq-reset-context-prompt";
-  });
-
-  assert.equal(ctx.__state.waitForIdleCalls, 1);
-  assert.equal(ctx.__state.newSessions.length, 1);
-  assert.deepEqual(ctx.__state.newSessions.map((session) => session.messages.length), [0]);
-  assert.equal(pi.sentUserMessages.length, 0);
-  assert.equal(pendingPromptEntry?.type, "custom");
-  assert.match(String((pendingPromptEntry as { data?: { content?: string } } | undefined)?.data?.content), /req\/docs\/WORKFLOW\.md/);
-});
-
-test("req-workflow delivers reset-context prompts through the replacement session runtime", async () => {
-  const cwd = createTempDir("pi-usereq-prompt-runtime-reset-");
-  const sessionManager = createFakeSessionManager();
-  const oldPi = createFakePi({ sessionManager });
-  const newPi = createFakePi({ sessionManager });
-  piUsereqExtension(oldPi);
-  piUsereqExtension(newPi);
-  const replacementCtx = createFakeCtx(cwd, { selects: [] }, { sessionManager });
-  const ctx = createFakeCtx(cwd, { selects: [] }, {
-    sessionManager,
-    async onNewSession() {
-      await newPi.emit("session_start", { reason: "new" }, replacementCtx);
-      return { cancelled: false };
-    },
-  });
-  const command = oldPi.commands.get("req-workflow");
-  assert.ok(command);
-
-  await command!.handler("", ctx);
-
-  assert.equal(ctx.__state.waitForIdleCalls, 1);
-  assert.equal(oldPi.sentUserMessages.length, 0);
-  assert.equal(newPi.sentUserMessages.length, 1);
-  assert.match(String(newPi.sentUserMessages[0]?.content), /req\/docs\/WORKFLOW\.md/);
-
-  await newPi.emit("session_start", { reason: "reload" }, replacementCtx);
-
-  assert.equal(newPi.sentUserMessages.length, 1);
-});
-
-test("prompt commands reuse the current session when reset-context is false", async () => {
+test("prompt commands use the current session by default", async () => {
   const cwd = createTempDir("pi-usereq-prompt-current-");
-  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-  fs.writeFileSync(
-    getProjectConfigPath(cwd),
-    `${JSON.stringify({
-      "docs-dir": DEFAULT_DOCS_DIR,
-      "tests-dir": "tests",
-      "src-dir": ["src"],
-      "reset-context": false,
-      "static-check": {},
-      "enabled-tools": [],
-    }, null, 2)}\n`,
-    "utf8",
-  );
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("req-analyze");
@@ -1299,7 +1238,6 @@ test("session_start applies configured pi-usereq startup tools", async () => {
       "docs-dir": DEFAULT_DOCS_DIR,
       "tests-dir": "tests",
       "src-dir": ["src", "foobar"],
-      "reset-context": false,
       "static-check": {},
       "enabled-tools": ["git-path", "static-check"],
     }, null, 2)}\n`,
@@ -1320,7 +1258,6 @@ test("session_start applies configured pi-usereq startup tools", async () => {
       `${formatFakeThemeForeground("accent", "tests:")}${formatFakeThemeForeground("warning", "tests")}`,
       `${formatFakeThemeForeground("accent", "src:")}${formatFakeThemeForeground("warning", "src,foobar")}`,
       `${formatFakeThemeForeground("accent", "tools:")}${formatFakeThemeForeground("warning", "2")}`,
-      `${formatFakeThemeForeground("accent", "context:")}${formatFakeThemeForeground("warning", "keep")}`,
     ].join(formatFakeThemeForeground("dim", " • ")),
   );
 });
