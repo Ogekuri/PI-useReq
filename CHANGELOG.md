@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/Ogekuri/PI-useReq/compare/v0.3.0..v0.4.0) - 2026-04-19
+### 🚜  Changes
+- add npm provenance metadata and release checks [useReq] *(package)*
+  - add canonical repository, bugs, and homepage metadata for npm provenance
+  - update SRS with REQ-157, REQ-158, and TST-044
+  - align release workflow Node setup action with release test expectations
+  - extend release-workflow tests for package provenance metadata
+
 ## [0.3.0](https://github.com/Ogekuri/PI-useReq/compare/v0.2.0..v0.3.0) - 2026-04-19
 ### 🐛  Bug Fixes
 - Fix .github/workflows/release-npm.yml file.
@@ -205,7 +213,9 @@
 - \[0.1.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 - \[0.2.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.2.0
 - \[0.3.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.3.0
+- \[0.4.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.4.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
 [0.3.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.2.0..v0.3.0
+[0.4.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.3.0..v0.4.0
