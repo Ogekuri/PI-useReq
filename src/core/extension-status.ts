@@ -67,7 +67,7 @@ interface StatusThemeAdapter {
 interface ContextUsageOverlaySpec {
   backgroundColor: StatusForegroundColor;
   foregroundColor: StatusForegroundColor;
-  text: "CLEAR" | "FULL!";
+  text: "◀ CLEAR ▶ " | " ◀ FULL ▶ ";
 }
 
 /**
@@ -266,12 +266,12 @@ function refreshContextUsage(
 }
 
 /**
- * @brief Counts the filled cells rendered by the 5-cell context bar.
+ * @brief Counts the filled cells rendered by the 10-cell context bar.
  * @details Uses ceiling semantics for positive percentages so any non-zero
  * usage occupies at least one cell and zero usage occupies none. Runtime is
  * O(1). No external state is mutated.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
- * @return {number} Filled-cell count in the inclusive range `[0, 5]`.
+ * @return {number} Filled-cell count in the inclusive range `[0, 10]`.
  * @satisfies REQ-122
  */
 function countFilledContextCells(
@@ -281,13 +281,13 @@ function countFilledContextCells(
   if (percent === null || percent === undefined || percent <= 0) {
     return 0;
   }
-  return Math.min(5, Math.ceil((percent * 5) / 100));
+  return Math.min(10, Math.ceil((percent * 10) / 100));
 }
 
 /**
  * @brief Resolves the threshold-specific context-bar overlay when required.
- * @details Returns the empty-state `CLEAR` overlay when normalized context
- * usage is unavailable or non-positive and returns the high-water `FULL!`
+ * @details Returns the empty-state `◀ CLEAR ▶ ` overlay when normalized context
+ * usage is unavailable or non-positive and returns the centered ` ◀ FULL ▶ `
  * overlay with the active theme `error` token when usage exceeds 90 percent.
  * Runtime is O(1). No external state is mutated.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
@@ -302,14 +302,14 @@ function resolveContextUsageOverlay(
     return {
       backgroundColor: "accent",
       foregroundColor: "warning",
-      text: "CLEAR",
+      text: "◀ CLEAR ▶ ",
     };
   }
   if (percent > 90) {
     return {
       backgroundColor: "warning",
       foregroundColor: "error",
-      text: "FULL!",
+      text: " ◀ FULL ▶ ",
     };
   }
   return undefined;
@@ -337,7 +337,7 @@ function formatContextUsageOverlay(
 }
 
 /**
- * @brief Formats one 5-cell context-usage bar.
+ * @brief Formats one 10-cell context-usage bar.
  * @details Renders threshold-specific overlays for empty and high-water states;
  * otherwise renders filled cells with the theme `warning` token on an
  * accent-derived background and unfilled cells in `dim` on the same background
@@ -345,7 +345,7 @@ function formatContextUsageOverlay(
  * mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
- * @return {string} Rendered 5-cell bar or overlay.
+ * @return {string} Rendered 10-cell bar or overlay.
  * @satisfies REQ-121, REQ-122, REQ-126, REQ-127, REQ-128
  */
 function formatContextUsageBar(
@@ -357,7 +357,7 @@ function formatContextUsageBar(
     return formatContextUsageOverlay(theme, overlay);
   }
   const filledCells = countFilledContextCells(contextUsage);
-  return Array.from({ length: 5 }, (_value, index) =>
+  return Array.from({ length: 10 }, (_value, index) =>
     index < filledCells ? theme.filledContextCell : theme.emptyContextCell,
   ).join("");
 }
@@ -394,26 +394,26 @@ function formatCompletedStatusDuration(
 }
 
 /**
- * @brief Formats the consolidated `et` status-bar value.
- * @details Emits the active prompt segment `▶<active>`, the latest normally
- * completed segment `↻<last>`, and the accumulated successful-runtime segment
- * `Σ<total>` in the canonical comma-separated order. Runtime is O(1). No
- * external state is mutated.
+ * @brief Formats the consolidated `elapsed` status-bar value.
+ * @details Emits the active prompt segment `⏱︎ <active>`, the latest normally
+ * completed segment `⚑ <last>`, and the accumulated successful-runtime segment
+ * `⌛︎ <total>` with fixed spacing. Runtime is O(1). No external state is
+ * mutated.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
- * @return {string} Consolidated `et` field value.
+ * @return {string} Consolidated `elapsed` field value.
  * @satisfies REQ-123, REQ-124, REQ-125, REQ-159
  */
-function formatEtStatusValue(
+function formatElapsedStatusValue(
   state: PiUsereqStatusState,
   nowMs: number,
 ): string {
   const activeText = state.runStartTimeMs === undefined
-    ? "idle"
+    ? "--:--"
     : formatStatusDuration(nowMs - state.runStartTimeMs);
   const lastText = formatCompletedStatusDuration(state.lastRunDurationMs);
   const totalText = formatCompletedStatusDuration(state.totalRunDurationMs);
-  return `▶${activeText},↻${lastText},Σ${totalText}`;
+  return ` ⏱︎ ${activeText} ⚑ ${lastText} ⌛︎ ${totalText}`;
 }
 
 /**
@@ -471,7 +471,9 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders base, docs, src, tests, context, et, beep, and sound fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(s) in configured source-path count. No external state is mutated.
+ * @details Renders base, context, elapsed, beep, and sound fields in the
+ * canonical order with dim bullet separators and threshold-specific context-bar
+ * overlays. Runtime is O(1). No external state is mutated.
  * @param[in] cwd {string} Runtime working directory used for base-path derivation.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
@@ -488,21 +490,17 @@ function buildPiUsereqStatusText(
   nowMs: number,
 ): string {
   const baseText = normalizePathSlashes(path.resolve(cwd));
-  const sourcePaths = config["src-dir"].join(",");
-  const etText = formatEtStatusValue(state, nowMs);
+  const elapsedText = formatElapsedStatusValue(state, nowMs);
   const beepText = formatPiNotifyBeepStatus(config);
   const soundText = config["notify-sound"];
   return [
     formatStatusField(theme, "base", baseText),
-    formatStatusField(theme, "docs", config["docs-dir"]),
-    formatStatusField(theme, "src", sourcePaths),
-    formatStatusField(theme, "tests", config["tests-dir"]),
     formatRenderedStatusField(
       theme,
       "context",
       formatContextUsageBar(theme, state.contextUsage),
     ),
-    formatStatusField(theme, "et", etText),
+    formatStatusField(theme, "elapsed", elapsedText),
     formatStatusField(theme, "beep", beepText),
     formatStatusField(theme, "sound", soundText),
   ].join(theme.separator);

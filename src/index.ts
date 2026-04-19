@@ -53,6 +53,7 @@ import {
 } from "./core/find-payload.js";
 import {
   getDefaultConfig,
+  getProjectConfigPath,
   loadConfig,
   normalizeConfigPaths,
   saveConfig,
@@ -65,7 +66,11 @@ import {
   runPiNotifyEffects,
   type PiNotifySoundLevel,
 } from "./core/pi-notify.js";
-import { buildRuntimePathContext, buildRuntimePathFacts } from "./core/path-context.js";
+import {
+  buildRuntimePathContext,
+  buildRuntimePathFacts,
+  formatRuntimePathForDisplay,
+} from "./core/path-context.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import { showPiUsereqSettingsMenu, type PiUsereqSettingsMenuChoice } from "./core/settings-menu.js";
 import {
@@ -191,6 +196,19 @@ function loadProjectConfig(cwd: string): UseReqConfig {
 function saveProjectConfig(cwd: string, config: UseReqConfig): void {
   const projectBase = getProjectBase(cwd);
   saveConfig(projectBase, normalizeConfigPaths(projectBase, config));
+}
+
+/**
+ * @brief Formats the current project config path for top-level menu display.
+ * @details Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived
+ * project base and formats it relative to the user home when possible. Runtime
+ * is O(p) in path length. No external state is mutated.
+ * @param[in] cwd {string} Current working directory.
+ * @return {string} User-home-relative or absolute config path display value.
+ * @satisfies REQ-162
+ */
+function formatProjectConfigPathForMenu(cwd: string): string {
+  return formatRuntimePathForDisplay(getProjectConfigPath(getProjectBase(cwd)));
 }
 
 /**
@@ -1929,12 +1947,16 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
- * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the display-only config path beside `show-config`. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162
  */
-function buildPiUsereqMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+function buildPiUsereqMenuChoices(
+  cwd: string,
+  config: UseReqConfig,
+): PiUsereqSettingsMenuChoice[] {
   return [
     {
       id: "docs-dir",
@@ -1973,16 +1995,17 @@ function buildPiUsereqMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       description: "Manage terminal beep flags, selected notify command, hotkey bind, and per-level notify commands.",
     },
     {
+      id: "show-config",
+      label: "show-config",
+      value: formatProjectConfigPathForMenu(cwd),
+      valueTone: "dim",
+      description: "Write the current project configuration JSON into the editor without saving additional changes.",
+    },
+    {
       id: "reset-defaults",
       label: "Reset defaults",
       value: "",
       description: "Restore the default pi-usereq configuration for the current project base.",
-    },
-    {
-      id: "show-config",
-      label: "show-config",
-      value: "",
-      description: "Write the current project configuration JSON into the editor without saving additional changes.",
     },
     {
       id: "save-and-close",
@@ -2049,12 +2072,12 @@ function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuCh
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/static-check/startup-tool/notification actions through the shared settings-menu renderer, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/static-check/startup-tool/notification actions through the shared settings-menu renderer, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162
  */
 async function configurePiUsereq(
   pi: ExtensionAPI,
@@ -2071,7 +2094,11 @@ async function configurePiUsereq(
   };
 
   while (true) {
-    const choice = await showPiUsereqSettingsMenu(ctx, "pi-usereq", buildPiUsereqMenuChoices(config));
+    const choice = await showPiUsereqSettingsMenu(
+      ctx,
+      "pi-usereq",
+      buildPiUsereqMenuChoices(ctx.cwd, config),
+    );
     if (!choice || choice === "save-and-close") {
       ensureSaved();
       refreshStatus();

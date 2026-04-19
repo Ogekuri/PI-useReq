@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.33"
+version: "0.0.34"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -114,7 +114,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish single-line `pi-usereq` status text during `session_start`.
-- **REQ-109**: MUST make the single-line status bar render `base`, `docs`, `src`, and `tests` with explicit derived or configured path values, keeping every field name separate from its value.
+- **REQ-109**: MUST make the single-line status bar render the explicit runtime `base` path and omit `docs`, `src`, and `tests` path fields.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
 - **REQ-112**: MUST render status-bar field names with the active theme `accent` token and field values with the active theme `warning` token.
 - **REQ-113**: MUST register shared event wrappers for `resources_discover`, `session_start`, `session_before_switch`, `session_before_fork`, `session_before_compact`, `session_compact`, and `session_shutdown`.
@@ -124,15 +124,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
-- **REQ-120**: MUST render single-line status fields in this order: `base`, `docs`, `src`, `tests`, `context`, `et`, `beep`, `sound`.
-- **REQ-121**: MUST render `context` immediately after `tests` with separator ` • ` and a 5-cell bar using `▓` for filled cells.
-- **REQ-122**: MUST compute filled `context` cells by ceiling `usagePercent * 5 / 100`, except 0 percent MUST produce 0 filled cells.
-- **REQ-123**: MUST render `et` immediately after `context` as `▶<active>,↻<last>,Σ<total>`.
-- **REQ-124**: MUST render `▶idle`, `↻--:--`, and `Σ--:--` until the corresponding timers receive a normally completed prompt duration.
-- **REQ-125**: MUST render timed `et` segments as `M:SS`, keep minutes unbounded above 59, zero-pad seconds to two digits, and preserve `↻` plus `Σ` when escape-triggered cancellation ends the active run.
+- **REQ-120**: MUST render single-line status fields in this order: `base`, `context`, `elapsed`, `beep`, `sound`.
+- **REQ-121**: MUST render `context` immediately after `base` with separator ` • ` and a 10-cell bar using `▓` for filled cells.
+- **REQ-122**: MUST compute filled `context` cells by ceiling `usagePercent * 10 / 100`, except 0 percent MUST produce 0 filled cells.
+- **REQ-123**: MUST render `elapsed` immediately after `context` as `⏱︎ <active> ⚑ <last> ⌛︎ <total>`.
+- **REQ-124**: MUST render `⏱︎ --:--` when no prompt is active, and `⚑ --:--` plus `⌛︎ --:--` until the corresponding timers receive a normally completed prompt duration.
+- **REQ-125**: MUST render timed `elapsed` segments as `M:SS`, keep minutes unbounded above 59, zero-pad seconds to two digits, and preserve `⚑` plus `⌛︎` when escape-triggered cancellation ends the active run.
 - **REQ-126**: MUST render `context` bar cells as theme `warning` `▓` glyphs on a background derived from the active theme `accent` token.
-- **REQ-127**: MUST overlay the literal `CLEAR` with the theme `warning` token on an `accent`-derived background when normalized context usage is unavailable or equals 0 percent.
-- **REQ-128**: MUST overlay the literal `FULL!` with the active theme `error` token on a theme `warning` background when normalized context usage exceeds 90 percent.
+- **REQ-127**: MUST overlay the literal `◀ CLEAR ▶ ` with the theme `warning` token on an `accent`-derived background when normalized context usage is unavailable or equals 0 percent.
+- **REQ-128**: MUST overlay the centered literal ` ◀ FULL ▶ ` with the active theme `error` token on a theme `warning` background when normalized context usage exceeds 90 percent.
 - **REQ-129**: MUST persist independent terminal-beep flags for successful prompt completion, escape-triggered prompt abortion, and error-terminated prompt completion, defaulting each flag to enabled.
 - **REQ-130**: MUST dispatch enabled terminal-beep events through `notifyWindows`, `notifyOSC99`, `notifyOSC9`, or `notifyOSC777` when the matching prompt lifecycle outcome occurs.
 - **REQ-131**: MUST persist a successful-prompt external sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
@@ -203,7 +203,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-105**: MUST make `git-path` print the derived repository root only when it equals `base-path` or is an ancestor of `base-path`.
 - **REQ-106**: MUST make prompt `%%GUIDELINES_FILES%%`, `%%GUIDELINES_PATH%%`, and `%%TEMPLATE_PATH%%` resolve under `<installation-path>/resources`.
 - **REQ-107**: MUST express prompt-visible `installation-path`, `execution-path`, `base-path`, `config-path`, template paths, and guideline paths relative to user home using platform-native home environment variables.
-- **REQ-031**: MUST make the `pi-usereq` menu expose a `show-config` action between `Reset defaults` and `Save and close`, writing the current project configuration JSON to the editor.
+- **REQ-031**: MUST make the `pi-usereq` menu expose a `show-config` action after `notifications` and before `Reset defaults`, writing the current project configuration JSON to the editor.
+- **REQ-162**: MUST render the `show-config` current value as the user-home-relative extension config path using the settings-list `dim` value style.
 - **REQ-032**: MUST inject a pi.dev conformance block into rendered prompts when `docs/pi.dev/agent-document-manifest.json` exists under the project base.
 - **REQ-033**: MUST make that conformance block require manifest-guided document review before implementing or changing extension code that interfaces with pi CLI.
 - **REQ-034**: MUST make that conformance block require manifest-guided document review before validating, analyzing, or fixing extension code that interfaces with pi CLI.
@@ -246,15 +247,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds Command static-check entries, and omits prompt-delivery mode controls.
 - **TST-046**: MUST verify static-check menus omit module selection and hide `Dummy`, `Pylance`, and `Ruff` from user-configurable actions.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
-- **TST-031**: MUST verify the status bar renders explicit base/docs/src/tests paths, omits `git` plus `tools`, and preserves active-theme `accent`/`warning` field-value token separation.
+- **TST-031**: MUST verify the status bar renders the explicit base path, omits `docs`, `src`, `tests`, `git`, and `tools`, and preserves active-theme `accent`/`warning` field-value token separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
-- **TST-033**: MUST verify the status bar renders ordered `base`, `docs`, `src`, `tests`, `context`, `et`, `beep`, and `sound` fields plus the ceiling-based 5-cell context bar.
+- **TST-033**: MUST verify the status bar renders ordered `base`, `context`, `elapsed`, `beep`, and `sound` fields plus the ceiling-based 10-cell context bar.
 - **TST-037**: MUST verify the configuration menu persists terminal-beep flags, selected notify command, sound toggle hotkey bind, and per-level notify commands using the documented menu labels.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
-- **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and prompt timing preserves `↻` plus `Σ` across normal completion but not escape-triggered cancellation.
+- **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
 - **TST-045**: MUST verify default configuration enables terminal-beep flags `end`, `esc`, and `err` before user customization.
-- **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `CLEAR` with the theme `warning` token on the preserved `accent`-derived context-bar background.
-- **TST-036**: MUST verify context usage above 90 percent renders the literal `FULL!` with the theme `error` token on the preserved theme `warning` background.
+- **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `◀ CLEAR ▶ ` with the theme `warning` token on the preserved `accent`-derived context-bar background.
+- **TST-036**: MUST verify context usage above 90 percent renders the literal ` ◀ FULL ▶ ` with the theme `error` token on the preserved theme `warning` background.
 - **TST-043**: MUST verify configuration menus reuse the active CLI settings-list theme semantics for labels, values, descriptions, cursor, and hints.
 - **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
 - **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
@@ -284,7 +285,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify `.pi-usereq/config.json` omits `base-path` and `git-path`, while runtime path tools and status rendering still derive both values correctly.
-- **TST-041**: MUST verify the `pi-usereq` menu exposes `show-config` between `Reset defaults` and `Save and close`, and omits overview rows plus notification reference-only actions.
+- **TST-041**: MUST verify the `pi-usereq` menu exposes `show-config` after `notifications` and before `Reset defaults`, shows the home-relative config path in the value column, and omits overview rows plus notification reference-only actions.
 
 ## 5. Observed Component Model
 

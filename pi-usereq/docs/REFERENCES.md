@@ -1658,7 +1658,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 
 ---
 
-# extension-status.ts | TypeScript | 688L | 32 symbols | 5 imports | 32 comments
+# extension-status.ts | TypeScript | 686L | 32 symbols | 5 imports | 32 comments
 > Path: `src/core/extension-status.ts`
 - @brief Tracks pi-usereq extension status state and renders status-bar telemetry.
 - @details Centralizes hook interception, context-usage snapshots, run timing,
@@ -1769,19 +1769,19 @@ runtime. Runtime is O(1). Side effect: mutates `state.contextUsage`.
 - @return {void} No return value.
 - @satisfies REQ-118, REQ-119
 
-### fn `function countFilledContextCells(` (L275-283)
-- @brief Counts the filled cells rendered by the 5-cell context bar.
+### fn `function countFilledContextCells(` (L277-285)
+- @brief Counts the filled cells rendered by the 10-cell context bar.
 - @details Uses ceiling semantics for positive percentages so any non-zero
 usage occupies at least one cell and zero usage occupies none. Runtime is
 O(1). No external state is mutated.
 - @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
-- @return {number} Filled-cell count in the inclusive range `[0, 5]`.
+- @return {number} Filled-cell count in the inclusive range `[0, 10]`.
 - @satisfies REQ-122
 
-### fn `function resolveContextUsageOverlay(` (L295-314)
+### fn `function resolveContextUsageOverlay(` (L297-316)
 - @brief Resolves the threshold-specific context-bar overlay when required.
-- @details Returns the empty-state `CLEAR` overlay when normalized context
-usage is unavailable or non-positive and returns the high-water `FULL!`
+- @details Returns the empty-state `◀ CLEAR ▶ ` overlay when normalized context
+usage is unavailable or non-positive and returns the centered ` ◀ FULL ▶ `
 overlay with the active theme `error` token when usage exceeds 90 percent.
 Runtime is O(1). No external state is mutated.
 - @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
@@ -1799,8 +1799,8 @@ width. No external state is mutated.
 - @return {string} Rendered overlay text.
 - @satisfies REQ-127, REQ-128
 
-### fn `function formatContextUsageBar(` (L349-361)
-- @brief Formats one 5-cell context-usage bar.
+### fn `function formatContextUsageBar(` (L351-363)
+- @brief Formats one 10-cell context-usage bar.
 - @details Renders threshold-specific overlays for empty and high-water states;
 otherwise renders filled cells with the theme `warning` token on an
 accent-derived background and unfilled cells in `dim` on the same background
@@ -1808,10 +1808,10 @@ to preserve constant bar width. Runtime is O(1). No external state is
 mutated.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
 - @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
-- @return {string} Rendered 5-cell bar or overlay.
+- @return {string} Rendered 10-cell bar or overlay.
 - @satisfies REQ-121, REQ-122, REQ-126, REQ-127, REQ-128
 
-### fn `function formatStatusDuration(durationMs: number): string` (L372-377)
+### fn `function formatStatusDuration(durationMs: number): string` (L374-379)
 - @brief Formats one elapsed-duration value as `M:SS`.
 - @details Floors the input to whole seconds, keeps minutes unbounded above 59,
 and zero-pads seconds to two digits. Runtime is O(1). No external state is
@@ -1820,7 +1820,27 @@ mutated.
 - @return {string} Duration rendered as `M:SS`.
 - @satisfies REQ-125
 
-### fn `function formatStatusField(` (L388-394)
+### fn `function formatCompletedStatusDuration(` (L390-394)
+- @brief Formats one optional completed-duration value.
+- @details Returns the canonical unset placeholder `--:--` until the supplied
+timer receives a normally completed prompt duration, then delegates to
+`formatStatusDuration(...)`. Runtime is O(1). No external state is mutated.
+- @param[in] durationMs {number | undefined} Optional completed-duration value.
+- @return {string} Rendered duration or unset placeholder.
+- @satisfies REQ-124
+
+### fn `function formatElapsedStatusValue(` (L407-417)
+- @brief Formats the consolidated `elapsed` status-bar value.
+- @details Emits the active prompt segment `⏱︎ <active>`, the latest normally
+completed segment `⚑ <last>`, and the accumulated successful-runtime segment
+`⌛︎ <total>` with fixed spacing. Runtime is O(1). No external state is
+mutated.
+- @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
+- @param[in] nowMs {number} Current wall-clock time in milliseconds.
+- @return {string} Consolidated `elapsed` field value.
+- @satisfies REQ-123, REQ-124, REQ-125, REQ-159
+
+### fn `function formatStatusField(` (L428-434)
 - @brief Formats one standard status-bar field.
 - @details Renders the field label in accent color and the value in warning
 color. Runtime is O(n) in combined text length. No external state is mutated.
@@ -1848,12 +1868,13 @@ Runtime is O(n) in message count. No external state is mutated.
 - @return {boolean} `true` when the run ended in aborted state.
 - @satisfies REQ-125
 
-### fn `function buildPiUsereqStatusText(` (L444-481)
+### fn `function buildPiUsereqStatusText(` (L485-507)
 - @brief Builds the full single-line pi-usereq status-bar payload.
-- @details Renders git, base, docs, tests, src, tools, context, elapsed, last, beep, and sound fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(s) in configured source-path count plus runtime git probing. No external state is mutated.
-- @param[in] cwd {string} Runtime working directory used for git/base path derivation.
+- @details Renders base, context, elapsed, beep, and sound fields in the
+canonical order with dim bullet separators and threshold-specific context-bar
+overlays. Runtime is O(1). No external state is mutated.
+- @param[in] cwd {string} Runtime working directory used for base-path derivation.
 - @param[in] config {UseReqConfig} Effective project configuration.
-- @param[in] activeTools {readonly string[]} Active runtime tool names.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
 - @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
 - @param[in] nowMs {number} Current wall-clock time in milliseconds.
@@ -1949,15 +1970,17 @@ limited to interval disposal and in-memory state mutation.
 |`backgroundize`|fn||203-219|const backgroundize = (color: StatusForegroundColor, text...|
 |`normalizeContextUsage`|fn||230-247|function normalizeContextUsage(|
 |`refreshContextUsage`|fn||259-264|function refreshContextUsage(|
-|`countFilledContextCells`|fn||275-283|function countFilledContextCells(|
-|`resolveContextUsageOverlay`|fn||295-314|function resolveContextUsageOverlay(|
-|`formatContextUsageOverlay`|fn||327-335|function formatContextUsageOverlay(|
-|`formatContextUsageBar`|fn||349-361|function formatContextUsageBar(|
-|`formatStatusDuration`|fn||372-377|function formatStatusDuration(durationMs: number): string|
-|`formatStatusField`|fn||388-394|function formatStatusField(|
-|`formatRenderedStatusField`|fn||406-412|function formatRenderedStatusField(|
-|`didAgentEndAbort`|fn||423-430|function didAgentEndAbort(messages: AgentEndEvent["messag...|
-|`buildPiUsereqStatusText`|fn||444-481|function buildPiUsereqStatusText(|
+|`countFilledContextCells`|fn||277-285|function countFilledContextCells(|
+|`resolveContextUsageOverlay`|fn||297-316|function resolveContextUsageOverlay(|
+|`formatContextUsageOverlay`|fn||329-337|function formatContextUsageOverlay(|
+|`formatContextUsageBar`|fn||351-363|function formatContextUsageBar(|
+|`formatStatusDuration`|fn||374-379|function formatStatusDuration(durationMs: number): string|
+|`formatCompletedStatusDuration`|fn||390-394|function formatCompletedStatusDuration(|
+|`formatElapsedStatusValue`|fn||407-417|function formatElapsedStatusValue(|
+|`formatStatusField`|fn||428-434|function formatStatusField(|
+|`formatRenderedStatusField`|fn||446-452|function formatRenderedStatusField(|
+|`didAgentEndAbort`|fn||463-470|function didAgentEndAbort(messages: AgentEndEvent["messag...|
+|`buildPiUsereqStatusText`|fn||485-507|function buildPiUsereqStatusText(|
 |`stopStatusTicker`|fn||491-496|function stopStatusTicker(controller: PiUsereqStatusContr...|
 |`syncPiUsereqStatusTicker`|fn||508-524|function syncPiUsereqStatusTicker(|
 |`createPiUsereqStatusController`|fn||535-549|export function createPiUsereqStatusController(|
@@ -3064,7 +3087,7 @@ import { isSameOrAncestorPath } from "./path-context.js";
 
 ---
 
-# settings-menu.ts | TypeScript | 233L | 11 symbols | 2 imports | 12 comments
+# settings-menu.ts | TypeScript | 238L | 11 symbols | 2 imports | 12 comments
 > Path: `src/core/settings-menu.ts`
 - @brief Renders pi-usereq configuration menus with the shared pi.dev settings style.
 - @details Wraps `SettingsList` in one extension-command helper that exposes right-aligned current values, built-in circular scrolling, bottom-line descriptions, and a deterministic bridge for offline test harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
@@ -3077,9 +3100,9 @@ import { Container, SettingsList, Text, type Component, type SettingItem, type S
 
 ## Definitions
 
-### iface `export interface PiUsereqSettingsMenuChoice` (L14-19)
+### iface `export interface PiUsereqSettingsMenuChoice` (L14-20)
 - @brief Describes one selectable pi-usereq settings-menu choice.
-- @details Stores the stable action identifier, left-column label, right-column current value, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
+- @details Stores the stable action identifier, left-column label, right-column current value, optional value-tone override, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
 
 ### iface `export interface PiUsereqSettingsMenuBridge` (L25-30)
 - @brief Describes the offline bridge exposed by shared settings-menu components.
@@ -3139,9 +3162,10 @@ Runtime is O(n) in title length. No external state is mutated.
 - @param[in] done {(value?: string) => void} Outer custom-UI completion callback.
 - @return {Component} Immediate-completion submenu component.
 
-### fn `function buildSettingItems(` (L156-167)
+### fn `function buildSettingItems(` (L158-172)
 - @brief Builds `SettingsList` items from one menu-choice vector.
-- @details Copies labels, current values, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier. Runtime is O(n) in choice count. No external state is mutated.
+- @details Copies labels, current values, value-tone overrides, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier. Runtime is O(n) in choice count. No external state is mutated.
+- @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
 - @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
 - @param[in] done {(value?: string) => void} Outer custom-UI completion callback.
 - @return {SettingItem[]} `SettingsList` item vector.
@@ -3158,7 +3182,7 @@ Runtime is O(n) in title length. No external state is mutated.
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`PiUsereqSettingsMenuChoice`|iface||14-19|export interface PiUsereqSettingsMenuChoice|
+|`PiUsereqSettingsMenuChoice`|iface||14-20|export interface PiUsereqSettingsMenuChoice|
 |`PiUsereqSettingsMenuBridge`|iface||25-30|export interface PiUsereqSettingsMenuBridge|
 |`PiUsereqSettingsMenuComponent`|iface||36-38|export interface PiUsereqSettingsMenuComponent extends Co...|
 |`PiUsereqSettingsThemeColor`|type||46||
@@ -3167,8 +3191,8 @@ Runtime is O(n) in title length. No external state is mutated.
 |`buildPiUsereqSettingsListTheme`|fn||95-109|function buildPiUsereqSettingsListTheme(|
 |`formatPiUsereqSettingsMenuTitle`|fn||121-126|function formatPiUsereqSettingsMenuTitle(|
 |`createImmediateSelectionComponent`|fn||135-147|function createImmediateSelectionComponent(choiceId: stri...|
-|`buildSettingItems`|fn||156-167|function buildSettingItems(|
-|`showPiUsereqSettingsMenu`|fn||178-233|export async function showPiUsereqSettingsMenu(|
+|`buildSettingItems`|fn||158-172|function buildSettingItems(|
+|`showPiUsereqSettingsMenu`|fn||183-238|export async function showPiUsereqSettingsMenu(|
 
 
 ---
@@ -4072,7 +4096,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 2210L | 50 symbols | 21 imports | 53 comments
+# index.ts | TypeScript | 2212L | 50 symbols | 21 imports | 53 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -4132,7 +4156,7 @@ cost.
 - @return {UseReqConfig} Effective project configuration.
 - @satisfies REQ-030, REQ-145, REQ-146
 
-### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L191-194)
+### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L196-199)
 - @brief Persists project configuration from the extension runtime.
 - @details Resolves the project base, normalizes configured directory paths into project-relative form, and delegates persistence to `saveConfig` without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
 - @param[in] cwd {string} Current working directory.
@@ -4140,7 +4164,16 @@ cost.
 - @return {void} No return value.
 - @satisfies REQ-146
 
-### fn `function collectProjectStaticCheckSelection(` (L203-234)
+### fn `function formatProjectConfigPathForMenu(cwd: string): string` (L210-212)
+- @brief Formats the current project config path for top-level menu display.
+- @details Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived
+project base and formats it relative to the user home when possible. Runtime
+is O(p) in path length. No external state is mutated.
+- @param[in] cwd {string} Current working directory.
+- @return {string} User-home-relative or absolute config path display value.
+- @satisfies REQ-162
+
+### fn `function collectProjectStaticCheckSelection(` (L221-252)
 - @brief Collects the project-scoped static-check selection used by the agent tool.
 - @details Resolves configured source plus test directories, reuses the same fixture-root exclusions as `runProjectStaticCheck`, and returns canonical relative file paths for structured payload emission. Runtime is O(F) plus project file-discovery cost. Side effects are limited to filesystem reads and git subprocesses delegated through `collectSourceFiles`.
 - @param[in] projectBase {string} Resolved project base path.
@@ -4409,12 +4442,13 @@ updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `function buildPiUsereqMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1962-2019)
+### fn `function buildPiUsereqMenuChoices(` (L1956-2017)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
-- @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
+- @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the display-only config path beside `show-config`. Runtime is O(s) in source-directory count. No external state is mutated.
+- @param[in] cwd {string} Current working directory.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
-- @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152
+- @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162
 
 ### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2028-2049)
 - @brief Builds the shared settings-menu choices for source-directory management.
@@ -4430,14 +4464,14 @@ updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L2084-2165)
+### fn `async function configurePiUsereq(` (L2082-2167)
 - @brief Runs the top-level pi-usereq configuration menu.
-- @details Loads project config, exposes docs/test/source/static-check/startup-tool/notification actions through the shared settings-menu renderer, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+- @details Loads project config, exposes docs/test/source/static-check/startup-tool/notification actions through the shared settings-menu renderer, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
-- @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154
+- @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162
 
 ### fn `const ensureSaved = () => saveProjectConfig(ctx.cwd, config)` (L2092-2096)
 
@@ -4473,8 +4507,9 @@ timer scheduling.
 |`getProjectBase`|fn||153-155|function getProjectBase(cwd: string): string|
 |`buildSharedRuntimePathFacts`|fn||165-169|function buildSharedRuntimePathFacts(cwd: string, config:...|
 |`loadProjectConfig`|fn||178-181|function loadProjectConfig(cwd: string): UseReqConfig|
-|`saveProjectConfig`|fn||191-194|function saveProjectConfig(cwd: string, config: UseReqCon...|
-|`collectProjectStaticCheckSelection`|fn||203-234|function collectProjectStaticCheckSelection(|
+|`saveProjectConfig`|fn||196-199|function saveProjectConfig(cwd: string, config: UseReqCon...|
+|`formatProjectConfigPathForMenu`|fn||210-212|function formatProjectConfigPathForMenu(cwd: string): st...|
+|`collectProjectStaticCheckSelection`|fn||221-252|function collectProjectStaticCheckSelection(|
 |`buildTokenToolExecutionStderr`|fn||242-248|function buildTokenToolExecutionStderr(payload: TokenTool...|
 |`buildTokenToolExecuteResult`|fn||257-274|function buildTokenToolExecuteResult(|
 |`buildReferenceToolExecuteResult`|fn||283-300|function buildReferenceToolExecuteResult(|
@@ -4510,12 +4545,12 @@ timer scheduling.
 |`buildSupportedStaticCheckLanguageChoices`|fn||1808-1827|function buildSupportedStaticCheckLanguageChoices(config:...|
 |`buildConfiguredStaticCheckLanguageChoices`|fn||1835-1852|function buildConfiguredStaticCheckLanguageChoices(config...|
 |`configureStaticCheckMenu`|fn||1862-1928|async function configureStaticCheckMenu(ctx: ExtensionCom...|
-|`buildPiUsereqMenuChoices`|fn||1962-2019|function buildPiUsereqMenuChoices(config: UseReqConfig): ...|
+|`buildPiUsereqMenuChoices`|fn||1956-2017|function buildPiUsereqMenuChoices(|
 |`buildSrcDirMenuChoices`|fn||2028-2049|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
 |`buildSrcDirRemovalChoices`|fn||2058-2073|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||2084-2165|async function configurePiUsereq(|
+|`configurePiUsereq`|fn||2082-2167|async function configurePiUsereq(|
 |`ensureSaved`|fn||2092-2096|const ensureSaved = () => saveProjectConfig(ctx.cwd, config)|
 |`refreshStatus`|fn||2093-2096|const refreshStatus = () =>|
-|`registerConfigCommands`|fn||2175-2185|function registerConfigCommands(|
-|`piUsereqExtension`|fn||2201-2209|export default function piUsereqExtension(pi: ExtensionAP...|
+|`registerConfigCommands`|fn||2177-2187|function registerConfigCommands(|
+|`piUsereqExtension`|fn||2204-2212|export default function piUsereqExtension(pi: ExtensionAP...|
 

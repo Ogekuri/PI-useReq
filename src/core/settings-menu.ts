@@ -9,12 +9,13 @@ import { Container, SettingsList, Text, type Component, type SettingItem, type S
 
 /**
  * @brief Describes one selectable pi-usereq settings-menu choice.
- * @details Stores the stable action identifier, left-column label, right-column current value, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the stable action identifier, left-column label, right-column current value, optional value-tone override, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqSettingsMenuChoice {
   id: string;
   label: string;
   value: string;
+  valueTone?: "default" | "dim";
   description: string;
 }
 
@@ -148,12 +149,14 @@ function createImmediateSelectionComponent(choiceId: string, done: (value?: stri
 
 /**
  * @brief Builds `SettingsList` items from one menu-choice vector.
- * @details Copies labels, current values, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier. Runtime is O(n) in choice count. No external state is mutated.
+ * @details Copies labels, current values, value-tone overrides, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier. Runtime is O(n) in choice count. No external state is mutated.
+ * @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
  * @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
  * @param[in] done {(value?: string) => void} Outer custom-UI completion callback.
  * @return {SettingItem[]} `SettingsList` item vector.
  */
 function buildSettingItems(
+  theme: PiUsereqSettingsTheme,
   choices: PiUsereqSettingsMenuChoice[],
   done: (value?: string) => void,
 ): SettingItem[] {
@@ -161,7 +164,9 @@ function buildSettingItems(
     id: choice.id,
     label: choice.label,
     description: choice.description,
-    currentValue: choice.value,
+    currentValue: choice.valueTone === "dim"
+      ? theme.fg("dim", choice.value)
+      : choice.value,
     submenu: () => createImmediateSelectionComponent(choice.id, done),
   }));
 }
@@ -188,7 +193,7 @@ export async function showPiUsereqSettingsMenu(
       0,
     );
     const settingsList = new SettingsList(
-      buildSettingItems(choices, done),
+      buildSettingItems(theme, choices, done),
       Math.min(Math.max(choices.length, 1), 12),
       buildPiUsereqSettingsListTheme(theme),
       () => undefined,

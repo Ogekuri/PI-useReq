@@ -9,6 +9,7 @@ import {
   getDefaultConfig,
   getProjectConfigPath,
 } from "../src/core/config.js";
+import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
 import {
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
@@ -288,9 +289,9 @@ function formatFakeThemeBackgroundFromForeground(color: string, text: string): s
 
 /**
  * @brief Builds the expected fake context-bar payload for assertions.
- * @details Resolves the empty-state `CLEAR` overlay for unavailable or
- * non-positive percent, resolves the high-water `FULL!` overlay for percent
- * above 90, and otherwise reconstructs the 5-cell bar. Runtime is O(1). No
+ * @details Resolves the empty-state `◀ CLEAR ▶ ` overlay for unavailable or
+ * non-positive percent, resolves the centered ` ◀ FULL ▶ ` overlay for percent
+ * above 90, and otherwise reconstructs the 10-cell bar. Runtime is O(1). No
  * external state is mutated.
  * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-bar facts.
  * @return {string} Encoded context-bar string.
@@ -302,16 +303,16 @@ function buildExpectedFakeContextBar(options: {
   if (options.percent === undefined || options.percent === null || options.percent <= 0) {
     return formatFakeThemeBackgroundFromForeground(
       "accent",
-      formatFakeThemeForeground("warning", "CLEAR"),
+      formatFakeThemeForeground("warning", "◀ CLEAR ▶ "),
     );
   }
   if (options.percent > 90) {
     return formatFakeThemeBackgroundFromForeground(
       "warning",
-      formatFakeThemeForeground("error", "FULL!"),
+      formatFakeThemeForeground("error", " ◀ FULL ▶ "),
     );
   }
-  return Array.from({ length: 5 }, (_value, index) =>
+  return Array.from({ length: 10 }, (_value, index) =>
     formatFakeThemeBackgroundFromForeground(
       "accent",
       formatFakeThemeForeground(index < options.filledCells ? "warning" : "dim", "▓"),
@@ -321,15 +322,17 @@ function buildExpectedFakeContextBar(options: {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, separators, context bar, and consolidated timing field emitted by the extension using deterministic fake theme markers. Runtime is O(s) in source-path count. No external state is mutated.
- * @param[in] options {{ basePath: string; docsDir: string; testsDir: string; srcDir: string[]; contextFilledCells: number; contextPercent?: number | null; et: string; beep?: string; sound?: string }} Expected status facts.
+ * @details Reconstructs the field order, separators, context bar, and
+ * consolidated elapsed field emitted by the extension using deterministic fake
+ * theme markers. Runtime is O(1). No external state is mutated.
+ * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; beep?: string; sound?: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
   basePath: string;
-  docsDir: string;
-  testsDir: string;
-  srcDir: string[];
+  docsDir?: string;
+  testsDir?: string;
+  srcDir?: string[];
   contextFilledCells: number;
   contextPercent?: number | null;
   et: string;
@@ -344,11 +347,8 @@ function buildExpectedFakeStatusText(options: {
   });
   return [
     buildField("base", options.basePath),
-    buildField("docs", options.docsDir),
-    buildField("src", options.srcDir.join(",")),
-    buildField("tests", options.testsDir),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
-    buildField("et", options.et),
+    buildField("elapsed", options.et),
     buildField("beep", options.beep ?? "end,esc,err"),
     buildField("sound", options.sound ?? "none"),
   ].join(formatFakeThemeForeground("dim", " • "));
@@ -1393,7 +1393,9 @@ test("configuration menu omits prompt-delivery controls and persisted config omi
 });
 
 test("configuration menus expose show-config ordering and omit overview or notification-reference rows", async () => {
-  const cwd = createTempDir("pi-usereq-menu-structure-");
+  const cwd = fs.mkdtempSync(
+    path.join(process.env.HOME ?? process.cwd(), "pi-usereq-menu-structure-"),
+  );
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
@@ -1403,6 +1405,7 @@ test("configuration menus expose show-config ordering and omit overview or notif
 
   await command!.handler("", ctx);
 
+  const renderedMenu = (ctx.__state.customRenderLines[0] ?? []).join("\n");
   assert.deepEqual(ctx.__state.selectCalls[0]?.items ?? [], [
     "docs-dir",
     "tests-dir",
@@ -1410,10 +1413,11 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "static-check",
     "startup tools",
     "notifications",
-    "Reset defaults",
     "show-config",
+    "Reset defaults",
     "Save and close",
   ]);
+  assert.ok(renderedMenu.includes(formatRuntimePathForDisplay(getProjectConfigPath(cwd))));
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "Toggle beep on success",
     "Toggle beep on escape",
@@ -1508,7 +1512,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
       testsDir: "tests",
       srcDir: ["src", "foobar"],
       contextFilledCells: 0,
-      et: "▶idle,↻--:--,Σ--:--",
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
     }),
   );
 });
@@ -1533,7 +1537,7 @@ test("session_start renders the CLEAR overlay when context usage is empty", asyn
       srcDir: ["src"],
       contextFilledCells: 0,
       contextPercent: 0,
-      et: "▶idle,↻--:--,Σ--:--",
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
     }),
   );
 });
@@ -1598,9 +1602,9 @@ test("context hook refreshes context usage and rounds progress cells upward", as
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      contextFilledCells: 1,
+      contextFilledCells: 2,
       contextPercent: 19.1,
-      et: "▶idle,↻--:--,Σ--:--",
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
     }),
   );
 });
@@ -1625,9 +1629,9 @@ test("context hook renders the FULL! overlay when usage exceeds ninety percent",
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      contextFilledCells: 5,
+      contextFilledCells: 10,
       contextPercent: 91,
-      et: "▶idle,↻--:--,Σ--:--",
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
     }),
   );
 });
@@ -1667,9 +1671,9 @@ test("status FULL overlay uses only CLI-supported theme tokens", async () => {
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      contextFilledCells: 5,
+      contextFilledCells: 10,
       contextPercent: 91,
-      et: "▶idle,↻--:--,Σ--:--",
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
     }),
   );
 });
@@ -1708,7 +1712,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "▶0:00,↻--:--,Σ--:--",
+        et: " ⏱︎ 0:00 ⚑ --:-- ⌛︎ --:--",
       }),
     );
 
@@ -1722,7 +1726,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "▶1:01,↻--:--,Σ--:--",
+        et: " ⏱︎ 1:01 ⚑ --:-- ⌛︎ --:--",
       }),
     );
 
@@ -1743,7 +1747,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "▶idle,↻1:01,Σ1:01",
+        et: " ⏱︎ --:-- ⚑ 1:01 ⌛︎ 1:01",
       }),
     );
 
@@ -1767,7 +1771,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "▶idle,↻1:01,Σ1:01",
+        et: " ⏱︎ --:-- ⚑ 1:01 ⌛︎ 1:01",
       }),
     );
     assert.ok(clearedHandles.length >= 2);
@@ -1891,7 +1895,7 @@ test("configuration menu can persist pi-notify settings", async () => {
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: "▶idle,↻--:--,Σ--:--",
+      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
       beep: "esc",
       sound: "high",
     }),
@@ -1927,7 +1931,7 @@ test("sound toggle shortcut cycles persisted pi-notify sound levels", async () =
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "▶idle,↻--:--,Σ--:--",
+        et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
         sound: expectedSound,
       }),
     );
