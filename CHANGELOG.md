@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.2.0](https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0) - 2026-04-19
+### ⛰️  Features
+- Add release-npm.yml file.
+- add configurable prompt beep and sound hooks [useReq] *(notify)*
+  - extend SRS with pi-notify beep and sound requirements
+  - add pi-notify config, status, and agent_end handlers
+  - add configurable shortcut, menu controls, and sound commands
+  - update extension and debug harness tests for new status fields
+
+### 🐛  Bug Fixes
+- Fix .github/workflows/release-npm.yml file.
+
+### 🚜  Changes
+- publish pi-usereq in release workflow [useReq] *(release-npm)*
+  - update REQ-138 REQ-141 and add REQ-155/TST-042
+  - keep existing tag trigger and changelog release flow intact
+  - add npm setup and publish steps plus workflow assertions
+- BREAKING CHANGE: derive runtime paths and restyle config menus [useReq] *(pi-usereq)*
+  - Update requirements for runtime-only base/git paths.
+  - Adopt shared settings-style menus with show-config submenu.
+  - Switch notify defaults to %%INSTALLATION_PATH%% and alt+s.
+  - Add status-bar git/base fields and CLEAR/FULL overlays.
+  - Refresh references and workflow documentation.
+- wire npm publish workflow and requirements [useReq] *(release-npm)*
+  - update REQUIREMENTS.md with release workflow requirements and evidence
+  - implement tag-gated npm publication and GitHub Release automation
+  - add workflow-focused verification test and runtime model updates
+
 ## [0.1.0](https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0) - 2026-04-19
 ### ⛰️  Features
 - Add src/resources/sounds/ files.
@@ -164,5 +192,7 @@
 # History
 
 - \[0.1.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
+- \[0.2.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.2.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
+[0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
