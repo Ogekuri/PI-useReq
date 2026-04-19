@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.5.0](https://github.com/Ogekuri/PI-useReq/compare/v0.4.0..v0.5.0) - 2026-04-19
+### ⛰️  Features
+- add pushover completion notifications [useReq] *(notify)*
+  - Add Pushover configuration, status-bar, and successful prompt delivery.
+  - Update requirements, workflow, references, and extension tests for REQ-163..172.
+
+### 🐛  Bug Fixes
+- Fix ignore file.
+- Fix move req in pi-usereq/docs dir.
+- Fix move req in pi-usereq/docs dir.
+
+### 🚜  Changes
+- BREAKING CHANGE: revise elapsed footer and config menu path [useReq] *(status-bar)*
+  - update requirements for footer, context bar, and show-config ordering
+  - implement elapsed/footer rendering and config-path menu display
+  - refresh workflow/references docs and extension registration tests
+- BREAKING CHANGE: remove Pylance and Ruff modules [useReq] *(static-check)*
+  - update requirements, workflow, and references
+  - simplify static-check menus to Command only
+  - keep Dummy debug-only and remove obsolete fixtures
+- BREAKING CHANGE: simplify status bar timing and defaults [useReq] *(extension-status)*
+  - update requirements for the breaking status-bar contract
+  - remove git and tools fields and switch base to absolute path
+  - consolidate timing into et with active, last, and total segments
+  - enable all beep flags by default and refresh docs plus tests
+
+### ◀️  Revert
+- Roll back branch to bb44b543 (bb44b543846f3d73abc82f852784ec3c4a503d54).
+
 ## [0.4.0](https://github.com/Ogekuri/PI-useReq/compare/v0.3.0..v0.4.0) - 2026-04-19
 ### 🚜  Changes
 - add npm provenance metadata and release checks [useReq] *(package)*
@@ -214,8 +243,10 @@
 - \[0.2.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.2.0
 - \[0.3.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.3.0
 - \[0.4.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.4.0
+- \[0.5.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.5.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
 [0.3.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.2.0..v0.3.0
 [0.4.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.3.0..v0.4.0
+[0.5.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.4.0..v0.5.0

@@ -8,7 +8,7 @@
  * @brief Declares the extension version string.
  * @details The value is exported for external inspection and packaging metadata alignment. Access complexity is O(1).
  */
-export const VERSION = "0.4.0"
+export const VERSION = "0.5.0"
 
 import path from "node:path";
 import type {
