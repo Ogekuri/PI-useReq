@@ -128,6 +128,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-124**: MUST render `last` immediately after `elapsed`, showing `N/A` before any normally completed prompt run and otherwise the final `elapsed` value of the latest normally completed run.
 - **REQ-125**: MUST keep `elapsed` and `last` minutes unbounded above 59, zero-pad seconds to two digits, and preserve `last` when escape-triggered cancellation ends the active run.
 - **REQ-126**: MUST render `context` bar cells as yellow `▓` characters on a violet background consistent with the field-label color.
+- **REQ-127**: MUST overlay the literal `claer` in yellow on the `context` bar while preserving the empty bar background when normalized context usage is unavailable or equals 0 percent.
+- **REQ-128**: MUST overlay the literal `full!` in bright red on the `context` bar while preserving the filled yellow bar background when normalized context usage exceeds 90 percent.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
@@ -214,6 +216,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
 - **TST-033**: MUST verify the status bar renders ordered `tools`, `context`, `elapsed`, and `last` fields plus the ceiling-based 5-cell context bar.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and prompt timing preserves `last` across normal completion but not escape-triggered cancellation.
+- **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `claer` in yellow on the preserved empty context-bar background.
+- **TST-036**: MUST verify context usage above 90 percent renders the literal `full!` in bright red on the preserved filled context-bar background.
 - **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
 - **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.

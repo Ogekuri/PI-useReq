@@ -256,11 +256,44 @@ function formatFakeThemeBackgroundFromForeground(color: string, text: string): s
 }
 
 /**
+ * @brief Builds the expected fake context-bar payload for assertions.
+ * @details Resolves the empty-state `claer` overlay for unavailable or
+ * non-positive percent, resolves the high-water `full!` overlay for percent
+ * above 90, and otherwise reconstructs the 5-cell bar. Runtime is O(1). No
+ * external state is mutated.
+ * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-bar facts.
+ * @return {string} Encoded context-bar string.
+ */
+function buildExpectedFakeContextBar(options: {
+  filledCells: number;
+  percent?: number | null;
+}): string {
+  if (options.percent === undefined || options.percent === null || options.percent <= 0) {
+    return formatFakeThemeBackgroundFromForeground(
+      "accent",
+      formatFakeThemeForeground("warning", "claer"),
+    );
+  }
+  if (options.percent > 90) {
+    return formatFakeThemeBackgroundFromForeground(
+      "warning",
+      formatFakeThemeForeground("redBright", "full!"),
+    );
+  }
+  return Array.from({ length: 5 }, (_value, index) =>
+    formatFakeThemeBackgroundFromForeground(
+      "accent",
+      formatFakeThemeForeground(index < options.filledCells ? "warning" : "dim", "▓"),
+    ),
+  ).join("");
+}
+
+/**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
  * @details Reconstructs the field order, separators, context bar, and timing
  * fields emitted by the extension using deterministic fake theme markers.
  * Runtime is O(s) in source-path count. No external state is mutated.
- * @param[in] options {{ docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; elapsed: string; last: string }} Expected status facts.
+ * @param[in] options {{ docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; contextPercent?: number | null; elapsed: string; last: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -269,17 +302,16 @@ function buildExpectedFakeStatusText(options: {
   srcDir: string[];
   toolCount: number;
   contextFilledCells: number;
+  contextPercent?: number | null;
   elapsed: string;
   last: string;
 }): string {
   const buildField = (fieldName: string, value: string): string =>
     `${formatFakeThemeForeground("accent", `${fieldName}:`)}${formatFakeThemeForeground("warning", value)}`;
-  const contextBar = Array.from({ length: 5 }, (_value, index) =>
-    formatFakeThemeBackgroundFromForeground(
-      "accent",
-      formatFakeThemeForeground(index < options.contextFilledCells ? "warning" : "dim", "▓"),
-    ),
-  ).join("");
+  const contextBar = buildExpectedFakeContextBar({
+    filledCells: options.contextFilledCells,
+    percent: options.contextPercent,
+  });
   return [
     buildField("docs", options.docsDir),
     buildField("tests", options.testsDir),
@@ -1335,6 +1367,32 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   );
 });
 
+test("session_start renders the claer overlay when context usage is empty", async () => {
+  const cwd = createTempDir("pi-usereq-context-empty-status-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    getContextUsage: () => ({ tokens: 0, contextWindow: 1000, percent: 0 }),
+  });
+
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+      contextFilledCells: 0,
+      contextPercent: 0,
+      elapsed: "idle",
+      last: "N/A",
+    }),
+  );
+});
+
 test("extension registers wrappers for all pi-usereq status hooks", () => {
   const pi = createFakePi();
   piUsereqExtension(pi);
@@ -1396,6 +1454,35 @@ test("context hook refreshes context usage and rounds progress cells upward", as
       srcDir: ["src"],
       toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
       contextFilledCells: 1,
+      contextPercent: 19.1,
+      elapsed: "idle",
+      last: "N/A",
+    }),
+  );
+});
+
+test("context hook renders the full! overlay when usage exceeds ninety percent", async () => {
+  const cwd = createTempDir("pi-usereq-context-full-status-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const contextUsage = { tokens: 910, contextWindow: 1000, percent: 91 };
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    getContextUsage: () => ({ ...contextUsage }),
+  });
+
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+  await pi.emit("context", { messages: [] }, ctx);
+
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+      contextFilledCells: 5,
+      contextPercent: 91,
       elapsed: "idle",
       last: "N/A",
     }),

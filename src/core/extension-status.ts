@@ -17,11 +17,11 @@ import type { UseReqConfig } from "./config.js";
 
 /**
  * @brief Enumerates the foreground colors consumed by pi-usereq status rendering.
- * @details Restricts the status formatter to the exact accent, warning, and dim
- * color roles already used by the extension status bar. Compile-time only and
- * introduces no runtime cost.
+ * @details Restricts the status formatter to the semantic field colors plus the
+ * bright-red overflow overlay token used by the context bar. Compile-time only
+ * and introduces no runtime cost.
  */
-type StatusForegroundColor = "accent" | "warning" | "dim";
+type StatusForegroundColor = "accent" | "warning" | "dim" | "redBright";
 
 /**
  * @brief Describes the raw theme capabilities required for status rendering.
@@ -37,16 +37,30 @@ interface RawStatusTheme {
 
 /**
  * @brief Describes the normalized theme adapter used by status formatters.
- * @details Exposes deterministic label, value, separator, and context-cell
- * renderers so status text generation stays independent from the raw theme API.
- * Compile-time only and introduces no runtime cost.
+ * @details Exposes deterministic label, value, foreground, background, and
+ * context-cell renderers so status text generation stays independent from the
+ * raw theme API. Compile-time only and introduces no runtime cost.
  */
 interface StatusThemeAdapter {
   label: (fieldName: string) => string;
   value: (text: string) => string;
+  colorize: (color: StatusForegroundColor, text: string) => string;
+  backgroundize: (color: StatusForegroundColor, text: string) => string;
   separator: string;
   filledContextCell: string;
   emptyContextCell: string;
+}
+
+/**
+ * @brief Describes one fixed-width context-bar overlay.
+ * @details Stores the literal text plus foreground and background color roles
+ * used when the context bar must render threshold-specific labels instead of
+ * block glyphs. Compile-time only and introduces no runtime cost.
+ */
+interface ContextUsageOverlaySpec {
+  backgroundColor: StatusForegroundColor;
+  foregroundColor: StatusForegroundColor;
+  text: "claer" | "full!";
 }
 
 /**
@@ -170,26 +184,31 @@ function applyForegroundAsBackground(
 
 /**
  * @brief Builds the normalized theme adapter used by pi-usereq status formatters.
- * @details Precomputes label, value, separator, and context-cell renderers so
- * status formatting remains stable across real TUI themes and deterministic
- * test doubles. Runtime is O(1). No external state is mutated.
+ * @details Precomputes label, value, foreground, background, separator, and
+ * context-cell renderers so status formatting remains stable across real TUI
+ * themes and deterministic test doubles. Runtime is O(1). No external state
+ * is mutated.
  * @param[in] theme {RawStatusTheme} Raw theme implementation from `ctx.ui.theme`.
  * @return {StatusThemeAdapter} Normalized status-theme adapter.
  */
 function createStatusThemeAdapter(theme: RawStatusTheme): StatusThemeAdapter {
+  const colorize = (color: StatusForegroundColor, text: string): string =>
+    theme.fg(color, text);
+  const backgroundize = (color: StatusForegroundColor, text: string): string =>
+    applyForegroundAsBackground(theme, color, text);
   return {
-    label: (fieldName: string): string => theme.fg("accent", `${fieldName}:`),
-    value: (text: string): string => theme.fg("warning", text),
-    separator: theme.fg("dim", " • "),
-    filledContextCell: applyForegroundAsBackground(
-      theme,
+    label: (fieldName: string): string => colorize("accent", `${fieldName}:`),
+    value: (text: string): string => colorize("warning", text),
+    colorize,
+    backgroundize,
+    separator: colorize("dim", " • "),
+    filledContextCell: backgroundize(
       "accent",
-      theme.fg("warning", "▓"),
+      colorize("warning", "▓"),
     ),
-    emptyContextCell: applyForegroundAsBackground(
-      theme,
+    emptyContextCell: backgroundize(
       "accent",
-      theme.fg("dim", "▓"),
+      colorize("dim", "▓"),
     ),
   };
 }
@@ -258,19 +277,76 @@ function countFilledContextCells(
 }
 
 /**
+ * @brief Resolves the threshold-specific context-bar overlay when required.
+ * @details Returns the empty-state `claer` overlay when normalized context
+ * usage is unavailable or non-positive and returns the high-water `full!`
+ * overlay when usage exceeds 90 percent. Runtime is O(1). No external state is
+ * mutated.
+ * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
+ * @return {ContextUsageOverlaySpec | undefined} Overlay spec when a replacement label is required.
+ * @satisfies REQ-127, REQ-128
+ */
+function resolveContextUsageOverlay(
+  contextUsage: ContextUsage | undefined,
+): ContextUsageOverlaySpec | undefined {
+  const percent = contextUsage?.percent;
+  if (percent === undefined || percent === null || percent <= 0) {
+    return {
+      backgroundColor: "accent",
+      foregroundColor: "warning",
+      text: "claer",
+    };
+  }
+  if (percent > 90) {
+    return {
+      backgroundColor: "warning",
+      foregroundColor: "redBright",
+      text: "full!",
+    };
+  }
+  return undefined;
+}
+
+/**
+ * @brief Formats one threshold-specific context-bar overlay.
+ * @details Renders the fixed-width overlay text with the requested foreground
+ * color and reuses the selected bar color as the background so the bar width
+ * and state-specific backdrop remain preserved. Runtime is O(n) in overlay
+ * width. No external state is mutated.
+ * @param[in] theme {StatusThemeAdapter} Normalized status theme.
+ * @param[in] overlay {ContextUsageOverlaySpec} Overlay specification.
+ * @return {string} Rendered overlay text.
+ * @satisfies REQ-127, REQ-128
+ */
+function formatContextUsageOverlay(
+  theme: StatusThemeAdapter,
+  overlay: ContextUsageOverlaySpec,
+): string {
+  return theme.backgroundize(
+    overlay.backgroundColor,
+    theme.colorize(overlay.foregroundColor, overlay.text),
+  );
+}
+
+/**
  * @brief Formats one 5-cell context-usage bar.
- * @details Renders filled cells in yellow on an accent-derived background and
+ * @details Renders threshold-specific overlays for empty and high-water states;
+ * otherwise renders filled cells in yellow on an accent-derived background and
  * unfilled cells in dim color on the same background to preserve constant bar
  * width. Runtime is O(1). No external state is mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
- * @return {string} Rendered 5-cell bar.
- * @satisfies REQ-121, REQ-122, REQ-126
+ * @return {string} Rendered 5-cell bar or overlay.
+ * @satisfies REQ-121, REQ-122, REQ-126, REQ-127, REQ-128
  */
 function formatContextUsageBar(
   theme: StatusThemeAdapter,
   contextUsage: ContextUsage | undefined,
 ): string {
+  const overlay = resolveContextUsageOverlay(contextUsage);
+  if (overlay) {
+    return formatContextUsageOverlay(theme, overlay);
+  }
   const filledCells = countFilledContextCells(contextUsage);
   return Array.from({ length: 5 }, (_value, index) =>
     index < filledCells ? theme.filledContextCell : theme.emptyContextCell,
@@ -349,15 +425,16 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
  * @details Renders docs, tests, src, tools, context, elapsed, and last fields
- * in the canonical order with dim bullet separators. Runtime is O(s) in
- * configured source-path count. No external state is mutated.
+ * in the canonical order with dim bullet separators and threshold-specific
+ * context-bar overlays. Runtime is O(s) in configured source-path count. No
+ * external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] activeTools {readonly string[]} Active runtime tool names.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128
  */
 function buildPiUsereqStatusText(
   config: UseReqConfig,
@@ -476,12 +553,13 @@ export function setPiUsereqStatusConfig(
 /**
  * @brief Renders the current pi-usereq status bar into the active UI context.
  * @details Updates the controller's latest context pointer and writes the
- * single-line status text only when configuration is available. Runtime is O(s)
- * in configured source-path count. Side effect: mutates `ctx.ui` status.
+ * single-line status text only when configuration is available, including any
+ * threshold-specific context-bar overlays. Runtime is O(s) in configured
+ * source-path count. Side effect: mutates `ctx.ui` status.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,
