@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.32"
+version: "0.0.33"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -68,7 +68,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-001**: MUST implement the standalone executable in `src/cli.ts` as flag parsing plus dispatch to `tool-runner.ts` or `runStaticCheck`.
 - **DES-002**: MUST implement extension activation in `src/index.ts` by registering prompt commands, agent tools, configuration commands, and shared wrappers for supported pi CLI lifecycle hooks.
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
-- **DES-004**: MUST implement static-check execution through `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, and `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
+- **DES-004**: MUST implement modular static-check execution through debug-capable `StaticCheckBase` and user-facing `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token/reference/compress/find operations, git checks, docs checks, and worktree helpers in `src/core/tool-runner.ts`.
 - **DES-006**: MUST keep CLI compression and construct-search renderers as markdown blocks headed by `@@@ <path> | <language>`, while agent-tool compression and construct-search responses use dedicated JSON payload builders.
 - **DES-007**: MUST implement the standalone debug surface in `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/` recording and SDK-probe modules without altering extension runtime control flow.
@@ -110,7 +110,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted project configuration.
 - **REQ-067**: MUST send every rendered `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that never creates replacement sessions or pre-reset flows.
-- **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
+- **REQ-008**: MUST provide a static-check submenu that adds Command entries by guided language flow or raw spec, removes language entries, and shows supported languages.
+- **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
+- **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish single-line `pi-usereq` status text during `session_start`.
 - **REQ-109**: MUST make the single-line status bar render `base`, `docs`, `src`, and `tests` with explicit derived or configured path values, keeping every field name separate from its value.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
@@ -183,11 +185,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-100**: MUST encode quantitative facts as JSON numbers in unit-specific fields, keep textual fields free of decorative formatting and textual units, and avoid duplicating facts already exposed by specialized fields.
 - **REQ-101**: MUST register every agent tool with machine-oriented metadata describing purpose, required and optional parameters, configuration and invocation variants, output schema and format, specialized behaviors, and stable error conditions.
 - **REQ-102**: MUST make every structured agent-tool execute result mirror the same JSON object into `content[0].text` and `details`, nesting execution metadata under dedicated `execution` fields.
-- **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy`, `pylance`, `ruff`, or `command` checker subcommands directly.
+- **REQ-018**: MUST expose the `test-static-check` driver only through standalone CLI `--test-static-check`, dispatching `dummy` or `command` checker subcommands directly.
 - **REQ-019**: MUST resolve each explicit static-check file by extension and run every configured checker for that language while capturing only failing checker output.
-- **REQ-020**: MUST parse static-check enable specs in `LANG=MODULE[,CMD[,PARAM...]]` format and normalize supported language and module names case-insensitively.
-- **REQ-021**: MUST reject static-check enable specs with missing `=`, missing module, unknown language, unknown module, or `Command` entries without `cmd`.
-- **REQ-022**: MUST resolve Python checker executables in this preference order: `<project>/.venv/bin/python`, `PI_USEREQ_PYTHON`, `python3`, `python`.
+- **REQ-020**: MUST parse user `--enable-static-check` specs in `LANG=Command,CMD[,PARAM...]` format and normalize supported language names plus `Command` case-insensitively.
+- **REQ-021**: MUST reject user `--enable-static-check` specs with missing `=`, missing `Command`, missing `cmd`, unknown language, or any module other than `Command`.
+- **REQ-022**: MUST preserve persisted `Dummy` static-check entries during config loading and execute them only when present in configuration or `--test-static-check dummy` input.
 - **REQ-023**: MUST require `Command`-module executables to exist on `PATH` before static-check execution.
 - **REQ-024**: MUST make `git-check` fail unless configured `git-path` exists, resolves inside a work tree, has no porcelain changes, and has a valid `HEAD`.
 - **REQ-025**: MUST make `docs-check` fail when `REQUIREMENTS.md`, `WORKFLOW.md`, or `REFERENCES.md` is missing and name the prompt command that should generate the missing file.
@@ -206,7 +208,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-033**: MUST make that conformance block require manifest-guided document review before implementing or changing extension code that interfaces with pi CLI.
 - **REQ-034**: MUST make that conformance block require manifest-guided document review before validating, analyzing, or fixing extension code that interfaces with pi CLI.
 - **REQ-108**: MUST make that conformance block require API-level compliance with `docs/pi.dev/agent-document-manifest.json` for new or modified software that interfaces with the pi.dev CLI.
-- **REQ-035**: MUST parse repeatable `--enable-static-check LANG=MODULE[,CMD[,PARAM...]]` CLI options before command dispatch and merge resulting entries into persisted project configuration for the current project base.
+- **REQ-035**: MUST parse repeatable `--enable-static-check LANG=Command,CMD[,PARAM...]` CLI options before command dispatch and merge resulting entries into persisted project configuration for the current project base.
 - **REQ-036**: MUST preserve existing `static-check` entries, append non-duplicate `--enable-static-check` entries in argument order, and treat canonical language, module, cmd, and params as the duplicate identity.
 - **REQ-037**: MUST reject `--enable-static-check` `Command` entries whose executable is unavailable on `PATH` and MUST NOT modify persisted project configuration when validation fails.
 - **REQ-038**: MUST honor `--verbose` only for `files-references`, `files-compress`, `files-find`, `references`, `compress`, and `find`, emitting command progress to stderr while leaving stdout payload format unchanged.
@@ -239,9 +241,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
 - **TST-002**: MUST verify installed bundled prompt, template, and guideline resources remain readable from `installation-path` and prompt rendering replaces all dynamic placeholders with runtime path context.
-- **TST-003**: MUST verify standalone CLI outputs for `files-tokens`, `files-compress`, `files-find`, and `--test-static-check` match the Python oracle for every fixture file.
-- **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
-- **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds static-check entries, and omits prompt-delivery mode controls.
+- **TST-003**: MUST verify standalone `files-*` CLI outputs match the Python oracle and `--test-static-check` dummy/command outputs match archived fixtures for every fixture file.
+- **TST-004**: MUST verify project `compress`, `find`, `tokens`, `git-check`, `docs-check`, `git-path`, and `get-base-path` outputs match the Python oracle, and verify `files-static-check` plus `static-check` against archived fixtures.
+- **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds Command static-check entries, and omits prompt-delivery mode controls.
+- **TST-046**: MUST verify static-check menus omit module selection and hide `Dummy`, `Pylance`, and `Ruff` from user-configurable actions.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
 - **TST-031**: MUST verify the status bar renders explicit base/docs/src/tests paths, omits `git` plus `tools`, and preserves active-theme `accent`/`warning` field-value token separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
@@ -291,7 +294,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/tool-runner.ts` orchestrates project file collection, markdown generation, compression, construct search, docs checks, git checks, and worktree lifecycle actions.
 - `src/core/source-analyzer.ts` defines `SourceElement`, language specs, extraction heuristics, Doxygen attachment, and Markdown rendering support.
 - `src/core/generate-markdown.ts`, `src/core/compress.ts`, and `src/core/find-constructs.ts` share analyzer and compressor logic to produce reusable Markdown outputs.
-- `src/core/static-check.ts` maps languages/extensions, parses enable specs, resolves inputs, and dispatches checker classes.
+- `src/core/static-check.ts` maps languages/extensions, parses Command-only enable specs, preserves debug `Dummy` handling, resolves inputs, and dispatches modular checker classes.
 - `src/core/config.ts`, `src/core/resources.ts`, and `src/core/prompts.ts` provide config persistence, home-resource synchronization, and prompt rendering.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
@@ -379,8 +382,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ### 7.1 Covered Behaviors
 - `tests/extension-registration.test.ts` covers extension registration, config-menu persistence, startup-tool enablement, runtime `git-path` derivation, and static-check menu mutation flows.
 - `tests/prompt-rendering.test.ts` covers home-resource synchronization and placeholder replacement in rendered prompts.
-- `tests/oracle-standalone.test.ts` compares standalone `files-*` and `--test-static-check` outputs against the Python `usereq.cli` oracle across all fixture languages.
-- `tests/oracle-project.test.ts` compares project-scoped commands against the Python oracle on a temporary git repository and separately verifies worktree create/delete side effects.
+- `tests/oracle-standalone.test.ts` compares standalone `files-*` outputs against the Python `usereq.cli` oracle and compares `--test-static-check` dummy/command outputs against archived fixtures.
+- `tests/oracle-project.test.ts` compares unchanged project-scoped commands against the Python oracle, verifies archived `files-static-check` and `static-check` outputs, and separately verifies worktree create/delete side effects.
 - `tests/release-workflow.test.ts` verifies semver-tag gating, npm publication steps, and GitHub release creation directives in `.github/workflows/release-npm.yml`.
 - Test business logic focuses on parity with the Python oracle, persistent config mutation, startup-tool activation, worktree lifecycle correctness, and npm release workflow structure.
 
@@ -410,7 +413,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-001 | `src/cli.ts` :: `parseArgs` and `main` :: parses flags then dispatches with branches such as `runReferences`, `runCompress`, `runFind`, `runProjectStaticCheck`, and `runStaticCheck`. |
 | DES-002 | `src/index.ts` :: `piUsereqExtension` :: calls `registerPromptCommands`, `registerToolWrapperCommands`, `registerAgentTools`, `registerConfigCommands`, then installs `pi.on("session_start", ...)`. |
 | DES-003 | `src/core/source-analyzer.ts` :: `class SourceElement`; `SourceAnalyzer.enrich` :: invokes `extractSignatures`, `detectHierarchy`, `extractVisibility`, `extractInheritance`, `extractBodyAnnotations`, and `extractDoxygenFields`. |
-| DES-004 | `src/core/static-check.ts` :: classes `StaticCheckBase`, `StaticCheckPylance`, `StaticCheckRuff`, `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the implementation by module name. |
+| DES-004 | `src/core/static-check.ts` :: `StaticCheckBase` and `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the modular implementation by module name. |
 | DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runReferences`, `runCompress`, `runFind`, `runProjectStaticCheck`, `runGitCheck`, `runDocsCheck`, `runGitWt*`, `runGitPath`, `runGetBasePath`. |
 | DES-006 | `src/core/compress-files.ts` :: `parts.push(\`@@@ ${outputPath} | ${language}\n> Lines: ...\`)`; `src/core/find-constructs.ts` :: `const header = \`@@@ ${filePath} | ${language}\``. |
 | DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags and `origin/master`, publish with npm authentication, and create the GitHub Release. |
@@ -425,7 +428,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
 | REQ-006 | `src/index.ts` :: `configurePiUsereq` :: edits docs/tests/src settings, invokes submenus, resets defaults, and persists with `saveProjectConfig`. |
 | REQ-007 | `src/index.ts` :: `configurePiUsereqToolsMenu` :: choices include `Show tool status`, `Toggle tool`, `Enable all`, `Disable all`, `Reset ... defaults`. |
-| REQ-008 | `src/index.ts` :: `configureStaticCheckMenu` :: supports guided language addition, raw-spec addition, language removal, and supported-language display. |
+| REQ-008 | `src/index.ts` :: `configureStaticCheckMenu` :: supports Command-only guided addition, raw-spec addition, language removal, and supported-language display. |
+| REQ-160 | `src/index.ts` :: `buildStaticCheckMenuChoices` and `configureStaticCheckMenu` :: omit user-facing module selection and hardcode `Command` for guided additions. |
+| REQ-161 | `src/core/static-check.ts` :: `dispatchStaticCheckForFile` and `runStaticCheck` :: keep `Dummy` only for existing config entries and the debug driver. |
 | REQ-009 | `src/index.ts` :: `pi.on("session_start", ...)` :: calls `ensureHomeResources()`, `applyConfiguredPiUsereqTools`, and `ctx.ui.setStatus(...)`. |
 | REQ-010 | `src/core/token-counter.ts` :: `new TokenCounter("cl100k_base")`; `formatPackSummary`; `src/core/tool-runner.ts` :: `runFilesTokens` validates files and returns summary plus warnings. |
 | REQ-011 | `src/core/reference-payload.ts` :: `buildReferenceToolPayload` :: emits explicit-file JSON with per-file metadata, imports, symbol records, and structured comments/Doxygen fields. |
@@ -435,11 +440,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-015 | `src/core/tool-runner.ts` :: `runCompress` :: collects configured project files then returns `compressFiles(files, enableLineNumbers, verbose, base)`. |
 | REQ-016 | `src/core/tool-runner.ts` :: `runFind` :: collects configured project files and executes `findConstructsInFiles(files, tagFilter, pattern, ...)`. |
 | REQ-017 | `src/core/tool-runner.ts` :: `runTokens` :: `canonicalNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"]` and fails if no canonical docs exist. |
-| REQ-018 | `src/cli.ts` :: `if (args.testStaticCheck) return runStaticCheck(args.testStaticCheck)`; `src/index.ts` :: registers `test-static-check`; `src/core/static-check.ts` :: `runStaticCheck` supports `dummy`, `pylance`, `ruff`, `command`. |
+| REQ-018 | `src/cli.ts` :: `if (args.testStaticCheck) return runStaticCheck(args.testStaticCheck)`; `src/core/static-check.ts` :: `runStaticCheck` supports `dummy` and `command`. |
 | REQ-019 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: resolves extension via `STATIC_CHECK_EXT_TO_LANG`, iterates configured checkers, and calls `dispatchStaticCheckForFile(..., { failOnly: true })`. |
-| REQ-020 | `src/core/static-check.ts` :: `parseEnableStaticCheck` :: parses `LANG=MODULE[,CMD[,PARAM...]]`, canonicalizes language/module names, and builds `StaticCheckEntry`. |
-| REQ-021 | `src/core/static-check.ts` :: `parseEnableStaticCheck` :: explicit `ReqError` branches for missing `=`, unknown language, missing module, unknown module, and missing `Command` cmd. |
-| REQ-022 | `src/core/static-check.ts` :: `detectPythonExecutable` :: candidate order is project `.venv/bin/python`, `PI_USEREQ_PYTHON`, `python3`, then `python`. |
+| REQ-020 | `src/core/static-check.ts` :: `parseEnableStaticCheck` :: parses `LANG=Command,CMD[,PARAM...]`, canonicalizes language names, and builds `StaticCheckEntry`. |
+| REQ-021 | `src/core/static-check.ts` :: `parseEnableStaticCheck` :: explicit `ReqError` branches reject missing `=`, missing `Command`, missing `cmd`, unknown language, and non-Command modules. |
+| REQ-022 | `src/core/config.ts` :: `loadConfig` preserves persisted entries; `src/core/static-check.ts` :: `dispatchStaticCheckForFile` and `runStaticCheck` keep `Dummy` available only for existing config or debug-driver use. |
 | REQ-023 | `src/core/static-check.ts` :: `StaticCheckCommand` constructor :: `if (!findExecutable(cmd)) throw new ReqError(...)`. |
 | REQ-024 | `src/core/tool-runner.ts` :: `runGitCheck` :: bash command requires worktree membership, empty `git status --porcelain`, and symbolic or detached `HEAD`. |
 | REQ-025 | `src/core/tool-runner.ts` :: `runDocsCheck` :: maps missing docs files to `/req-write`, `/req-workflow`, and `/req-references` prompt guidance. |
@@ -459,9 +464,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | --- | --- |
 | TST-001 | `tests/extension-registration.test.ts` :: `extension registers all required prompt commands, tool wrappers, and agent tools` validates command and tool registration sets. |
 | TST-002 | `tests/prompt-rendering.test.ts` :: `embedded resources are copied ...` and `prompt rendering replaces all dynamic placeholders ...`. |
-| TST-003 | `tests/oracle-standalone.test.ts` :: `standalone command outputs match the Python oracle for every fixture` across `files-tokens`, `files-compress`, `files-find`, and `--test-static-check`. |
-| TST-004 | `tests/oracle-project.test.ts` :: `project-scan commands match the Python oracle on a git-backed fixture repository` for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path`. |
-| TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and both static-check menu addition tests. |
+| TST-003 | `tests/oracle-standalone.test.ts` :: preserves Python-oracle coverage for `files-tokens`, `files-compress`, and `files-find`; `tests/attended-results-scenarios.ts` :: archives `test-static-check` dummy and command scenarios only. |
+| TST-004 | `tests/oracle-project.test.ts` :: preserves Python-oracle coverage for `compress`, `find`, `tokens`, `git-check`, `docs-check`, `git-path`, and `get-base-path`; `tests/attended-results-scenarios.ts` :: archives `files-static-check` and `static-check`. |
+| TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and both Command-oriented static-check menu addition tests. |
+| TST-046 | `tests/extension-registration.test.ts` :: `configuration menu hides removed static-check modules from user-facing actions`. |
 | TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
 | TST-007 | `tests/extension-registration.test.ts` :: `git-path dependent commands derive the repository root at runtime`. |
 | TST-008 | `tests/oracle-project.test.ts` :: `git worktree create/delete wrappers produce expected worktree side effects`. |

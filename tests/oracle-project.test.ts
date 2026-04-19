@@ -6,7 +6,14 @@ import { getProjectConfigPath } from "../src/core/config.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
 import { initFixtureRepo, runNodeCli, runPythonCli } from "./helpers.js";
 
-function compareCli(args: string[], cwd: string) {
+/**
+ * @brief Compares one project-scoped Node CLI execution against the Python oracle.
+ * @details Executes the same repository command through both implementations and asserts exact equality for exit status, stdout, and stderr. Runtime is dominated by subprocess execution. Side effects are limited to child processes.
+ * @param[in] args {string[]} CLI argument vector forwarded to both implementations.
+ * @param[in] cwd {string} Project root used as the working directory.
+ * @return {void} No return value.
+ */
+function compareCli(args: string[], cwd: string): void {
   const python = runPythonCli(args, cwd);
   const node = runNodeCli(args, cwd);
   assert.equal(node.status, python.status, `exit code mismatch for ${args.join(" ")}`);
@@ -28,8 +35,6 @@ test("project-scan commands match the Python oracle on a git-backed fixture repo
     compareCli(["--find", tagFilter, ".*"], projectBase);
   });
   await t.test("tokens", () => compareCli(["--tokens"], projectBase));
-  await t.test("files-static-check", () => compareCli(["--files-static-check", path.join(projectBase, "src", "fixture_python.py")], projectBase));
-  await t.test("static-check", () => compareCli(["--static-check"], projectBase));
   await t.test("git-check", () => compareCli(["--git-check"], projectBase));
   await t.test("docs-check", () => compareCli(["--docs-check"], projectBase));
   await t.test("git-path", () => compareCli(["--git-path"], projectBase));

@@ -3316,10 +3316,10 @@ import { formatDoxygenFieldsAsMarkdown, parseDoxygenComment } from "./doxygen-pa
 
 ---
 
-# static-check.ts | TypeScript | 674L | 18 symbols | 7 imports | 34 comments
+# static-check.ts | TypeScript | 538L | 16 symbols | 7 imports | 29 comments
 > Path: `src/core/static-check.ts`
 - @brief Defines static-check language mappings and checker dispatch implementations.
-- @details Parses static-check configuration syntax, resolves file targets, and runs built-in or command-based analyzers such as Pylance and Ruff. Runtime is linear in file count plus external tool cost. Side effects include filesystem reads, PATH probing, process spawning, and console output.
+- @details Parses Command-only user static-check specifications, preserves debug `Dummy` config handling, resolves file targets, and runs modular dummy or command-based analyzers. Runtime is linear in file count plus external tool cost. Side effects include filesystem reads, PATH probing, process spawning, and console output.
 
 ## Imports
 ```
@@ -3334,39 +3334,44 @@ import { ReqError } from "./errors.js";
 
 ## Definitions
 
-### iface `export interface StaticCheckLanguageSupport` (L85-88)
+### iface `export interface StaticCheckLanguageSupport` (L91-94)
 - @brief Describes supported extensions for one canonical static-check language.
 - @details The interface is used for UI rendering and capability reporting only. It is compile-time only and adds no runtime cost.
 
-### fn `export function getSupportedStaticCheckLanguages(): string[]` (L106-108)
+### fn `export function getSupportedStaticCheckLanguages(): string[]` (L109-111)
 - @brief Returns the sorted list of canonical languages with extension support.
 - @details Deduplicates the extension map values and sorts them alphabetically for stable UI and error messages. Runtime is O(n log n). No side effects occur.
 - @return {string[]} Sorted canonical language names.
 
-### fn `export function getSupportedStaticCheckLanguageSupport(): StaticCheckLanguageSupport[]` (L115-126)
+### fn `export function getSupportedStaticCheckLanguageSupport(): StaticCheckLanguageSupport[]` (L118-129)
 - @brief Returns supported languages paired with their known file extensions.
 - @details Groups extensions by canonical language and emits alphabetically sorted extension lists. Runtime is O(n log n). No external state is mutated.
 - @return {StaticCheckLanguageSupport[]} Sorted language-support descriptors.
 
-### fn `function formatStaticCheckModules(): string` (L133-135)
-- @brief Formats the supported module list for diagnostics.
-- @details Joins `STATIC_CHECK_MODULES` with commas for direct insertion into error strings. Time complexity is O(n). No side effects occur.
-- @return {string} Comma-delimited module names.
+### fn `function formatStaticCheckModules(): string` (L136-138)
+- @brief Formats the user-configurable module list for diagnostics.
+- @details Joins `STATIC_CHECK_MODULES` with commas for direct insertion into user-facing error strings. Time complexity is O(n). No side effects occur.
+- @return {string} Comma-delimited user-configurable module names.
 
-### fn `function splitCsvLikeTokens(specRhs: string): string[]` (L143-165)
+### fn `function formatDispatchStaticCheckModules(): string` (L145-147)
+- @brief Formats the persisted or debug-capable module list for dispatch diagnostics.
+- @details Joins `STATIC_CHECK_PERSISTED_MODULES` with commas for error strings emitted while executing existing config entries or debug-driver requests. Time complexity is O(n). No side effects occur.
+- @return {string} Comma-delimited persisted module names.
+
+### fn `function splitCsvLikeTokens(specRhs: string): string[]` (L155-177)
 - @brief Splits a comma-delimited static-check specification while honoring quotes.
 - @details Performs a single pass over the right-hand side of `LANG=...`, preserving commas inside quoted segments. Runtime is O(n). No side effects occur.
 - @param[in] specRhs {string} Right-hand side of the enable-static-check specification.
 - @return {string[]} Parsed tokens with surrounding whitespace trimmed.
 
-### fn `export function parseEnableStaticCheck(spec: string): [string, StaticCheckEntry]` (L174-222)
-- @brief Parses one `LANG=MODULE[,CMD[,PARAM...]]` static-check specification.
-- @details Validates the language alias, canonicalizes the module name, enforces module-specific argument requirements, and returns a config entry ready for persistence. Runtime is O(n) in specification length. No external state is mutated.
+### fn `export function parseEnableStaticCheck(spec: string): [string, StaticCheckEntry]` (L186-234)
+- @brief Parses one `LANG=Command,CMD[,PARAM...]` static-check specification.
+- @details Validates the language alias, canonicalizes the Command module name, enforces the required executable argument, and returns a config entry ready for persistence. Runtime is O(n) in specification length. No external state is mutated.
 - @param[in] spec {string} Raw static-check specification string.
 - @return {[string, StaticCheckEntry]} Tuple of canonical language name and normalized checker configuration.
-- @throws {ReqError} Throws for missing separators, unknown languages, unknown modules, or missing required command arguments.
+- @throws {ReqError} Throws for missing separators, unknown languages, non-Command modules, or missing required command arguments.
 
-### fn `export function buildStaticCheckEntryIdentity(language: string, entry: StaticCheckEntry): string` (L232-237)
+### fn `export function buildStaticCheckEntryIdentity(language: string, entry: StaticCheckEntry): string` (L244-249)
 - @brief Builds the duplicate-identity token for one static-check entry.
 - @details Canonicalizes the language key, module name, command name, and parameter list into a stable JSON tuple used for merge deduplication. Runtime is O(p) in parameter count. No side effects occur.
 - @param[in] language {string} Canonical or alias language name associated with the entry.
@@ -3374,7 +3379,7 @@ import { ReqError } from "./errors.js";
 - @return {string} Stable identity token suitable for equality comparison.
 - @satisfies REQ-036
 
-### fn `export function validateStaticCheckEntry(entry: StaticCheckEntry): void` (L247-258)
+### fn `export function validateStaticCheckEntry(entry: StaticCheckEntry): void` (L259-270)
 - @brief Validates pre-persistence invariants for one static-check entry.
 - @details Rejects `Command` entries whose executable cannot be resolved before config writes while leaving non-command modules untouched. Runtime is O(p) in PATH entry count. Side effects are limited to filesystem reads.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry to validate.
@@ -3382,32 +3387,18 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when a `Command` entry omits `cmd` or resolves to a non-executable program.
 - @satisfies REQ-037
 
-### fn `function resolveFiles(inputs: string[]): string[]` (L266-290)
+### fn `function resolveFiles(inputs: string[]): string[]` (L278-302)
 - @brief Resolves explicit files, directories, and glob patterns into absolute file paths.
 - @details Expands glob inputs with `fast-glob`, enumerates direct children for directory inputs, accepts regular files, and warns for invalid entries. Runtime is O(n + m) where m is the total matched path count. Side effects are filesystem reads and warning output to stderr.
 - @param[in] inputs {string[]} Raw file, directory, or glob inputs.
 - @return {string[]} Unique absolute file paths.
 
-### class `export class StaticCheckBase` (L296-370)
-- @brief Provides the base implementation for file-oriented static checks.
-- @details Resolves input files once, emits standardized headers, and defines overridable `checkFile` and `emitLine` hooks used by concrete analyzers. Runtime is O(f) plus subclass checker cost. Side effects include console output.
+### class `export class StaticCheckBase` (L308-382)
+- @brief Provides the shared and debug-capable base implementation for file-oriented static checks.
+- @details Resolves input files once, emits standardized headers, implements the debug `Dummy` checker behavior, and defines overridable `checkFile` plus `emitLine` hooks used by concrete analyzers. Runtime is O(f) plus subclass checker cost. Side effects include console output.
 
-### fn `function detectPythonExecutable(projectBase?: string): string` (L378-398)
-- @brief Resolves the preferred Python executable for Python-based checkers.
-- @details Checks the project virtual environment first, then `PI_USEREQ_PYTHON`, then `python3`, then `python`, and finally falls back to the literal `python3` string. Runtime is O(c) in candidate count. Side effects are filesystem reads and PATH probing.
-- @param[in] projectBase {string | undefined} Optional project root used to probe `.venv/bin/python`.
-- @return {string} Executable path or command name.
-
-### class `export class StaticCheckPylance extends StaticCheckBase` : StaticCheckBase (L404-455)
-- @brief Runs Pyright/Pylance checks through the selected Python interpreter.
-- @details Invokes `python -m pyright` for each resolved file and emits standardized OK/FAIL records. Runtime is dominated by external checker execution. Side effects include process spawning and console output.
-
-### class `export class StaticCheckRuff extends StaticCheckBase` : StaticCheckBase (L461-509)
-- @brief Runs Ruff checks through the selected Python interpreter.
-- @details Invokes `python -m ruff check` for each resolved file and emits standardized OK/FAIL records. Runtime is dominated by external checker execution. Side effects include process spawning and console output.
-
-### class `export class StaticCheckCommand extends StaticCheckBase` : StaticCheckBase (L515-564)
-- @brief Runs an arbitrary external command as a static checker.
+### class `export class StaticCheckCommand extends StaticCheckBase` : StaticCheckBase (L388-437)
+- @brief Runs the user-facing external-command static checker.
 - @brief Initializes a command-backed checker instance.
 - @details Validates command availability on PATH during construction, then invokes the command with configured extra arguments plus one target file at a time. Runtime is dominated by external command execution. Side effects include PATH probing, process spawning, and console output.
 - @details Validates that the executable exists on PATH before delegating file resolution to the base class and recording the command label. Runtime is O(p + f) where p is PATH entry count and f is resolved input count. Side effects are filesystem reads.
@@ -3417,30 +3408,30 @@ import { ReqError } from "./errors.js";
 - @param[in] failOnly {boolean} When `true`, suppress successful-file output.
 - @throws {ReqError} Throws when the executable cannot be found on PATH.
 
-### fn `function isExecutableFile(candidate: string): boolean` (L572-582)
+### fn `function isExecutableFile(candidate: string): boolean` (L445-455)
 - @brief Tests whether one filesystem path is executable.
 - @details Requires the candidate to exist, be a regular file, and pass `X_OK` access checks. Runtime is O(1). Side effects are limited to filesystem reads.
 - @param[in] candidate {string} Absolute or relative path to inspect.
 - @return {boolean} `true` when the candidate is executable by the current process.
 
-### fn `function findExecutable(cmd: string): string | undefined` (L590-601)
+### fn `function findExecutable(cmd: string): string | undefined` (L463-474)
 - @brief Locates an executable by scanning the current PATH.
 - @details Checks each PATH directory for an executable file named exactly as the requested command. Runtime is O(p) in PATH entry count. Side effects are filesystem reads.
 - @param[in] cmd {string} Executable name to locate.
 - @return {string | undefined} Absolute executable path, or `undefined` when not found.
 
-### fn `export function dispatchStaticCheckForFile(` (L612-615)
+### fn `export function dispatchStaticCheckForFile(` (L485-488)
 - @brief Dispatches one configured static checker for a single file.
-- @details Selects the checker implementation by module name, normalizes parameter arrays, and runs exactly one checker instance against the target file. Runtime is dominated by the selected checker. Side effects include console output and possible process spawning.
+- @details Selects the debug `Dummy` or user-facing `Command` implementation by module name, normalizes parameter arrays, and runs exactly one checker instance against the target file. Runtime is dominated by the selected checker. Side effects include console output and possible process spawning.
 - @param[in] filePath {string} Absolute or relative file path to check.
 - @param[in] langConfig {StaticCheckEntry} Normalized static-check configuration entry.
 - @param[in] options {{ failOnly?: boolean; projectBase?: string }} Optional execution controls.
 - @return {number} Checker exit status where `0` means success and non-zero means failure.
 - @throws {ReqError} Throws when configuration is incomplete or names an unknown module.
 
-### fn `export function runStaticCheck(argv: string[]): number` (L649-674)
+### fn `export function runStaticCheck(argv: string[]): number` (L517-538)
 - @brief Runs the standalone static-check test driver.
-- @details Dispatches subcommands to the built-in checker implementations without consulting project configuration. Runtime is O(n) in argument count plus checker cost. Side effects include console output and external process spawning.
+- @details Dispatches debug `dummy` or user-facing `command` subcommands without consulting project configuration. Runtime is O(n) in argument count plus checker cost. Side effects include console output and external process spawning.
 - @param[in] argv {string[]} Raw static-check subcommand arguments.
 - @return {number} Checker exit status where `0` means success.
 - @throws {ReqError} Throws when no subcommand is provided, the subcommand is unknown, or required arguments are missing.
@@ -3448,24 +3439,22 @@ import { ReqError } from "./errors.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`StaticCheckLanguageSupport`|iface||85-88|export interface StaticCheckLanguageSupport|
-|`getSupportedStaticCheckLanguages`|fn||106-108|export function getSupportedStaticCheckLanguages(): string[]|
-|`getSupportedStaticCheckLanguageSupport`|fn||115-126|export function getSupportedStaticCheckLanguageSupport():...|
-|`formatStaticCheckModules`|fn||133-135|function formatStaticCheckModules(): string|
-|`splitCsvLikeTokens`|fn||143-165|function splitCsvLikeTokens(specRhs: string): string[]|
-|`parseEnableStaticCheck`|fn||174-222|export function parseEnableStaticCheck(spec: string): [st...|
-|`buildStaticCheckEntryIdentity`|fn||232-237|export function buildStaticCheckEntryIdentity(language: s...|
-|`validateStaticCheckEntry`|fn||247-258|export function validateStaticCheckEntry(entry: StaticChe...|
-|`resolveFiles`|fn||266-290|function resolveFiles(inputs: string[]): string[]|
-|`StaticCheckBase`|class||296-370|export class StaticCheckBase|
-|`detectPythonExecutable`|fn||378-398|function detectPythonExecutable(projectBase?: string): st...|
-|`StaticCheckPylance`|class||404-455|export class StaticCheckPylance extends StaticCheckBase|
-|`StaticCheckRuff`|class||461-509|export class StaticCheckRuff extends StaticCheckBase|
-|`StaticCheckCommand`|class||515-564|export class StaticCheckCommand extends StaticCheckBase|
-|`isExecutableFile`|fn||572-582|function isExecutableFile(candidate: string): boolean|
-|`findExecutable`|fn||590-601|function findExecutable(cmd: string): string | undefined|
-|`dispatchStaticCheckForFile`|fn||612-615|export function dispatchStaticCheckForFile(|
-|`runStaticCheck`|fn||649-674|export function runStaticCheck(argv: string[]): number|
+|`StaticCheckLanguageSupport`|iface||91-94|export interface StaticCheckLanguageSupport|
+|`getSupportedStaticCheckLanguages`|fn||109-111|export function getSupportedStaticCheckLanguages(): string[]|
+|`getSupportedStaticCheckLanguageSupport`|fn||118-129|export function getSupportedStaticCheckLanguageSupport():...|
+|`formatStaticCheckModules`|fn||136-138|function formatStaticCheckModules(): string|
+|`formatDispatchStaticCheckModules`|fn||145-147|function formatDispatchStaticCheckModules(): string|
+|`splitCsvLikeTokens`|fn||155-177|function splitCsvLikeTokens(specRhs: string): string[]|
+|`parseEnableStaticCheck`|fn||186-234|export function parseEnableStaticCheck(spec: string): [st...|
+|`buildStaticCheckEntryIdentity`|fn||244-249|export function buildStaticCheckEntryIdentity(language: s...|
+|`validateStaticCheckEntry`|fn||259-270|export function validateStaticCheckEntry(entry: StaticChe...|
+|`resolveFiles`|fn||278-302|function resolveFiles(inputs: string[]): string[]|
+|`StaticCheckBase`|class||308-382|export class StaticCheckBase|
+|`StaticCheckCommand`|class||388-437|export class StaticCheckCommand extends StaticCheckBase|
+|`isExecutableFile`|fn||445-455|function isExecutableFile(candidate: string): boolean|
+|`findExecutable`|fn||463-474|function findExecutable(cmd: string): string | undefined|
+|`dispatchStaticCheckForFile`|fn||485-488|export function dispatchStaticCheckForFile(|
+|`runStaticCheck`|fn||517-538|export function runStaticCheck(argv: string[]): number|
 
 
 ---
@@ -4387,44 +4376,38 @@ updates.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string or `(none)`.
 
-### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L1728-1749)
+### fn `function renderStaticCheckReference(config: UseReqConfig): string` (L1728-1756)
 - @brief Renders the static-check configuration reference view.
-- @details Produces a markdown-like summary containing configured entries, supported languages, supported modules, and example specifications. Runtime is O(l log l). No side effects occur.
+- @details Produces a markdown-like summary containing configured entries, supported languages, the Command-only user module surface, and canonical example specifications. Runtime is O(l log l). No side effects occur.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Reference text for the editor view.
 
-### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1758-1793)
+### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1765-1800)
 - @brief Builds the shared settings-menu choices for static-check management.
-- @details Serializes static-check actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
+- @details Serializes Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting user-facing module selection. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
-- @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154
+- @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1801-1820)
+### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1808-1827)
 - @brief Builds the shared settings-menu choices for supported static-check languages.
-- @details Exposes every supported language as one row whose right-side value reports extensions plus the current configured checker count. Runtime is O(l log l). No external state is mutated.
+- @details Exposes every supported language as one row whose right-side value reports extensions plus the current configured checker count for Command-oriented configuration flows. Runtime is O(l log l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
 
-### fn `function buildStaticCheckModuleChoices(language: string): PiUsereqSettingsMenuChoice[]` (L1828-1845)
-- @brief Builds the shared settings-menu choices for static-check modules.
-- @details Exposes every supported static-check module as one selectable row with a concise execution description. Runtime is O(m) in module count. No external state is mutated.
-- @param[in] language {string} Canonical selected language.
-- @return {PiUsereqSettingsMenuChoice[]} Ordered module-choice vector.
-
-### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1853-1870)
+### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1835-1852)
 - @brief Builds the shared settings-menu choices for configured static-check languages.
 - @details Exposes only languages that currently have at least one configured checker so removal remains deterministic. Runtime is O(l log l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
 
-### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1880-1953)
+### fn `async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void>` (L1862-1928)
 - @brief Runs the interactive static-check configuration menu.
-- @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+- @details Lets the user inspect support, add Command entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {Promise<void>} Promise resolved when the menu closes.
-- @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154
+- @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
 
 ### fn `function buildPiUsereqMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L1962-2019)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
@@ -4522,12 +4505,11 @@ timer scheduling.
 |`configurePiUsereqToolsMenu`|fn||1641-1692|async function configurePiUsereqToolsMenu(pi: ExtensionAP...|
 |`formatStaticCheckEntry`|fn||1700-1706|function formatStaticCheckEntry(entry: StaticCheckEntry):...|
 |`formatStaticCheckLanguagesSummary`|fn||1714-1720|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`renderStaticCheckReference`|fn||1728-1749|function renderStaticCheckReference(config: UseReqConfig)...|
-|`buildStaticCheckMenuChoices`|fn||1758-1793|function buildStaticCheckMenuChoices(config: UseReqConfig...|
-|`buildSupportedStaticCheckLanguageChoices`|fn||1801-1820|function buildSupportedStaticCheckLanguageChoices(config:...|
-|`buildStaticCheckModuleChoices`|fn||1828-1845|function buildStaticCheckModuleChoices(language: string):...|
-|`buildConfiguredStaticCheckLanguageChoices`|fn||1853-1870|function buildConfiguredStaticCheckLanguageChoices(config...|
-|`configureStaticCheckMenu`|fn||1880-1953|async function configureStaticCheckMenu(ctx: ExtensionCom...|
+|`renderStaticCheckReference`|fn||1728-1756|function renderStaticCheckReference(config: UseReqConfig)...|
+|`buildStaticCheckMenuChoices`|fn||1765-1800|function buildStaticCheckMenuChoices(config: UseReqConfig...|
+|`buildSupportedStaticCheckLanguageChoices`|fn||1808-1827|function buildSupportedStaticCheckLanguageChoices(config:...|
+|`buildConfiguredStaticCheckLanguageChoices`|fn||1835-1852|function buildConfiguredStaticCheckLanguageChoices(config...|
+|`configureStaticCheckMenu`|fn||1862-1928|async function configureStaticCheckMenu(ctx: ExtensionCom...|
 |`buildPiUsereqMenuChoices`|fn||1962-2019|function buildPiUsereqMenuChoices(config: UseReqConfig): ...|
 |`buildSrcDirMenuChoices`|fn||2028-2049|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
 |`buildSrcDirRemovalChoices`|fn||2058-2073|function buildSrcDirRemovalChoices(config: UseReqConfig):...|

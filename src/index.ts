@@ -1721,7 +1721,7 @@ function formatStaticCheckLanguagesSummary(config: UseReqConfig): string {
 
 /**
  * @brief Renders the static-check configuration reference view.
- * @details Produces a markdown-like summary containing configured entries, supported languages, supported modules, and example specifications. Runtime is O(l log l). No side effects occur.
+ * @details Produces a markdown-like summary containing configured entries, supported languages, the Command-only user module surface, and canonical example specifications. Runtime is O(l log l). No side effects occur.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {string} Reference text for the editor view.
  */
@@ -1744,16 +1744,23 @@ function renderStaticCheckReference(config: UseReqConfig): string {
   for (const { language, extensions } of getSupportedStaticCheckLanguageSupport()) {
     lines.push(`- ${language}: ${extensions.join(", ")}`);
   }
-  lines.push("", `Supported modules: ${STATIC_CHECK_MODULES.join(", ")}`, "", "Examples:", "- Python=Ruff", "- Python=Command,mypy,--strict", "- TypeScript=Command,eslint,--max-warnings,0");
+  lines.push(
+    "",
+    `Supported modules: ${STATIC_CHECK_MODULES.join(", ")}`,
+    "",
+    "Examples:",
+    "- Python=Command,mypy,--strict",
+    "- TypeScript=Command,eslint,--max-warnings,0",
+  );
   return `${lines.join("\n")}\n`;
 }
 
 /**
  * @brief Builds the shared settings-menu choices for static-check management.
- * @details Serializes static-check actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
+ * @details Serializes Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting user-facing module selection. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
- * @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
  */
 function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const supportedLanguageCount = getSupportedStaticCheckLanguageSupport().length;
@@ -1763,13 +1770,13 @@ function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenu
       id: "add-entry-supported-language",
       label: "Add entry for supported language",
       value: `${supportedLanguageCount} languages`,
-      description: "Select a supported language, then select one static-check module to add.",
+      description: "Select a supported language, then configure the Command static-check executable.",
     },
     {
       id: "add-entry-raw-spec",
       label: "Add entry from LANG=MODULE[,CMD[,PARAM...]]",
       value: "raw spec",
-      description: "Enter one raw static-check specification string in canonical CLI format.",
+      description: "Enter one raw Command-based static-check specification string in canonical CLI format.",
     },
     {
       id: "remove-language-entry",
@@ -1794,7 +1801,7 @@ function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenu
 
 /**
  * @brief Builds the shared settings-menu choices for supported static-check languages.
- * @details Exposes every supported language as one row whose right-side value reports extensions plus the current configured checker count. Runtime is O(l log l). No external state is mutated.
+ * @details Exposes every supported language as one row whose right-side value reports extensions plus the current configured checker count for Command-oriented configuration flows. Runtime is O(l log l). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
  */
@@ -1807,7 +1814,7 @@ function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsere
         id: language,
         label: language,
         value: `${extensions.join(", ")} • ${configuredCount} ${suffix}`,
-        description: `Configure static-check modules for ${language}. Supported extensions: ${extensions.join(", ")}.`,
+        description: `Configure the Command static-check entry for ${language}. Supported extensions: ${extensions.join(", ")}.`,
       };
     }),
     {
@@ -1815,31 +1822,6 @@ function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsere
       label: "Back",
       value: "",
       description: "Return to the static-check menu.",
-    },
-  ];
-}
-
-/**
- * @brief Builds the shared settings-menu choices for static-check modules.
- * @details Exposes every supported static-check module as one selectable row with a concise execution description. Runtime is O(m) in module count. No external state is mutated.
- * @param[in] language {string} Canonical selected language.
- * @return {PiUsereqSettingsMenuChoice[]} Ordered module-choice vector.
- */
-function buildStaticCheckModuleChoices(language: string): PiUsereqSettingsMenuChoice[] {
-  return [
-    ...STATIC_CHECK_MODULES.map((moduleName) => ({
-      id: moduleName,
-      label: moduleName,
-      value: language,
-      description: moduleName === "Command"
-        ? `Run one explicit external command against ${language} files.`
-        : `Run the built-in ${moduleName} checker for ${language} files.`,
-    })),
-    {
-      id: "back",
-      label: "Back",
-      value: "",
-      description: "Return to language selection.",
     },
   ];
 }
@@ -1871,11 +1853,11 @@ function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUser
 
 /**
  * @brief Runs the interactive static-check configuration menu.
- * @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Lets the user inspect support, add Command entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
  */
 async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   while (true) {
@@ -1895,23 +1877,16 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
       if (!selectedLanguage || selectedLanguage === "back") {
         continue;
       }
-      const moduleName = await showPiUsereqSettingsMenu(ctx, `static-check for ${selectedLanguage}`, buildStaticCheckModuleChoices(selectedLanguage));
-      if (!moduleName || moduleName === "back") {
+
+      const cmd = await ctx.ui.input(`Command executable for ${selectedLanguage}`, "");
+      if (!cmd?.trim()) {
+        ctx.ui.notify(`Command executable is required for ${selectedLanguage}`, "error");
         continue;
       }
 
-      const entry: StaticCheckEntry = { module: moduleName };
-      if (moduleName === "Command") {
-        const cmd = await ctx.ui.input(`Command executable for ${selectedLanguage}`, "");
-        if (!cmd?.trim()) {
-          ctx.ui.notify(`Command executable is required for ${selectedLanguage}`, "error");
-          continue;
-        }
-        entry.cmd = cmd.trim();
-      }
-
+      const entry: StaticCheckEntry = { module: "Command", cmd: cmd.trim() };
       const paramsInput = await ctx.ui.input(
-        `Additional parameters for ${moduleName} on ${selectedLanguage} (optional, shell-style)`,
+        `Additional parameters for Command on ${selectedLanguage} (optional, shell-style)`,
         "",
       );
       const params = paramsInput?.trim() ? shellSplit(paramsInput.trim()) : [];
@@ -1926,7 +1901,7 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
     }
 
     if (staticChoice === "add-entry-raw-spec") {
-      const spec = await ctx.ui.input("Static-check spec", "Python=Ruff");
+      const spec = await ctx.ui.input("Static-check spec", "Python=Command,true");
       if (!spec?.trim()) {
         continue;
       }

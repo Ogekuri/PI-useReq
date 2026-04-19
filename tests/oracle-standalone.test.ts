@@ -5,7 +5,13 @@ import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
 import { detectLanguage } from "../src/core/generate-markdown.js";
 import { getFixtureFiles, runNodeCli, runPythonCli } from "./helpers.js";
 
-function compareCli(args: string[]) {
+/**
+ * @brief Compares one standalone Node CLI execution against the Python oracle.
+ * @details Executes the same explicit-file command through both implementations and asserts exact equality for exit status, stdout, and stderr. Runtime is dominated by subprocess execution. Side effects are limited to child processes.
+ * @param[in] args {string[]} CLI argument vector forwarded to both implementations.
+ * @return {void} No return value.
+ */
+function compareCli(args: string[]): void {
   const python = runPythonCli(args);
   const node = runNodeCli(args);
   assert.equal(node.status, python.status, `exit code mismatch for ${args.join(" ")}`);
@@ -31,18 +37,6 @@ test("standalone command outputs match the Python oracle for every fixture", asy
       assert.ok(language);
       const tagFilter = [...LANGUAGE_TAGS[language!]!].sort().join("|");
       compareCli(["--files-find", tagFilter, ".*", fixture]);
-    });
-    await t.test(`test-static-check dummy ${fileName}`, () => {
-      compareCli(["--test-static-check", "dummy", fixture]);
-    });
-    await t.test(`test-static-check pylance ${fileName}`, () => {
-      compareCli(["--test-static-check", "pylance", fixture]);
-    });
-    await t.test(`test-static-check ruff ${fileName}`, () => {
-      compareCli(["--test-static-check", "ruff", fixture]);
-    });
-    await t.test(`test-static-check command ${fileName}`, () => {
-      compareCli(["--test-static-check", "command", "false", fixture]);
     });
   }
 });

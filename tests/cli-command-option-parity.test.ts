@@ -583,6 +583,14 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.equal(result.status, 1);
       assert.match(result.stderr, /not an executable program/);
       assert.ok(!fs.existsSync(getProjectConfigPath(projectBase)));
+
+      const removedModule = runNodeCli(
+        ["--base", projectBase, "--enable-static-check", "Python=Ruff"],
+        projectBase,
+      );
+      assert.equal(removedModule.status, 1);
+      assert.match(removedModule.stderr, /unknown module/i);
+      assert.ok(!fs.existsSync(getProjectConfigPath(projectBase)));
     },
   },
   {
@@ -594,16 +602,19 @@ const TARGET_CASES: TargetParityCase[] = [
           "--base",
           projectBase,
           "--enable-static-check",
-          "Python=Pylance",
+          "Python=Command,git,--version",
           "--enable-static-check",
           "C=Command,git,--version",
           "--enable-static-check",
-          "Python=Ruff",
+          "Python=Command,git,--help",
         ],
         projectBase,
       );
       assert.equal(persisted.status, 0, persisted.stderr);
-      assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [{ module: "Pylance" }, { module: "Ruff" }]);
+      assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [
+        { module: "Command", cmd: "git", params: ["--version"] },
+        { module: "Command", cmd: "git", params: ["--help"] },
+      ]);
       assert.deepEqual(getStaticCheckEntries(projectBase, "C"), [{ module: "Command", cmd: "git", params: ["--version"] }]);
     },
   },
@@ -616,9 +627,9 @@ const TARGET_CASES: TargetParityCase[] = [
           "--base",
           projectBase,
           "--enable-static-check",
-          "Python=Ruff",
+          "Python=Command,git,--version",
           "--enable-static-check",
-          "Python=Ruff",
+          "Python=Command,git,--version",
           "--enable-static-check",
           "C=Command,git,--version",
           "--enable-static-check",
@@ -627,7 +638,7 @@ const TARGET_CASES: TargetParityCase[] = [
         projectBase,
       );
       assert.equal(result.status, 0, result.stderr);
-      assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [{ module: "Ruff" }]);
+      assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [{ module: "Command", cmd: "git", params: ["--version"] }]);
       assert.deepEqual(getStaticCheckEntries(projectBase, "C"), [
         { module: "Command", cmd: "git", params: ["--version"] },
         { module: "Command", cmd: "git", params: ["--help"] },
@@ -641,7 +652,7 @@ const TARGET_CASES: TargetParityCase[] = [
       const preloaded = {
         ...config,
         "static-check": {
-          Python: [{ module: "Pylance", meta: "legacy-note" } as unknown as Record<string, unknown>],
+          Python: [{ module: "Dummy", meta: "debug-note" } as unknown as Record<string, unknown>],
           JavaScript: [{ module: "Command", cmd: "git", params: ["--version"] }],
         } as unknown as UseReqConfig["static-check"],
       } as UseReqConfig;
@@ -651,9 +662,7 @@ const TARGET_CASES: TargetParityCase[] = [
           "--base",
           projectBase,
           "--enable-static-check",
-          "Python=Pylance",
-          "--enable-static-check",
-          "Python=Ruff",
+          "Python=Command,git,--version",
           "--enable-static-check",
           "JavaScript=Command,git,--help",
         ],
@@ -661,8 +670,8 @@ const TARGET_CASES: TargetParityCase[] = [
       );
       assert.equal(result.status, 0, result.stderr);
       assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [
-        { module: "Pylance", meta: "legacy-note" },
-        { module: "Ruff" },
+        { module: "Dummy" },
+        { module: "Command", cmd: "git", params: ["--version"] },
       ]);
       assert.deepEqual(getStaticCheckEntries(projectBase, "JavaScript"), [
         { module: "Command", cmd: "git", params: ["--version"] },

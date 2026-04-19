@@ -1,5 +1,0 @@
-{
-  "code": 0,
-  "stdout": "# Static-Check(Ruff): <ROOT>/tests/fixtures/fixture_python.py\nResult: OK\n\n",
-  "stderr": ""
-}

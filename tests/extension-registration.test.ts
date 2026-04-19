@@ -1986,6 +1986,26 @@ test("configuration menu can add static-check entries from raw specs", async () 
   assert.deepEqual(config["static-check"].Python, [{ module: "Command", cmd: "true" }]);
 });
 
+test("configuration menu hides removed static-check modules from user-facing actions", async () => {
+  const cwd = createTempDir("pi-usereq-menu-sc-hidden-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["static-check"],
+  });
+
+  await command!.handler("", ctx);
+
+  const renderedStaticCheckMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
+  assert.match(renderedStaticCheckMenu, /Add entry for supported language/);
+  assert.doesNotMatch(renderedStaticCheckMenu, /Pylance/);
+  assert.doesNotMatch(renderedStaticCheckMenu, /Ruff/);
+  assert.doesNotMatch(renderedStaticCheckMenu, /Dummy/);
+});
+
 test("configuration menu can add guided static-check entries for explicit supported languages", async () => {
   const cwd = createTempDir("pi-usereq-menu-sc-guided-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
@@ -2001,13 +2021,13 @@ test("configuration menu can add guided static-check entries for explicit suppor
         "static-check",
         "Add entry for supported language",
         "Python",
-        "Ruff",
         "Back",
         "Save and close",
       ],
+      inputs: ["true", ""],
     }),
   );
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.deepEqual(config["static-check"].Python, [{ module: "Ruff" }]);
+  assert.deepEqual(config["static-check"].Python, [{ module: "Command", cmd: "true" }]);
 });

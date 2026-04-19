@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Defines static-check language mappings and checker dispatch implementations.
- * @details Parses static-check configuration syntax, resolves file targets, and runs built-in or command-based analyzers such as Pylance and Ruff. Runtime is linear in file count plus external tool cost. Side effects include filesystem reads, PATH probing, process spawning, and console output.
+ * @details Parses Command-only user static-check specifications, preserves debug `Dummy` config handling, resolves file targets, and runs modular dummy or command-based analyzers. Runtime is linear in file count plus external tool cost. Side effects include filesystem reads, PATH probing, process spawning, and console output.
  */
 
 import fs from "node:fs";
@@ -73,10 +73,16 @@ export const STATIC_CHECK_EXT_TO_LANG: Record<string, string> = {
 };
 
 /**
- * @brief Lists the built-in static-check module identifiers.
- * @details The tuple constrains configuration parsing and menu rendering to supported checker implementations. Access complexity is O(1).
+ * @brief Lists the user-configurable static-check module identifiers.
+ * @details The tuple constrains guided configuration and `--enable-static-check` parsing to the supported user-facing checker implementations. Access complexity is O(1).
  */
-export const STATIC_CHECK_MODULES = ["Dummy", "Pylance", "Ruff", "Command"] as const;
+export const STATIC_CHECK_MODULES = ["Command"] as const;
+
+/**
+ * @brief Lists the persisted or debug-capable static-check module identifiers.
+ * @details The tuple augments user-configurable modules with debug-only `Dummy` support used by existing config payloads and the standalone test driver. Access complexity is O(1).
+ */
+const STATIC_CHECK_PERSISTED_MODULES = ["Dummy", "Command"] as const;
 
 /**
  * @brief Describes supported extensions for one canonical static-check language.
@@ -88,13 +94,10 @@ export interface StaticCheckLanguageSupport {
 }
 
 /**
- * @brief Maps case-insensitive module names to canonical module identifiers.
- * @details Enables permissive user input while keeping downstream dispatch logic deterministic. Lookup complexity is O(1).
+ * @brief Maps case-insensitive user module names to canonical static-check module identifiers.
+ * @details Enables permissive Command-only user input while keeping downstream dispatch logic deterministic. Lookup complexity is O(1).
  */
 const CANONICAL_MODULES: Record<string, (typeof STATIC_CHECK_MODULES)[number]> = {
-  dummy: "Dummy",
-  pylance: "Pylance",
-  ruff: "Ruff",
   command: "Command",
 };
 
@@ -126,12 +129,21 @@ export function getSupportedStaticCheckLanguageSupport(): StaticCheckLanguageSup
 }
 
 /**
- * @brief Formats the supported module list for diagnostics.
- * @details Joins `STATIC_CHECK_MODULES` with commas for direct insertion into error strings. Time complexity is O(n). No side effects occur.
- * @return {string} Comma-delimited module names.
+ * @brief Formats the user-configurable module list for diagnostics.
+ * @details Joins `STATIC_CHECK_MODULES` with commas for direct insertion into user-facing error strings. Time complexity is O(n). No side effects occur.
+ * @return {string} Comma-delimited user-configurable module names.
  */
 function formatStaticCheckModules(): string {
   return STATIC_CHECK_MODULES.join(", ");
+}
+
+/**
+ * @brief Formats the persisted or debug-capable module list for dispatch diagnostics.
+ * @details Joins `STATIC_CHECK_PERSISTED_MODULES` with commas for error strings emitted while executing existing config entries or debug-driver requests. Time complexity is O(n). No side effects occur.
+ * @return {string} Comma-delimited persisted module names.
+ */
+function formatDispatchStaticCheckModules(): string {
+  return STATIC_CHECK_PERSISTED_MODULES.join(", ");
 }
 
 /**
@@ -165,11 +177,11 @@ function splitCsvLikeTokens(specRhs: string): string[] {
 }
 
 /**
- * @brief Parses one `LANG=MODULE[,CMD[,PARAM...]]` static-check specification.
- * @details Validates the language alias, canonicalizes the module name, enforces module-specific argument requirements, and returns a config entry ready for persistence. Runtime is O(n) in specification length. No external state is mutated.
+ * @brief Parses one `LANG=Command,CMD[,PARAM...]` static-check specification.
+ * @details Validates the language alias, canonicalizes the Command module name, enforces the required executable argument, and returns a config entry ready for persistence. Runtime is O(n) in specification length. No external state is mutated.
  * @param[in] spec {string} Raw static-check specification string.
  * @return {[string, StaticCheckEntry]} Tuple of canonical language name and normalized checker configuration.
- * @throws {ReqError} Throws for missing separators, unknown languages, unknown modules, or missing required command arguments.
+ * @throws {ReqError} Throws for missing separators, unknown languages, non-Command modules, or missing required command arguments.
  */
 export function parseEnableStaticCheck(spec: string): [string, StaticCheckEntry] {
   if (!spec.includes("=")) {
@@ -290,8 +302,8 @@ function resolveFiles(inputs: string[]): string[] {
 }
 
 /**
- * @brief Provides the base implementation for file-oriented static checks.
- * @details Resolves input files once, emits standardized headers, and defines overridable `checkFile` and `emitLine` hooks used by concrete analyzers. Runtime is O(f) plus subclass checker cost. Side effects include console output.
+ * @brief Provides the shared and debug-capable base implementation for file-oriented static checks.
+ * @details Resolves input files once, emits standardized headers, implements the debug `Dummy` checker behavior, and defines overridable `checkFile` plus `emitLine` hooks used by concrete analyzers. Runtime is O(f) plus subclass checker cost. Side effects include console output.
  */
 export class StaticCheckBase {
   static LABEL = "Dummy";
@@ -370,146 +382,7 @@ export class StaticCheckBase {
 }
 
 /**
- * @brief Resolves the preferred Python executable for Python-based checkers.
- * @details Checks the project virtual environment first, then `PI_USEREQ_PYTHON`, then `python3`, then `python`, and finally falls back to the literal `python3` string. Runtime is O(c) in candidate count. Side effects are filesystem reads and PATH probing.
- * @param[in] projectBase {string | undefined} Optional project root used to probe `.venv/bin/python`.
- * @return {string} Executable path or command name.
- */
-function detectPythonExecutable(projectBase?: string): string {
-  const candidates = [
-    projectBase ? path.join(projectBase, ".venv", "bin", "python") : undefined,
-    process.env.PI_USEREQ_PYTHON,
-    "python3",
-    "python",
-  ].filter((value): value is string => !!value);
-
-  for (const candidate of candidates) {
-    if (candidate.includes(path.sep)) {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-        return candidate;
-      }
-      continue;
-    }
-    if (findExecutable(candidate)) {
-      return candidate;
-    }
-  }
-  return "python3";
-}
-
-/**
- * @brief Runs Pyright/Pylance checks through the selected Python interpreter.
- * @details Invokes `python -m pyright` for each resolved file and emits standardized OK/FAIL records. Runtime is dominated by external checker execution. Side effects include process spawning and console output.
- */
-export class StaticCheckPylance extends StaticCheckBase {
-  static override LABEL = "Pylance";
-  private projectBase?: string;
-
-  /**
-   * @brief Initializes a Pylance checker instance.
-   * @details Delegates file resolution to the base class, stores the optional project base, and overrides the human-readable label. Runtime is O(f) in resolved input count. Mutates instance fields only.
-   * @param[in] inputs {string[]} Raw file inputs.
-   * @param[in] extraArgs {string[] | undefined} Extra Pyright arguments.
-   * @param[in] failOnly {boolean} When `true`, suppress successful-file output.
-   * @param[in] projectBase {string | undefined} Optional project root used for interpreter resolution and process cwd.
-   */
-  constructor(inputs: string[], extraArgs?: string[], failOnly = false, projectBase?: string) {
-    super(inputs, extraArgs, failOnly);
-    this.projectBase = projectBase;
-    this.label = "Pylance";
-  }
-
-  /**
-   * @brief Runs Pyright for one file.
-   * @details Resolves the Python interpreter, executes `python -m pyright`, and emits standardized OK/FAIL output with captured evidence on failure. Runtime is dominated by external tool execution. Side effects include process spawning and console output.
-   * @param[in] filePath {string} File to analyze.
-   * @return {number} `0` on success; `1` on execution or analysis failure.
-   */
-  protected override checkFile(filePath: string): number {
-    const pythonExec = detectPythonExecutable(this.projectBase);
-    const command = [pythonExec, "-m", "pyright", "--pythonpath", pythonExec, filePath, ...this.extraArgs];
-    const result = spawnSync(command[0]!, command.slice(1), {
-      cwd: this.projectBase,
-      encoding: "utf8",
-    });
-    if (result.error) {
-      this.emitLine(this.headerLine(filePath));
-      this.emitLine("Result: FAIL");
-      this.emitLine("Evidence:");
-      this.emitLine("  pyright module not available via sys.executable");
-      return 1;
-    }
-    if (result.status === 0) {
-      if (!this.failOnly) {
-        this.emitLine(this.headerLine(filePath));
-        this.emitLine("Result: OK");
-      }
-      return 0;
-    }
-    this.emitLine(this.headerLine(filePath));
-    this.emitLine("Result: FAIL");
-    this.emitLine("Evidence:");
-    this.emitLine(`${result.stdout ?? ""}${result.stderr ?? ""}`.trimEnd());
-    return 1;
-  }
-}
-
-/**
- * @brief Runs Ruff checks through the selected Python interpreter.
- * @details Invokes `python -m ruff check` for each resolved file and emits standardized OK/FAIL records. Runtime is dominated by external checker execution. Side effects include process spawning and console output.
- */
-export class StaticCheckRuff extends StaticCheckBase {
-  static override LABEL = "Ruff";
-  private projectBase?: string;
-
-  /**
-   * @brief Initializes a Ruff checker instance.
-   * @details Delegates file resolution to the base class, stores the optional project base, and overrides the human-readable label. Runtime is O(f) in resolved input count. Mutates instance fields only.
-   * @param[in] inputs {string[]} Raw file inputs.
-   * @param[in] extraArgs {string[] | undefined} Extra Ruff arguments.
-   * @param[in] failOnly {boolean} When `true`, suppress successful-file output.
-   * @param[in] projectBase {string | undefined} Optional project root used for interpreter resolution and process cwd.
-   */
-  constructor(inputs: string[], extraArgs?: string[], failOnly = false, projectBase?: string) {
-    super(inputs, extraArgs, failOnly);
-    this.label = "Ruff";
-    this.projectBase = projectBase;
-  }
-
-  /**
-   * @brief Runs Ruff for one file.
-   * @details Resolves the Python interpreter, executes `python -m ruff check`, and emits standardized OK/FAIL output with captured evidence on failure. Runtime is dominated by external tool execution. Side effects include process spawning and console output.
-   * @param[in] filePath {string} File to analyze.
-   * @return {number} `0` on success; `1` on execution or analysis failure.
-   */
-  protected override checkFile(filePath: string): number {
-    const pythonExec = detectPythonExecutable(this.projectBase);
-    const command = [pythonExec, "-m", "ruff", "check", filePath, ...this.extraArgs];
-    const result = spawnSync(command[0]!, command.slice(1), { encoding: "utf8", cwd: this.projectBase });
-    if (result.error) {
-      this.emitLine(this.headerLine(filePath));
-      this.emitLine("Result: FAIL");
-      this.emitLine("Evidence:");
-      this.emitLine("  ruff module not available via sys.executable");
-      return 1;
-    }
-    if (result.status === 0) {
-      if (!this.failOnly) {
-        this.emitLine(this.headerLine(filePath));
-        this.emitLine("Result: OK");
-      }
-      return 0;
-    }
-    this.emitLine(this.headerLine(filePath));
-    this.emitLine("Result: FAIL");
-    this.emitLine("Evidence:");
-    this.emitLine(`${result.stdout ?? ""}${result.stderr ?? ""}`.trimEnd());
-    return 1;
-  }
-}
-
-/**
- * @brief Runs an arbitrary external command as a static checker.
+ * @brief Runs the user-facing external-command static checker.
  * @details Validates command availability on PATH during construction, then invokes the command with configured extra arguments plus one target file at a time. Runtime is dominated by external command execution. Side effects include PATH probing, process spawning, and console output.
  */
 export class StaticCheckCommand extends StaticCheckBase {
@@ -602,7 +475,7 @@ function findExecutable(cmd: string): string | undefined {
 
 /**
  * @brief Dispatches one configured static checker for a single file.
- * @details Selects the checker implementation by module name, normalizes parameter arrays, and runs exactly one checker instance against the target file. Runtime is dominated by the selected checker. Side effects include console output and possible process spawning.
+ * @details Selects the debug `Dummy` or user-facing `Command` implementation by module name, normalizes parameter arrays, and runs exactly one checker instance against the target file. Runtime is dominated by the selected checker. Side effects include console output and possible process spawning.
  * @param[in] filePath {string} Absolute or relative file path to check.
  * @param[in] langConfig {StaticCheckEntry} Normalized static-check configuration entry.
  * @param[in] options {{ failOnly?: boolean; projectBase?: string }} Optional execution controls.
@@ -618,14 +491,9 @@ export function dispatchStaticCheckForFile(
   const params = Array.isArray(langConfig.params) ? langConfig.params.map(String) : [];
   const cmd = typeof langConfig.cmd === "string" ? langConfig.cmd : undefined;
   const failOnly = options.failOnly ?? false;
-  const projectBase = options.projectBase;
   switch (moduleName.toLowerCase()) {
     case "dummy":
       return new StaticCheckBase([filePath], params, failOnly).run();
-    case "pylance":
-      return new StaticCheckPylance([filePath], params, failOnly, projectBase).run();
-    case "ruff":
-      return new StaticCheckRuff([filePath], params, failOnly, projectBase).run();
     case "command":
       if (!cmd) {
         throw new ReqError(`Error: Command module requires 'cmd' in static-check config for '${filePath}'.`, 1);
@@ -633,7 +501,7 @@ export function dispatchStaticCheckForFile(
       return new StaticCheckCommand(cmd, [filePath], params, failOnly).run();
     default:
       throw new ReqError(
-        `Error: unknown static-check module '${moduleName}'. Valid modules: ${formatStaticCheckModules()}`,
+        `Error: unknown static-check module '${moduleName}'. Valid modules: ${formatDispatchStaticCheckModules()}`,
         1,
       );
   }
@@ -641,23 +509,19 @@ export function dispatchStaticCheckForFile(
 
 /**
  * @brief Runs the standalone static-check test driver.
- * @details Dispatches subcommands to the built-in checker implementations without consulting project configuration. Runtime is O(n) in argument count plus checker cost. Side effects include console output and external process spawning.
+ * @details Dispatches debug `dummy` or user-facing `command` subcommands without consulting project configuration. Runtime is O(n) in argument count plus checker cost. Side effects include console output and external process spawning.
  * @param[in] argv {string[]} Raw static-check subcommand arguments.
  * @return {number} Checker exit status where `0` means success.
  * @throws {ReqError} Throws when no subcommand is provided, the subcommand is unknown, or required arguments are missing.
  */
 export function runStaticCheck(argv: string[]): number {
   if (argv.length === 0) {
-    throw new ReqError("Error: --test-static-check requires a subcommand: dummy, pylance, ruff, command.", 1);
+    throw new ReqError("Error: --test-static-check requires a subcommand: dummy, command.", 1);
   }
   const [subcommand, ...rest] = argv;
   switch (subcommand) {
     case "dummy":
       return new StaticCheckBase(rest).run();
-    case "pylance":
-      return new StaticCheckPylance(rest).run();
-    case "ruff":
-      return new StaticCheckRuff(rest, undefined, false, process.cwd()).run();
     case "command": {
       if (rest.length === 0) {
         throw new ReqError("Error: --test-static-check command requires a <cmd> argument.", 1);
@@ -667,7 +531,7 @@ export function runStaticCheck(argv: string[]): number {
     }
     default:
       throw new ReqError(
-        `Error: unknown --test-static-check subcommand '${subcommand}'. Valid subcommands: dummy, pylance, ruff, command.`,
+        `Error: unknown --test-static-check subcommand '${subcommand}'. Valid subcommands: dummy, command.`,
         1,
       );
   }

@@ -358,16 +358,6 @@ function buildStandaloneScenarios(): AttendedScenario[] {
         ["--test-static-check", "dummy", relativeFixturePath],
       ),
       createStandaloneScenario(
-        `standalone/test-static-check-pylance/${fixtureName}`,
-        path.posix.join("standalone", "test-static-check-pylance", `${fixtureName}.json`),
-        ["--test-static-check", "pylance", relativeFixturePath],
-      ),
-      createStandaloneScenario(
-        `standalone/test-static-check-ruff/${fixtureName}`,
-        path.posix.join("standalone", "test-static-check-ruff", `${fixtureName}.json`),
-        ["--test-static-check", "ruff", relativeFixturePath],
-      ),
-      createStandaloneScenario(
         `standalone/test-static-check-command/${fixtureName}`,
         path.posix.join("standalone", "test-static-check-command", `${fixtureName}.json`),
         ["--test-static-check", "command", "false", relativeFixturePath],
@@ -470,14 +460,14 @@ function buildProjectScenarios(): AttendedScenario[] {
             "--provider",
             "claude:prompts",
             "--enable-static-check",
-            "Python=Pylance",
+            "Python=Command,git,--version",
           ],
           cwd: projectBase,
           normalize: createProjectNormalizer(projectBase),
           cleanup: () => removePath(projectBase),
           postAssert: () => {
             const payload = JSON.parse(fs.readFileSync(getProjectConfigPath(projectBase), "utf8")) as UseReqConfig;
-            assert.deepEqual(payload["static-check"].Python, [{ module: "Pylance" }]);
+            assert.deepEqual(payload["static-check"].Python, [{ module: "Command", cmd: "git", params: ["--version"] }]);
           },
         };
       },
@@ -488,7 +478,7 @@ function buildProjectScenarios(): AttendedScenario[] {
           const script = [
             "from pathlib import Path",
             "from usereq.cli import save_config",
-            `save_config(Path(${JSON.stringify(projectBase)}), 'guidelines', 'docs', 'tests', ['src'], static_check_config={'Python': [{'module': 'Pylance'}]})`,
+            `save_config(Path(${JSON.stringify(projectBase)}), 'guidelines', 'docs', 'tests', ['src'], static_check_config={'Python': [{'module': 'Command', 'cmd': 'git', 'params': ['--version']} ]})`,
           ].join("\n");
           const result = runPythonInline(script, projectBase);
           return createProjectNormalizer(projectBase)(toArchivedCliResult(result));
