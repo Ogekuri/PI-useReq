@@ -35,8 +35,16 @@ type RegisteredTool = {
 };
 
 /**
+ * @brief Describes one fake shortcut registration captured during tests.
+ * @details Mirrors the minimal shortcut-registration shape exercised by the
+ * suite so tests can trigger the configured sound toggle without a live TUI.
+ * The alias is compile-time only and introduces no runtime side effects.
+ */
+type RegisteredShortcut = { description?: string; handler: (ctx: any) => Promise<void> | void };
+
+/**
  * @brief Represents the fake pi runtime returned by `createFakePi`.
- * @details Captures registered commands, tools, event handlers, active-tool state, and prompt-delivery payloads for deterministic extension-registration assertions. The alias is compile-time only and introduces no runtime side effects.
+ * @details Captures registered commands, tools, shortcuts, event handlers, active-tool state, and prompt-delivery payloads for deterministic extension-registration assertions. The alias is compile-time only and introduces no runtime side effects.
  */
 type FakePi = ReturnType<typeof createFakePi>;
 
@@ -145,14 +153,15 @@ function createFakeSessionManager(): FakeSessionManager {
 }
 
 /**
- * @brief Creates a fake pi runtime that records command and tool registrations.
- * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, event dispatch, active-tool mutation, prompt delivery, and optional session-entry persistence. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
+ * @brief Creates a fake pi runtime that records command, tool, and shortcut registrations.
+ * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, shortcut registration, event dispatch, active-tool mutation, prompt delivery, and optional session-entry persistence. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
  * @param[in] options {FakePiOptions} Optional fake runtime integrations.
  * @return {FakePi} Fake extension runtime.
  */
 function createFakePi(options: FakePiOptions = {}) {
   const commands = new Map<string, RegisteredCommand>();
   const tools: RegisteredTool[] = [];
+  const shortcuts = new Map<string, RegisteredShortcut>();
   const sentUserMessages: Array<{ content: unknown; options?: unknown }> = [];
   const eventHandlers = new Map<string, Array<(event: any, ctx: any) => Promise<void> | void>>();
   const embeddedToolNames = new Set<string>(PI_USEREQ_EMBEDDED_TOOL_NAMES);
@@ -186,6 +195,7 @@ function createFakePi(options: FakePiOptions = {}) {
   return {
     commands,
     tools,
+    shortcuts,
     sentUserMessages,
     eventHandlers,
     getActiveTools() {
@@ -221,6 +231,9 @@ function createFakePi(options: FakePiOptions = {}) {
       if (!activeTools.includes(definition.name)) {
         activeTools = [...activeTools, definition.name];
       }
+    },
+    registerShortcut(shortcut: string, options: RegisteredShortcut) {
+      shortcuts.set(shortcut, options);
     },
     sendUserMessage(content: unknown, options?: unknown) {
       sentUserMessages.push({ content, options });
@@ -293,7 +306,7 @@ function buildExpectedFakeContextBar(options: {
  * @details Reconstructs the field order, separators, context bar, and timing
  * fields emitted by the extension using deterministic fake theme markers.
  * Runtime is O(s) in source-path count. No external state is mutated.
- * @param[in] options {{ docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; contextPercent?: number | null; elapsed: string; last: string }} Expected status facts.
+ * @param[in] options {{ docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; contextPercent?: number | null; elapsed: string; last: string; beep?: string; sound?: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -305,6 +318,8 @@ function buildExpectedFakeStatusText(options: {
   contextPercent?: number | null;
   elapsed: string;
   last: string;
+  beep?: string;
+  sound?: string;
 }): string {
   const buildField = (fieldName: string, value: string): string =>
     `${formatFakeThemeForeground("accent", `${fieldName}:`)}${formatFakeThemeForeground("warning", value)}`;
@@ -320,6 +335,8 @@ function buildExpectedFakeStatusText(options: {
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
     buildField("elapsed", options.elapsed),
     buildField("last", options.last),
+    buildField("beep", options.beep ?? "none"),
+    buildField("sound", options.sound ?? "none"),
   ].join(formatFakeThemeForeground("dim", " • "));
 }
 
@@ -1652,6 +1669,99 @@ test("configuration menu can disable configurable active tools", async () => {
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.deepEqual(config["enabled-tools"], []);
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
+});
+
+test("configuration menu can persist pi-notify settings", async () => {
+  const cwd = createTempDir("pi-usereq-menu-notify-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "Manage notifications",
+      "Toggle beep on success [off]",
+      "Toggle beep on error [off]",
+      "Set success sound level",
+      "high",
+      "Set sound toggle shortcut",
+      "Set PI_NOTIFY_SOUND_LOW_CMD",
+      "Set PI_NOTIFY_SOUND_MID_CMD",
+      "Set PI_NOTIFY_SOUND_HIGH_CMD",
+      "Back",
+      "Save and close",
+    ],
+    inputs: [
+      "ctrl+shift+s",
+      "echo low $install-path",
+      "echo mid $install-path",
+      "echo high $install-path",
+    ],
+  });
+
+  await command!.handler("", ctx);
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(config["notify-beep-on-end"], true);
+  assert.equal(config["notify-beep-on-error"], true);
+  assert.equal(config["notify-beep-on-esc"], false);
+  assert.equal(config["notify-sound"], "high");
+  assert.equal(config["notify-sound-toggle-shortcut"], "ctrl+shift+s");
+  assert.equal(config.PI_NOTIFY_SOUND_LOW_CMD, "echo low $install-path");
+  assert.equal(config.PI_NOTIFY_SOUND_MID_CMD, "echo mid $install-path");
+  assert.equal(config.PI_NOTIFY_SOUND_HIGH_CMD, "echo high $install-path");
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      toolCount: pi.getActiveTools().length,
+      contextFilledCells: 0,
+      elapsed: "idle",
+      last: "N/A",
+      beep: "end,err",
+      sound: "high",
+    }),
+  );
+});
+
+test("sound toggle shortcut cycles persisted pi-notify sound levels", async () => {
+  const cwd = createTempDir("pi-usereq-shortcut-notify-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const previousCwd = process.cwd();
+  const pi = createFakePi();
+  process.chdir(cwd);
+  try {
+    piUsereqExtension(pi);
+  } finally {
+    process.chdir(previousCwd);
+  }
+
+  const shortcut = pi.shortcuts.get("ctrl+s");
+  assert.ok(shortcut);
+  const ctx = createFakeCtx(cwd);
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+
+  for (const expectedSound of ["low", "mid", "high", "none"]) {
+    await shortcut!.handler(ctx);
+    const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+    assert.equal(config["notify-sound"], expectedSound);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
+        contextFilledCells: 0,
+        elapsed: "idle",
+        last: "N/A",
+        sound: expectedSound,
+      }),
+    );
+  }
 });
 
 test("git-path tool derives the repository root at runtime", async () => {

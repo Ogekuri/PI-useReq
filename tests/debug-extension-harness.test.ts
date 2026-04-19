@@ -252,10 +252,12 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     );
     assert.match(
       status,
-      /<accent>context:<\/accent><bg-from-fg-accent><dim>▓<\/dim><\/bg-from-fg-accent>/,
+      /<accent>context:<\/accent><bg-from-fg-accent><warning>claer<\/warning><\/bg-from-fg-accent>/,
     );
     assert.match(status, /<accent>elapsed:<\/accent><warning>idle<\/warning>/);
     assert.match(status, /<accent>last:<\/accent><warning>N\/A<\/warning>/);
+    assert.match(status, /<accent>beep:<\/accent><warning>none<\/warning>/);
+    assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
     assert.equal(report.ui.notifications.length, 0);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
