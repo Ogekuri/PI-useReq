@@ -270,8 +270,8 @@ function formatFakeThemeBackgroundFromForeground(color: string, text: string): s
 
 /**
  * @brief Builds the expected fake context-bar payload for assertions.
- * @details Resolves the empty-state `claer` overlay for unavailable or
- * non-positive percent, resolves the high-water `full!` overlay for percent
+ * @details Resolves the empty-state `CLEAR` overlay for unavailable or
+ * non-positive percent, resolves the high-water `FULL!` overlay for percent
  * above 90, and otherwise reconstructs the 5-cell bar. Runtime is O(1). No
  * external state is mutated.
  * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-bar facts.
@@ -284,13 +284,13 @@ function buildExpectedFakeContextBar(options: {
   if (options.percent === undefined || options.percent === null || options.percent <= 0) {
     return formatFakeThemeBackgroundFromForeground(
       "accent",
-      formatFakeThemeForeground("warning", "claer"),
+      formatFakeThemeForeground("warning", "CLEAR"),
     );
   }
   if (options.percent > 90) {
     return formatFakeThemeBackgroundFromForeground(
       "warning",
-      formatFakeThemeForeground("redBright", "full!"),
+      formatFakeThemeForeground("redBright", "FULL!"),
     );
   }
   return Array.from({ length: 5 }, (_value, index) =>
@@ -303,13 +303,13 @@ function buildExpectedFakeContextBar(options: {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, separators, context bar, and timing
- * fields emitted by the extension using deterministic fake theme markers.
- * Runtime is O(s) in source-path count. No external state is mutated.
- * @param[in] options {{ docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; contextPercent?: number | null; elapsed: string; last: string; beep?: string; sound?: string }} Expected status facts.
+ * @details Reconstructs the field order, separators, context bar, and timing fields emitted by the extension using deterministic fake theme markers. Runtime is O(s) in source-path count. No external state is mutated.
+ * @param[in] options {{ gitPath?: string; basePath?: string; docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; contextPercent?: number | null; elapsed: string; last: string; beep?: string; sound?: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
+  gitPath?: string;
+  basePath?: string;
   docsDir: string;
   testsDir: string;
   srcDir: string[];
@@ -328,6 +328,8 @@ function buildExpectedFakeStatusText(options: {
     percent: options.contextPercent,
   });
   return [
+    buildField("git", options.gitPath ?? ""),
+    buildField("base", options.basePath ?? "."),
     buildField("docs", options.docsDir),
     buildField("tests", options.testsDir),
     buildField("src", options.srcDir.join(",")),
@@ -342,7 +344,7 @@ function buildExpectedFakeStatusText(options: {
 
 /**
  * @brief Creates a fake extension command context with scripted UI interactions.
- * @details Materializes deterministic `select`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, `getContextUsage`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` injection lets tests emulate runtime replacement after setup logic mutates the fake session manager. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
+ * @details Materializes deterministic `select`, shared settings-menu `custom`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, `getContextUsage`, and theme-color behaviors backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` injection lets tests emulate runtime replacement after setup logic mutates the fake session manager. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
  * @param[in] cwd {string} Working directory exposed to command handlers.
  * @param[in] plan {FakeCtxPlan} Scripted select and input responses.
  * @param[in] options {FakeCtxOptions} Optional fake session-manager, context-usage, and runtime-replacement integrations.
@@ -419,6 +421,39 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
       async input(_title: string, _placeholder?: string) {
         return inputs.shift();
       },
+      async custom<T>(factory: (tui: { requestRender: () => void }, theme: { fg: (color: string, text: string) => string; bgFromFg: (color: string, text: string) => string; bold: (text: string) => string }, keybindings: Record<string, never>, done: (value?: T) => void) => unknown) {
+        let resolveResult!: (value: T | undefined) => void;
+        const resultPromise = new Promise<T | undefined>((resolve) => {
+          resolveResult = resolve;
+        });
+        const component = factory(
+          { requestRender: () => undefined },
+          {
+            fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
+            bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
+            bold: (text: string) => `<bold>${text}</bold>`,
+          },
+          {},
+          (value?: T) => resolveResult(value),
+        ) as {
+          __piUsereqSettingsMenu?: {
+            title: string;
+            choices: Array<{ label: string }>;
+            selectByLabel: (label: string) => boolean;
+            cancel: () => void;
+          };
+        };
+        const bridge = component.__piUsereqSettingsMenu;
+        assert.ok(bridge, "unsupported custom UI component");
+        const response = selects.shift();
+        state.selectCalls.push({ title: bridge.title, items: bridge.choices.map((choice) => choice.label) });
+        if (response === undefined) {
+          bridge.cancel();
+        } else {
+          assert.ok(bridge.selectByLabel(response), `unsupported custom selection ${response}`);
+        }
+        return resultPromise;
+      },
       notify(message: string, level: string = "info") {
         state.notifications.push({ message, level });
       },
@@ -470,7 +505,6 @@ test("extension registers prompt and config commands while exposing tool capabil
   const commandNames = [...pi.commands.keys()].sort();
   for (const name of [
     "pi-usereq",
-    "pi-usereq-show-config",
     "req-analyze",
     "req-change",
     "req-check",
@@ -509,6 +543,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "git-wt-name",
     "git-wt-create",
     "git-wt-delete",
+    "pi-usereq-show-config",
     "test-static-check",
   ]) {
     assert.ok(!commandNames.includes(name), `unexpected command ${name}`);
@@ -1310,12 +1345,12 @@ test("configuration menu saves updated docs-dir in project config", async () => 
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
 
-  await command!.handler("", createFakeCtx(cwd, { selects: ["Set docs-dir", "Save and close"], inputs: ["docs/custom"] }));
+  await command!.handler("", createFakeCtx(cwd, { selects: ["docs-dir", "Save and close"], inputs: ["docs/custom"] }));
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(config["docs-dir"], "docs/custom");
 });
 
-test("configuration menu omits prompt-delivery controls and persisted config omits removed fields", async () => {
+test("configuration menu omits prompt-delivery controls and persisted config omits removed runtime fields", async () => {
   const cwd = createTempDir("pi-usereq-menu-current-session-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -1330,6 +1365,43 @@ test("configuration menu omits prompt-delivery controls and persisted config omi
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(menuItems.some((item) => item.includes("reset-context")), false);
   assert.equal(Object.prototype.hasOwnProperty.call(config, "reset-context"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(config, "base-path"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(config, "git-path"), false);
+});
+
+test("configuration menus expose show-config ordering and omit overview or notification-reference rows", async () => {
+  const cwd = createTempDir("pi-usereq-menu-structure-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, { selects: ["show-config", "notifications", "Back", "Save and close"] });
+
+  await command!.handler("", ctx);
+
+  assert.deepEqual(ctx.__state.selectCalls[0]?.items ?? [], [
+    "docs-dir",
+    "tests-dir",
+    "src-dir",
+    "static-check",
+    "startup tools",
+    "notifications",
+    "Reset defaults",
+    "show-config",
+    "Save and close",
+  ]);
+  assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
+    "Toggle beep on success",
+    "Toggle beep on escape",
+    "Toggle beep on error",
+    "Selected notify command",
+    "Sound toggle hotkey bind",
+    "Notify command (low vol.)",
+    "Notify command (mid vol.)",
+    "Notify command (high vol.)",
+    "Back",
+  ]);
 });
 
 test("prompt commands use the current session by default", async () => {
@@ -1384,7 +1456,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   );
 });
 
-test("session_start renders the claer overlay when context usage is empty", async () => {
+test("session_start renders the CLEAR overlay when context usage is empty", async () => {
   const cwd = createTempDir("pi-usereq-context-empty-status-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -1478,7 +1550,7 @@ test("context hook refreshes context usage and rounds progress cells upward", as
   );
 });
 
-test("context hook renders the full! overlay when usage exceeds ninety percent", async () => {
+test("context hook renders the FULL! overlay when usage exceeds ninety percent", async () => {
   const cwd = createTempDir("pi-usereq-context-full-status-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const contextUsage = { tokens: 910, contextWindow: 1000, percent: 91 };
@@ -1642,7 +1714,7 @@ test("configuration menu can enable embedded builtin tools", async () => {
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["Manage active tools", "Toggle tool", "✗ grep [builtin]", "Back", "Save and close"],
+      selects: ["startup tools", "Toggle tool", "grep", "Back", "Save and close"],
     }),
   );
 
@@ -1662,7 +1734,7 @@ test("configuration menu can disable configurable active tools", async () => {
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["Manage active tools", "Disable all configurable tools", "Back", "Save and close"],
+      selects: ["startup tools", "Disable all configurable tools", "Back", "Save and close"],
     }),
   );
 
@@ -1680,23 +1752,23 @@ test("configuration menu can persist pi-notify settings", async () => {
   assert.ok(command);
   const ctx = createFakeCtx(cwd, {
     selects: [
-      "Manage notifications",
-      "Toggle beep on success [off]",
-      "Toggle beep on error [off]",
-      "Set success sound level",
+      "notifications",
+      "Toggle beep on success",
+      "Toggle beep on error",
+      "Selected notify command",
       "high",
-      "Set sound toggle shortcut",
-      "Set PI_NOTIFY_SOUND_LOW_CMD",
-      "Set PI_NOTIFY_SOUND_MID_CMD",
-      "Set PI_NOTIFY_SOUND_HIGH_CMD",
+      "Sound toggle hotkey bind",
+      "Notify command (low vol.)",
+      "Notify command (mid vol.)",
+      "Notify command (high vol.)",
       "Back",
       "Save and close",
     ],
     inputs: [
-      "ctrl+shift+s",
-      "echo low $install-path",
-      "echo mid $install-path",
-      "echo high $install-path",
+      "alt+shift+s",
+      "echo low %%INSTALLATION_PATH%%",
+      "echo mid %%INSTALLATION_PATH%%",
+      "echo high %%INSTALLATION_PATH%%",
     ],
   });
 
@@ -1707,10 +1779,10 @@ test("configuration menu can persist pi-notify settings", async () => {
   assert.equal(config["notify-beep-on-error"], true);
   assert.equal(config["notify-beep-on-esc"], false);
   assert.equal(config["notify-sound"], "high");
-  assert.equal(config["notify-sound-toggle-shortcut"], "ctrl+shift+s");
-  assert.equal(config.PI_NOTIFY_SOUND_LOW_CMD, "echo low $install-path");
-  assert.equal(config.PI_NOTIFY_SOUND_MID_CMD, "echo mid $install-path");
-  assert.equal(config.PI_NOTIFY_SOUND_HIGH_CMD, "echo high $install-path");
+  assert.equal(config["notify-sound-toggle-shortcut"], "alt+shift+s");
+  assert.equal(config.PI_NOTIFY_SOUND_LOW_CMD, "echo low %%INSTALLATION_PATH%%");
+  assert.equal(config.PI_NOTIFY_SOUND_MID_CMD, "echo mid %%INSTALLATION_PATH%%");
+  assert.equal(config.PI_NOTIFY_SOUND_HIGH_CMD, "echo high %%INSTALLATION_PATH%%");
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
@@ -1739,7 +1811,7 @@ test("sound toggle shortcut cycles persisted pi-notify sound levels", async () =
     process.chdir(previousCwd);
   }
 
-  const shortcut = pi.shortcuts.get("ctrl+s");
+  const shortcut = pi.shortcuts.get("alt+s");
   assert.ok(shortcut);
   const ctx = createFakeCtx(cwd);
   await pi.emit("session_start", { reason: "startup" }, ctx);
@@ -1807,7 +1879,7 @@ test("configuration menu can add static-check entries from raw specs", async () 
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["Manage static-check", "Add entry from LANG=MODULE[,CMD[,PARAM...]]", "Back", "Save and close"],
+      selects: ["static-check", "Add entry from LANG=MODULE[,CMD[,PARAM...]]", "Back", "Save and close"],
       inputs: ["Python=Command,true"],
     }),
   );
@@ -1828,9 +1900,9 @@ test("configuration menu can add guided static-check entries for explicit suppor
     "",
     createFakeCtx(cwd, {
       selects: [
-        "Manage static-check",
+        "static-check",
         "Add entry for supported language",
-        "Python [.py] (0 checkers)",
+        "Python",
         "Ruff",
         "Back",
         "Save and close",

@@ -7,11 +7,9 @@
 
 import process from "node:process";
 import { ReqError } from "./core/errors.js";
-import { loadConfig, saveConfig, type UseReqConfig } from "./core/config.js";
+import { loadConfig, normalizeConfigPaths, saveConfig, type UseReqConfig } from "./core/config.js";
 import {
-  isInsideGitRepo,
   loadAndRepairConfig,
-  resolveGitRoot,
   resolveProjectBase,
   runCompress,
   runDocsCheck,
@@ -234,21 +232,15 @@ function writeResult(result: { stdout: string; stderr: string; code: number }): 
 }
 
 /**
- * @brief Loads mutable project config state without persisting intermediate repairs.
- * @details Resolves the project base, loads existing config or defaults, refreshes `base-path`, recomputes `git-path` when the base resides inside a repository, and returns the in-memory pair used by CLI mutations. Runtime is dominated by config I/O plus optional git probing. Side effects are limited to config reads and git subprocess execution.
+ * @brief Loads mutable project config state without persisting runtime path metadata.
+ * @details Resolves the project base, loads existing config or defaults, normalizes persisted directory fields into project-relative form, and returns the in-memory pair used by CLI mutations. Runtime is dominated by config I/O. Side effects are limited to config reads.
  * @param[in] projectBase {string} Candidate project root path.
- * @return {{ base: string; config: UseReqConfig }} Validated project base and repaired in-memory config.
- * @satisfies REQ-035
+ * @return {{ base: string; config: UseReqConfig }} Validated project base and normalized in-memory config.
+ * @satisfies REQ-035, REQ-146
  */
 function loadMutableProjectConfig(projectBase: string): { base: string; config: UseReqConfig } {
   const base = resolveProjectBase(projectBase);
-  const config = loadConfig(base);
-  config["base-path"] = base;
-  if (isInsideGitRepo(base)) {
-    config["git-path"] = resolveGitRoot(base);
-  } else {
-    delete config["git-path"];
-  }
+  const config = normalizeConfigPaths(base, loadConfig(base));
   return { base, config };
 }
 
@@ -287,7 +279,7 @@ function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseR
 
 /**
  * @brief Executes one pi-usereq CLI invocation.
- * @details Parses arguments, enforces mutually exclusive project-selection rules, repairs config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config repair writes and stdout/stderr output.
+ * @details Parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes and stdout/stderr output.
  * @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
  * @return {number} Process exit code for the invocation.
  * @throws {ReqError} Internally catches `ReqError` and returns its code; other errors are coerced into exit code `1` with stderr output.
@@ -321,7 +313,8 @@ export function main(argv = process.argv.slice(2)): number {
       if (args.here || args.base) {
         loadAndRepairConfig(projectBase);
       }
-      config = loadConfig(projectBase);
+      const resolvedBase = resolveProjectBase(projectBase);
+      config = normalizeConfigPaths(resolvedBase, loadConfig(resolvedBase));
     }
 
     if (args.filesTokens) return writeResult(runFilesTokens(args.filesTokens));

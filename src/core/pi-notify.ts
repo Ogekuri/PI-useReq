@@ -38,28 +38,28 @@ export type PiNotifyOutcome = (typeof PI_NOTIFY_OUTCOMES)[number];
  * @details Seeds persisted configuration when no project-specific shortcut exists. Access complexity is O(1).
  * @satisfies REQ-134
  */
-export const DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT = "ctrl+s";
+export const DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT = "alt+s";
 
 /**
  * @brief Defines the default low-level successful-run sound command.
- * @details Uses the bundled soft notification asset with a low playback volume and defers `$install-path` substitution until runtime execution. Access complexity is O(1).
- * @satisfies REQ-133
+ * @details Uses the bundled soft notification asset with a low playback volume and defers `%%INSTALLATION_PATH%%` substitution until runtime execution. Access complexity is O(1).
+ * @satisfies REQ-133, REQ-142
  */
-export const DEFAULT_PI_NOTIFY_SOUND_LOW_CMD = "paplay --volume=21845 $install-path/resources/sounds/Soft-high-tech-notification-sound-effect.mp3";
+export const DEFAULT_PI_NOTIFY_SOUND_LOW_CMD = "paplay --volume=21845 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3";
 
 /**
  * @brief Defines the default mid-level successful-run sound command.
- * @details Uses the bundled soft notification asset with a mid playback volume and defers `$install-path` substitution until runtime execution. Access complexity is O(1).
- * @satisfies REQ-133
+ * @details Uses the bundled soft notification asset with a mid playback volume and defers `%%INSTALLATION_PATH%%` substitution until runtime execution. Access complexity is O(1).
+ * @satisfies REQ-133, REQ-143
  */
-export const DEFAULT_PI_NOTIFY_SOUND_MID_CMD = "paplay --volume=43690 $install-path/resources/sounds/Soft-high-tech-notification-sound-effect.mp3";
+export const DEFAULT_PI_NOTIFY_SOUND_MID_CMD = "paplay --volume=43690 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3";
 
 /**
  * @brief Defines the default high-level successful-run sound command.
- * @details Uses the bundled soft notification asset with a high playback volume and defers `$install-path` substitution until runtime execution. Access complexity is O(1).
- * @satisfies REQ-133
+ * @details Uses the bundled soft notification asset with a high playback volume and defers `%%INSTALLATION_PATH%%` substitution until runtime execution. Access complexity is O(1).
+ * @satisfies REQ-133, REQ-144
  */
-export const DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD = "paplay --volume=65535 $install-path/resources/sounds/Soft-high-tech-notification-sound-effect.mp3";
+export const DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD = "paplay --volume=65535 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3";
 
 /**
  * @brief Describes the configuration fields consumed by pi-notify helpers.
@@ -326,7 +326,7 @@ function buildPiNotifyBody(outcome: PiNotifyOutcome): string {
 
 /**
  * @brief Quotes one installation path for shell substitution.
- * @details Emits POSIX single-quoted literals for `sh -lc` execution and CMD double-quoted literals for `cmd.exe /c` execution so `$install-path` substitutions preserve whitespace safely. Runtime is O(n) in path length. No external state is mutated.
+ * @details Emits POSIX single-quoted literals for `sh -lc` execution and CMD double-quoted literals for `cmd.exe /c` execution so `%%INSTALLATION_PATH%%` substitutions preserve whitespace safely. Runtime is O(n) in path length. No external state is mutated.
  * @param[in] installationPath {string} Absolute extension installation path.
  * @return {string} Shell-quoted installation path fragment.
  */
@@ -338,15 +338,15 @@ function quotePiNotifyInstallPath(installationPath: string): string {
 }
 
 /**
- * @brief Substitutes `$install-path` inside one sound command.
- * @details Replaces every `$install-path` token with a shell-quoted runtime installation path so bundled sound assets can be addressed safely from external commands. Runtime is O(n) in command length. No external state is mutated.
+ * @brief Substitutes `%%INSTALLATION_PATH%%` inside one sound command.
+ * @details Replaces every `%%INSTALLATION_PATH%%` token with a shell-quoted runtime installation path so bundled sound assets can be addressed safely from external commands. Runtime is O(n) in command length. No external state is mutated.
  * @param[in] command {string} Raw configured sound command.
  * @param[in] installationPath {string} Absolute extension installation path.
  * @return {string} Runtime-ready command string.
  * @satisfies REQ-133
  */
 export function substitutePiNotifyInstallPath(command: string, installationPath: string): string {
-  return command.replaceAll("$install-path", quotePiNotifyInstallPath(installationPath));
+  return command.replaceAll("%%INSTALLATION_PATH%%", quotePiNotifyInstallPath(installationPath));
 }
 
 /**
@@ -372,7 +372,7 @@ function resolvePiNotifySoundCommand(
 
 /**
  * @brief Executes the configured successful-run sound command on an external shell.
- * @details Resolves the runtime installation path, substitutes `$install-path`, spawns the configured shell command without waiting, and ignores transport failures so prompt-end handling remains non-blocking. Runtime is dominated by process spawn. Side effects include detached child-process execution.
+ * @details Resolves the runtime installation path, substitutes `%%INSTALLATION_PATH%%`, spawns the configured shell command without waiting, and ignores transport failures so prompt-end handling remains non-blocking. Runtime is dominated by process spawn. Side effects include detached child-process execution.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] soundLevel {Exclude<PiNotifySoundLevel, "none">} Requested non-disabled sound level.
  * @return {void} No return value.

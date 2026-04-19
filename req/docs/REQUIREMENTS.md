@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.27"
+version: "0.0.28"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -60,6 +60,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-009**: MUST implement extension debugging outside `src/index.ts` business logic and drive extension behavior only through the default extension export, registered commands, registered tools, and registered events.
 - **CTN-010**: MUST execute offline harness flows without requiring pi.dev services or `docs/pi.dev/agent-document-manifest.json`.
 - **CTN-011**: MUST store bundled prompt, template, and guideline resources under `src/resources/{prompts,templates,guidelines}` and install them under `<installation-path>/resources/{prompts,templates,guidelines}`.
+- **CTN-012**: MUST NOT persist `base-path` or `git-path` in `.pi-usereq/config.json`.
 
 ## 3. Requirements
 
@@ -102,7 +103,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-061**: MUST make `scripts/pi-usereq-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
 - **REQ-062**: MUST make `scripts/pi-usereq-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
 - **REQ-065**: MUST make `scripts/pi-usereq-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
-- **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, and `src-dir`, manages static-check and startup-tool submenus, resets defaults, and saves configuration on exit.
+- **REQ-006**: MUST provide a `pi-usereq` menu that edits `docs-dir`, `tests-dir`, and `src-dir`, manages static-check and startup-tool submenus, exposes `show-config`, resets defaults, and saves configuration on exit.
 - **REQ-007**: MUST provide a startup-tools submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for configurable custom and embedded pi CLI active tools.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `grep`, and `ls`.
 - **REQ-064**: MUST default all custom tools except `find` and embedded `read`, `bash`, `edit`, and `write` to enabled, and custom `find` plus embedded `grep` and `ls` to disabled.
@@ -111,7 +112,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-068**: MUST use one prompt-delivery path that never creates replacement sessions or pre-reset flows.
 - **REQ-008**: MUST provide a static-check submenu that adds entries by guided language/module selection or raw spec, removes language entries, and shows supported languages and modules.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish single-line `pi-usereq` status text during `session_start`.
-- **REQ-109**: MUST make the single-line status bar render `docs`, `tests`, and `src` fields with explicit configured path values, keeping every field name separate from its value.
+- **REQ-109**: MUST make the single-line status bar render `git`, `base`, `docs`, `tests`, and `src` with explicit derived or configured path values, keeping every field name separate from its value.
 - **REQ-110**: MUST make the single-line status bar render `tools` as the count of active tools.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
 - **REQ-112**: MUST render status-bar field names in violet and field values in yellow.
@@ -122,24 +123,24 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
-- **REQ-120**: MUST render single-line status fields in this order: `docs`, `tests`, `src`, `tools`, `context`, `elapsed`, `last`, `beep`, `sound`.
+- **REQ-120**: MUST render single-line status fields in this order: `git`, `base`, `docs`, `tests`, `src`, `tools`, `context`, `elapsed`, `last`, `beep`, `sound`.
 - **REQ-121**: MUST render `context` immediately after `tools` with separator ` • ` and a 5-cell bar using `▓` for filled cells.
 - **REQ-122**: MUST compute filled `context` cells by ceiling `usagePercent * 5 / 100`, except 0 percent MUST produce 0 filled cells.
 - **REQ-123**: MUST render `elapsed` immediately after `context`, showing `idle` when no prompt is running and `M:SS` for the active prompt duration.
 - **REQ-124**: MUST render `last` immediately after `elapsed`, showing `N/A` before any normally completed prompt run and otherwise the final `elapsed` value of the latest normally completed run.
 - **REQ-125**: MUST keep `elapsed` and `last` minutes unbounded above 59, zero-pad seconds to two digits, and preserve `last` when escape-triggered cancellation ends the active run.
 - **REQ-126**: MUST render `context` bar cells as yellow `▓` characters on a violet background consistent with the field-label color.
-- **REQ-127**: MUST overlay the literal `claer` in yellow on the `context` bar while preserving the empty bar background when normalized context usage is unavailable or equals 0 percent.
-- **REQ-128**: MUST overlay the literal `full!` in bright red on the `context` bar while preserving the filled yellow bar background when normalized context usage exceeds 90 percent.
+- **REQ-127**: MUST overlay the literal `CLEAR` in yellow on the `context` bar while preserving the empty bar background when normalized context usage is unavailable or equals 0 percent.
+- **REQ-128**: MUST overlay the literal `FULL!` in bright red on the `context` bar while preserving the filled yellow bar background when normalized context usage exceeds 90 percent.
 - **REQ-129**: MUST persist independent terminal-beep flags for successful prompt completion, escape-triggered prompt abortion, and error-terminated prompt completion, defaulting each flag to disabled.
 - **REQ-130**: MUST dispatch enabled terminal-beep events through `notifyWindows`, `notifyOSC99`, `notifyOSC9`, or `notifyOSC777` when the matching prompt lifecycle outcome occurs.
 - **REQ-131**: MUST persist a successful-prompt external sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
 - **REQ-132**: MUST execute the configured successful-prompt external sound command only when the prompt ends without abort or error and the sound level is not `none`.
-- **REQ-133**: MUST persist configurable shell-command strings for sound levels `low`, `mid`, and `high`, and MUST substitute `$install-path` with the runtime extension installation path before execution.
-- **REQ-134**: MUST persist a configurable sound-level toggle shortcut, defaulting to `ctrl+s`, and MUST cycle sound levels in the order `none`, `low`, `mid`, `high`, `none`.
+- **REQ-133**: MUST persist configurable shell-command strings for sound levels `low`, `mid`, and `high`, and MUST substitute `%%INSTALLATION_PATH%%` with the runtime extension installation path before execution.
+- **REQ-134**: MUST persist a configurable sound-level toggle shortcut, defaulting to `alt+s`, and MUST cycle sound levels in the order `none`, `low`, `mid`, `high`, `none`.
 - **REQ-135**: MUST render `beep` immediately after `last`, showing `none` or the comma-ordered enabled event tokens `end`, `esc`, and `err`.
 - **REQ-136**: MUST render `sound` immediately after `beep`, showing one of `none`, `low`, `mid`, or `high`.
-- **REQ-137**: MUST make the configuration UI expose controls for terminal-beep flags, successful-prompt sound level, sound toggle shortcut, and per-level sound commands.
+- **REQ-137**: MUST make the configuration UI expose controls for terminal-beep flags, selected notify command, sound toggle hotkey bind, and per-level notify commands.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
 - **REQ-011**: MUST generate explicit-file references by analyzing supported source files and emitting agent-oriented JSON with per-file metadata, imports, symbol records, and optional residual text.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving indentation for Python, Haskell, and Elixir, and optionally preserving original line numbers.
@@ -194,13 +195,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-027**: MUST make `git-wt-create` reject invalid names, create `../<wtName>` from the configured git root, and copy `.pi-usereq` into the matching worktree base when present.
 - **REQ-028**: MUST make `git-wt-delete` remove the exact named worktree and/or branch when either exists and fail when neither exists.
 - **REQ-029**: MUST make `get-base-path` print `base-path`, where `base-path` equals the current `execution-path`.
-- **REQ-030**: MUST make extension project-config loading set `execution-path` to current cwd and set `config-path` to `<base-path>/.pi-usereq/config.json`.
+- **REQ-030**: MUST make extension project-config loading set `execution-path` to current cwd, derive `base-path` from it, and set `config-path` to `<base-path>/.pi-usereq/config.json`.
 - **REQ-103**: MUST resolve `installation-path` from the executing extension entry module and expose it with runtime path context to prompts, tools, and `session_start` handlers.
 - **REQ-104**: MUST keep `docs-dir`, `tests-dir`, and every `src-dir` entry relative to `base-path` and resolve them against `base-path` during execution.
 - **REQ-105**: MUST make `git-path` print the derived repository root only when it equals `base-path` or is an ancestor of `base-path`.
 - **REQ-106**: MUST make prompt `%%GUIDELINES_FILES%%`, `%%GUIDELINES_PATH%%`, and `%%TEMPLATE_PATH%%` resolve under `<installation-path>/resources`.
 - **REQ-107**: MUST express prompt-visible `installation-path`, `execution-path`, `base-path`, `config-path`, template paths, and guideline paths relative to user home using platform-native home environment variables.
-- **REQ-031**: MUST make `pi-usereq-show-config` write the current project configuration JSON to the editor.
+- **REQ-031**: MUST make the `pi-usereq` menu expose a `show-config` action between `Reset defaults` and `Save and close`, writing the current project configuration JSON to the editor.
 - **REQ-032**: MUST inject a pi.dev conformance block into rendered prompts when `docs/pi.dev/agent-document-manifest.json` exists under the project base.
 - **REQ-033**: MUST make that conformance block require manifest-guided document review before implementing or changing extension code that interfaces with pi CLI.
 - **REQ-034**: MUST make that conformance block require manifest-guided document review before validating, analyzing, or fixing extension code that interfaces with pi CLI.
@@ -218,22 +219,35 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-139**: MUST skip npm publication and GitHub release creation unless the tagged commit is contained in `origin/master`.
 - **REQ-140**: MUST configure Node.js plus npm registry authentication, install dependencies with `npm ci`, remove manifest `private`, and publish with provenance using `secrets.NPM_TOKEN`.
 - **REQ-141**: MUST create a non-draft non-prerelease GitHub Release for the published tag using generated changelog content.
+- **REQ-142**: MUST default `PI_NOTIFY_SOUND_LOW_CMD` to `paplay --volume=21845 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
+- **REQ-143**: MUST default `PI_NOTIFY_SOUND_MID_CMD` to `paplay --volume=43690 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
+- **REQ-144**: MUST default `PI_NOTIFY_SOUND_HIGH_CMD` to `paplay --volume=65535 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
+- **REQ-145**: MUST derive `git-path` only at runtime from the current working directory and repository ancestry rules, ignoring project-configuration JSON values.
+- **REQ-146**: MUST NOT read or persist `base-path` or `git-path` in project-configuration JSON.
+- **REQ-147**: MUST render status-bar `git` as the absolute runtime `git-path`, or an empty value when no repository root is resolved.
+- **REQ-148**: MUST render status-bar `base` as `.` when `base-path` equals or lacks `git-path`, otherwise as the path relative to `git-path`.
+- **REQ-149**: MUST label notification settings actions as `Selected notify command`, `Sound toggle hotkey bind`, `Notify command (low vol.)`, `Notify command (mid vol.)`, and `Notify command (high vol.)`.
+- **REQ-150**: MUST omit overview rows and reference-only actions from the main and notification configuration menus.
+- **REQ-151**: MUST render `pi-usereq`, notification, static-check, and startup-tool menus with left-aligned labels and right-aligned current values styled in a darker theme consistent with pi.dev settings UI.
+- **REQ-152**: MUST render a persistent bottom-line description for the currently selected configuration entry.
+- **REQ-153**: MUST use scrollable configuration menus when entry count exceeds the visible row budget.
+- **REQ-154**: MUST wrap configuration-menu selection from last-to-first and first-to-last entries.
 
 ## 4. Test Requirements
-- **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting custom slash commands for tool names and `test-static-check`.
+- **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
 - **TST-002**: MUST verify installed bundled prompt, template, and guideline resources remain readable from `installation-path` and prompt rendering replaces all dynamic placeholders with runtime path context.
 - **TST-003**: MUST verify standalone CLI outputs for `files-tokens`, `files-compress`, `files-find`, and `--test-static-check` match the Python oracle for every fixture file.
 - **TST-004**: MUST verify project-scan CLI outputs for `compress`, `find`, `tokens`, `files-static-check`, `static-check`, `git-check`, `docs-check`, `git-path`, and `get-base-path` match the Python oracle.
 - **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds static-check entries, and omits prompt-delivery mode controls.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
-- **TST-031**: MUST verify the status bar renders explicit docs/tests/src paths, active-tool count, and violet/yellow field-value color separation.
+- **TST-031**: MUST verify the status bar renders explicit git/base/docs/tests/src paths, active-tool count, and violet/yellow field-value color separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
-- **TST-033**: MUST verify the status bar renders ordered `tools`, `context`, `elapsed`, `last`, `beep`, and `sound` fields plus the ceiling-based 5-cell context bar.
-- **TST-037**: MUST verify the configuration menu persists terminal-beep flags, sound level, sound toggle shortcut, and per-level sound commands.
+- **TST-033**: MUST verify the status bar renders ordered `git`, `base`, `docs`, `tests`, `src`, `tools`, `context`, `elapsed`, `last`, `beep`, and `sound` fields plus the ceiling-based 5-cell context bar.
+- **TST-037**: MUST verify the configuration menu persists terminal-beep flags, selected notify command, sound toggle hotkey bind, and per-level notify commands using the documented menu labels.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and prompt timing preserves `last` across normal completion but not escape-triggered cancellation.
-- **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `claer` in yellow on the preserved empty context-bar background.
-- **TST-036**: MUST verify context usage above 90 percent renders the literal `full!` in bright red on the preserved filled context-bar background.
+- **TST-035**: MUST verify unavailable or 0-percent context usage renders the literal `CLEAR` in yellow on the preserved empty context-bar background.
+- **TST-036**: MUST verify context usage above 90 percent renders the literal `FULL!` in bright red on the preserved filled context-bar background.
 - **TST-007**: MUST verify `git-path` output ignores stale stored values and resolves only a current repository root that is identical to or an ancestor of `base-path`.
 - **TST-008**: MUST verify `git-wt-create` and `git-wt-delete` create, configure, copy `.pi-usereq`, and remove the named worktree as observable filesystem side effects.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
@@ -259,6 +273,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-028**: MUST verify path, static-check, git, docs, and worktree agent-tool outputs expose structured JSON request, result, status, execution, and derived runtime path facts through dedicated fields.
 - **TST-029**: MUST verify harness inspection surfaces machine-oriented descriptions for path, static-check, git, docs, and worktree tools, including parameters, output schema, specialization triggers, and failure conditions.
 - **TST-039**: MUST verify `.github/workflows/release-npm.yml` gates semver-tag releases on `origin/master`, runs `npm ci`, publishes with provenance via `secrets.NPM_TOKEN`, and creates the GitHub Release from generated changelog text.
+- **TST-040**: MUST verify `.pi-usereq/config.json` omits `base-path` and `git-path`, while runtime path tools and status rendering still derive both values correctly.
+- **TST-041**: MUST verify the `pi-usereq` menu exposes `show-config` between `Reset defaults` and `Save and close`, and omits overview rows plus notification reference-only actions.
 
 ## 5. Observed Component Model
 

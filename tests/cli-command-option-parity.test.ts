@@ -752,14 +752,15 @@ const TARGET_CASES: TargetParityCase[] = [
   {
     id: "direct::git-path-and-base-path-matrix",
     run(t) {
-      const { projectBase, config } = createFixtureRepo(t, { fixtures: [] });
+      const { projectBase } = createFixtureRepo(t, { fixtures: [] });
+      const resolvedGitPath = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: projectBase, encoding: "utf8" }).stdout.trim();
       const gitPath = runNodeCli(["--git-path"], projectBase);
       assert.equal(gitPath.status, 0, gitPath.stderr);
-      assert.equal(gitPath.stdout.trim(), formatRuntimePathForDisplay(String(config["git-path"] ?? "")));
+      assert.equal(gitPath.stdout.trim(), formatRuntimePathForDisplay(resolvedGitPath));
 
       const basePath = runNodeCli(["--get-base-path"], projectBase);
       assert.equal(basePath.status, 0, basePath.stderr);
-      assert.equal(basePath.stdout.trim(), formatRuntimePathForDisplay(String(config["base-path"] ?? projectBase)));
+      assert.equal(basePath.stdout.trim(), formatRuntimePathForDisplay(projectBase));
 
       const gitRejected = runNodeCli(["--base", projectBase, "--git-path"], projectBase);
       assert.notEqual(gitRejected.status, 0);

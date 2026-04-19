@@ -284,7 +284,7 @@ function formatRecordedThemeBackgroundFromForeground(color: string, text: string
 
 /**
  * @brief Records UI activity and session-control side effects for one offline command context.
- * @details Exposes the subset of `ctx.ui` plus command-only session APIs consumed by the extension, dequeues scripted responses for interactive handlers, encodes theme-color output deterministically, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI or session-control operation plus delegated setup cost. Side effects are limited to in-memory state mutation.
+ * @details Exposes the subset of `ctx.ui` plus command-only session APIs consumed by the extension, including shared settings-menu custom UI replay, dequeues scripted responses for interactive handlers, encodes theme-color output deterministically, and accumulates deterministic side-effect evidence. Runtime is O(1) per UI or session-control operation plus delegated setup cost. Side effects are limited to in-memory state mutation.
  */
 export class RecordingCommandContext {
   /**
@@ -295,7 +295,7 @@ export class RecordingCommandContext {
 
   /**
    * @brief Exposes the recorded UI adapter consumed by extension handlers.
-   * @details Each method mutates recorder state only and never touches a real terminal UI. Access complexity is O(1).
+   * @details Each method mutates recorder state only and never touches a real terminal UI. Shared settings-menu custom UI is replayed through scripted select labels. Access complexity is O(1).
    */
   public readonly ui: {
     theme: {
@@ -304,6 +304,7 @@ export class RecordingCommandContext {
     };
     select: (title: string, items: string[]) => Promise<string | undefined>;
     input: (title: string, placeholder?: string) => Promise<string | undefined>;
+    custom: <T>(factory: (tui: { requestRender: () => void }, theme: { fg: (color: string, text: string) => string; bgFromFg: (color: string, text: string) => string; bold: (text: string) => string }, keybindings: Record<string, never>, done: (value?: T) => void) => unknown) => Promise<T | undefined>;
     notify: (message: string, level?: string) => void;
     setStatus: (key: string, value?: string) => void;
     setEditorText: (value: string) => void;
@@ -325,7 +326,7 @@ export class RecordingCommandContext {
 
   /**
    * @brief Initializes a recording command context.
-   * @details Copies scripted response queues so callers can reuse input arrays safely across replays, stores the user-message recorder used by `ctx.newSession(...setup)`, then binds a stable `ui` adapter over recorder methods plus deterministic theme-color encoding. Runtime is O(s + i) in queued select and input count. Side effects are limited to instance initialization.
+   * @details Copies scripted response queues so callers can reuse input arrays safely across replays, stores the user-message recorder used by `ctx.newSession(...setup)`, then binds a stable `ui` adapter over recorder methods plus deterministic theme-color encoding and shared settings-menu custom replay. Runtime is O(s + i) in queued select and input count. Side effects are limited to instance initialization.
    * @param[in] cwd {string} Working directory exposed through `ctx.cwd`.
    * @param[in] plan {RecordingUiPlan | undefined} Optional scripted UI responses.
    * @param[in] recordSessionUserMessage {(content: JsonValue) => void | undefined} Optional recorder for user messages appended during new-session setup.
@@ -343,6 +344,7 @@ export class RecordingCommandContext {
       },
       select: async (title: string, items: string[]) => this.recordSelect(title, items),
       input: async (title: string, placeholder?: string) => this.recordInput(title, placeholder),
+      custom: async <T>(factory: (tui: { requestRender: () => void }, theme: { fg: (color: string, text: string) => string; bgFromFg: (color: string, text: string) => string; bold: (text: string) => string }, keybindings: Record<string, never>, done: (value?: T) => void) => unknown) => this.recordCustom(factory),
       notify: (message: string, level = "info") => this.recordNotification(message, level),
       setStatus: (key: string, value?: string) => this.recordStatus(key, value),
       setEditorText: (value: string) => this.recordEditorText(value),
@@ -407,6 +409,48 @@ export class RecordingCommandContext {
     const response = this.selectQueue.shift();
     this.selectCalls.push({ title, items: [...items], response });
     return response;
+  }
+
+  /**
+   * @brief Replays one supported custom settings menu through queued select labels.
+   * @details Instantiates the custom component with deterministic fake TUI and theme adapters, reads the shared pi-usereq settings-menu bridge when present, records the menu as one `select` interaction, and resolves the scripted choice without raw key-stream simulation. Runtime is O(m) in visible choice count. Side effects mutate recorder state.
+   * @param[in] factory {(tui: { requestRender: () => void }, theme: { fg: (color: string, text: string) => string; bgFromFg: (color: string, text: string) => string; bold: (text: string) => string }, keybindings: Record<string, never>, done: (value?: T) => void) => unknown} Custom UI factory supplied by extension code.
+   * @return {Promise<T | undefined>} Scripted custom-UI result.
+   * @throws {Error} Throws when the custom component does not expose the shared settings-menu bridge or the scripted selection label is invalid.
+   */
+  private async recordCustom<T>(factory: (tui: { requestRender: () => void }, theme: { fg: (color: string, text: string) => string; bgFromFg: (color: string, text: string) => string; bold: (text: string) => string }, keybindings: Record<string, never>, done: (value?: T) => void) => unknown): Promise<T | undefined> {
+    let resolveResult!: (value: T | undefined) => void;
+    const resultPromise = new Promise<T | undefined>((resolve) => {
+      resolveResult = resolve;
+    });
+    const component = factory(
+      { requestRender: () => undefined },
+      {
+        fg: (color: string, text: string) => formatRecordedThemeForeground(color, text),
+        bgFromFg: (color: string, text: string) => formatRecordedThemeBackgroundFromForeground(color, text),
+        bold: (text: string) => `<bold>${text}</bold>`,
+      },
+      {},
+      (value?: T) => resolveResult(value),
+    ) as {
+      __piUsereqSettingsMenu?: {
+        title: string;
+        choices: Array<{ label: string }>;
+        selectByLabel: (label: string) => boolean;
+        cancel: () => void;
+      };
+    };
+    const bridge = component.__piUsereqSettingsMenu;
+    if (!bridge) {
+      throw new Error("Unsupported custom UI component in recording harness.");
+    }
+    const response = this.recordSelect(bridge.title, bridge.choices.map((choice) => choice.label));
+    if (response === undefined) {
+      bridge.cancel();
+    } else if (!bridge.selectByLabel(response)) {
+      throw new Error(`Unsupported custom selection '${response}' for menu '${bridge.title}'.`);
+    }
+    return resultPromise;
   }
 
   /**

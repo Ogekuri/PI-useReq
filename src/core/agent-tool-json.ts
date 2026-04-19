@@ -300,7 +300,7 @@ export function normalizeToolFailure(error: unknown): ToolResult {
 
 /**
  * @brief Builds the structured payload returned by `git-path` or `get-base-path`.
- * @details Exposes the resolved config value as a direct-access field and preserves normalized execution metadata separately from path facts. Runtime is O(p) in path length. No external state is mutated.
+ * @details Exposes the resolved runtime path value as a direct-access field and preserves normalized execution metadata separately from path facts. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] toolName {"git-path" | "get-base-path"} Target tool name.
  * @param[in] workingDirectoryPath {string} Caller working directory.
  * @param[in] projectBasePath {string} Resolved project base path.
@@ -339,9 +339,9 @@ export function buildPathQueryToolPayload(
 
 /**
  * @brief Builds the structured payload returned by `git-check`.
- * @details Encodes configured git-root presence plus clean-versus-error status as direct fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
+ * @details Encodes runtime git-root presence plus clean-versus-error status as direct fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] projectBasePath {string} Resolved project base path.
- * @param[in] configuredGitPath {string | undefined} Configured git root path.
+ * @param[in] configuredGitPath {string | undefined} Runtime git root path.
  * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {GitCheckToolPayload} Structured git-check payload.
@@ -436,7 +436,7 @@ export function buildDocsCheckToolPayload(
  * @brief Builds the structured payload returned by `git-wt-name`.
  * @details Preserves the generated worktree name plus its normative format string as direct-access fields and reports failures through structured execution metadata. Runtime is O(n) in output size. No external state is mutated.
  * @param[in] projectBasePath {string} Resolved project base path.
- * @param[in] configuredGitPath {string | undefined} Configured git root path.
+ * @param[in] configuredGitPath {string | undefined} Runtime git root path.
  * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.
  * @return {WorktreeNameToolPayload} Structured worktree-name payload.
@@ -471,7 +471,7 @@ export function buildWorktreeNameToolPayload(
  * @details Exposes the requested operation, exact worktree name, derived worktree path, and mutation outcome as stable JSON fields while preserving raw diagnostics under execution. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] toolName {"git-wt-create" | "git-wt-delete"} Target tool name.
  * @param[in] projectBasePath {string} Resolved project base path.
- * @param[in] configuredGitPath {string | undefined} Configured git root path.
+ * @param[in] configuredGitPath {string | undefined} Runtime git root path.
  * @param[in] worktreeName {string} Exact requested worktree name.
  * @param[in] runtimePaths {RuntimePathFacts} Shared runtime path facts.
  * @param[in] execution {ToolExecutionSection} Normalized execution metadata.

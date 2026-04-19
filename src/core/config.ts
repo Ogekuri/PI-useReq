@@ -37,7 +37,7 @@ export interface StaticCheckEntry {
 
 /**
  * @brief Defines the persisted pi-usereq project configuration schema.
- * @details Captures documentation paths, source/test directory selection, static-check configuration, enabled startup tools, and git/base-path metadata. The interface is compile-time only and introduces no runtime side effects.
+ * @details Captures documentation paths, source/test directory selection, static-check configuration, enabled startup tools, and notification settings while excluding runtime-derived path metadata. The interface is compile-time only and introduces no runtime side effects.
  */
 export interface UseReqConfig {
   "docs-dir": string;
@@ -53,8 +53,6 @@ export interface UseReqConfig {
   PI_NOTIFY_SOUND_LOW_CMD: string;
   PI_NOTIFY_SOUND_MID_CMD: string;
   PI_NOTIFY_SOUND_HIGH_CMD: string;
-  "base-path"?: string;
-  "git-path"?: string;
 }
 
 /**
@@ -85,13 +83,12 @@ export function getProjectConfigPath(projectBase: string): string {
 
 /**
  * @brief Builds the default project configuration.
- * @details Populates canonical docs/test/source directories, the default startup tool set, default pi-notify beep and sound-hook values, and the provided project base path. Time complexity is O(n) in default tool count. No filesystem side effects occur.
+ * @details Populates canonical docs/test/source directories, the default startup tool set, and default pi-notify fields while excluding runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
- * @satisfies CTN-001, REQ-066
+ * @satisfies CTN-001, CTN-012, REQ-066, REQ-146
  */
-export function getDefaultConfig(projectBase: string): UseReqConfig {
-  const normalizedProjectBase = path.resolve(projectBase);
+export function getDefaultConfig(_projectBase: string): UseReqConfig {
   return {
     "docs-dir": DEFAULT_DOCS_DIR,
     "tests-dir": DEFAULT_TESTS_DIR,
@@ -106,17 +103,16 @@ export function getDefaultConfig(projectBase: string): UseReqConfig {
     PI_NOTIFY_SOUND_LOW_CMD: DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
     PI_NOTIFY_SOUND_MID_CMD: DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
     PI_NOTIFY_SOUND_HIGH_CMD: DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
-    "base-path": normalizedProjectBase,
   };
 }
 
 /**
  * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names, normalizes pi-notify beep and sound-hook fields, and omits removed prompt-delivery mode fields from the returned object. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names and pi-notify fields, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
- * @satisfies REQ-066
+ * @satisfies CTN-012, REQ-066, REQ-146
  */
 export function loadConfig(projectBase: string): UseReqConfig {
   const configPath = getProjectConfigPath(projectBase);
@@ -152,8 +148,6 @@ export function loadConfig(projectBase: string): UseReqConfig {
   const lowSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD);
   const midSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD);
   const highSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_HIGH_CMD, DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD);
-  const basePath = typeof data["base-path"] === "string" ? data["base-path"] : projectBase;
-  const gitPath = typeof data["git-path"] === "string" ? data["git-path"] : undefined;
 
   return {
     "docs-dir": docsDir,
@@ -169,22 +163,55 @@ export function loadConfig(projectBase: string): UseReqConfig {
     PI_NOTIFY_SOUND_LOW_CMD: lowSoundCommand,
     PI_NOTIFY_SOUND_MID_CMD: midSoundCommand,
     PI_NOTIFY_SOUND_HIGH_CMD: highSoundCommand,
-    "base-path": basePath,
-    "git-path": gitPath,
+  };
+}
+
+/**
+ * @brief Builds the persisted configuration payload that excludes runtime-derived fields.
+ * @details Copies only the canonical persisted configuration keys into a fresh object so runtime-derived metadata such as `base-path` and `git-path` can never be written to disk. Runtime is O(n) in config size. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective configuration object.
+ * @return {UseReqConfig} Persistable configuration payload.
+ * @satisfies CTN-012, REQ-146
+ */
+function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
+  return {
+    "docs-dir": config["docs-dir"],
+    "tests-dir": config["tests-dir"],
+    "src-dir": [...config["src-dir"]],
+    "static-check": Object.fromEntries(
+      Object.entries(config["static-check"]).map(([language, entries]) => [
+        language,
+        entries.map((entry) => ({
+          module: entry.module,
+          ...(entry.cmd ? { cmd: entry.cmd } : {}),
+          ...(entry.params ? { params: [...entry.params] } : {}),
+        })),
+      ]),
+    ),
+    "enabled-tools": [...config["enabled-tools"]],
+    "notify-beep-on-end": config["notify-beep-on-end"],
+    "notify-beep-on-esc": config["notify-beep-on-esc"],
+    "notify-beep-on-error": config["notify-beep-on-error"],
+    "notify-sound": config["notify-sound"],
+    "notify-sound-toggle-shortcut": config["notify-sound-toggle-shortcut"],
+    PI_NOTIFY_SOUND_LOW_CMD: config.PI_NOTIFY_SOUND_LOW_CMD,
+    PI_NOTIFY_SOUND_MID_CMD: config.PI_NOTIFY_SOUND_MID_CMD,
+    PI_NOTIFY_SOUND_HIGH_CMD: config.PI_NOTIFY_SOUND_HIGH_CMD,
   };
 }
 
 /**
  * @brief Persists the project configuration to disk.
- * @details Creates the parent `.pi-usereq` directory when necessary and writes formatted JSON terminated by a newline. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
+ * @details Creates the parent `.pi-usereq` directory when necessary, strips runtime-derived fields from the serialized payload, and writes formatted JSON terminated by a newline. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] config {UseReqConfig} Configuration object to persist.
  * @return {void} No return value.
+ * @satisfies CTN-012, REQ-146
  */
 export function saveConfig(projectBase: string, config: UseReqConfig): void {
   const configPath = getProjectConfigPath(projectBase);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  fs.writeFileSync(configPath, `${JSON.stringify(buildPersistedConfig(config), null, 2)}\n`, "utf8");
 }
 
 /**
@@ -215,7 +242,7 @@ export function normalizeConfigPaths(projectBase: string, config: UseReqConfig):
  * @satisfies REQ-002, REQ-103, REQ-106, REQ-107, CTN-011
  */
 export function buildPromptReplacementPaths(projectBase: string, config: UseReqConfig): Record<string, string> {
-  const runtimePathContext = buildRuntimePathContext(projectBase, config, { gitPath: config["git-path"] });
+  const runtimePathContext = buildRuntimePathContext(projectBase, config);
   const runtimePathFacts = buildRuntimePathFacts(runtimePathContext);
   const guidelineEntries = fs.existsSync(runtimePathContext.guidelinesPath)
     ? fs.readdirSync(runtimePathContext.guidelinesPath)

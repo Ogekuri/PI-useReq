@@ -31,7 +31,7 @@ test("prompt rendering replaces all dynamic placeholders and adapts req tool ref
   const config = getDefaultConfig(projectBase);
   config["src-dir"] = ["src", "scripts", ".github/workflows"];
   config["tests-dir"] = "tests";
-  const runtimePathFacts = buildRuntimePathFacts(buildRuntimePathContext(projectBase, config, { gitPath: config["git-path"] }));
+  const runtimePathFacts = buildRuntimePathFacts(buildRuntimePathContext(projectBase, config));
   const rendered = renderPrompt("write", "Build a CLI parser", projectBase, config);
   assert.match(rendered, /Build a CLI parser/);
   assert.match(rendered, /req\/docs/);

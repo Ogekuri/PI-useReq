@@ -8,8 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { ReqError } from "./errors.js";
-import { loadConfig, saveConfig, type UseReqConfig } from "./config.js";
-import { formatRuntimePathForDisplay, isSameOrAncestorPath } from "./path-context.js";
+import { loadConfig, normalizeConfigPaths, saveConfig, type UseReqConfig } from "./config.js";
+import { formatRuntimePathForDisplay } from "./path-context.js";
+import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 import { countFilesMetrics, formatPackSummary } from "./token-counter.js";
 import {
   buildReferenceToolExecutionStderr,
@@ -84,53 +85,14 @@ function runCapture(command: string[], options: { cwd?: string } = {}) {
 }
 
 /**
- * @brief Tests whether a path is inside a git work tree.
- * @details Runs `git rev-parse --is-inside-work-tree` in the target directory and returns `true` only for a successful `true` response. Runtime is dominated by git invocation. Side effects include process spawning.
- * @param[in] targetPath {string} Directory to test.
- * @return {boolean} `true` when the path is inside a git repository.
- */
-export function isInsideGitRepo(targetPath: string): boolean {
-  const result = runCapture(["git", "rev-parse", "--is-inside-work-tree"], { cwd: targetPath });
-  return result.status === 0 && result.stdout.trim() === "true";
-}
-
-/**
- * @brief Resolves the git repository root for a target path.
- * @details Runs `git rev-parse --show-toplevel` and normalizes the result to an absolute path. Runtime is dominated by git invocation. Side effects include process spawning.
- * @param[in] targetPath {string} Directory inside the repository.
- * @return {string} Absolute git root path.
- * @throws {ReqError} Throws when the path is not inside a git repository.
- */
-export function resolveGitRoot(targetPath: string): string {
-  const result = runCapture(["git", "rev-parse", "--show-toplevel"], { cwd: targetPath });
-  if (result.error || result.status !== 0) {
-    fail(`Error: '${targetPath}' is not inside a git repository.`, 3);
-  }
-  return path.resolve(result.stdout.trim());
-}
-
-/**
- * @brief Resolves the effective git root for the current base path.
- * @details Prefers a configured git path only when it exists, is a directory, and is identical to or an ancestor of the resolved base path. Falls back to probing the current execution path and returns `undefined` when the base path is outside a git repository. Runtime is dominated by filesystem checks plus optional git probing. Side effects include filesystem reads and git subprocess execution.
+ * @brief Resolves the effective runtime git root for the current base path.
+ * @details Delegates to the shared runtime-only repository resolver so git helpers never consult persisted `git-path` metadata. Runtime is dominated by git probing. Side effects include subprocess execution.
  * @param[in] projectBase {string} Resolved base path.
- * @param[in] config {UseReqConfig | undefined} Optional configuration carrying a candidate `git-path`.
  * @return {string | undefined} Effective git root path or `undefined` when unavailable.
+ * @satisfies REQ-145, REQ-146
  */
-function resolveEffectiveGitPath(projectBase: string, config?: UseReqConfig): string | undefined {
-  const candidateGitPath = config?.["git-path"];
-  if (
-    candidateGitPath
-    && fs.existsSync(candidateGitPath)
-    && fs.statSync(candidateGitPath).isDirectory()
-    && isSameOrAncestorPath(candidateGitPath, projectBase)
-  ) {
-    return path.resolve(candidateGitPath);
-  }
-  if (!isInsideGitRepo(projectBase)) {
-    return undefined;
-  }
-  const resolvedGitRoot = resolveGitRoot(projectBase);
-  return isSameOrAncestorPath(resolvedGitRoot, projectBase) ? resolvedGitRoot : undefined;
+function resolveEffectiveGitPath(projectBase: string): string | undefined {
+  return resolveRuntimeGitPath(projectBase);
 }
 
 /**
@@ -273,21 +235,15 @@ export function resolveProjectSrcDirs(projectBase: string, config?: UseReqConfig
 }
 
 /**
- * @brief Loads project configuration and refreshes derived path metadata.
- * @details Resolves the base path, loads config, updates `base-path`, refreshes `git-path` when inside a repository, saves the repaired config, and returns it. Runtime is dominated by config I/O and git detection. Side effects include config writes and git subprocess execution.
+ * @brief Loads project configuration and persists normalized path fields.
+ * @details Resolves the base path, normalizes persisted docs/tests/source directories into project-relative form, writes the normalized config back to disk, and returns the in-memory result without persisting runtime-derived path metadata. Runtime is dominated by config I/O. Side effects include config writes.
  * @param[in] projectBase {string} Candidate project root.
- * @return {UseReqConfig} Repaired effective configuration.
+ * @return {UseReqConfig} Normalized effective configuration.
+ * @satisfies CTN-012, REQ-146
  */
 export function loadAndRepairConfig(projectBase: string): UseReqConfig {
   const base = resolveProjectBase(projectBase);
-  const config = loadConfig(base);
-  config["base-path"] = base;
-  const gitPath = resolveEffectiveGitPath(base, config);
-  if (gitPath) {
-    config["git-path"] = gitPath;
-  } else {
-    delete config["git-path"];
-  }
+  const config = normalizeConfigPaths(base, loadConfig(base));
   saveConfig(base, config);
   return config;
 }
@@ -529,18 +485,19 @@ export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig
 
 /**
  * @brief Verifies that the effective repository root is clean and has a valid HEAD.
- * @details Resolves the git root for the current execution path, rejects roots that are not ancestors of `base-path`, checks work-tree status, rejects uncommitted changes, and verifies either a symbolic ref or detached HEAD hash exists. Runtime is dominated by git execution. Side effects include process spawning.
+ * @details Resolves the runtime git root for the current execution path, checks work-tree status, rejects uncommitted changes, and verifies either a symbolic ref or detached HEAD hash exists. Runtime is dominated by git execution. Side effects include process spawning.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @return {ToolResult} Successful empty result when the repository state is valid.
- * @throws {ReqError} Throws when `git-path` is unavailable or repository status is unclear.
+ * @throws {ReqError} Throws when the runtime git root is unavailable or repository status is unclear.
+ * @satisfies REQ-145, REQ-146
  */
 export function runGitCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
-  const effectiveConfig = config ?? loadConfig(base);
-  const gitPath = resolveEffectiveGitPath(base, effectiveConfig);
+  void config;
+  const gitPath = resolveEffectiveGitPath(base);
   if (!gitPath) {
-    fail("Error: git-path not configured or does not exist.", 11);
+    fail("Error: git-path is unavailable for the current runtime path.", 11);
   }
   const insideResult = runCapture(["git", "rev-parse", "--is-inside-work-tree"], { cwd: gitPath });
   if (insideResult.error || insideResult.status !== 0 || insideResult.stdout.trim() !== "true") {
@@ -566,14 +523,13 @@ export function runGitCheck(projectBase: string, config?: UseReqConfig): ToolRes
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @return {ToolResult} Successful empty result when all canonical docs exist.
- * @throws {ReqError} Throws when `git-path` metadata is invalid or a required doc file is missing.
+ * @throws {ReqError} Throws when a required doc file is missing.
  */
 export function runDocsCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
   const docsDir = effectiveConfig["docs-dir"].replace(/[/\\]+$/, "");
-  const basePath = effectiveConfig["base-path"] ?? base;
-  const docPath = path.join(basePath, docsDir);
+  const docPath = path.join(base, docsDir);
   for (const [filename, promptCmd] of [
     ["REQUIREMENTS.md", "/req-write"],
     ["WORKFLOW.md", "/req-workflow"],
@@ -590,18 +546,19 @@ export function runDocsCheck(projectBase: string, config?: UseReqConfig): ToolRe
 
 /**
  * @brief Generates the standardized worktree name for the effective repository root.
- * @details Resolves the git root constrained by the current base path, combines the repository basename, sanitized current branch, and a timestamp-based execution identifier into a deterministic `useReq-...` name. Runtime is O(1) plus git execution cost. Side effects include process spawning.
+ * @details Resolves the runtime git root constrained by the current base path, combines the repository basename, sanitized current branch, and a timestamp-based execution identifier into a deterministic `useReq-...` name. Runtime is O(1) plus git execution cost. Side effects include process spawning.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @return {ToolResult} Successful result containing the generated worktree name and trailing newline.
- * @throws {ReqError} Throws when `git-path` is missing or invalid.
+ * @throws {ReqError} Throws when the runtime git root is unavailable.
+ * @satisfies REQ-145, REQ-146
  */
 export function runGitWtName(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
-  const effectiveConfig = config ?? loadConfig(base);
-  const gitPath = resolveEffectiveGitPath(base, effectiveConfig);
+  void config;
+  const gitPath = resolveEffectiveGitPath(base);
   if (!gitPath) {
-    fail("Error: git-path not configured or does not exist.", 11);
+    fail("Error: git-path is unavailable for the current runtime path.", 11);
   }
   const projectName = path.basename(gitPath);
   const branchResult = runCapture(["git", "branch", "--show-current"], { cwd: gitPath });
@@ -659,11 +616,11 @@ export function runGitWtCreate(projectBase: string, wtName: string, config?: Use
     fail(message, 1, `${message}\n`, message);
   }
   const base = resolveProjectBase(projectBase);
-  const effectiveConfig = config ?? loadConfig(base);
-  const gitPath = resolveEffectiveGitPath(base, effectiveConfig);
+  void config;
+  const gitPath = resolveEffectiveGitPath(base);
   const resolvedBasePath = base;
   if (!gitPath) {
-    fail("Error: git-path not configured or does not exist.", 11);
+    fail("Error: git-path is unavailable for the current runtime path.", 11);
   }
   const gitRoot = path.resolve(gitPath);
   const parentPath = path.dirname(gitRoot);
@@ -699,10 +656,10 @@ export function runGitWtCreate(projectBase: string, wtName: string, config?: Use
  */
 export function runGitWtDelete(projectBase: string, wtName: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
-  const effectiveConfig = config ?? loadConfig(base);
-  const gitPath = resolveEffectiveGitPath(base, effectiveConfig);
+  void config;
+  const gitPath = resolveEffectiveGitPath(base);
   if (!gitPath) {
-    fail("Error: git-path not configured or does not exist.", 11);
+    fail("Error: git-path is unavailable for the current runtime path.", 11);
   }
   const gitRoot = path.resolve(gitPath);
   const parentPath = path.dirname(gitRoot);
@@ -741,8 +698,8 @@ export function runGitWtDelete(projectBase: string, wtName: string, config?: Use
  */
 export function runGitPath(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
-  const effectiveConfig = config ?? loadConfig(base);
-  const gitPath = resolveEffectiveGitPath(base, effectiveConfig);
+  void config;
+  const gitPath = resolveEffectiveGitPath(base);
   return ok(`${gitPath ? formatRuntimePathForDisplay(gitPath) : ""}\n`);
 }
 

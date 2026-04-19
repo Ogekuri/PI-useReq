@@ -15,6 +15,7 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
 import { formatPiNotifyBeepStatus } from "./pi-notify.js";
+import { formatAbsoluteGitPath, formatBasePathRelativeToGitPath, resolveRuntimeGitPath } from "./runtime-project-paths.js";
 
 /**
  * @brief Enumerates the foreground colors consumed by pi-usereq status rendering.
@@ -61,7 +62,7 @@ interface StatusThemeAdapter {
 interface ContextUsageOverlaySpec {
   backgroundColor: StatusForegroundColor;
   foregroundColor: StatusForegroundColor;
-  text: "claer" | "full!";
+  text: "CLEAR" | "FULL!";
 }
 
 /**
@@ -279,8 +280,8 @@ function countFilledContextCells(
 
 /**
  * @brief Resolves the threshold-specific context-bar overlay when required.
- * @details Returns the empty-state `claer` overlay when normalized context
- * usage is unavailable or non-positive and returns the high-water `full!`
+ * @details Returns the empty-state `CLEAR` overlay when normalized context
+ * usage is unavailable or non-positive and returns the high-water `FULL!`
  * overlay when usage exceeds 90 percent. Runtime is O(1). No external state is
  * mutated.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
@@ -295,14 +296,14 @@ function resolveContextUsageOverlay(
     return {
       backgroundColor: "accent",
       foregroundColor: "warning",
-      text: "claer",
+      text: "CLEAR",
     };
   }
   if (percent > 90) {
     return {
       backgroundColor: "warning",
       foregroundColor: "redBright",
-      text: "full!",
+      text: "FULL!",
     };
   }
   return undefined;
@@ -425,25 +426,27 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders docs, tests, src, tools, context, elapsed, last, beep, and
- * sound fields in the canonical order with dim bullet separators and
- * threshold-specific context-bar overlays. Runtime is O(s) in configured
- * source-path count. No external state is mutated.
+ * @details Renders git, base, docs, tests, src, tools, context, elapsed, last, beep, and sound fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(s) in configured source-path count plus runtime git probing. No external state is mutated.
+ * @param[in] cwd {string} Runtime working directory used for git/base path derivation.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] activeTools {readonly string[]} Active runtime tool names.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136
+ * @satisfies REQ-109, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-147, REQ-148
  */
 function buildPiUsereqStatusText(
+  cwd: string,
   config: UseReqConfig,
   activeTools: readonly string[],
   theme: StatusThemeAdapter,
   state: PiUsereqStatusState,
   nowMs: number,
 ): string {
+  const gitPath = resolveRuntimeGitPath(cwd);
+  const gitText = formatAbsoluteGitPath(gitPath);
+  const baseText = formatBasePathRelativeToGitPath(cwd, gitPath);
   const sourcePaths = config["src-dir"].join(",");
   const elapsedText = state.runStartTimeMs === undefined
     ? "idle"
@@ -454,6 +457,8 @@ function buildPiUsereqStatusText(
   const beepText = formatPiNotifyBeepStatus(config);
   const soundText = config["notify-sound"];
   return [
+    formatStatusField(theme, "git", gitText),
+    formatStatusField(theme, "base", baseText),
     formatStatusField(theme, "docs", config["docs-dir"]),
     formatStatusField(theme, "tests", config["tests-dir"]),
     formatStatusField(theme, "src", sourcePaths),
@@ -578,6 +583,7 @@ export function renderPiUsereqStatus(
   ctx.ui.setStatus(
     "pi-usereq",
     buildPiUsereqStatusText(
+      ctx.cwd,
       controller.config,
       controller.getActiveTools(),
       theme,

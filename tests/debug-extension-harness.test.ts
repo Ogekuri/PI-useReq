@@ -58,7 +58,7 @@ function buildOfflineFixture(): OfflineContractSnapshot {
     tools: [
       {
         name: "git-path",
-        description: "Print the configured git root path from .pi-usereq/config.json.",
+        description: "Return the runtime-derived git root path for the current working directory.",
         promptGuidelines: [],
         hasParameters: false,
         sourceInfo: {
@@ -102,7 +102,7 @@ function buildSdkFixture(overrides?: Partial<SdkContractSnapshot>): SdkContractS
     tools: [
       {
         name: "git-path",
-        description: "Print the configured git root path from .pi-usereq/config.json.",
+        description: "Return the runtime-derived git root path for the current working directory.",
         hasParameters: false,
         sourceInfo: {
           path: "src/index.ts",
@@ -248,11 +248,11 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.equal(report.effectiveProcessCwd, projectBase);
     assert.match(
       status,
-      /<accent>docs:<\/accent><warning>pi-usereq\/docs<\/warning><dim> • <\/dim><accent>tests:<\/accent><warning>tests<\/warning><dim> • <\/dim><accent>src:<\/accent><warning>src<\/warning><dim> • <\/dim><accent>tools:<\/accent><warning>2<\/warning>/,
+      /<accent>git:<\/accent><warning>.*<\/warning><dim> • <\/dim><accent>base:<\/accent><warning>\.<\/warning><dim> • <\/dim><accent>docs:<\/accent><warning>pi-usereq\/docs<\/warning><dim> • <\/dim><accent>tests:<\/accent><warning>tests<\/warning><dim> • <\/dim><accent>src:<\/accent><warning>src<\/warning><dim> • <\/dim><accent>tools:<\/accent><warning>2<\/warning>/,
     );
     assert.match(
       status,
-      /<accent>context:<\/accent><bg-from-fg-accent><warning>claer<\/warning><\/bg-from-fg-accent>/,
+      /<accent>context:<\/accent><bg-from-fg-accent><warning>CLEAR<\/warning><\/bg-from-fg-accent>/,
     );
     assert.match(status, /<accent>elapsed:<\/accent><warning>idle<\/warning>/);
     assert.match(status, /<accent>last:<\/accent><warning>N\/A<\/warning>/);
@@ -287,7 +287,7 @@ test("replayCommand captures interactive UI side effects", async () => {
       projectBase,
       undefined,
       {
-        selects: ["Manage active tools", "Disable all configurable tools", "Back", "Save and close"],
+        selects: ["startup tools", "Disable all configurable tools", "Back", "Save and close"],
         inputs: [],
       },
     );

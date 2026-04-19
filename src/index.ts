@@ -54,6 +54,7 @@ import {
 import {
   getDefaultConfig,
   loadConfig,
+  normalizeConfigPaths,
   saveConfig,
   type StaticCheckEntry,
   type UseReqConfig,
@@ -65,6 +66,8 @@ import {
   type PiNotifySoundLevel,
 } from "./core/pi-notify.js";
 import { buildRuntimePathContext, buildRuntimePathFacts } from "./core/path-context.js";
+import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
+import { showPiUsereqSettingsMenu, type PiUsereqSettingsMenuChoice } from "./core/settings-menu.js";
 import {
   PI_USEREQ_STARTUP_TOOL_SET,
   isPiUsereqEmbeddedToolName,
@@ -89,8 +92,6 @@ import {
   runGitCheck,
   runGitPath,
   runGitWtCreate,
-  isInsideGitRepo,
-  resolveGitRoot,
   runGitWtDelete,
   runGitWtName,
   runProjectStaticCheck,
@@ -155,44 +156,41 @@ function getProjectBase(cwd: string): string {
 
 /**
  * @brief Builds the shared runtime path facts for the current command or tool context.
- * @details Derives installation, execution, base, config, resource, docs, test, source, and optional git paths from the cwd-derived project configuration and converts them into prompt/tool-facing strings. Runtime is O(s + p) where s is configured source-directory count and p is aggregate path length. No external state is mutated.
+ * @details Derives installation, execution, base, config, resource, docs, test, source, and optional git paths from the cwd-derived project configuration plus runtime-only repository probing, then converts them into prompt/tool-facing strings. Runtime is O(s + p) where s is configured source-directory count and p is aggregate path length. Side effects are limited to git subprocess execution.
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {import("./core/path-context.js").RuntimePathFacts} Shared runtime path facts.
+ * @satisfies REQ-145, REQ-146
  */
 function buildSharedRuntimePathFacts(cwd: string, config: UseReqConfig): import("./core/path-context.js").RuntimePathFacts {
-  return buildRuntimePathFacts(buildRuntimePathContext(getProjectBase(cwd), config, { gitPath: config["git-path"] }));
+  const projectBase = getProjectBase(cwd);
+  const gitPath = resolveRuntimeGitPath(projectBase);
+  return buildRuntimePathFacts(buildRuntimePathContext(projectBase, config, { gitPath }));
 }
 
 /**
- * @brief Loads project configuration and refreshes derived path metadata for the extension runtime.
- * @details Resolves the project base, loads persisted config, updates `base-path`, refreshes `git-path` when the project is inside a repository, and removes stale git metadata otherwise. Runtime is dominated by config I/O and git detection. Side effects are limited to filesystem reads and git subprocess execution.
+ * @brief Loads project configuration for the extension runtime.
+ * @details Resolves the project base, loads persisted config, and normalizes configured directory paths without reading or persisting runtime-derived `base-path` or `git-path` metadata. Runtime is dominated by config I/O. Side effects are limited to filesystem reads.
  * @param[in] cwd {string} Current working directory.
  * @return {UseReqConfig} Effective project configuration.
+ * @satisfies REQ-030, REQ-145, REQ-146
  */
 function loadProjectConfig(cwd: string): UseReqConfig {
   const projectBase = getProjectBase(cwd);
-  const config = loadConfig(projectBase);
-  config["base-path"] = projectBase;
-  if (isInsideGitRepo(projectBase)) {
-    config["git-path"] = resolveGitRoot(projectBase);
-  } else {
-    delete config["git-path"];
-  }
-  return config;
+  return normalizeConfigPaths(projectBase, loadConfig(projectBase));
 }
 
 /**
  * @brief Persists project configuration from the extension runtime.
- * @details Recomputes `base-path` from the current working directory and delegates persistence to `saveConfig`. Runtime is O(n) in config size. Side effects include config-file writes.
+ * @details Resolves the project base, normalizes configured directory paths into project-relative form, and delegates persistence to `saveConfig` without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Configuration to persist.
  * @return {void} No return value.
+ * @satisfies REQ-146
  */
 function saveProjectConfig(cwd: string, config: UseReqConfig): void {
   const projectBase = getProjectBase(cwd);
-  config["base-path"] = projectBase;
-  saveConfig(projectBase, config);
+  saveConfig(projectBase, normalizeConfigPaths(projectBase, config));
 }
 
 /**
@@ -614,18 +612,6 @@ function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enab
 }
 
 /**
- * @brief Formats one configurable-tool label for selection menus.
- * @details Prefixes the tool name with a checkmark or cross and appends a stable builtin-versus-extension marker derived from runtime metadata. Runtime is O(1). No side effects occur.
- * @param[in] tool {ToolInfo} Tool descriptor.
- * @param[in] enabled {boolean} Enablement state.
- * @return {string} Menu label.
- */
-function formatPiUsereqToolLabel(tool: ToolInfo, enabled: boolean): string {
-  const marker = enabled ? "✓" : "✗";
-  return `${marker} ${tool.name} [${getPiUsereqToolKind(tool)}]`;
-}
-
-/**
  * @brief Renders a textual reference for configurable-tool configuration and runtime state.
  * @details Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -674,46 +660,8 @@ type PiNotifyBeepConfigKey =
   | "notify-beep-on-error";
 
 /**
- * @brief Renders the notification configuration reference text.
- * @details Serializes the current beep flags, sound level, shortcut, and
- * per-level sound commands into a deterministic multiline report for the
- * editor pane. Runtime is O(n) in command length. No external state is
- * mutated.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {string} Multiline notification-configuration report.
- */
-function renderPiNotifyReference(config: UseReqConfig): string {
-  return [
-    "# pi-notify configuration",
-    "",
-    `beep=${formatPiNotifyBeepStatus(config)}`,
-    `sound=${config["notify-sound"]}`,
-    `sound-toggle-shortcut=${config["notify-sound-toggle-shortcut"]}`,
-    `PI_NOTIFY_SOUND_LOW_CMD=${config.PI_NOTIFY_SOUND_LOW_CMD}`,
-    `PI_NOTIFY_SOUND_MID_CMD=${config.PI_NOTIFY_SOUND_MID_CMD}`,
-    `PI_NOTIFY_SOUND_HIGH_CMD=${config.PI_NOTIFY_SOUND_HIGH_CMD}`,
-    "",
-  ].join("\n");
-}
-
-/**
- * @brief Builds the top-level configuration overview string.
- * @details Summarizes docs, tests, src, active-tool count, terminal-beep
- * state, and successful-run sound level into one deterministic line used by
- * the main menu. Runtime is O(s) in configured source-path count. No external
- * state is mutated.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {string} Single-line overview string.
- */
-function buildPiUsereqConfigOverview(config: UseReqConfig): string {
-  return `Overview: docs=${config["docs-dir"]}, tests=${config["tests-dir"]}, src=${config["src-dir"].join(", ")}, tools=${getConfiguredEnabledPiUsereqTools(config).length}, beep=${formatPiNotifyBeepStatus(config)}, sound=${config["notify-sound"]}`;
-}
-
-/**
  * @brief Flips one persisted pi-notify beep flag.
- * @details Negates the selected prompt-end beep flag in place and returns the
- * resulting boolean value so callers can emit deterministic UI feedback.
- * Runtime is O(1). Side effect: mutates `config`.
+ * @details Negates the selected prompt-end beep flag in place and returns the resulting boolean value so callers can emit deterministic UI feedback. Runtime is O(1). Side effect: mutates `config`.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @param[in] key {PiNotifyBeepConfigKey} Beep flag key to toggle.
  * @return {boolean} Next enabled state.
@@ -724,15 +672,119 @@ function togglePiNotifyBeepFlag(config: UseReqConfig, key: PiNotifyBeepConfigKey
 }
 
 /**
+ * @brief Builds the shared settings-menu choices for notification configuration.
+ * @details Serializes the current beep flags, selected notify command, hotkey bind, and per-level notify commands into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1) plus command-length formatting. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152
+ */
+function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    {
+      id: "toggle-beep-on-success",
+      label: "Toggle beep on success",
+      value: config["notify-beep-on-end"] ? "on" : "off",
+      description: "Toggle terminal beep delivery for successful prompt completion.",
+    },
+    {
+      id: "toggle-beep-on-escape",
+      label: "Toggle beep on escape",
+      value: config["notify-beep-on-esc"] ? "on" : "off",
+      description: "Toggle terminal beep delivery for escape-triggered prompt abortion.",
+    },
+    {
+      id: "toggle-beep-on-error",
+      label: "Toggle beep on error",
+      value: config["notify-beep-on-error"] ? "on" : "off",
+      description: "Toggle terminal beep delivery for error-terminated prompt completion.",
+    },
+    {
+      id: "selected-notify-command",
+      label: "Selected notify command",
+      value: config["notify-sound"],
+      description: "Select which notify command runs after successful prompt completion.",
+    },
+    {
+      id: "sound-toggle-hotkey-bind",
+      label: "Sound toggle hotkey bind",
+      value: config["notify-sound-toggle-shortcut"],
+      description: "Edit the keyboard shortcut that cycles the selected notify command.",
+    },
+    {
+      id: "notify-command-low",
+      label: "Notify command (low vol.)",
+      value: config.PI_NOTIFY_SOUND_LOW_CMD,
+      description: "Edit the shell command used when the selected notify command is `low`.",
+    },
+    {
+      id: "notify-command-mid",
+      label: "Notify command (mid vol.)",
+      value: config.PI_NOTIFY_SOUND_MID_CMD,
+      description: "Edit the shell command used when the selected notify command is `mid`.",
+    },
+    {
+      id: "notify-command-high",
+      label: "Notify command (high vol.)",
+      value: config.PI_NOTIFY_SOUND_HIGH_CMD,
+      description: "Edit the shell command used when the selected notify command is `high`.",
+    },
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the parent configuration menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Opens the shared settings-menu selector for the selected notify command.
+ * @details Reuses the pi-usereq settings-menu renderer so notify-command selection remains stylistically aligned with the main configuration UI and returns the chosen sound level or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] currentLevel {PiNotifySoundLevel} Currently selected notify command.
+ * @return {Promise<PiNotifySoundLevel | undefined>} Selected sound level or `undefined` when cancelled.
+ * @satisfies REQ-131, REQ-137, REQ-149, REQ-151, REQ-152, REQ-153, REQ-154
+ */
+async function selectPiNotifySoundLevel(
+  ctx: ExtensionCommandContext,
+  currentLevel: PiNotifySoundLevel,
+): Promise<PiNotifySoundLevel | undefined> {
+  const choice = await showPiUsereqSettingsMenu(ctx, "Selected notify command", [
+    {
+      id: "none",
+      label: "none",
+      value: currentLevel === "none" ? "selected" : "",
+      description: "Disable external notify-command execution.",
+    },
+    {
+      id: "low",
+      label: "low",
+      value: currentLevel === "low" ? "selected" : "",
+      description: "Run the low-volume notify command after successful completion.",
+    },
+    {
+      id: "mid",
+      label: "mid",
+      value: currentLevel === "mid" ? "selected" : "",
+      description: "Run the mid-volume notify command after successful completion.",
+    },
+    {
+      id: "high",
+      label: "high",
+      value: currentLevel === "high" ? "selected" : "",
+      description: "Run the high-volume notify command after successful completion.",
+    },
+  ]);
+  return choice ? choice as PiNotifySoundLevel : undefined;
+}
+
+/**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes prompt-end beep toggles, successful-run sound-level
- * selection, sound-toggle shortcut input, and per-level sound-command editors.
- * Runtime depends on user interaction count. Side effects include UI updates
- * and config mutation.
+ * @details Exposes prompt-end beep toggles, selected notify-command selection, hotkey-bind editing, and per-level notify-command editors through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137
+ * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
@@ -740,78 +792,62 @@ async function configurePiNotifyMenu(
 ): Promise<boolean> {
   const originalShortcut = config["notify-sound-toggle-shortcut"];
   while (true) {
-    const choice = await ctx.ui.select("pi-notify", [
-      `Overview: beep=${formatPiNotifyBeepStatus(config)}, sound=${config["notify-sound"]}, shortcut=${config["notify-sound-toggle-shortcut"]}`,
-      "Show notification config",
-      `Toggle beep on success [${config["notify-beep-on-end"] ? "on" : "off"}]`,
-      `Toggle beep on escape [${config["notify-beep-on-esc"] ? "on" : "off"}]`,
-      `Toggle beep on error [${config["notify-beep-on-error"] ? "on" : "off"}]`,
-      "Set success sound level",
-      "Set sound toggle shortcut",
-      "Set PI_NOTIFY_SOUND_LOW_CMD",
-      "Set PI_NOTIFY_SOUND_MID_CMD",
-      "Set PI_NOTIFY_SOUND_HIGH_CMD",
-      "Back",
-    ]);
-    if (!choice || choice === "Back") {
+    const choice = await showPiUsereqSettingsMenu(ctx, "notifications", buildPiNotifyMenuChoices(config));
+    if (!choice || choice === "back") {
       return config["notify-sound-toggle-shortcut"] !== originalShortcut;
     }
-    if (choice === "Show notification config" || choice.startsWith("Overview:")) {
-      ctx.ui.setEditorText(renderPiNotifyReference(config));
-      continue;
-    }
-    if (choice.startsWith("Toggle beep on success")) {
+    if (choice === "toggle-beep-on-success") {
       const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-end");
       ctx.ui.notify(`Beep on success ${enabled ? "enabled" : "disabled"}`, "info");
       continue;
     }
-    if (choice.startsWith("Toggle beep on escape")) {
+    if (choice === "toggle-beep-on-escape") {
       const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-esc");
       ctx.ui.notify(`Beep on escape ${enabled ? "enabled" : "disabled"}`, "info");
       continue;
     }
-    if (choice.startsWith("Toggle beep on error")) {
+    if (choice === "toggle-beep-on-error") {
       const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-error");
       ctx.ui.notify(`Beep on error ${enabled ? "enabled" : "disabled"}`, "info");
       continue;
     }
-    if (choice === "Set success sound level") {
-      const nextLevel = await ctx.ui.select("sound level", ["none", "low", "mid", "high", "Back"]);
-      if (nextLevel && nextLevel !== "Back") {
-        config["notify-sound"] = nextLevel as PiNotifySoundLevel;
-        ctx.ui.notify(`Sound level set to ${nextLevel}`, "info");
+    if (choice === "selected-notify-command") {
+      const nextLevel = await selectPiNotifySoundLevel(ctx, config["notify-sound"]);
+      if (nextLevel) {
+        config["notify-sound"] = nextLevel;
+        ctx.ui.notify(`Selected notify command set to ${nextLevel}`, "info");
       }
       continue;
     }
-    if (choice === "Set sound toggle shortcut") {
-      const value = await ctx.ui.input("sound toggle shortcut", config["notify-sound-toggle-shortcut"]);
+    if (choice === "sound-toggle-hotkey-bind") {
+      const value = await ctx.ui.input("Sound toggle hotkey bind", config["notify-sound-toggle-shortcut"]);
       if (value?.trim()) {
         config["notify-sound-toggle-shortcut"] = value.trim();
-        ctx.ui.notify(`Sound toggle shortcut set to ${config["notify-sound-toggle-shortcut"]}`, "info");
+        ctx.ui.notify(`Sound toggle hotkey bind set to ${config["notify-sound-toggle-shortcut"]}`, "info");
       }
       continue;
     }
-    if (choice === "Set PI_NOTIFY_SOUND_LOW_CMD") {
-      const value = await ctx.ui.input("PI_NOTIFY_SOUND_LOW_CMD", config.PI_NOTIFY_SOUND_LOW_CMD);
+    if (choice === "notify-command-low") {
+      const value = await ctx.ui.input("Notify command (low vol.)", config.PI_NOTIFY_SOUND_LOW_CMD);
       if (value?.trim()) {
         config.PI_NOTIFY_SOUND_LOW_CMD = value.trim();
-        ctx.ui.notify("Updated PI_NOTIFY_SOUND_LOW_CMD", "info");
+        ctx.ui.notify("Updated notify command (low vol.)", "info");
       }
       continue;
     }
-    if (choice === "Set PI_NOTIFY_SOUND_MID_CMD") {
-      const value = await ctx.ui.input("PI_NOTIFY_SOUND_MID_CMD", config.PI_NOTIFY_SOUND_MID_CMD);
+    if (choice === "notify-command-mid") {
+      const value = await ctx.ui.input("Notify command (mid vol.)", config.PI_NOTIFY_SOUND_MID_CMD);
       if (value?.trim()) {
         config.PI_NOTIFY_SOUND_MID_CMD = value.trim();
-        ctx.ui.notify("Updated PI_NOTIFY_SOUND_MID_CMD", "info");
+        ctx.ui.notify("Updated notify command (mid vol.)", "info");
       }
       continue;
     }
-    if (choice === "Set PI_NOTIFY_SOUND_HIGH_CMD") {
-      const value = await ctx.ui.input("PI_NOTIFY_SOUND_HIGH_CMD", config.PI_NOTIFY_SOUND_HIGH_CMD);
+    if (choice === "notify-command-high") {
+      const value = await ctx.ui.input("Notify command (high vol.)", config.PI_NOTIFY_SOUND_HIGH_CMD);
       if (value?.trim()) {
         config.PI_NOTIFY_SOUND_HIGH_CMD = value.trim();
-        ctx.ui.notify("Updated PI_NOTIFY_SOUND_HIGH_CMD", "info");
+        ctx.ui.notify("Updated notify command (high vol.)", "info");
       }
     }
   }
@@ -886,18 +922,18 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const gitPathSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived configured git root.",
+      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived runtime git root.",
     },
   );
   pi.registerTool({
     name: "git-path",
     label: "git-path",
-    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `git-path` value through direct-access fields instead of text-only output.",
-    promptSnippet: "Return the structured configured git-root payload for the current project.",
+    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `git-path` value through direct-access fields instead of text-only output.",
+    promptSnippet: "Return the structured runtime git-root payload for the current project.",
     promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Input contract: no params. Scope is the cwd-derived runtime path context.",
       "Output contract: request + result + execution. Result exposes path_key, path_value, and path_present.",
-      "Configuration contract: loadProjectConfig recomputes git-path from the current working directory when the project is inside a repository.",
+      "Behavior contract: git-path is derived at runtime from the current working directory and repository ancestry rules.",
       "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
     ],
     parameters: gitPathSchema,
@@ -922,18 +958,18 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const basePathSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived configured project base path.",
+      description: "Input contract: no params. Output contract: JSON object with request, result, and execution. Result exposes path_key, path_value, and path_present for the cwd-derived runtime base path.",
     },
   );
   pi.registerTool({
     name: "get-base-path",
     label: "get-base-path",
-    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `base-path` value through direct-access fields instead of text-only output.",
-    promptSnippet: "Return the structured configured project-base payload.",
+    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the resolved `base-path` value through direct-access fields instead of text-only output.",
+    promptSnippet: "Return the structured runtime project-base payload.",
     promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Input contract: no params. Scope is the cwd-derived runtime path context.",
       "Output contract: request + result + execution. Result exposes path_key, path_value, and path_present.",
-      "Configuration contract: loadProjectConfig refreshes base-path from the current working directory before the payload is emitted.",
+      "Behavior contract: base-path equals the current working directory used by the extension command or tool.",
       "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
     ],
     parameters: basePathSchema,
@@ -1348,10 +1384,10 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "git-check",
     label: "git-check",
-    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes repository validation status through direct fields instead of empty-success text.",
-    promptSnippet: "Return the structured git-validation payload for the configured repository.",
+    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes repository validation status through direct fields instead of empty-success text.",
+    promptSnippet: "Return the structured git-validation payload for the runtime repository.",
     promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Input contract: no params. Scope is the cwd-derived runtime path context.",
       "Output contract: request + result + execution. Result exposes git_path_present, status, worktree_status, and head_status.",
       "Behavior contract: the tool checks work-tree membership, porcelain cleanliness, and symbolic-or-detached HEAD validity.",
       "Failure contract: execution.code and execution.stderr_lines surface git-path or repository-state errors.",
@@ -1367,7 +1403,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       } catch (error) {
         execution = buildToolExecutionSection(normalizeToolFailure(error));
       }
-      const payload = buildGitCheckToolPayload(projectBase, config["git-path"], runtimePaths, execution);
+      const payload = buildGitCheckToolPayload(projectBase, resolveRuntimeGitPath(projectBase), runtimePaths, execution);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1408,10 +1444,10 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "git-wt-name",
     label: "git-wt-name",
-    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the generated worktree name plus its normative format as direct fields.",
+    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the generated worktree name plus its normative format as direct fields.",
     promptSnippet: "Return the structured worktree-name generation payload.",
     promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived project configuration.",
+      "Input contract: no params. Scope is the cwd-derived runtime path context.",
       "Output contract: request + result + execution. Result exposes worktree_name and format_text.",
       "Behavior contract: generation follows useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>.",
       "Failure contract: execution.code and execution.stderr_lines surface git-path or branch-resolution errors.",
@@ -1427,7 +1463,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       } catch (error) {
         execution = buildToolExecutionSection(normalizeToolFailure(error));
       }
-      const payload = buildWorktreeNameToolPayload(projectBase, config["git-path"], runtimePaths, execution);
+      const payload = buildWorktreeNameToolPayload(projectBase, resolveRuntimeGitPath(projectBase), runtimePaths, execution);
       return buildStructuredToolExecuteResult(payload);
     },
   });
@@ -1443,12 +1479,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "git-wt-create",
     label: "git-wt-create",
-    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested create operation, exact worktree name, derived path, and mutation status.",
+    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested create operation, exact worktree name, derived path, and mutation status.",
     promptSnippet: "Return the structured worktree-creation payload for the requested name.",
     promptGuidelines: [
       "Input contract: wtName is required and must match the exact worktree/branch name to create.",
       "Output contract: request + result + execution. Result exposes operation=create, worktree_name, branch_name, worktree_path, and status.",
-      "Specialization trigger: worktree_path depends on the configured git root parent directory.",
+      "Specialization trigger: worktree_path depends on the runtime git root parent directory.",
       "Failure contract: execution.code and execution.stderr_lines surface invalid-name, git, or finalization errors.",
     ],
     parameters: gitWtCreateSchema,
@@ -1465,7 +1501,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       const payload = buildWorktreeMutationToolPayload(
         "git-wt-create",
         projectBase,
-        config["git-path"],
+        resolveRuntimeGitPath(projectBase),
         params.wtName,
         runtimePaths,
         execution,
@@ -1485,12 +1521,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "git-wt-delete",
     label: "git-wt-delete",
-    description: "Scope: current project config. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested delete operation, exact worktree name, derived path, and mutation status.",
+    description: "Scope: current runtime path. Return a JSON-first payload with request, result, and execution sections. Result exposes the requested delete operation, exact worktree name, derived path, and mutation status.",
     promptSnippet: "Return the structured worktree-deletion payload for the requested name.",
     promptGuidelines: [
       "Input contract: wtName is required and must match the exact worktree/branch name to delete.",
       "Output contract: request + result + execution. Result exposes operation=delete, worktree_name, branch_name, worktree_path, and status.",
-      "Specialization trigger: worktree_path depends on the configured git root parent directory.",
+      "Specialization trigger: worktree_path depends on the runtime git root parent directory.",
       "Failure contract: execution.code and execution.stderr_lines surface missing-target or deletion errors.",
     ],
     parameters: gitWtDeleteSchema,
@@ -1507,7 +1543,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       const payload = buildWorktreeMutationToolPayload(
         "git-wt-delete",
         projectBase,
-        config["git-path"],
+        resolveRuntimeGitPath(projectBase),
         params.wtName,
         runtimePaths,
         execution,
@@ -1518,74 +1554,137 @@ function registerAgentTools(pi: ExtensionAPI): void {
 }
 
 /**
+ * @brief Builds the shared settings-menu choices for startup-tool management.
+ * @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(t) in configurable-tool count. No external state is mutated.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
+ * @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154
+ */
+function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  const tools = getPiUsereqStartupTools(pi);
+  return [
+    {
+      id: "show-tool-status",
+      label: "Show tool status",
+      value: `${getConfiguredEnabledPiUsereqTools(config).length}/${tools.length} enabled`,
+      description: "Open the full startup-tool reference report in the editor.",
+    },
+    {
+      id: "toggle-tool",
+      label: "Toggle tool",
+      value: `${getConfiguredEnabledPiUsereqTools(config).length} enabled`,
+      description: "Open the per-tool toggle menu for configurable startup tools.",
+    },
+    {
+      id: "enable-all-tools",
+      label: "Enable all configurable tools",
+      value: `${tools.length} targets`,
+      description: "Enable every configurable startup tool for future session starts.",
+    },
+    {
+      id: "disable-all-tools",
+      label: "Disable all configurable tools",
+      value: `${tools.length} targets`,
+      description: "Disable every configurable startup tool for future session starts.",
+    },
+    {
+      id: "reset-tool-defaults",
+      label: "Reset configurable-tool defaults",
+      value: `${normalizeEnabledPiUsereqTools(undefined).length} defaults`,
+      description: "Restore the documented default startup-tool selection.",
+    },
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the parent configuration menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for per-tool startup toggles.
+ * @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state. Runtime is O(t) in configurable-tool count. No external state is mutated.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
+ * @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154
+ */
+function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
+  return [
+    ...getPiUsereqStartupTools(pi).map((tool) => ({
+      id: tool.name,
+      label: tool.name,
+      value: enabledTools.has(tool.name) ? "on" : "off",
+      description: tool.description ?? `Toggle startup activation for ${tool.name}.`,
+    })),
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the startup-tools menu.",
+    },
+  ];
+}
+
+/**
  * @brief Runs the interactive active-tool configuration menu.
- * @details Synchronizes runtime active tools with persisted config, renders overview and mutation actions, and updates configuration state in response to UI selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
+ * @details Synchronizes runtime active tools with persisted config, renders startup-tool actions through the shared settings-menu UI, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-007, REQ-063, REQ-064
+ * @satisfies REQ-007, REQ-063, REQ-064, REQ-151, REQ-152, REQ-153, REQ-154
  */
 async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   applyConfiguredPiUsereqTools(pi, config);
   while (true) {
     const tools = getPiUsereqStartupTools(pi);
     const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
-    const choice = await ctx.ui.select("Active tools", [
-      `Overview: ${enabledTools.size}/${tools.length} enabled`,
-      "Show tool status",
-      "Toggle tool",
-      "Enable all configurable tools",
-      "Disable all configurable tools",
-      "Reset configurable-tool defaults",
-      "Back",
-    ]);
+    const choice = await showPiUsereqSettingsMenu(ctx, "startup tools", buildPiUsereqToolsMenuChoices(pi, config));
 
-    if (!choice || choice === "Back") {
+    if (!choice || choice === "back") {
       return;
     }
 
-    if (choice === "Show tool status" || choice.startsWith("Overview:")) {
+    if (choice === "show-tool-status") {
       ctx.ui.setEditorText(renderPiUsereqToolsReference(pi, config));
       continue;
     }
 
-    if (choice === "Enable all configurable tools") {
+    if (choice === "enable-all-tools") {
       setConfiguredPiUsereqTools(pi, config, tools.map((tool) => tool.name));
       ctx.ui.notify("Enabled all configurable active tools", "info");
       continue;
     }
 
-    if (choice === "Disable all configurable tools") {
+    if (choice === "disable-all-tools") {
       setConfiguredPiUsereqTools(pi, config, []);
       ctx.ui.notify("Disabled all configurable active tools", "info");
       continue;
     }
 
-    if (choice === "Reset configurable-tool defaults") {
+    if (choice === "reset-tool-defaults") {
       setConfiguredPiUsereqTools(pi, config, normalizeEnabledPiUsereqTools(undefined));
       ctx.ui.notify("Restored default configurable active tools", "info");
       continue;
     }
 
-    if (choice === "Toggle tool") {
-      const toolLabels = tools.map((tool) => formatPiUsereqToolLabel(tool, enabledTools.has(tool.name)));
-      const selectedToolLabel = await ctx.ui.select("Toggle active tool", [...toolLabels, "Back"]);
-      if (!selectedToolLabel || selectedToolLabel === "Back") {
+    if (choice === "toggle-tool") {
+      const selectedToolName = await showPiUsereqSettingsMenu(ctx, "toggle startup tool", buildPiUsereqToolToggleChoices(pi, config));
+      if (!selectedToolName || selectedToolName === "back") {
         continue;
       }
-      const selectedTool = tools.find((tool) => formatPiUsereqToolLabel(tool, enabledTools.has(tool.name)) === selectedToolLabel);
-      if (!selectedTool) {
-        continue;
-      }
-      if (enabledTools.has(selectedTool.name)) {
-        enabledTools.delete(selectedTool.name);
+      if (enabledTools.has(selectedToolName)) {
+        enabledTools.delete(selectedToolName);
       } else {
-        enabledTools.add(selectedTool.name);
+        enabledTools.add(selectedToolName);
       }
       setConfiguredPiUsereqTools(pi, config, tools.map((tool) => tool.name).filter((toolName) => enabledTools.has(toolName)));
       ctx.ui.notify(
-        `${enabledTools.has(selectedTool.name) ? "Enabled" : "Disabled"} ${selectedTool.name}`,
+        `${enabledTools.has(selectedToolName) ? "Enabled" : "Disabled"} ${selectedToolName}`,
         "info",
       );
     }
@@ -1621,19 +1720,6 @@ function formatStaticCheckLanguagesSummary(config: UseReqConfig): string {
 }
 
 /**
- * @brief Builds one static-check language selection label.
- * @details Includes the language name, supported extensions, and the number of configured checkers with singular/plural handling. Runtime is O(n) in extension count. No side effects occur.
- * @param[in] language {string} Canonical language name.
- * @param[in] extensions {string[]} Supported file extensions.
- * @param[in] configuredCount {number} Number of configured checkers for the language.
- * @return {string} Menu label.
- */
-function buildStaticCheckLanguageLabel(language: string, extensions: string[], configuredCount: number): string {
-  const suffix = configuredCount === 1 ? "checker" : "checkers";
-  return `${language} [${extensions.join(", ")}] (${configuredCount} ${suffix})`;
-}
-
-/**
  * @brief Renders the static-check configuration reference view.
  * @details Produces a markdown-like summary containing configured entries, supported languages, supported modules, and example specifications. Runtime is O(l log l). No side effects occur.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -1663,65 +1749,169 @@ function renderStaticCheckReference(config: UseReqConfig): string {
 }
 
 /**
+ * @brief Builds the shared settings-menu choices for static-check management.
+ * @details Serializes static-check actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
+ * @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154
+ */
+function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  const supportedLanguageCount = getSupportedStaticCheckLanguageSupport().length;
+  const configuredLanguageCount = Object.values(config["static-check"]).filter((entries) => entries.length > 0).length;
+  return [
+    {
+      id: "add-entry-supported-language",
+      label: "Add entry for supported language",
+      value: `${supportedLanguageCount} languages`,
+      description: "Select a supported language, then select one static-check module to add.",
+    },
+    {
+      id: "add-entry-raw-spec",
+      label: "Add entry from LANG=MODULE[,CMD[,PARAM...]]",
+      value: "raw spec",
+      description: "Enter one raw static-check specification string in canonical CLI format.",
+    },
+    {
+      id: "remove-language-entry",
+      label: "Remove language entry",
+      value: configuredLanguageCount > 0 ? `${configuredLanguageCount} configured` : "(none)",
+      description: "Remove every configured static-check entry for one language.",
+    },
+    {
+      id: "show-supported-languages",
+      label: "Show supported languages",
+      value: `${supportedLanguageCount} languages`,
+      description: "Open the static-check reference report in the editor.",
+    },
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the parent configuration menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for supported static-check languages.
+ * @details Exposes every supported language as one row whose right-side value reports extensions plus the current configured checker count. Runtime is O(l log l). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
+ */
+function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    ...getSupportedStaticCheckLanguageSupport().map(({ language, extensions }) => {
+      const configuredCount = config["static-check"][language]?.length ?? 0;
+      const suffix = configuredCount === 1 ? "checker" : "checkers";
+      return {
+        id: language,
+        label: language,
+        value: `${extensions.join(", ")} • ${configuredCount} ${suffix}`,
+        description: `Configure static-check modules for ${language}. Supported extensions: ${extensions.join(", ")}.`,
+      };
+    }),
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the static-check menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for static-check modules.
+ * @details Exposes every supported static-check module as one selectable row with a concise execution description. Runtime is O(m) in module count. No external state is mutated.
+ * @param[in] language {string} Canonical selected language.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered module-choice vector.
+ */
+function buildStaticCheckModuleChoices(language: string): PiUsereqSettingsMenuChoice[] {
+  return [
+    ...STATIC_CHECK_MODULES.map((moduleName) => ({
+      id: moduleName,
+      label: moduleName,
+      value: language,
+      description: moduleName === "Command"
+        ? `Run one explicit external command against ${language} files.`
+        : `Run the built-in ${moduleName} checker for ${language} files.`,
+    })),
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to language selection.",
+    },
+  ];
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for configured static-check languages.
+ * @details Exposes only languages that currently have at least one configured checker so removal remains deterministic. Runtime is O(l log l). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
+ */
+function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    ...getSupportedStaticCheckLanguageSupport()
+      .filter(({ language }) => (config["static-check"][language] ?? []).length > 0)
+      .map(({ language, extensions }) => ({
+        id: language,
+        label: language,
+        value: `${extensions.join(", ")} • ${config["static-check"][language]!.length} configured`,
+        description: `Remove every configured static-check entry for ${language}.`,
+      })),
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the static-check menu.",
+    },
+  ];
+}
+
+/**
  * @brief Runs the interactive static-check configuration menu.
- * @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Lets the user inspect support, add entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
+ * @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154
  */
 async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   while (true) {
-    const staticChoice = await ctx.ui.select("static-check", [
-      `Configured languages: ${formatStaticCheckLanguagesSummary(config)}`,
-      "Add entry for supported language",
-      "Add entry from LANG=MODULE[,CMD[,PARAM...]]",
-      "Remove language entry",
-      "Show supported languages",
-      "Back",
-    ]);
+    const staticChoice = await showPiUsereqSettingsMenu(ctx, "static-check", buildStaticCheckMenuChoices(config));
 
-    if (!staticChoice || staticChoice === "Back") {
+    if (!staticChoice || staticChoice === "back") {
       return;
     }
 
-    if (staticChoice === "Show supported languages" || staticChoice.startsWith("Configured languages:")) {
+    if (staticChoice === "show-supported-languages") {
       ctx.ui.setEditorText(renderStaticCheckReference(config));
       continue;
     }
 
-    if (staticChoice === "Add entry for supported language") {
-      const languageOptions = getSupportedStaticCheckLanguageSupport();
-      const languageLabels = languageOptions.map(({ language, extensions }) =>
-        buildStaticCheckLanguageLabel(language, extensions, config["static-check"][language]?.length ?? 0),
-      );
-      const selectedLanguageLabel = await ctx.ui.select("Static-check language", [...languageLabels, "Back"]);
-      if (!selectedLanguageLabel || selectedLanguageLabel === "Back") {
+    if (staticChoice === "add-entry-supported-language") {
+      const selectedLanguage = await showPiUsereqSettingsMenu(ctx, "static-check language", buildSupportedStaticCheckLanguageChoices(config));
+      if (!selectedLanguage || selectedLanguage === "back") {
         continue;
       }
-      const selectedLanguage = languageOptions.find(({ language, extensions }) =>
-        buildStaticCheckLanguageLabel(language, extensions, config["static-check"][language]?.length ?? 0) === selectedLanguageLabel,
-      );
-      if (!selectedLanguage) {
-        continue;
-      }
-
-      const moduleName = await ctx.ui.select(`Static-check for ${selectedLanguage.language}`, [...STATIC_CHECK_MODULES, "Back"]);
-      if (!moduleName || moduleName === "Back") {
+      const moduleName = await showPiUsereqSettingsMenu(ctx, `static-check for ${selectedLanguage}`, buildStaticCheckModuleChoices(selectedLanguage));
+      if (!moduleName || moduleName === "back") {
         continue;
       }
 
       const entry: StaticCheckEntry = { module: moduleName };
       if (moduleName === "Command") {
-        const cmd = await ctx.ui.input(`Command executable for ${selectedLanguage.language}`, "");
+        const cmd = await ctx.ui.input(`Command executable for ${selectedLanguage}`, "");
         if (!cmd?.trim()) {
-          ctx.ui.notify(`Command executable is required for ${selectedLanguage.language}`, "error");
+          ctx.ui.notify(`Command executable is required for ${selectedLanguage}`, "error");
           continue;
         }
         entry.cmd = cmd.trim();
       }
 
       const paramsInput = await ctx.ui.input(
-        `Additional parameters for ${moduleName} on ${selectedLanguage.language} (optional, shell-style)`,
+        `Additional parameters for ${moduleName} on ${selectedLanguage} (optional, shell-style)`,
         "",
       );
       const params = paramsInput?.trim() ? shellSplit(paramsInput.trim()) : [];
@@ -1729,13 +1919,13 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
         entry.params = params;
       }
 
-      config["static-check"][selectedLanguage.language] ??= [];
-      config["static-check"][selectedLanguage.language]!.push(entry);
-      ctx.ui.notify(`Added ${moduleName} checker for ${selectedLanguage.language}`, "info");
+      config["static-check"][selectedLanguage] ??= [];
+      config["static-check"][selectedLanguage]!.push(entry);
+      ctx.ui.notify(`Added ${entry.module} checker for ${selectedLanguage}`, "info");
       continue;
     }
 
-    if (staticChoice === "Add entry from LANG=MODULE[,CMD[,PARAM...]]") {
+    if (staticChoice === "add-entry-raw-spec") {
       const spec = await ctx.ui.input("Static-check spec", "Python=Ruff");
       if (!spec?.trim()) {
         continue;
@@ -1751,41 +1941,145 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
       continue;
     }
 
-    if (staticChoice === "Remove language entry") {
-      const configuredLanguages = getSupportedStaticCheckLanguageSupport().filter(
-        ({ language }) => (config["static-check"][language] ?? []).length > 0,
-      );
-      if (configuredLanguages.length === 0) {
-        ctx.ui.notify("No static-check languages configured", "info");
+    if (staticChoice === "remove-language-entry") {
+      const configuredLanguage = await showPiUsereqSettingsMenu(ctx, "remove static-check language", buildConfiguredStaticCheckLanguageChoices(config));
+      if (!configuredLanguage || configuredLanguage === "back") {
         continue;
       }
-      const languageLabels = configuredLanguages.map(({ language, extensions }) =>
-        buildStaticCheckLanguageLabel(language, extensions, config["static-check"][language]!.length),
-      );
-      const selectedLanguageLabel = await ctx.ui.select("Remove static-check language", [...languageLabels, "Back"]);
-      if (!selectedLanguageLabel || selectedLanguageLabel === "Back") {
-        continue;
-      }
-      const selectedLanguage = configuredLanguages.find(({ language, extensions }) =>
-        buildStaticCheckLanguageLabel(language, extensions, config["static-check"][language]!.length) === selectedLanguageLabel,
-      );
-      if (!selectedLanguage) {
-        continue;
-      }
-      delete config["static-check"][selectedLanguage.language];
-      ctx.ui.notify(`Removed static-check entries for ${selectedLanguage.language}`, "info");
+      delete config["static-check"][configuredLanguage];
+      ctx.ui.notify(`Removed static-check entries for ${configuredLanguage}`, "info");
     }
   }
 }
 
 /**
+ * @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
+ * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152
+ */
+function buildPiUsereqMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    {
+      id: "docs-dir",
+      label: "docs-dir",
+      value: config["docs-dir"],
+      description: "Edit the repository-relative directory that stores REQUIREMENTS, WORKFLOW, and REFERENCES documents.",
+    },
+    {
+      id: "tests-dir",
+      label: "tests-dir",
+      value: config["tests-dir"],
+      description: "Edit the repository-relative directory used for project test assets and static-check selection.",
+    },
+    {
+      id: "src-dir",
+      label: "src-dir",
+      value: config["src-dir"].join(", "),
+      description: "Manage the repository-relative source directories scanned by project-scope tools.",
+    },
+    {
+      id: "static-check",
+      label: "static-check",
+      value: formatStaticCheckLanguagesSummary(config),
+      description: "Manage configured static-check entries and inspect supported languages and modules.",
+    },
+    {
+      id: "startup-tools",
+      label: "startup tools",
+      value: `${getConfiguredEnabledPiUsereqTools(config).length} enabled`,
+      description: "Manage which configurable tools become active during session_start.",
+    },
+    {
+      id: "notifications",
+      label: "notifications",
+      value: `beep:${formatPiNotifyBeepStatus(config)} • sound:${config["notify-sound"]}`,
+      description: "Manage terminal beep flags, selected notify command, hotkey bind, and per-level notify commands.",
+    },
+    {
+      id: "reset-defaults",
+      label: "Reset defaults",
+      value: "",
+      description: "Restore the default pi-usereq configuration for the current project base.",
+    },
+    {
+      id: "show-config",
+      label: "show-config",
+      value: "",
+      description: "Write the current project configuration JSON into the editor without saving additional changes.",
+    },
+    {
+      id: "save-and-close",
+      label: "Save and close",
+      value: "",
+      description: "Persist the current configuration and return to the normal pi session UI.",
+    },
+  ];
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for source-directory management.
+ * @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
+ * @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
+ */
+function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    {
+      id: "add-src-dir-entry",
+      label: "Add src-dir entry",
+      value: `${config["src-dir"].length} configured`,
+      description: "Append one repository-relative source directory to the current configuration.",
+    },
+    {
+      id: "remove-src-dir-entry",
+      label: "Remove src-dir entry",
+      value: config["src-dir"].join(", "),
+      description: "Select one configured source directory to remove from the current configuration.",
+    },
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the parent configuration menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for removing one source-directory entry.
+ * @details Exposes every configured `src-dir` entry as one removable row and appends a `Back` action for cancellation. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
+ * @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
+ */
+function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    ...config["src-dir"].map((entry) => ({
+      id: entry,
+      label: entry,
+      value: "remove",
+      description: `Remove the source-directory entry ${entry} from the current configuration.`,
+    })),
+    {
+      id: "back",
+      label: "Back",
+      value: "",
+      description: "Return to the source-directory menu.",
+    },
+  ];
+}
+
+/**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/static-check/active-tool/pi-notify configuration actions, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
+ * @details Loads project config, exposes docs/test/source/static-check/startup-tool/notification actions through the shared settings-menu renderer, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, and active-tool changes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-109, REQ-110, REQ-111, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-131, REQ-133, REQ-134, REQ-137
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154
  */
 async function configurePiUsereq(
   pi: ExtensionAPI,
@@ -1802,70 +2096,69 @@ async function configurePiUsereq(
   };
 
   while (true) {
-    const choice = await ctx.ui.select("pi-usereq", [
-      buildPiUsereqConfigOverview(config),
-      "Set docs-dir",
-      "Set tests-dir",
-      "Manage src-dir",
-      "Manage static-check",
-      "Manage active tools",
-      "Manage notifications",
-      "Reset defaults",
-      "Save and close",
-    ]);
-    if (!choice || choice === "Save and close") {
+    const choice = await showPiUsereqSettingsMenu(ctx, "pi-usereq", buildPiUsereqMenuChoices(config));
+    if (!choice || choice === "save-and-close") {
       ensureSaved();
       refreshStatus();
       if (config["notify-sound-toggle-shortcut"] !== initialShortcut) {
-        ctx.ui.notify("Sound toggle shortcut updated; run /reload to apply the new binding", "info");
+        ctx.ui.notify("Sound toggle hotkey bind updated; run /reload to apply the new binding", "info");
       }
       return;
     }
-    if (choice === "Set docs-dir") {
+    if (choice === "docs-dir") {
       const value = await ctx.ui.input("docs-dir", config["docs-dir"]);
       if (value?.trim()) config["docs-dir"] = value.trim();
       continue;
     }
-    if (choice === "Set tests-dir") {
+    if (choice === "tests-dir") {
       const value = await ctx.ui.input("tests-dir", config["tests-dir"]);
       if (value?.trim()) config["tests-dir"] = value.trim();
       continue;
     }
-    if (choice === "Manage src-dir") {
-      const srcAction = await ctx.ui.select("src-dir", [
-        `Current: ${config["src-dir"].join(", ")}`,
-        "Add src-dir entry",
-        "Remove src-dir entry",
-        "Back",
-      ]);
-      if (srcAction === "Add src-dir entry") {
-        const value = await ctx.ui.input("New src-dir entry", "src");
-        if (value?.trim()) config["src-dir"] = [...config["src-dir"], value.trim()];
-      } else if (srcAction === "Remove src-dir entry") {
-        const toRemove = await ctx.ui.select("Remove src-dir entry", [...config["src-dir"], "Back"]);
-        if (toRemove && toRemove !== "Back") {
-          config["src-dir"] = config["src-dir"].filter((entry) => entry !== toRemove);
-          if (config["src-dir"].length === 0) config["src-dir"] = ["src"];
+    if (choice === "src-dir") {
+      while (true) {
+        const srcAction = await showPiUsereqSettingsMenu(ctx, "src-dir", buildSrcDirMenuChoices(config));
+        if (!srcAction || srcAction === "back") {
+          break;
+        }
+        if (srcAction === "add-src-dir-entry") {
+          const value = await ctx.ui.input("New src-dir entry", "src");
+          if (value?.trim()) {
+            config["src-dir"] = [...config["src-dir"], value.trim()];
+          }
+          continue;
+        }
+        if (srcAction === "remove-src-dir-entry") {
+          const toRemove = await showPiUsereqSettingsMenu(ctx, "remove src-dir entry", buildSrcDirRemovalChoices(config));
+          if (toRemove && toRemove !== "back") {
+            config["src-dir"] = config["src-dir"].filter((entry) => entry !== toRemove);
+            if (config["src-dir"].length === 0) {
+              config["src-dir"] = ["src"];
+            }
+          }
         }
       }
       continue;
     }
-    if (choice === "Manage static-check") {
+    if (choice === "static-check") {
       await configureStaticCheckMenu(ctx, config);
       continue;
     }
-    if (choice === "Manage active tools") {
+    if (choice === "startup-tools") {
       await configurePiUsereqToolsMenu(pi, ctx, config);
       continue;
     }
-    if (choice === "Manage notifications") {
+    if (choice === "notifications") {
       await configurePiNotifyMenu(ctx, config);
       continue;
     }
-    if (choice === "Reset defaults") {
+    if (choice === "reset-defaults") {
       config = getDefaultConfig(projectBase);
-      config["static-check"] = {};
       applyConfiguredPiUsereqTools(pi, config);
+      continue;
+    }
+    if (choice === "show-config") {
+      ctx.ui.setEditorText(`${JSON.stringify(config, null, 2)}\n`);
       continue;
     }
   }
@@ -1873,10 +2166,11 @@ async function configurePiUsereq(
 
 /**
  * @brief Registers configuration-management commands.
- * @details Adds commands for opening the interactive configuration menu and showing the current config JSON in the editor. Runtime is O(1) for registration. Side effects include command registration.
+ * @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
+ * @satisfies REQ-006, REQ-031
  */
 function registerConfigCommands(
   pi: ExtensionAPI,
@@ -1886,14 +2180,6 @@ function registerConfigCommands(
     description: "Open the pi-usereq configuration menu",
     handler: async (_args, ctx) => {
       await configurePiUsereq(pi, ctx, statusController);
-    },
-  });
-
-  pi.registerCommand("pi-usereq-show-config", {
-    description: "Show the current pi-usereq project configuration",
-    handler: async (_args, ctx) => {
-      const config = loadProjectConfig(ctx.cwd);
-      ctx.ui.setEditorText(`${JSON.stringify(config, null, 2)}\n`);
     },
   });
 }

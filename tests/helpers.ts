@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import {
   DEFAULT_DOCS_DIR,
+  getDefaultConfig,
   getProjectConfigPath,
   saveConfig,
   type UseReqConfig,
@@ -183,16 +184,13 @@ export function initFixtureRepo(options: {
   spawnSync("git", ["add", "."], { cwd: projectBase, encoding: "utf8" });
   const commit = spawnSync("git", ["commit", "-m", "init"], { cwd: projectBase, encoding: "utf8" });
   assert.equal(commit.status, 0, commit.stderr);
-  const gitPath = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: projectBase, encoding: "utf8" }).stdout.trim();
-
   const config: UseReqConfig = {
+    ...getDefaultConfig(projectBase),
     "docs-dir": DEFAULT_DOCS_DIR,
     "tests-dir": "tests",
     "src-dir": ["src"],
     "static-check": options.staticCheck ?? {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
-    "base-path": projectBase,
-    "git-path": gitPath,
   };
   saveFixtureConfigs(projectBase, config);
 
