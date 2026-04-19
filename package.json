@@ -2,6 +2,14 @@
   "name": "pi-usereq",
   "private": true,
   "version": "0.3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ogekuri/PI-useReq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ogekuri/PI-useReq/issues"
+  },
+  "homepage": "https://github.com/Ogekuri/PI-useReq#readme",
   "type": "module",
   "scripts": {
     "test": "node --import tsx --test tests/**/*.test.ts",

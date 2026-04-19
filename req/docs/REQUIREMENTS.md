@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.30"
+version: "0.0.31"
 date: "2026-04-19"
 author: "OpenAI Codex"
 scope:
@@ -220,6 +220,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-140**: MUST configure Node.js plus npm registry authentication, run `npm ci`, remove manifest `private`, and publish with provenance and public access using `secrets.NPM_TOKEN`.
 - **REQ-141**: MUST preserve the existing changelog-builder step and use its output as the non-draft non-prerelease GitHub Release body.
 - **REQ-155**: MUST keep `package.json` `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
+- **REQ-157**: MUST declare `package.json` `repository.type` as `git` and `repository.url` as `git+https://github.com/Ogekuri/PI-useReq.git`.
+- **REQ-158**: MUST declare `package.json` `bugs.url` as `https://github.com/Ogekuri/PI-useReq/issues` and `homepage` as `https://github.com/Ogekuri/PI-useReq#readme`.
 - **REQ-142**: MUST default `PI_NOTIFY_SOUND_LOW_CMD` to `paplay --volume=21845 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
 - **REQ-143**: MUST default `PI_NOTIFY_SOUND_MID_CMD` to `paplay --volume=43690 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
 - **REQ-144**: MUST default `PI_NOTIFY_SOUND_HIGH_CMD` to `paplay --volume=65535 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
@@ -277,6 +279,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-029**: MUST verify harness inspection surfaces machine-oriented descriptions for path, static-check, git, docs, and worktree tools, including parameters, output schema, specialization triggers, and failure conditions.
 - **TST-039**: MUST verify `.github/workflows/release-npm.yml` keeps the existing tag filter, gates downstream release work on `origin/master`, runs npm publication, and creates the GitHub Release from generated changelog text.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
+- **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify `.pi-usereq/config.json` omits `base-path` and `git-path`, while runtime path tools and status rendering still derive both values correctly.
 - **TST-041**: MUST verify the `pi-usereq` menu exposes `show-config` between `Reset defaults` and `Save and close`, and omits overview rows plus notification reference-only actions.
 

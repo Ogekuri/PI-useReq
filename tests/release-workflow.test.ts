@@ -17,15 +17,62 @@ function readReleaseWorkflow(): string {
 }
 
 /**
- * @brief Loads the repository package manifest for npm publication assertions.
- * @details Resolves `package.json` from the current process working directory, parses the UTF-8 JSON document, and returns the manifest object so tests can assert publication identity deterministically. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
- * @return {{ name?: unknown }} Parsed package manifest.
- * @satisfies TST-042
+ * @brief Describes the package manifest fields asserted by npm release tests.
+ * @details Constrains the parsed `package.json` shape to the publication identity and provenance metadata required by the release workflow tests. The interface is compile-time only and introduces no runtime side effects.
  */
-function readPackageManifest(): { name?: unknown } {
+interface PackageManifest {
+  name?: unknown;
+  repository?: {
+    type?: unknown;
+    url?: unknown;
+  };
+  bugs?: {
+    url?: unknown;
+  };
+  homepage?: unknown;
+}
+
+/**
+ * @brief Loads the repository package manifest for npm publication assertions.
+ * @details Resolves `package.json` from the current process working directory, parses the UTF-8 JSON document, and returns the manifest object so tests can assert publication identity and provenance metadata deterministically. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @return {PackageManifest} Parsed package manifest.
+ * @satisfies TST-042, TST-044
+ */
+function readPackageManifest(): PackageManifest {
   return JSON.parse(
     fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
-  ) as { name?: unknown };
+  ) as PackageManifest;
+}
+
+/**
+ * @brief Asserts the fixed npm package name used for publication.
+ * @details Loads `package.json` and verifies that the published package name remains `pi-usereq`, preserving the canonical npm package identity. Runtime is O(n) in file size. Side effects are limited to filesystem reads through `readPackageManifest`.
+ * @return {void} No return value.
+ * @satisfies TST-042
+ */
+function assertFixedPackageName(): void {
+  const manifest = readPackageManifest();
+
+  assert.equal(manifest.name, "pi-usereq");
+}
+
+/**
+ * @brief Asserts canonical GitHub provenance metadata in `package.json`.
+ * @details Loads `package.json` and verifies that repository, issues, and homepage URLs remain aligned to the canonical GitHub repository required by npm provenance validation. Runtime is O(n) in file size. Side effects are limited to filesystem reads through `readPackageManifest`.
+ * @return {void} No return value.
+ * @satisfies TST-044
+ */
+function assertCanonicalPackageProvenanceMetadata(): void {
+  const manifest = readPackageManifest();
+
+  assert.deepEqual(manifest.repository, {
+    type: "git",
+    url: "git+https://github.com/Ogekuri/PI-useReq.git",
+  });
+  assert.deepEqual(manifest.bugs, {
+    url: "https://github.com/Ogekuri/PI-useReq/issues",
+  });
+  assert.equal(manifest.homepage, "https://github.com/Ogekuri/PI-useReq#readme");
 }
 
 test(
@@ -75,8 +122,12 @@ test(
   },
 );
 
-test("package manifest keeps the npm publication name fixed to pi-usereq", () => {
-  const manifest = readPackageManifest();
+test(
+  "package manifest keeps the npm publication name fixed to pi-usereq",
+  assertFixedPackageName,
+);
 
-  assert.equal(manifest.name, "pi-usereq");
-});
+test(
+  "package manifest keeps canonical repository, bugs, and homepage metadata for npm provenance",
+  assertCanonicalPackageProvenanceMetadata,
+);
