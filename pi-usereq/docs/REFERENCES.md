@@ -1658,7 +1658,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 
 ---
 
-# extension-status.ts | TypeScript | 660L | 30 symbols | 4 imports | 30 comments
+# extension-status.ts | TypeScript | 688L | 32 symbols | 5 imports | 32 comments
 > Path: `src/core/extension-status.ts`
 - @brief Tracks pi-usereq extension status state and renders status-bar telemetry.
 - @details Centralizes hook interception, context-usage snapshots, run timing,
@@ -1669,10 +1669,11 @@ scheduling through exported controller helpers.
 
 ## Imports
 ```
+import path from "node:path";
 import type {
 import type { UseReqConfig } from "./config.js";
+import { normalizePathSlashes } from "./path-context.js";
 import { formatPiNotifyBeepStatus } from "./pi-notify.js";
-import { formatAbsoluteGitPath, formatBasePathRelativeToGitPath, resolveRuntimeGitPath } from "./runtime-project-paths.js";
 ```
 
 ## Definitions
@@ -1857,7 +1858,7 @@ Runtime is O(n) in message count. No external state is mutated.
 - @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
 - @param[in] nowMs {number} Current wall-clock time in milliseconds.
 - @return {string} Single-line status-bar text.
-- @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-147, REQ-148, REQ-156
+- @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-156, REQ-159
 
 ### fn `function stopStatusTicker(controller: PiUsereqStatusController): void` (L491-496)
 - @brief Stops the live elapsed-time ticker when it is active.
@@ -3008,17 +3009,17 @@ import { getInstallationPath, RESOURCE_ROOT_DIRNAME } from "./path-context.js";
 
 ---
 
-# runtime-project-paths.ts | TypeScript | 99L | 6 symbols | 4 imports | 7 comments
+# runtime-project-paths.ts | TypeScript | 70L | 4 symbols | 4 imports | 5 comments
 > Path: `src/core/runtime-project-paths.ts`
-- @brief Derives runtime-only repository and base-path facts.
-- @details Centralizes git-repository probing, repository-root resolution, and base-path-to-git-path formatting for extension status, tool execution, and CLI flows. Runtime is dominated by git subprocess execution plus path normalization. Side effects are limited to subprocess spawning.
+- @brief Derives runtime-only repository facts.
+- @details Centralizes git-repository probing and repository-root resolution for extension status, tool execution, and CLI flows. Runtime is dominated by git subprocess execution plus path normalization. Side effects are limited to subprocess spawning.
 
 ## Imports
 ```
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { ReqError } from "./errors.js";
-import { isSameOrAncestorPath, normalizePathSlashes } from "./path-context.js";
+import { isSameOrAncestorPath } from "./path-context.js";
 ```
 
 ## Definitions
@@ -3052,21 +3053,6 @@ import { isSameOrAncestorPath, normalizePathSlashes } from "./path-context.js";
 - @return {string | undefined} Absolute repository-root path or `undefined` when unavailable.
 - @satisfies REQ-105, REQ-145
 
-### fn `export function formatBasePathRelativeToGitPath(basePath: string, gitPath: string | undefined): string` (L78-88)
-- @brief Formats the runtime `base-path` relative to the runtime `git-path`.
-- @details Returns `.` when the repository root is unavailable or identical to the base path. Otherwise returns the slash-normalized relative path from `git-path` to `base-path`. Runtime is O(p) in path length. No external state is mutated.
-- @param[in] basePath {string} Runtime base path.
-- @param[in] gitPath {string | undefined} Runtime repository root.
-- @return {string} Relative base-path token for status rendering.
-- @satisfies REQ-148
-
-### fn `export function formatAbsoluteGitPath(gitPath: string | undefined): string` (L97-99)
-- @brief Formats the runtime git path for status rendering.
-- @details Returns a slash-normalized absolute path or an empty string when no repository root is available. Runtime is O(p) in path length. No external state is mutated.
-- @param[in] gitPath {string | undefined} Runtime repository root.
-- @return {string} Absolute repository path or an empty string.
-- @satisfies REQ-147
-
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
@@ -3074,8 +3060,6 @@ import { isSameOrAncestorPath, normalizePathSlashes } from "./path-context.js";
 |`isInsideGitRepo`|fn||33-36|export function isInsideGitRepo(targetPath: string): boolean|
 |`resolveGitRoot`|fn||46-52|export function resolveGitRoot(targetPath: string): string|
 |`resolveRuntimeGitPath`|fn||61-68|export function resolveRuntimeGitPath(executionPath: stri...|
-|`formatBasePathRelativeToGitPath`|fn||78-88|export function formatBasePathRelativeToGitPath(basePath:...|
-|`formatAbsoluteGitPath`|fn||97-99|export function formatAbsoluteGitPath(gitPath: string | u...|
 
 
 ---
@@ -4099,7 +4083,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 2209L | 50 symbols | 21 imports | 53 comments
+# index.ts | TypeScript | 2210L | 50 symbols | 21 imports | 53 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -4490,13 +4474,14 @@ updates.
 configuration commands plus agent tools, registers the configurable
 successful-run sound shortcut when the runtime supports shortcuts, and
 installs shared wrappers for all supported pi lifecycle hooks so status
-telemetry, context usage, prompt timing, and pi-notify effects remain
-synchronized with runtime events. Runtime is O(h) in hook count during
-registration. Side effects include filesystem reads, command/tool/shortcut
-registration, UI updates, active-tool changes, and timer scheduling.
+telemetry, context usage, prompt timing, cumulative runtime, and pi-notify
+effects remain synchronized with runtime events. Runtime is O(h) in hook
+count during registration. Side effects include filesystem reads,
+command/tool/shortcut registration, UI updates, active-tool changes, and
+timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
-- @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137
+- @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137, REQ-148, REQ-159
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|

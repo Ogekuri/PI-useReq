@@ -1,13 +1,13 @@
 /**
  * @file
- * @brief Derives runtime-only repository and base-path facts.
- * @details Centralizes git-repository probing, repository-root resolution, and base-path-to-git-path formatting for extension status, tool execution, and CLI flows. Runtime is dominated by git subprocess execution plus path normalization. Side effects are limited to subprocess spawning.
+ * @brief Derives runtime-only repository facts.
+ * @details Centralizes git-repository probing and repository-root resolution for extension status, tool execution, and CLI flows. Runtime is dominated by git subprocess execution plus path normalization. Side effects are limited to subprocess spawning.
  */
 
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { ReqError } from "./errors.js";
-import { isSameOrAncestorPath, normalizePathSlashes } from "./path-context.js";
+import { isSameOrAncestorPath } from "./path-context.js";
 
 /**
  * @brief Executes one git subprocess and captures UTF-8 output.
@@ -67,33 +67,4 @@ export function resolveRuntimeGitPath(executionPath: string): string | undefined
   return isSameOrAncestorPath(gitRoot, normalizedExecutionPath) ? gitRoot : undefined;
 }
 
-/**
- * @brief Formats the runtime `base-path` relative to the runtime `git-path`.
- * @details Returns `.` when the repository root is unavailable or identical to the base path. Otherwise returns the slash-normalized relative path from `git-path` to `base-path`. Runtime is O(p) in path length. No external state is mutated.
- * @param[in] basePath {string} Runtime base path.
- * @param[in] gitPath {string | undefined} Runtime repository root.
- * @return {string} Relative base-path token for status rendering.
- * @satisfies REQ-148
- */
-export function formatBasePathRelativeToGitPath(basePath: string, gitPath: string | undefined): string {
-  const normalizedBasePath = path.resolve(basePath);
-  if (!gitPath) {
-    return ".";
-  }
-  const normalizedGitPath = path.resolve(gitPath);
-  if (normalizedBasePath === normalizedGitPath) {
-    return ".";
-  }
-  return normalizePathSlashes(path.relative(normalizedGitPath, normalizedBasePath)) || ".";
-}
 
-/**
- * @brief Formats the runtime git path for status rendering.
- * @details Returns a slash-normalized absolute path or an empty string when no repository root is available. Runtime is O(p) in path length. No external state is mutated.
- * @param[in] gitPath {string | undefined} Runtime repository root.
- * @return {string} Absolute repository path or an empty string.
- * @satisfies REQ-147
- */
-export function formatAbsoluteGitPath(gitPath: string | undefined): string {
-  return gitPath ? normalizePathSlashes(path.resolve(gitPath)) : "";
-}

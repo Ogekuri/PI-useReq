@@ -86,7 +86,7 @@ export function getProjectConfigPath(projectBase: string): string {
  * @details Populates canonical docs/test/source directories, the default startup tool set, and default pi-notify fields while excluding runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
- * @satisfies CTN-001, CTN-012, REQ-066, REQ-146
+ * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146
  */
 export function getDefaultConfig(_projectBase: string): UseReqConfig {
   return {
@@ -95,9 +95,9 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     "src-dir": [...DEFAULT_SRC_DIRS],
     "static-check": {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
-    "notify-beep-on-end": false,
-    "notify-beep-on-esc": false,
-    "notify-beep-on-error": false,
+    "notify-beep-on-end": true,
+    "notify-beep-on-esc": true,
+    "notify-beep-on-error": true,
     "notify-sound": "none",
     "notify-sound-toggle-shortcut": DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
     PI_NOTIFY_SOUND_LOW_CMD: DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
@@ -108,11 +108,11 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
 
 /**
  * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names and pi-notify fields, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names and pi-notify fields, applies enabled beep defaults for missing flag payloads, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
- * @satisfies CTN-012, REQ-066, REQ-146
+ * @satisfies CTN-012, REQ-066, REQ-129, REQ-146
  */
 export function loadConfig(projectBase: string): UseReqConfig {
   const configPath = getProjectConfigPath(projectBase);
@@ -140,9 +140,9 @@ export function loadConfig(projectBase: string): UseReqConfig {
     ? (data["static-check"] as Record<string, StaticCheckEntry[]>)
     : {};
   const enabledTools = normalizeEnabledPiUsereqTools(data["enabled-tools"]);
-  const notifyBeepOnEnd = data["notify-beep-on-end"] === true;
-  const notifyBeepOnEsc = data["notify-beep-on-esc"] === true;
-  const notifyBeepOnError = data["notify-beep-on-error"] === true;
+  const notifyBeepOnEnd = data["notify-beep-on-end"] !== false;
+  const notifyBeepOnEsc = data["notify-beep-on-esc"] !== false;
+  const notifyBeepOnError = data["notify-beep-on-error"] !== false;
   const notifySound = normalizePiNotifySoundLevel(data["notify-sound"]);
   const notifySoundToggleShortcut = normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]);
   const lowSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD);

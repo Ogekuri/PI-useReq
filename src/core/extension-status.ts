@@ -8,6 +8,7 @@
  * scheduling through exported controller helpers.
  */
 
+import path from "node:path";
 import type {
   AgentEndEvent,
   ContextUsage,
@@ -15,8 +16,8 @@ import type {
   ThemeColor,
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
+import { normalizePathSlashes } from "./path-context.js";
 import { formatPiNotifyBeepStatus } from "./pi-notify.js";
-import { formatAbsoluteGitPath, formatBasePathRelativeToGitPath, resolveRuntimeGitPath } from "./runtime-project-paths.js";
 
 /**
  * @brief Enumerates the CLI-supported theme tokens consumed by status rendering.
@@ -115,25 +116,26 @@ export type PiUsereqStatusHookName = (typeof PI_USEREQ_STATUS_HOOK_NAMES)[number
 /**
  * @brief Stores the mutable runtime facts displayed by the status bar.
  * @details Persists the latest context-usage snapshot, the active run start
- * timestamp, and the most recent normally completed run duration. Runtime state
- * is mutated in-place by controller helpers. Compile-time only and introduces
- * no runtime cost.
+ * timestamp, the most recent normally completed run duration, and the
+ * accumulated duration of all normally completed runs. Runtime state is
+ * mutated in-place by controller helpers. Compile-time only and introduces no
+ * runtime cost.
  */
 export interface PiUsereqStatusState {
   contextUsage: ContextUsage | undefined;
   runStartTimeMs: number | undefined;
   lastRunDurationMs: number | undefined;
+  totalRunDurationMs: number | undefined;
 }
 
 /**
  * @brief Stores the controller state required for event-driven status updates.
  * @details Keeps the mutable status snapshot, the current configuration, the
- * latest extension context used for rendering, the active-tools provider, and
- * the interval handle used for live elapsed-time refreshes. Compile-time only
- * and introduces no runtime cost.
+ * latest extension context used for rendering, and the interval handle used
+ * for live elapsed-time refreshes. Compile-time only and introduces no runtime
+ * cost.
  */
 export interface PiUsereqStatusController {
-  readonly getActiveTools: () => readonly string[];
   config: UseReqConfig | undefined;
   latestContext: ExtensionContext | undefined;
   state: PiUsereqStatusState;
@@ -377,6 +379,44 @@ function formatStatusDuration(durationMs: number): string {
 }
 
 /**
+ * @brief Formats one optional completed-duration value.
+ * @details Returns the canonical unset placeholder `--:--` until the supplied
+ * timer receives a normally completed prompt duration, then delegates to
+ * `formatStatusDuration(...)`. Runtime is O(1). No external state is mutated.
+ * @param[in] durationMs {number | undefined} Optional completed-duration value.
+ * @return {string} Rendered duration or unset placeholder.
+ * @satisfies REQ-124
+ */
+function formatCompletedStatusDuration(
+  durationMs: number | undefined,
+): string {
+  return durationMs === undefined ? "--:--" : formatStatusDuration(durationMs);
+}
+
+/**
+ * @brief Formats the consolidated `et` status-bar value.
+ * @details Emits the active prompt segment `▶<active>`, the latest normally
+ * completed segment `↻<last>`, and the accumulated successful-runtime segment
+ * `Σ<total>` in the canonical comma-separated order. Runtime is O(1). No
+ * external state is mutated.
+ * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
+ * @param[in] nowMs {number} Current wall-clock time in milliseconds.
+ * @return {string} Consolidated `et` field value.
+ * @satisfies REQ-123, REQ-124, REQ-125, REQ-159
+ */
+function formatEtStatusValue(
+  state: PiUsereqStatusState,
+  nowMs: number,
+): string {
+  const activeText = state.runStartTimeMs === undefined
+    ? "idle"
+    : formatStatusDuration(nowMs - state.runStartTimeMs);
+  const lastText = formatCompletedStatusDuration(state.lastRunDurationMs);
+  const totalText = formatCompletedStatusDuration(state.totalRunDurationMs);
+  return `▶${activeText},↻${lastText},Σ${totalText}`;
+}
+
+/**
  * @brief Formats one standard status-bar field.
  * @details Renders the field label in accent color and the value in warning
  * color. Runtime is O(n) in combined text length. No external state is mutated.
@@ -431,50 +471,38 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders git, base, docs, tests, src, tools, context, elapsed, last, beep, and sound fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(s) in configured source-path count plus runtime git probing. No external state is mutated.
- * @param[in] cwd {string} Runtime working directory used for git/base path derivation.
+ * @details Renders base, docs, src, tests, context, et, beep, and sound fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(s) in configured source-path count. No external state is mutated.
+ * @param[in] cwd {string} Runtime working directory used for base-path derivation.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @param[in] activeTools {readonly string[]} Active runtime tool names.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-147, REQ-148, REQ-156
+ * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-156, REQ-159
  */
 function buildPiUsereqStatusText(
   cwd: string,
   config: UseReqConfig,
-  activeTools: readonly string[],
   theme: StatusThemeAdapter,
   state: PiUsereqStatusState,
   nowMs: number,
 ): string {
-  const gitPath = resolveRuntimeGitPath(cwd);
-  const gitText = formatAbsoluteGitPath(gitPath);
-  const baseText = formatBasePathRelativeToGitPath(cwd, gitPath);
+  const baseText = normalizePathSlashes(path.resolve(cwd));
   const sourcePaths = config["src-dir"].join(",");
-  const elapsedText = state.runStartTimeMs === undefined
-    ? "idle"
-    : formatStatusDuration(nowMs - state.runStartTimeMs);
-  const lastText = state.lastRunDurationMs === undefined
-    ? "N/A"
-    : formatStatusDuration(state.lastRunDurationMs);
+  const etText = formatEtStatusValue(state, nowMs);
   const beepText = formatPiNotifyBeepStatus(config);
   const soundText = config["notify-sound"];
   return [
-    formatStatusField(theme, "git", gitText),
     formatStatusField(theme, "base", baseText),
     formatStatusField(theme, "docs", config["docs-dir"]),
-    formatStatusField(theme, "tests", config["tests-dir"]),
     formatStatusField(theme, "src", sourcePaths),
-    formatStatusField(theme, "tools", String(activeTools.length)),
+    formatStatusField(theme, "tests", config["tests-dir"]),
     formatRenderedStatusField(
       theme,
       "context",
       formatContextUsageBar(theme, state.contextUsage),
     ),
-    formatStatusField(theme, "elapsed", elapsedText),
-    formatStatusField(theme, "last", lastText),
+    formatStatusField(theme, "et", etText),
     formatStatusField(theme, "beep", beepText),
     formatStatusField(theme, "sound", soundText),
   ].join(theme.separator);
@@ -525,24 +553,21 @@ function syncPiUsereqStatusTicker(
 
 /**
  * @brief Creates an empty pi-usereq status controller.
- * @details Initializes the mutable status snapshot, stores the active-tools
- * provider used by render-time tool counting, and starts with no config, no
- * context, and no live ticker. Runtime is O(1). No external state is mutated.
- * @param[in] getActiveTools {() => readonly string[]} Provider for active tools.
+ * @details Initializes the mutable status snapshot and starts with no config,
+ * no context, and no live ticker. Runtime is O(1). No external state is
+ * mutated.
  * @return {PiUsereqStatusController} New status controller.
  * @satisfies DES-010
  */
-export function createPiUsereqStatusController(
-  getActiveTools: () => readonly string[],
-): PiUsereqStatusController {
+export function createPiUsereqStatusController(): PiUsereqStatusController {
   return {
-    getActiveTools,
     config: undefined,
     latestContext: undefined,
     state: {
       contextUsage: undefined,
       runStartTimeMs: undefined,
       lastRunDurationMs: undefined,
+      totalRunDurationMs: undefined,
     },
     tickHandle: undefined,
   };
@@ -574,7 +599,7 @@ export function setPiUsereqStatusConfig(
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-159
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,
@@ -590,7 +615,6 @@ export function renderPiUsereqStatus(
     buildPiUsereqStatusText(
       ctx.cwd,
       controller.config,
-      controller.getActiveTools(),
       theme,
       controller.state,
       Date.now(),
@@ -601,17 +625,18 @@ export function renderPiUsereqStatus(
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
  * @details Refreshes stored context usage on every hook, starts run timing on
- * `agent_start`, captures non-aborted run duration on `agent_end`, clears live
- * timing on shutdown, synchronizes the live ticker, and re-renders the status
- * bar when configuration is available. Runtime is O(n) in `agent_end` message
- * count and otherwise O(1). Side effects include in-memory state mutation,
- * interval scheduling, and footer-status updates.
+ * `agent_start`, captures non-aborted run duration on `agent_end`, accumulates
+ * successful runtime into `Σ`, clears live timing on shutdown, synchronizes
+ * the live ticker, and re-renders the status bar when configuration is
+ * available. Runtime is O(n) in `agent_end` message count and otherwise O(1).
+ * Side effects include in-memory state mutation, interval scheduling, and
+ * footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159
  */
 export function updateExtensionStatus(
   controller: PiUsereqStatusController,
@@ -631,6 +656,9 @@ export function updateExtensionStatus(
     const durationMs = nowMs - controller.state.runStartTimeMs;
     if (!didAgentEndAbort((event as AgentEndEvent).messages ?? [])) {
       controller.state.lastRunDurationMs = durationMs;
+      controller.state.totalRunDurationMs = controller.state.totalRunDurationMs === undefined
+        ? durationMs
+        : controller.state.totalRunDurationMs + durationMs;
     }
     controller.state.runStartTimeMs = undefined;
   }

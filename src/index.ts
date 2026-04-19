@@ -2190,16 +2190,17 @@ function registerConfigCommands(
  * configuration commands plus agent tools, registers the configurable
  * successful-run sound shortcut when the runtime supports shortcuts, and
  * installs shared wrappers for all supported pi lifecycle hooks so status
- * telemetry, context usage, prompt timing, and pi-notify effects remain
- * synchronized with runtime events. Runtime is O(h) in hook count during
- * registration. Side effects include filesystem reads, command/tool/shortcut
- * registration, UI updates, active-tool changes, and timer scheduling.
+ * telemetry, context usage, prompt timing, cumulative runtime, and pi-notify
+ * effects remain synchronized with runtime events. Runtime is O(h) in hook
+ * count during registration. Side effects include filesystem reads,
+ * command/tool/shortcut registration, UI updates, active-tool changes, and
+ * timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-110, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137, REQ-148, REQ-159
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
-  const statusController = createPiUsereqStatusController(() => pi.getActiveTools());
+  const statusController = createPiUsereqStatusController();
   ensureBundledResourcesAccessible();
   registerPromptCommands(pi);
   registerAgentTools(pi);

@@ -246,18 +246,21 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.deepEqual([...report.activeTools].sort(), ["git-path", "static-check"]);
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
-    assert.match(
-      status,
-      /<accent>git:<\/accent><warning>.*<\/warning><dim> • <\/dim><accent>base:<\/accent><warning>\.<\/warning><dim> • <\/dim><accent>docs:<\/accent><warning>pi-usereq\/docs<\/warning><dim> • <\/dim><accent>tests:<\/accent><warning>tests<\/warning><dim> • <\/dim><accent>src:<\/accent><warning>src<\/warning><dim> • <\/dim><accent>tools:<\/accent><warning>2<\/warning>/,
+    const normalizedBasePath = projectBase.split(path.sep).join("/");
+    assert.ok(
+      status.includes(
+        `<accent>base:</accent><warning>${normalizedBasePath}</warning><dim> • </dim><accent>docs:</accent><warning>pi-usereq/docs</warning><dim> • </dim><accent>src:</accent><warning>src</warning><dim> • </dim><accent>tests:</accent><warning>tests</warning>`,
+      ),
     );
     assert.match(
       status,
       /<accent>context:<\/accent><bg-from-fg-accent><warning>CLEAR<\/warning><\/bg-from-fg-accent>/,
     );
-    assert.match(status, /<accent>elapsed:<\/accent><warning>idle<\/warning>/);
-    assert.match(status, /<accent>last:<\/accent><warning>N\/A<\/warning>/);
-    assert.match(status, /<accent>beep:<\/accent><warning>none<\/warning>/);
+    assert.match(status, /<accent>et:<\/accent><warning>▶idle,↻--:--,Σ--:--<\/warning>/);
+    assert.match(status, /<accent>beep:<\/accent><warning>end,esc,err<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
+    assert.doesNotMatch(status, /<accent>git:<\/accent>/);
+    assert.doesNotMatch(status, /<accent>tools:<\/accent>/);
     assert.equal(report.ui.notifications.length, 0);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -294,7 +297,8 @@ test("replayCommand captures interactive UI side effects", async () => {
 
     assert.deepEqual(report.activeTools, []);
     assert.ok(report.ui.notifications.some((entry) => entry.message === "Disabled all configurable active tools"));
-    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>tools:<\/accent><warning>0<\/warning>/);
+    assert.doesNotMatch(report.ui.statuses["pi-usereq"] ?? "", /<accent>tools:<\/accent>/);
+    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>et:<\/accent><warning>▶idle,↻--:--,Σ--:--<\/warning>/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

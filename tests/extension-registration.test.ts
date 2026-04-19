@@ -4,7 +4,11 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
-import { DEFAULT_DOCS_DIR, getProjectConfigPath } from "../src/core/config.js";
+import {
+  DEFAULT_DOCS_DIR,
+  getDefaultConfig,
+  getProjectConfigPath,
+} from "../src/core/config.js";
 import {
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
@@ -317,21 +321,18 @@ function buildExpectedFakeContextBar(options: {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, separators, context bar, and timing fields emitted by the extension using deterministic fake theme markers. Runtime is O(s) in source-path count. No external state is mutated.
- * @param[in] options {{ gitPath?: string; basePath?: string; docsDir: string; testsDir: string; srcDir: string[]; toolCount: number; contextFilledCells: number; contextPercent?: number | null; elapsed: string; last: string; beep?: string; sound?: string }} Expected status facts.
+ * @details Reconstructs the field order, separators, context bar, and consolidated timing field emitted by the extension using deterministic fake theme markers. Runtime is O(s) in source-path count. No external state is mutated.
+ * @param[in] options {{ basePath: string; docsDir: string; testsDir: string; srcDir: string[]; contextFilledCells: number; contextPercent?: number | null; et: string; beep?: string; sound?: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
-  gitPath?: string;
-  basePath?: string;
+  basePath: string;
   docsDir: string;
   testsDir: string;
   srcDir: string[];
-  toolCount: number;
   contextFilledCells: number;
   contextPercent?: number | null;
-  elapsed: string;
-  last: string;
+  et: string;
   beep?: string;
   sound?: string;
 }): string {
@@ -342,18 +343,27 @@ function buildExpectedFakeStatusText(options: {
     percent: options.contextPercent,
   });
   return [
-    buildField("git", options.gitPath ?? ""),
-    buildField("base", options.basePath ?? "."),
+    buildField("base", options.basePath),
     buildField("docs", options.docsDir),
-    buildField("tests", options.testsDir),
     buildField("src", options.srcDir.join(",")),
-    buildField("tools", String(options.toolCount)),
+    buildField("tests", options.testsDir),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
-    buildField("elapsed", options.elapsed),
-    buildField("last", options.last),
-    buildField("beep", options.beep ?? "none"),
+    buildField("et", options.et),
+    buildField("beep", options.beep ?? "end,esc,err"),
     buildField("sound", options.sound ?? "none"),
   ].join(formatFakeThemeForeground("dim", " • "));
+}
+
+/**
+ * @brief Formats one expected absolute base path for fake status assertions.
+ * @details Resolves the supplied cwd and normalizes path separators to `/` so
+ * fake status comparisons stay stable across operating systems. Runtime is O(p)
+ * in path length. No external state is mutated.
+ * @param[in] cwd {string} Runtime working directory.
+ * @return {string} Slash-normalized absolute base path.
+ */
+function buildExpectedFakeBasePath(cwd: string): string {
+  return path.resolve(cwd).split(path.sep).join("/");
 }
 
 /**
@@ -1493,13 +1503,12 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src", "foobar"],
-      toolCount: 2,
       contextFilledCells: 0,
-      elapsed: "idle",
-      last: "N/A",
+      et: "▶idle,↻--:--,Σ--:--",
     }),
   );
 });
@@ -1518,14 +1527,13 @@ test("session_start renders the CLEAR overlay when context usage is empty", asyn
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
       contextFilledCells: 0,
       contextPercent: 0,
-      elapsed: "idle",
-      last: "N/A",
+      et: "▶idle,↻--:--,Σ--:--",
     }),
   );
 });
@@ -1586,14 +1594,13 @@ test("context hook refreshes context usage and rounds progress cells upward", as
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
       contextFilledCells: 1,
       contextPercent: 19.1,
-      elapsed: "idle",
-      last: "N/A",
+      et: "▶idle,↻--:--,Σ--:--",
     }),
   );
 });
@@ -1614,14 +1621,13 @@ test("context hook renders the FULL! overlay when usage exceeds ninety percent",
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
       contextFilledCells: 5,
       contextPercent: 91,
-      elapsed: "idle",
-      last: "N/A",
+      et: "▶idle,↻--:--,Σ--:--",
     }),
   );
 });
@@ -1657,19 +1663,18 @@ test("status FULL overlay uses only CLI-supported theme tokens", async () => {
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
       contextFilledCells: 5,
       contextPercent: 91,
-      elapsed: "idle",
-      last: "N/A",
+      et: "▶idle,↻--:--,Σ--:--",
     }),
   );
 });
 
-test("agent timing status updates elapsed and last while preserving aborted last values", async () => {
+test("agent timing status updates et while preserving accumulated completed runtime", async () => {
   const cwd = createTempDir("pi-usereq-timing-status-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
 
@@ -1698,13 +1703,12 @@ test("agent timing status updates elapsed and last while preserving aborted last
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
         srcDir: ["src"],
-        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
         contextFilledCells: 0,
-        elapsed: "0:00",
-        last: "N/A",
+        et: "▶0:00,↻--:--,Σ--:--",
       }),
     );
 
@@ -1713,13 +1717,12 @@ test("agent timing status updates elapsed and last while preserving aborted last
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
         srcDir: ["src"],
-        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
         contextFilledCells: 0,
-        elapsed: "1:01",
-        last: "N/A",
+        et: "▶1:01,↻--:--,Σ--:--",
       }),
     );
 
@@ -1735,13 +1738,12 @@ test("agent timing status updates elapsed and last while preserving aborted last
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
         srcDir: ["src"],
-        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
         contextFilledCells: 0,
-        elapsed: "idle",
-        last: "1:01",
+        et: "▶idle,↻1:01,Σ1:01",
       }),
     );
 
@@ -1760,13 +1762,12 @@ test("agent timing status updates elapsed and last while preserving aborted last
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
         srcDir: ["src"],
-        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
         contextFilledCells: 0,
-        elapsed: "idle",
-        last: "1:01",
+        et: "▶idle,↻1:01,Σ1:01",
       }),
     );
     assert.ok(clearedHandles.length >= 2);
@@ -1792,6 +1793,14 @@ test("session_start enables default custom tools and default embedded tools only
   assert.equal(activeTools.has("find"), false);
   assert.equal(activeTools.has("grep"), false);
   assert.equal(activeTools.has("ls"), false);
+});
+
+test("default configuration enables all pi-notify beep outcomes", () => {
+  const config = getDefaultConfig(createTempDir("pi-usereq-default-notify-"));
+
+  assert.equal(config["notify-beep-on-end"], true);
+  assert.equal(config["notify-beep-on-esc"], true);
+  assert.equal(config["notify-beep-on-error"], true);
 });
 
 test("configuration menu can enable embedded builtin tools", async () => {
@@ -1866,9 +1875,9 @@ test("configuration menu can persist pi-notify settings", async () => {
   await command!.handler("", ctx);
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["notify-beep-on-end"], true);
-  assert.equal(config["notify-beep-on-error"], true);
-  assert.equal(config["notify-beep-on-esc"], false);
+  assert.equal(config["notify-beep-on-end"], false);
+  assert.equal(config["notify-beep-on-error"], false);
+  assert.equal(config["notify-beep-on-esc"], true);
   assert.equal(config["notify-sound"], "high");
   assert.equal(config["notify-sound-toggle-shortcut"], "alt+shift+s");
   assert.equal(config.PI_NOTIFY_SOUND_LOW_CMD, "echo low %%INSTALLATION_PATH%%");
@@ -1877,14 +1886,13 @@ test("configuration menu can persist pi-notify settings", async () => {
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
       docsDir: DEFAULT_DOCS_DIR,
       testsDir: "tests",
       srcDir: ["src"],
-      toolCount: pi.getActiveTools().length,
       contextFilledCells: 0,
-      elapsed: "idle",
-      last: "N/A",
-      beep: "end,err",
+      et: "▶idle,↻--:--,Σ--:--",
+      beep: "esc",
       sound: "high",
     }),
   );
@@ -1914,13 +1922,12 @@ test("sound toggle shortcut cycles persisted pi-notify sound levels", async () =
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
         srcDir: ["src"],
-        toolCount: PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length,
         contextFilledCells: 0,
-        elapsed: "idle",
-        last: "N/A",
+        et: "▶idle,↻--:--,Σ--:--",
         sound: expectedSound,
       }),
     );
