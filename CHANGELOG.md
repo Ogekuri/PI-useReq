@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.7.0](https://github.com/Ogekuri/PI-useReq/compare/v0.6.0..v0.7.0) - 2026-04-20
+### ⛰️  Features
+- Add src/resources/images/ files.
+
+### 🐛  Bug Fixes
+- defer js-tiktoken loading for token tools [useReq] *(extension)*
+  - lazy-load js-tiktoken inside token counting instead of at extension import time
+  - return structured token-tool failures when the dependency is unavailable
+  - add coverage for deferred loading and dependency error handling
+
+### 🚜  Changes
+- BREAKING CHANGE: rename menus and notify defaults [useReq] *(config-menu)*
+  - update requirements for tilde config-path display and guided static-check menus
+  - remove legacy startup-tool status and static-check raw-spec/reference actions
+  - add %%RESULT%% defaults for notify and Pushover templates with tests/docs refresh
+- BREAKING CHANGE: move event toggles into shared submenus [useReq] *(notifications)*
+  - update requirements for completed/interrupted/failed event contracts
+  - replace direct notification toggles with shared event submenus
+  - rename persisted notification keys and refresh extension docs/tests
+- BREAKING CHANGE: remove terminal bell notification support [useReq] *(core)*
+  - update requirements and workflow docs for the breaking removal
+  - delete terminal bell config and runtime handling
+  - refresh notification UI tests and references
+- BREAKING CHANGE: replace status context bar and notification menus [useReq] *(config-ui)*
+  - update requirements for breaking status and configuration UI behavior
+  - switch context footer rendering to icon-based thresholds
+  - remove notify, beep, and pushover footer fields
+  - flatten Pushover settings into Notifications and add scoped submenu resets
+  - preserve menu focus after toggles and edits
+  - update configuration UI tests and debug harness assertions
+- BREAKING CHANGE: unify notify beep sound and pushover [useReq] *(pi-notify)*
+  - update SRS for breaking notification model changes
+  - replace legacy terminal notification implementations with PI_NOTIFY_CMD and terminal bell routing
+  - add global and per-event toggles for notify, beep, sound, and pushover
+  - update status bar, configuration menus, workflow, references, and tests
+
 ## [0.6.0](https://github.com/Ogekuri/PI-useReq/compare/v0.5.0..v0.6.0) - 2026-04-20
 ### 🚜  Changes
 - BREAKING CHANGE: optimize tool response payloads [useReq] *(core)*
@@ -253,6 +289,7 @@
 - \[0.4.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.4.0
 - \[0.5.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.5.0
 - \[0.6.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.6.0
+- \[0.7.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.7.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -260,3 +297,4 @@
 [0.4.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.3.0..v0.4.0
 [0.5.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.4.0..v0.5.0
 [0.6.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.5.0..v0.6.0
+[0.7.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.6.0..v0.7.0
