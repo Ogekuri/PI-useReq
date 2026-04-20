@@ -14,6 +14,9 @@ import {
   getConfigPath,
 } from "./path-context.js";
 import {
+  DEFAULT_PI_NOTIFY_CMD,
+  DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+  DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
   DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
   DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
   DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
@@ -23,6 +26,7 @@ import {
   normalizePiNotifyPushoverPriority,
   normalizePiNotifyShortcut,
   normalizePiNotifySoundLevel,
+  normalizePiNotifyTemplateValue,
 } from "./pi-notify.js";
 import { normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
@@ -47,16 +51,29 @@ export interface UseReqConfig {
   "src-dir": string[];
   "static-check": Record<string, StaticCheckEntry[]>;
   "enabled-tools": string[];
+  "notify-enabled": boolean;
+  "notify-on-end": boolean;
+  "notify-on-esc": boolean;
+  "notify-on-error": boolean;
+  "notify-beep-enabled": boolean;
   "notify-beep-on-end": boolean;
   "notify-beep-on-esc": boolean;
   "notify-beep-on-error": boolean;
   "notify-sound": "none" | "low" | "mid" | "high";
+  "notify-sound-on-end": boolean;
+  "notify-sound-on-esc": boolean;
+  "notify-sound-on-error": boolean;
   "notify-sound-toggle-shortcut": string;
-  "notify-pushover-global-disable": boolean;
-  "notify-pushover-on-success": boolean;
+  "notify-pushover-enabled": boolean;
+  "notify-pushover-on-end": boolean;
+  "notify-pushover-on-esc": boolean;
+  "notify-pushover-on-error": boolean;
   "notify-pushover-user-key": string;
   "notify-pushover-api-token": string;
   "notify-pushover-priority": 0 | 1;
+  "notify-pushover-title": string;
+  "notify-pushover-text": string;
+  PI_NOTIFY_CMD: string;
   PI_NOTIFY_SOUND_LOW_CMD: string;
   PI_NOTIFY_SOUND_MID_CMD: string;
   PI_NOTIFY_SOUND_HIGH_CMD: string;
@@ -90,10 +107,10 @@ export function getProjectConfigPath(projectBase: string): string {
 
 /**
  * @brief Builds the default project configuration.
- * @details Populates canonical docs/test/source directories, the default startup tool set, default pi-notify fields, and default Pushover settings while excluding runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
+ * @details Populates canonical docs/test/source directories, the default startup tool set, default command-notify, terminal-beep, sound, and Pushover fields, and excludes runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
- * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146, REQ-163
+ * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185
  */
 export function getDefaultConfig(_projectBase: string): UseReqConfig {
   return {
@@ -102,16 +119,29 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     "src-dir": [...DEFAULT_SRC_DIRS],
     "static-check": {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
+    "notify-enabled": true,
+    "notify-on-end": true,
+    "notify-on-esc": true,
+    "notify-on-error": true,
+    "notify-beep-enabled": true,
     "notify-beep-on-end": true,
     "notify-beep-on-esc": true,
     "notify-beep-on-error": true,
     "notify-sound": "none",
+    "notify-sound-on-end": true,
+    "notify-sound-on-esc": false,
+    "notify-sound-on-error": false,
     "notify-sound-toggle-shortcut": DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
-    "notify-pushover-global-disable": false,
-    "notify-pushover-on-success": false,
+    "notify-pushover-enabled": false,
+    "notify-pushover-on-end": false,
+    "notify-pushover-on-esc": false,
+    "notify-pushover-on-error": false,
     "notify-pushover-user-key": "",
     "notify-pushover-api-token": "",
     "notify-pushover-priority": 0,
+    "notify-pushover-title": DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
+    "notify-pushover-text": DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+    PI_NOTIFY_CMD: DEFAULT_PI_NOTIFY_CMD,
     PI_NOTIFY_SOUND_LOW_CMD: DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
     PI_NOTIFY_SOUND_MID_CMD: DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
     PI_NOTIFY_SOUND_HIGH_CMD: DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
@@ -120,11 +150,11 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
 
 /**
  * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names plus pi-notify and Pushover fields, applies enabled beep defaults for missing flag payloads, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names plus notify, beep, sound, and Pushover fields, applies documented per-flag defaults for missing payloads, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
- * @satisfies CTN-012, REQ-066, REQ-129, REQ-146, REQ-163
+ * @satisfies CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185
  */
 export function loadConfig(projectBase: string): UseReqConfig {
   const configPath = getProjectConfigPath(projectBase);
@@ -152,16 +182,35 @@ export function loadConfig(projectBase: string): UseReqConfig {
     ? (data["static-check"] as Record<string, StaticCheckEntry[]>)
     : {};
   const enabledTools = normalizeEnabledPiUsereqTools(data["enabled-tools"]);
+  const notifyEnabled = data["notify-enabled"] !== false;
+  const notifyOnEnd = data["notify-on-end"] !== false;
+  const notifyOnEsc = data["notify-on-esc"] !== false;
+  const notifyOnError = data["notify-on-error"] !== false;
+  const notifyBeepEnabled = data["notify-beep-enabled"] !== false;
   const notifyBeepOnEnd = data["notify-beep-on-end"] !== false;
   const notifyBeepOnEsc = data["notify-beep-on-esc"] !== false;
   const notifyBeepOnError = data["notify-beep-on-error"] !== false;
   const notifySound = normalizePiNotifySoundLevel(data["notify-sound"]);
+  const notifySoundOnEnd = data["notify-sound-on-end"] !== false;
+  const notifySoundOnEsc = data["notify-sound-on-esc"] === true;
+  const notifySoundOnError = data["notify-sound-on-error"] === true;
   const notifySoundToggleShortcut = normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]);
-  const pushoverGlobalDisable = data["notify-pushover-global-disable"] === true;
-  const pushoverOnSuccess = data["notify-pushover-on-success"] === true;
+  const pushoverEnabled = data["notify-pushover-enabled"] === true;
+  const pushoverOnEnd = data["notify-pushover-on-end"] === true;
+  const pushoverOnEsc = data["notify-pushover-on-esc"] === true;
+  const pushoverOnError = data["notify-pushover-on-error"] === true;
   const pushoverUserKey = normalizePiNotifyPushoverCredential(data["notify-pushover-user-key"]);
   const pushoverApiToken = normalizePiNotifyPushoverCredential(data["notify-pushover-api-token"]);
   const pushoverPriority = normalizePiNotifyPushoverPriority(data["notify-pushover-priority"]);
+  const pushoverTitle = normalizePiNotifyTemplateValue(
+    data["notify-pushover-title"],
+    DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
+  );
+  const pushoverText = normalizePiNotifyTemplateValue(
+    data["notify-pushover-text"],
+    DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+  );
+  const notifyCommand = normalizePiNotifyCommand(data.PI_NOTIFY_CMD, DEFAULT_PI_NOTIFY_CMD);
   const lowSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD);
   const midSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD);
   const highSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_HIGH_CMD, DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD);
@@ -172,16 +221,29 @@ export function loadConfig(projectBase: string): UseReqConfig {
     "src-dir": srcDir,
     "static-check": staticCheck,
     "enabled-tools": enabledTools,
+    "notify-enabled": notifyEnabled,
+    "notify-on-end": notifyOnEnd,
+    "notify-on-esc": notifyOnEsc,
+    "notify-on-error": notifyOnError,
+    "notify-beep-enabled": notifyBeepEnabled,
     "notify-beep-on-end": notifyBeepOnEnd,
     "notify-beep-on-esc": notifyBeepOnEsc,
     "notify-beep-on-error": notifyBeepOnError,
     "notify-sound": notifySound,
+    "notify-sound-on-end": notifySoundOnEnd,
+    "notify-sound-on-esc": notifySoundOnEsc,
+    "notify-sound-on-error": notifySoundOnError,
     "notify-sound-toggle-shortcut": notifySoundToggleShortcut,
-    "notify-pushover-global-disable": pushoverGlobalDisable,
-    "notify-pushover-on-success": pushoverOnSuccess,
+    "notify-pushover-enabled": pushoverEnabled,
+    "notify-pushover-on-end": pushoverOnEnd,
+    "notify-pushover-on-esc": pushoverOnEsc,
+    "notify-pushover-on-error": pushoverOnError,
     "notify-pushover-user-key": pushoverUserKey,
     "notify-pushover-api-token": pushoverApiToken,
     "notify-pushover-priority": pushoverPriority,
+    "notify-pushover-title": pushoverTitle,
+    "notify-pushover-text": pushoverText,
+    PI_NOTIFY_CMD: notifyCommand,
     PI_NOTIFY_SOUND_LOW_CMD: lowSoundCommand,
     PI_NOTIFY_SOUND_MID_CMD: midSoundCommand,
     PI_NOTIFY_SOUND_HIGH_CMD: highSoundCommand,
@@ -211,16 +273,29 @@ function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
       ]),
     ),
     "enabled-tools": [...config["enabled-tools"]],
+    "notify-enabled": config["notify-enabled"],
+    "notify-on-end": config["notify-on-end"],
+    "notify-on-esc": config["notify-on-esc"],
+    "notify-on-error": config["notify-on-error"],
+    "notify-beep-enabled": config["notify-beep-enabled"],
     "notify-beep-on-end": config["notify-beep-on-end"],
     "notify-beep-on-esc": config["notify-beep-on-esc"],
     "notify-beep-on-error": config["notify-beep-on-error"],
     "notify-sound": config["notify-sound"],
+    "notify-sound-on-end": config["notify-sound-on-end"],
+    "notify-sound-on-esc": config["notify-sound-on-esc"],
+    "notify-sound-on-error": config["notify-sound-on-error"],
     "notify-sound-toggle-shortcut": config["notify-sound-toggle-shortcut"],
-    "notify-pushover-global-disable": config["notify-pushover-global-disable"],
-    "notify-pushover-on-success": config["notify-pushover-on-success"],
+    "notify-pushover-enabled": config["notify-pushover-enabled"],
+    "notify-pushover-on-end": config["notify-pushover-on-end"],
+    "notify-pushover-on-esc": config["notify-pushover-on-esc"],
+    "notify-pushover-on-error": config["notify-pushover-on-error"],
     "notify-pushover-user-key": config["notify-pushover-user-key"],
     "notify-pushover-api-token": config["notify-pushover-api-token"],
     "notify-pushover-priority": config["notify-pushover-priority"],
+    "notify-pushover-title": config["notify-pushover-title"],
+    "notify-pushover-text": config["notify-pushover-text"],
+    PI_NOTIFY_CMD: config.PI_NOTIFY_CMD,
     PI_NOTIFY_SOUND_LOW_CMD: config.PI_NOTIFY_SOUND_LOW_CMD,
     PI_NOTIFY_SOUND_MID_CMD: config.PI_NOTIFY_SOUND_MID_CMD,
     PI_NOTIFY_SOUND_HIGH_CMD: config.PI_NOTIFY_SOUND_HIGH_CMD,

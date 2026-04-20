@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
 import {
@@ -10,7 +11,11 @@ import {
   getProjectConfigPath,
 } from "../src/core/config.js";
 import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
-import { setPiNotifyHttpsRequestForTests } from "../src/core/pi-notify.js";
+import {
+  setPiNotifyHttpsRequestForTests,
+  setPiNotifySpawnForTests,
+  setPiNotifyStdoutWriteForTests,
+} from "../src/core/pi-notify.js";
 import {
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
@@ -323,8 +328,8 @@ function buildExpectedFakeContextBar(options: {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, separators, context bar, consolidated elapsed field, and Pushover enable field emitted by the extension using deterministic fake theme markers. Runtime is O(1). No external state is mutated.
- * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; beep?: string; sound?: string; pushover?: string }} Expected status facts.
+ * @details Reconstructs the field order, separators, context bar, consolidated elapsed field, and global notify, beep, sound, and Pushover status fields emitted by the extension using deterministic fake theme markers. Runtime is O(1). No external state is mutated.
+ * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; notify?: string; beep?: string; sound?: string; pushover?: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -335,6 +340,7 @@ function buildExpectedFakeStatusText(options: {
   contextFilledCells: number;
   contextPercent?: number | null;
   et: string;
+  notify?: string;
   beep?: string;
   sound?: string;
   pushover?: string;
@@ -349,7 +355,8 @@ function buildExpectedFakeStatusText(options: {
     buildField("base", options.basePath),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
     buildField("elapsed", options.et),
-    buildField("beep", options.beep ?? "end,esc,err"),
+    buildField("notify", options.notify ?? "on"),
+    buildField("beep", options.beep ?? "on"),
     buildField("sound", options.sound ?? "none"),
     buildField("pushover", options.pushover ?? "off"),
   ].join(formatFakeThemeForeground("dim", " • "));
@@ -365,6 +372,25 @@ function buildExpectedFakeStatusText(options: {
  */
 function buildExpectedFakeBasePath(cwd: string): string {
   return path.resolve(cwd).split(path.sep).join("/");
+}
+
+/**
+ * @brief Formats one expected home-relative base path for notify-template assertions.
+ * @details Resolves the supplied cwd, emits `~` or `~/...` when the path is inside the current user home directory, and otherwise returns the slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] cwd {string} Runtime working directory.
+ * @return {string} Home-relative or absolute base path used by notification templates.
+ */
+function buildExpectedNotifyBasePath(cwd: string): string {
+  const resolvedPath = path.resolve(cwd);
+  const homePath = path.resolve(process.env.HOME ?? os.homedir());
+  if (resolvedPath === homePath) {
+    return "~";
+  }
+  const relativePath = path.relative(homePath, resolvedPath);
+  if (relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return `~/${relativePath.split(path.sep).join("/")}`;
+  }
+  return resolvedPath.split(path.sep).join("/");
 }
 
 /**
@@ -1357,14 +1383,23 @@ test("configuration menus expose show-config ordering and omit overview or notif
   ]);
   assert.ok(renderedMenu.includes(formatRuntimePathForDisplay(getProjectConfigPath(cwd))));
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
+    "Enable notification",
+    "Toggle notify on success",
+    "Toggle notify on escape",
+    "Toggle notify on error",
+    "Notify command",
+    "Enable terminal beep",
     "Toggle beep on success",
     "Toggle beep on escape",
     "Toggle beep on error",
-    "Selected notify command",
+    "Selected sound command",
+    "Toggle sound on success",
+    "Toggle sound on escape",
+    "Toggle sound on error",
     "Sound toggle hotkey bind",
-    "Notify command (low vol.)",
-    "Notify command (mid vol.)",
-    "Notify command (high vol.)",
+    "Sound command (low vol.)",
+    "Sound command (mid vol.)",
+    "Sound command (high vol.)",
     "Pushover notifications",
     "Back",
   ]);
@@ -1738,12 +1773,25 @@ test("session_start enables default custom tools and default embedded tools only
   assert.equal(activeTools.has("ls"), false);
 });
 
-test("default configuration enables all pi-notify beep outcomes", () => {
+test("default configuration applies the documented notify, beep, sound, and pushover defaults", () => {
   const config = getDefaultConfig(createTempDir("pi-usereq-default-notify-"));
 
+  assert.equal(config["notify-enabled"], true);
+  assert.equal(config["notify-on-end"], true);
+  assert.equal(config["notify-on-esc"], true);
+  assert.equal(config["notify-on-error"], true);
+  assert.equal(config["notify-beep-enabled"], true);
   assert.equal(config["notify-beep-on-end"], true);
   assert.equal(config["notify-beep-on-esc"], true);
   assert.equal(config["notify-beep-on-error"], true);
+  assert.equal(config["notify-sound"], "none");
+  assert.equal(config["notify-sound-on-end"], true);
+  assert.equal(config["notify-sound-on-esc"], false);
+  assert.equal(config["notify-sound-on-error"], false);
+  assert.equal(config["notify-pushover-enabled"], false);
+  assert.equal(config["notify-pushover-on-end"], false);
+  assert.equal(config["notify-pushover-on-esc"], false);
+  assert.equal(config["notify-pushover-on-error"], false);
 });
 
 test("configuration menu can enable embedded builtin tools", async () => {
@@ -1786,7 +1834,7 @@ test("configuration menu can disable configurable active tools", async () => {
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
 
-test("configuration menu can persist pi-notify settings", async () => {
+test("configuration menu can persist notify, beep, and sound settings", async () => {
   const cwd = createTempDir("pi-usereq-menu-notify-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -1796,19 +1844,23 @@ test("configuration menu can persist pi-notify settings", async () => {
   const ctx = createFakeCtx(cwd, {
     selects: [
       "notifications",
-      "Toggle beep on success",
-      "Toggle beep on error",
-      "Selected notify command",
+      "Enable notification",
+      "Toggle notify on error",
+      "Enable terminal beep",
+      "Selected sound command",
       "high",
+      "Toggle sound on escape",
       "Sound toggle hotkey bind",
-      "Notify command (low vol.)",
-      "Notify command (mid vol.)",
-      "Notify command (high vol.)",
+      "Notify command",
+      "Sound command (low vol.)",
+      "Sound command (mid vol.)",
+      "Sound command (high vol.)",
       "Back",
       "Save and close",
     ],
     inputs: [
       "alt+shift+s",
+      "notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png \"%%PROMT%% @ %%BASE%% [%%TIME%%]\" \"%%ARGS%%\"",
       "echo low %%INSTALLATION_PATH%%",
       "echo mid %%INSTALLATION_PATH%%",
       "echo high %%INSTALLATION_PATH%%",
@@ -1818,11 +1870,20 @@ test("configuration menu can persist pi-notify settings", async () => {
   await command!.handler("", ctx);
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["notify-beep-on-end"], false);
-  assert.equal(config["notify-beep-on-error"], false);
+  assert.equal(config["notify-enabled"], false);
+  assert.equal(config["notify-on-end"], true);
+  assert.equal(config["notify-on-esc"], true);
+  assert.equal(config["notify-on-error"], false);
+  assert.equal(config["notify-beep-enabled"], false);
+  assert.equal(config["notify-beep-on-end"], true);
   assert.equal(config["notify-beep-on-esc"], true);
+  assert.equal(config["notify-beep-on-error"], true);
   assert.equal(config["notify-sound"], "high");
+  assert.equal(config["notify-sound-on-end"], true);
+  assert.equal(config["notify-sound-on-esc"], true);
+  assert.equal(config["notify-sound-on-error"], false);
   assert.equal(config["notify-sound-toggle-shortcut"], "alt+shift+s");
+  assert.equal(config.PI_NOTIFY_CMD, "notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png \"%%PROMT%% @ %%BASE%% [%%TIME%%]\" \"%%ARGS%%\"");
   assert.equal(config.PI_NOTIFY_SOUND_LOW_CMD, "echo low %%INSTALLATION_PATH%%");
   assert.equal(config.PI_NOTIFY_SOUND_MID_CMD, "echo mid %%INSTALLATION_PATH%%");
   assert.equal(config.PI_NOTIFY_SOUND_HIGH_CMD, "echo high %%INSTALLATION_PATH%%");
@@ -1835,7 +1896,8 @@ test("configuration menu can persist pi-notify settings", async () => {
       srcDir: ["src"],
       contextFilledCells: 0,
       et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
-      beep: "esc",
+      notify: "off",
+      beep: "off",
       sound: "high",
     }),
   );
@@ -1852,16 +1914,21 @@ test("configuration menu can persist pushover settings", async () => {
     selects: [
       "notifications",
       "Pushover notifications",
-      "Notify on success",
+      "Enable pushover",
+      "Toggle pushover on success",
+      "Pushover priority",
+      "High",
+      "Pushover title",
+      "Pushover text",
       "User Key/Delivery Group Key",
       "Token/API Token Key",
-      "Priority",
-      "1=High Priority",
       "Back",
       "Back",
       "Save and close",
     ],
     inputs: [
+      "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "%%ARGS%%",
       "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "ah6bf5u2sj63mcvou6qamiabeoubbe",
     ],
@@ -1870,11 +1937,15 @@ test("configuration menu can persist pushover settings", async () => {
   await command!.handler("", ctx);
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["notify-pushover-global-disable"], false);
-  assert.equal(config["notify-pushover-on-success"], true);
+  assert.equal(config["notify-pushover-enabled"], true);
+  assert.equal(config["notify-pushover-on-end"], true);
+  assert.equal(config["notify-pushover-on-esc"], false);
+  assert.equal(config["notify-pushover-on-error"], false);
   assert.equal(config["notify-pushover-user-key"], "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
   assert.equal(config["notify-pushover-api-token"], "ah6bf5u2sj63mcvou6qamiabeoubbe");
   assert.equal(config["notify-pushover-priority"], 1);
+  assert.equal(config["notify-pushover-title"], "%%PROMT%% @ %%BASE%% [%%TIME%%]");
+  assert.equal(config["notify-pushover-text"], "%%ARGS%%");
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
@@ -1889,7 +1960,7 @@ test("configuration menu can persist pushover settings", async () => {
   );
 });
 
-test("successful req prompt completion sends pushover requests and suppresses invalid scenarios", async () => {
+test("prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates", async () => {
   const cwd = createTempDir("pi-usereq-pushover-run-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const configPath = getProjectConfigPath(cwd);
@@ -1932,10 +2003,13 @@ test("successful req prompt completion sends pushover requests and suppresses in
 
   try {
     writeConfig({
-      "notify-pushover-on-success": true,
+      "notify-pushover-enabled": true,
+      "notify-pushover-on-end": true,
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-priority": 1,
+      "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "notify-pushover-text": "%%ARGS%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
@@ -1960,7 +2034,7 @@ test("successful req prompt completion sends pushover requests and suppresses in
     assert.equal(successParams.get("user"), "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
     assert.equal(successParams.get("priority"), "1");
     assert.equal(successParams.get("message"), "Inspect src/index.ts");
-    assert.equal(successParams.get("title"), `analyze @ ${buildExpectedFakeBasePath(cwd)} [0:05]`);
+    assert.equal(successParams.get("title"), `analyze @ ${buildExpectedNotifyBasePath(cwd)} [0:05]`);
 
     recordedRequests.length = 0;
     nowMs = 10_000;
@@ -1995,10 +2069,13 @@ test("successful req prompt completion sends pushover requests and suppresses in
     assert.equal(recordedRequests.length, 0);
 
     writeConfig({
-      "notify-pushover-on-success": true,
+      "notify-pushover-enabled": true,
+      "notify-pushover-on-error": true,
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
-      "notify-pushover-api-token": "",
+      "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-priority": 1,
+      "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "notify-pushover-text": "%%ARGS%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
@@ -2006,6 +2083,35 @@ test("successful req prompt completion sends pushover requests and suppresses in
     await pi.commands.get("req-write")!.handler("Write docs", ctx);
     await pi.emit("agent_start", {}, ctx);
     nowMs = 32_000;
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "error",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.equal(recordedRequests.length, 1);
+    const errorParams = new URLSearchParams(recordedRequests[0]?.body ?? "");
+    assert.equal(errorParams.get("title"), `write @ ${buildExpectedNotifyBasePath(cwd)} [0:02]`);
+    assert.equal(errorParams.get("message"), "Write docs");
+
+    writeConfig({
+      "notify-pushover-enabled": true,
+      "notify-pushover-on-end": true,
+      "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "notify-pushover-api-token": "",
+      "notify-pushover-priority": 1,
+      "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "notify-pushover-text": "%%ARGS%%",
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    recordedRequests.length = 0;
+    nowMs = 40_000;
+    await pi.commands.get("req-check")!.handler("Check docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 43_000;
     await pi.emit("agent_end", {
       messages: [
         {
@@ -2022,7 +2128,7 @@ test("successful req prompt completion sends pushover requests and suppresses in
   }
 });
 
-test("pushover global disable suppresses delivery without clearing enabled state", async () => {
+test("pushover global enable controls status and suppresses delivery when disabled", async () => {
   const cwd = createTempDir("pi-usereq-pushover-disabled-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -2033,8 +2139,7 @@ test("pushover global disable suppresses delivery without clearing enabled state
     selects: [
       "notifications",
       "Pushover notifications",
-      "Notify on success",
-      "Global disable",
+      "Toggle pushover on success",
       "User Key/Delivery Group Key",
       "Token/API Token Key",
       "Back",
@@ -2050,8 +2155,8 @@ test("pushover global disable suppresses delivery without clearing enabled state
   await command!.handler("", ctx);
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["notify-pushover-on-success"], true);
-  assert.equal(config["notify-pushover-global-disable"], true);
+  assert.equal(config["notify-pushover-enabled"], false);
+  assert.equal(config["notify-pushover-on-end"], true);
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
@@ -2061,7 +2166,7 @@ test("pushover global disable suppresses delivery without clearing enabled state
       srcDir: ["src"],
       contextFilledCells: 0,
       et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
-      pushover: "on",
+      pushover: "off",
     }),
   );
 
@@ -2105,6 +2210,196 @@ test("pushover global disable suppresses delivery without clearing enabled state
     assert.deepEqual(recordedRequests, []);
   } finally {
     setPiNotifyHttpsRequestForTests(undefined);
+  }
+});
+
+test("command notify routes through PI_NOTIFY_CMD placeholders and per-event toggles", async () => {
+  const cwd = createTempDir("pi-usereq-command-notify-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const configPath = getProjectConfigPath(cwd);
+  const writeConfig = (overrides: Record<string, unknown>) => {
+    const config = {
+      ...getDefaultConfig(cwd),
+      ...overrides,
+    };
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  };
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const originalDateNow = Date.now;
+  const recordedCommands: string[] = [];
+  let nowMs = 0;
+  setPiNotifySpawnForTests(((command: string, args?: readonly string[] | undefined, _options?: Record<string, unknown>) => {
+    void command;
+    recordedCommands.push(String(args && args.length > 0 ? args[args.length - 1] : ""));
+    const fakeChild = {
+      once(_eventName: string, _handler: (...handlerArgs: unknown[]) => void) {
+        return fakeChild;
+      },
+      unref() {
+        return undefined;
+      },
+    };
+    return fakeChild as unknown as ReturnType<typeof import("node:child_process").spawn>;
+  }) as typeof import("node:child_process").spawn);
+  Date.now = () => nowMs;
+
+  try {
+    writeConfig({
+      "notify-enabled": true,
+      "notify-on-end": true,
+      "notify-on-esc": false,
+      "notify-on-error": true,
+      "notify-beep-enabled": false,
+      "notify-sound": "none",
+      PI_NOTIFY_CMD: 'notify-send "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%ARGS%%"',
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    recordedCommands.length = 0;
+    nowMs = 0;
+    await pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 5_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(recordedCommands.length, 1);
+    assert.match(
+      recordedCommands[0] ?? "",
+      new RegExp(`analyze @ ${buildExpectedNotifyBasePath(cwd).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\[0:05\\]`),
+    );
+    assert.match(recordedCommands[0] ?? "", /Inspect src\/index\.ts/);
+
+    recordedCommands.length = 0;
+    nowMs = 10_000;
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 12_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "aborted", content: [] }],
+    }, ctx);
+    assert.equal(recordedCommands.length, 0);
+
+    recordedCommands.length = 0;
+    nowMs = 20_000;
+    await pi.commands.get("req-write")!.handler("Write docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 23_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, ctx);
+    assert.equal(recordedCommands.length, 1);
+    assert.match(
+      recordedCommands[0] ?? "",
+      new RegExp(`write @ ${buildExpectedNotifyBasePath(cwd).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\[0:03\\]`),
+    );
+    assert.match(recordedCommands[0] ?? "", /Write docs/);
+  } finally {
+    setPiNotifySpawnForTests(undefined);
+    Date.now = originalDateNow;
+  }
+});
+
+test("terminal beep and sound routing honor global state and per-event toggles", async () => {
+  const cwd = createTempDir("pi-usereq-beep-sound-routing-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const configPath = getProjectConfigPath(cwd);
+  const writeConfig = (overrides: Record<string, unknown>) => {
+    const config = {
+      ...getDefaultConfig(cwd),
+      ...overrides,
+    };
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  };
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const recordedCommands: string[] = [];
+  const recordedBeeps: string[] = [];
+  setPiNotifySpawnForTests(((command: string, args?: readonly string[] | undefined, _options?: Record<string, unknown>) => {
+    void command;
+    recordedCommands.push(String(args && args.length > 0 ? args[args.length - 1] : ""));
+    const fakeChild = {
+      once(_eventName: string, _handler: (...handlerArgs: unknown[]) => void) {
+        return fakeChild;
+      },
+      unref() {
+        return undefined;
+      },
+    };
+    return fakeChild as unknown as ReturnType<typeof import("node:child_process").spawn>;
+  }) as typeof import("node:child_process").spawn);
+  setPiNotifyStdoutWriteForTests((chunk) => {
+    recordedBeeps.push(chunk);
+    return true;
+  });
+
+  try {
+    writeConfig({
+      "notify-enabled": false,
+      "notify-beep-enabled": false,
+      "notify-beep-on-end": true,
+      "notify-sound": "high",
+      "notify-sound-on-end": true,
+      PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    recordedCommands.length = 0;
+    recordedBeeps.length = 0;
+    await pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.deepEqual(recordedBeeps, []);
+    assert.equal(recordedCommands.length, 1);
+
+    writeConfig({
+      "notify-enabled": false,
+      "notify-beep-enabled": true,
+      "notify-beep-on-esc": false,
+      "notify-sound": "high",
+      "notify-sound-on-end": false,
+      "notify-sound-on-esc": true,
+      "notify-sound-on-error": false,
+      PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    recordedCommands.length = 0;
+    recordedBeeps.length = 0;
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "aborted", content: [] }],
+    }, ctx);
+    assert.deepEqual(recordedBeeps, []);
+    assert.equal(recordedCommands.length, 1);
+
+    writeConfig({
+      "notify-enabled": false,
+      "notify-beep-enabled": true,
+      "notify-beep-on-error": true,
+      "notify-sound": "high",
+      "notify-sound-on-end": false,
+      "notify-sound-on-esc": false,
+      "notify-sound-on-error": false,
+      PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    recordedCommands.length = 0;
+    recordedBeeps.length = 0;
+    await pi.commands.get("req-write")!.handler("Write docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, ctx);
+    assert.deepEqual(recordedBeeps, ["\u0007"]);
+    assert.deepEqual(recordedCommands, []);
+  } finally {
+    setPiNotifySpawnForTests(undefined);
+    setPiNotifyStdoutWriteForTests(undefined);
   }
 });
 

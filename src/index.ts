@@ -61,14 +61,23 @@ import {
   type UseReqConfig,
 } from "./core/config.js";
 import {
+  DEFAULT_PI_NOTIFY_CMD,
+  DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+  DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
+  DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
+  DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
+  DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
   cyclePiNotifySoundLevel,
   formatPiNotifyBeepStatus,
   formatPiNotifyPushoverStatus,
+  formatPiNotifyStatus,
+  normalizePiNotifyCommand,
   normalizePiNotifyPushoverCredential,
   normalizePiNotifyPushoverPriority,
+  normalizePiNotifyTemplateValue,
   runPiNotifyEffects,
+  type PiNotifyEventRequest,
   type PiNotifyPushoverPriority,
-  type PiNotifyPushoverRequest,
   type PiNotifySoundLevel,
 } from "./core/pi-notify.js";
 import { formatRuntimePathForDisplay } from "./core/path-context.js";
@@ -539,9 +548,9 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
  * @details Applies session-start-specific resource validation, project-config
  * refresh, and startup-tool enablement before forwarding the originating hook
  * name and payload into the shared `updateExtensionStatus(...)` pipeline.
- * On `agent_end`, also dispatches configured pi-notify beep, sound, and
- * prompt-specific Pushover effects when the current run originates from a
- * bundled prompt command. Runtime is dominated by configuration loading during
+ * On `agent_end`, also dispatches configured command-notify, terminal-beep,
+ * sound, and prompt-specific Pushover effects when the current run originates
+ * from a bundled prompt command. Runtime is dominated by configuration loading during
  * `session_start`; all other hooks are O(1). Side effects include resource
  * checks, active-tool mutation, status updates, live-ticker disposal on
  * shutdown, stdout writes, optional child-process spawning, and outbound
@@ -552,7 +561,7 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-177, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -561,6 +570,16 @@ async function handleExtensionStatusEvent(
   event: unknown,
   ctx: ExtensionContext,
 ): Promise<void> {
+  const notifyRequest: PiNotifyEventRequest | undefined = hookName === "agent_end"
+    && statusController.state.activePromptRequest !== undefined
+    && statusController.state.runStartTimeMs !== undefined
+    ? {
+        promptName: statusController.state.activePromptRequest.promptName,
+        promptArgs: statusController.state.activePromptRequest.promptArgs,
+        basePath: path.resolve(ctx.cwd),
+        completionTimeMs: Math.max(0, Date.now() - statusController.state.runStartTimeMs),
+      }
+    : undefined;
   if (hookName === "session_start") {
     ensureBundledResourcesAccessible();
     const config = loadProjectConfig(ctx.cwd);
@@ -570,19 +589,10 @@ async function handleExtensionStatusEvent(
   updateExtensionStatus(statusController, hookName, event, ctx);
   if (hookName === "agent_end") {
     if (statusController.config) {
-      const pushoverRequest: PiNotifyPushoverRequest | undefined = statusController.state.activePromptRequest
-        && statusController.state.lastRunDurationMs !== undefined
-        ? {
-            promptName: statusController.state.activePromptRequest.promptName,
-            promptArgs: statusController.state.activePromptRequest.promptArgs,
-            basePath: path.resolve(ctx.cwd),
-            completionTimeMs: statusController.state.lastRunDurationMs,
-          }
-        : undefined;
       runPiNotifyEffects(
         statusController.config,
         event as { messages: AgentEndEvent["messages"] },
-        pushoverRequest,
+        notifyRequest,
       );
     }
     statusController.state.activePromptRequest = undefined;
@@ -669,77 +679,111 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
 }
 
 /**
- * @brief Represents one persisted pi-notify beep flag key.
- * @details Restricts menu toggles to the three independent prompt-end beep
- * flags stored in project configuration. Compile-time only and introduces no
- * runtime cost.
+ * @brief Represents one persisted boolean notification-setting key.
+ * @details Restricts menu toggles to the global enable flags and outcome-specific toggles used by command-notify, terminal-beep, sound, and Pushover configuration. Compile-time only and introduces no runtime cost.
  */
-type PiNotifyBeepConfigKey =
+type PiNotifyBooleanConfigKey =
+  | "notify-enabled"
+  | "notify-on-end"
+  | "notify-on-esc"
+  | "notify-on-error"
+  | "notify-beep-enabled"
   | "notify-beep-on-end"
   | "notify-beep-on-esc"
-  | "notify-beep-on-error";
+  | "notify-beep-on-error"
+  | "notify-sound-on-end"
+  | "notify-sound-on-esc"
+  | "notify-sound-on-error"
+  | "notify-pushover-enabled"
+  | "notify-pushover-on-end"
+  | "notify-pushover-on-esc"
+  | "notify-pushover-on-error";
 
 /**
- * @brief Flips one persisted pi-notify beep flag.
- * @details Negates the selected prompt-end beep flag in place and returns the resulting boolean value so callers can emit deterministic UI feedback. Runtime is O(1). Side effect: mutates `config`.
+ * @brief Flips one persisted boolean notification setting.
+ * @details Negates the selected configuration flag in place and returns the resulting boolean value so callers can emit deterministic UI feedback. Runtime is O(1). Side effect: mutates `config`.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
- * @param[in] key {PiNotifyBeepConfigKey} Beep flag key to toggle.
+ * @param[in] key {PiNotifyBooleanConfigKey} Boolean configuration key to toggle.
  * @return {boolean} Next enabled state.
  */
-function togglePiNotifyBeepFlag(config: UseReqConfig, key: PiNotifyBeepConfigKey): boolean {
+function togglePiNotifyFlag(config: UseReqConfig, key: PiNotifyBooleanConfigKey): boolean {
   config[key] = !config[key];
   return config[key];
 }
 
 /**
  * @brief Formats one persisted Pushover priority for menu display.
- * @details Maps the canonical `0|1` priority domain to deterministic menu text reused by the Pushover configuration UI. Runtime is O(1). No external state is mutated.
+ * @details Maps the canonical `0|1` priority domain to deterministic `Normal|High` labels reused by the Pushover configuration UI. Runtime is O(1). No external state is mutated.
  * @param[in] priority {PiNotifyPushoverPriority} Persisted Pushover priority.
  * @return {string} Menu-display label.
- * @satisfies REQ-165
+ * @satisfies REQ-172
  */
 function formatPiNotifyPushoverPriority(priority: PiNotifyPushoverPriority): string {
-  return priority === 1 ? "1=High Priority" : "0=Normal";
+  return priority === 1 ? "High" : "Normal";
 }
 
 /**
  * @brief Builds the shared settings-menu choices for Pushover configuration.
- * @details Serializes the Pushover global-disable flag, successful-completion enable flag, credential strings, and priority value into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
+ * @details Serializes the global enable flag, per-event toggles, priority, title, text, and credential rows into right-valued menu items consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered Pushover-menu choice vector.
- * @satisfies REQ-163, REQ-165, REQ-166, REQ-172
+ * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185
  */
 function buildPiNotifyPushoverMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
     {
-      id: "pushover-global-disable",
-      label: "Global disable",
-      value: config["notify-pushover-global-disable"] ? "on" : "off",
-      description: "Suppress all Pushover delivery without changing the successful-prompt enable flag.",
-    },
-    {
-      id: "pushover-on-success",
-      label: "Notify on success",
+      id: "notify-pushover-enabled",
+      label: "Enable pushover",
       value: formatPiNotifyPushoverStatus(config),
-      description: "Toggle Pushover delivery after successful prompt completion only.",
+      description: "Enable or disable all Pushover delivery globally.",
     },
     {
-      id: "pushover-user-key",
+      id: "notify-pushover-on-end",
+      label: "Toggle pushover on success",
+      value: config["notify-pushover-on-end"] ? "on" : "off",
+      description: "Toggle Pushover delivery for successful prompt completion.",
+    },
+    {
+      id: "notify-pushover-on-esc",
+      label: "Toggle pushover on escape",
+      value: config["notify-pushover-on-esc"] ? "on" : "off",
+      description: "Toggle Pushover delivery for escape-triggered prompt abortion.",
+    },
+    {
+      id: "notify-pushover-on-error",
+      label: "Toggle pushover on error",
+      value: config["notify-pushover-on-error"] ? "on" : "off",
+      description: "Toggle Pushover delivery for error-terminated prompt completion.",
+    },
+    {
+      id: "notify-pushover-priority",
+      label: "Pushover priority",
+      value: formatPiNotifyPushoverPriority(config["notify-pushover-priority"]),
+      description: "Select whether outbound Pushover messages use Normal or High priority.",
+    },
+    {
+      id: "notify-pushover-title",
+      label: "Pushover title",
+      value: config["notify-pushover-title"],
+      description: "Edit the title template used for outbound Pushover messages.",
+    },
+    {
+      id: "notify-pushover-text",
+      label: "Pushover text",
+      value: config["notify-pushover-text"],
+      description: "Edit the text template used for outbound Pushover messages.",
+    },
+    {
+      id: "notify-pushover-user-key",
       label: "User Key/Delivery Group Key",
       value: config["notify-pushover-user-key"] || "(empty)",
-      description: "Edit the Pushover user key or delivery group key sent with successful prompt notifications.",
+      description: "Edit the Pushover user key or delivery group key used for outbound requests.",
     },
     {
-      id: "pushover-api-token",
+      id: "notify-pushover-api-token",
       label: "Token/API Token Key",
       value: config["notify-pushover-api-token"] || "(empty)",
-      description: "Edit the Pushover application token used for successful prompt notifications.",
-    },
-    {
-      id: "pushover-priority",
-      label: "Priority",
-      value: formatPiNotifyPushoverPriority(config["notify-pushover-priority"]),
-      description: "Select whether successful prompt notifications use normal or high Pushover priority.",
+      description: "Edit the Pushover application token used for outbound requests.",
     },
     {
       id: "back",
@@ -752,11 +796,11 @@ function buildPiNotifyPushoverMenuChoices(config: UseReqConfig): PiUsereqSetting
 
 /**
  * @brief Opens the shared settings-menu selector for Pushover priority.
- * @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the existing notification menus and returns the chosen priority or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the notification menus and returns the chosen priority or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] currentPriority {PiNotifyPushoverPriority} Persisted priority value.
  * @return {Promise<PiNotifyPushoverPriority | undefined>} Selected priority or `undefined` when cancelled.
- * @satisfies REQ-165
+ * @satisfies REQ-172
  */
 async function selectPiNotifyPushoverPriority(
   ctx: ExtensionCommandContext,
@@ -765,15 +809,15 @@ async function selectPiNotifyPushoverPriority(
   const choice = await showPiUsereqSettingsMenu(ctx, "Pushover priority", [
     {
       id: "0",
-      label: "0=Normal",
+      label: "Normal",
       value: currentPriority === 0 ? "selected" : "",
-      description: "Send successful prompt notifications with normal Pushover priority.",
+      description: "Send outbound Pushover messages with normal priority `0`.",
     },
     {
       id: "1",
-      label: "1=High Priority",
+      label: "High",
       value: currentPriority === 1 ? "selected" : "",
-      description: "Send successful prompt notifications with high Pushover priority.",
+      description: "Send outbound Pushover messages with high priority `1`.",
     },
   ]);
   if (!choice) {
@@ -784,35 +828,75 @@ async function selectPiNotifyPushoverPriority(
 
 /**
  * @brief Runs the interactive Pushover-configuration menu.
- * @details Exposes the Pushover global-disable flag, successful-completion enable flag, user key, API token, and priority selector through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes the global enable flag, per-event toggles, priority selector, title and text templates, and credentials through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-163, REQ-165, REQ-166, REQ-172
+ * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185
  */
 async function configurePiNotifyPushoverMenu(
   ctx: ExtensionCommandContext,
   config: UseReqConfig,
 ): Promise<void> {
   while (true) {
-    const choice = await showPiUsereqSettingsMenu(ctx, "Pushover notifications", buildPiNotifyPushoverMenuChoices(config));
+    const choice = await showPiUsereqSettingsMenu(
+      ctx,
+      "Pushover notifications",
+      buildPiNotifyPushoverMenuChoices(config),
+    );
     if (!choice || choice === "back") {
       return;
     }
-    if (choice === "pushover-global-disable") {
-      config["notify-pushover-global-disable"] = !config["notify-pushover-global-disable"];
-      ctx.ui.notify(`Pushover global disable ${config["notify-pushover-global-disable"] ? "enabled" : "disabled"}`, "info");
+    if (
+      choice === "notify-pushover-enabled"
+      || choice === "notify-pushover-on-end"
+      || choice === "notify-pushover-on-esc"
+      || choice === "notify-pushover-on-error"
+    ) {
+      const enabled = togglePiNotifyFlag(config, choice as PiNotifyBooleanConfigKey);
+      const labelMap: Record<string, string> = {
+        "notify-pushover-enabled": "Pushover",
+        "notify-pushover-on-end": "Pushover on success",
+        "notify-pushover-on-esc": "Pushover on escape",
+        "notify-pushover-on-error": "Pushover on error",
+      };
+      ctx.ui.notify(`${labelMap[choice]} ${enabled ? "enabled" : "disabled"}`, "info");
       continue;
     }
-    if (choice === "pushover-on-success") {
-      config["notify-pushover-on-success"] = !config["notify-pushover-on-success"];
-      ctx.ui.notify(`Pushover on success ${config["notify-pushover-on-success"] ? "enabled" : "disabled"}`, "info");
+    if (choice === "notify-pushover-priority") {
+      const nextPriority = await selectPiNotifyPushoverPriority(ctx, config["notify-pushover-priority"]);
+      if (nextPriority !== undefined) {
+        config["notify-pushover-priority"] = nextPriority;
+        ctx.ui.notify(`Pushover priority set to ${formatPiNotifyPushoverPriority(nextPriority)}`, "info");
+      }
       continue;
     }
-    if (choice === "pushover-user-key") {
+    if (choice === "notify-pushover-title") {
+      const value = await ctx.ui.input("Pushover title", config["notify-pushover-title"]);
+      if (value !== undefined) {
+        config["notify-pushover-title"] = normalizePiNotifyTemplateValue(
+          value,
+          DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
+        );
+        ctx.ui.notify("Updated Pushover title", "info");
+      }
+      continue;
+    }
+    if (choice === "notify-pushover-text") {
+      const value = await ctx.ui.input("Pushover text", config["notify-pushover-text"]);
+      if (value !== undefined) {
+        config["notify-pushover-text"] = normalizePiNotifyTemplateValue(
+          value,
+          DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+        );
+        ctx.ui.notify("Updated Pushover text", "info");
+      }
+      continue;
+    }
+    if (choice === "notify-pushover-user-key") {
       const value = await ctx.ui.input(
         "User Key/Delivery Group Key",
-        config["notify-pushover-user-key"] || "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+        config["notify-pushover-user-key"],
       );
       if (value !== undefined) {
         config["notify-pushover-user-key"] = normalizePiNotifyPushoverCredential(value);
@@ -820,22 +904,14 @@ async function configurePiNotifyPushoverMenu(
       }
       continue;
     }
-    if (choice === "pushover-api-token") {
+    if (choice === "notify-pushover-api-token") {
       const value = await ctx.ui.input(
         "Token/API Token Key",
-        config["notify-pushover-api-token"] || "ah6bf5u2sj63mcvou6qamiabeoubbe",
+        config["notify-pushover-api-token"],
       );
       if (value !== undefined) {
         config["notify-pushover-api-token"] = normalizePiNotifyPushoverCredential(value);
         ctx.ui.notify("Updated Pushover API token", "info");
-      }
-      continue;
-    }
-    if (choice === "pushover-priority") {
-      const nextPriority = await selectPiNotifyPushoverPriority(ctx, config["notify-pushover-priority"]);
-      if (nextPriority !== undefined) {
-        config["notify-pushover-priority"] = nextPriority;
-        ctx.ui.notify(`Pushover priority set to ${formatPiNotifyPushoverPriority(nextPriority)}`, "info");
       }
     }
   }
@@ -843,66 +919,120 @@ async function configurePiNotifyPushoverMenu(
 
 /**
  * @brief Builds the shared settings-menu choices for notification configuration.
- * @details Serializes the current beep flags, selected notify command, hotkey bind, per-level notify commands, and the Pushover submenu entry into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(1) plus command-length formatting. No external state is mutated.
+ * @details Serializes command-notify, terminal-beep, sound, and nested Pushover rows in the documented order so the shared settings-menu renderer can expose a uniform configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
- * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-166, REQ-172
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183
  */
 function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
     {
-      id: "toggle-beep-on-success",
+      id: "notify-enabled",
+      label: "Enable notification",
+      value: formatPiNotifyStatus(config),
+      description: "Enable or disable command-notify delivery globally.",
+    },
+    {
+      id: "notify-on-end",
+      label: "Toggle notify on success",
+      value: config["notify-on-end"] ? "on" : "off",
+      description: "Toggle command-notify delivery for successful prompt completion.",
+    },
+    {
+      id: "notify-on-esc",
+      label: "Toggle notify on escape",
+      value: config["notify-on-esc"] ? "on" : "off",
+      description: "Toggle command-notify delivery for escape-triggered prompt abortion.",
+    },
+    {
+      id: "notify-on-error",
+      label: "Toggle notify on error",
+      value: config["notify-on-error"] ? "on" : "off",
+      description: "Toggle command-notify delivery for error-terminated prompt completion.",
+    },
+    {
+      id: "notify-command",
+      label: "Notify command",
+      value: config.PI_NOTIFY_CMD,
+      description: "Edit the shell command used for command-notify delivery.",
+    },
+    {
+      id: "notify-beep-enabled",
+      label: "Enable terminal beep",
+      value: formatPiNotifyBeepStatus(config),
+      description: "Enable or disable terminal-beep delivery globally.",
+    },
+    {
+      id: "notify-beep-on-end",
       label: "Toggle beep on success",
       value: config["notify-beep-on-end"] ? "on" : "off",
-      description: "Toggle terminal beep delivery for successful prompt completion.",
+      description: "Toggle terminal-beep delivery for successful prompt completion.",
     },
     {
-      id: "toggle-beep-on-escape",
+      id: "notify-beep-on-esc",
       label: "Toggle beep on escape",
       value: config["notify-beep-on-esc"] ? "on" : "off",
-      description: "Toggle terminal beep delivery for escape-triggered prompt abortion.",
+      description: "Toggle terminal-beep delivery for escape-triggered prompt abortion.",
     },
     {
-      id: "toggle-beep-on-error",
+      id: "notify-beep-on-error",
       label: "Toggle beep on error",
       value: config["notify-beep-on-error"] ? "on" : "off",
-      description: "Toggle terminal beep delivery for error-terminated prompt completion.",
+      description: "Toggle terminal-beep delivery for error-terminated prompt completion.",
     },
     {
-      id: "selected-notify-command",
-      label: "Selected notify command",
+      id: "selected-sound-command",
+      label: "Selected sound command",
       value: config["notify-sound"],
-      description: "Select which notify command runs after successful prompt completion.",
+      description: "Select which sound command level is currently active.",
+    },
+    {
+      id: "notify-sound-on-end",
+      label: "Toggle sound on success",
+      value: config["notify-sound-on-end"] ? "on" : "off",
+      description: "Toggle sound-command delivery for successful prompt completion.",
+    },
+    {
+      id: "notify-sound-on-esc",
+      label: "Toggle sound on escape",
+      value: config["notify-sound-on-esc"] ? "on" : "off",
+      description: "Toggle sound-command delivery for escape-triggered prompt abortion.",
+    },
+    {
+      id: "notify-sound-on-error",
+      label: "Toggle sound on error",
+      value: config["notify-sound-on-error"] ? "on" : "off",
+      description: "Toggle sound-command delivery for error-terminated prompt completion.",
     },
     {
       id: "sound-toggle-hotkey-bind",
       label: "Sound toggle hotkey bind",
       value: config["notify-sound-toggle-shortcut"],
-      description: "Edit the keyboard shortcut that cycles the selected notify command.",
+      description: "Edit the keyboard shortcut that cycles the selected sound command.",
     },
     {
-      id: "notify-command-low",
-      label: "Notify command (low vol.)",
+      id: "sound-command-low",
+      label: "Sound command (low vol.)",
       value: config.PI_NOTIFY_SOUND_LOW_CMD,
-      description: "Edit the shell command used when the selected notify command is `low`.",
+      description: "Edit the shell command used when the selected sound command is `low`.",
     },
     {
-      id: "notify-command-mid",
-      label: "Notify command (mid vol.)",
+      id: "sound-command-mid",
+      label: "Sound command (mid vol.)",
       value: config.PI_NOTIFY_SOUND_MID_CMD,
-      description: "Edit the shell command used when the selected notify command is `mid`.",
+      description: "Edit the shell command used when the selected sound command is `mid`.",
     },
     {
-      id: "notify-command-high",
-      label: "Notify command (high vol.)",
+      id: "sound-command-high",
+      label: "Sound command (high vol.)",
       value: config.PI_NOTIFY_SOUND_HIGH_CMD,
-      description: "Edit the shell command used when the selected notify command is `high`.",
+      description: "Edit the shell command used when the selected sound command is `high`.",
     },
     {
       id: "pushover-notifications",
       label: "Pushover notifications",
       value: formatPiNotifyPushoverStatus(config),
-      description: "Open the Pushover submenu for successful-completion delivery, credentials, priority, and global disable.",
+      description: "Open the Pushover submenu for global enablement, per-event toggles, templates, credentials, and priority.",
     },
     {
       id: "back",
@@ -914,41 +1044,41 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
 }
 
 /**
- * @brief Opens the shared settings-menu selector for the selected notify command.
- * @details Reuses the pi-usereq settings-menu renderer so notify-command selection remains stylistically aligned with the main configuration UI and returns the chosen sound level or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @brief Opens the shared settings-menu selector for the selected sound command.
+ * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the main configuration UI and returns the chosen sound level or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
- * @param[in] currentLevel {PiNotifySoundLevel} Currently selected notify command.
+ * @param[in] currentLevel {PiNotifySoundLevel} Currently selected sound level.
  * @return {Promise<PiNotifySoundLevel | undefined>} Selected sound level or `undefined` when cancelled.
- * @satisfies REQ-131, REQ-137, REQ-149, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-131, REQ-179
  */
 async function selectPiNotifySoundLevel(
   ctx: ExtensionCommandContext,
   currentLevel: PiNotifySoundLevel,
 ): Promise<PiNotifySoundLevel | undefined> {
-  const choice = await showPiUsereqSettingsMenu(ctx, "Selected notify command", [
+  const choice = await showPiUsereqSettingsMenu(ctx, "Selected sound command", [
     {
       id: "none",
       label: "none",
       value: currentLevel === "none" ? "selected" : "",
-      description: "Disable external notify-command execution.",
+      description: "Disable sound-command delivery while preserving per-event sound toggles.",
     },
     {
       id: "low",
       label: "low",
       value: currentLevel === "low" ? "selected" : "",
-      description: "Run the low-volume notify command after successful completion.",
+      description: "Use the low-volume sound command when sound delivery is enabled for the current event.",
     },
     {
       id: "mid",
       label: "mid",
       value: currentLevel === "mid" ? "selected" : "",
-      description: "Run the mid-volume notify command after successful completion.",
+      description: "Use the mid-volume sound command when sound delivery is enabled for the current event.",
     },
     {
       id: "high",
       label: "high",
       value: currentLevel === "high" ? "selected" : "",
-      description: "Run the high-volume notify command after successful completion.",
+      description: "Use the high-volume sound command when sound delivery is enabled for the current event.",
     },
   ]);
   return choice ? choice as PiNotifySoundLevel : undefined;
@@ -956,11 +1086,11 @@ async function selectPiNotifySoundLevel(
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes prompt-end beep toggles, selected notify-command selection, hotkey-bind editing, per-level notify-command editors, and the nested Pushover submenu through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes command-notify, terminal-beep, sound, and nested Pushover controls through the shared settings-menu renderer while preserving the documented row ordering. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-163, REQ-164, REQ-165, REQ-166, REQ-172
+ * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
@@ -968,30 +1098,57 @@ async function configurePiNotifyMenu(
 ): Promise<boolean> {
   const originalShortcut = config["notify-sound-toggle-shortcut"];
   while (true) {
-    const choice = await showPiUsereqSettingsMenu(ctx, "notifications", buildPiNotifyMenuChoices(config));
+    const choice = await showPiUsereqSettingsMenu(
+      ctx,
+      "notifications",
+      buildPiNotifyMenuChoices(config),
+    );
     if (!choice || choice === "back") {
       return config["notify-sound-toggle-shortcut"] !== originalShortcut;
     }
-    if (choice === "toggle-beep-on-success") {
-      const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-end");
-      ctx.ui.notify(`Beep on success ${enabled ? "enabled" : "disabled"}`, "info");
+    if (
+      choice === "notify-enabled"
+      || choice === "notify-on-end"
+      || choice === "notify-on-esc"
+      || choice === "notify-on-error"
+      || choice === "notify-beep-enabled"
+      || choice === "notify-beep-on-end"
+      || choice === "notify-beep-on-esc"
+      || choice === "notify-beep-on-error"
+      || choice === "notify-sound-on-end"
+      || choice === "notify-sound-on-esc"
+      || choice === "notify-sound-on-error"
+    ) {
+      const enabled = togglePiNotifyFlag(config, choice as PiNotifyBooleanConfigKey);
+      const labelMap: Record<string, string> = {
+        "notify-enabled": "Notification",
+        "notify-on-end": "Notify on success",
+        "notify-on-esc": "Notify on escape",
+        "notify-on-error": "Notify on error",
+        "notify-beep-enabled": "Terminal beep",
+        "notify-beep-on-end": "Beep on success",
+        "notify-beep-on-esc": "Beep on escape",
+        "notify-beep-on-error": "Beep on error",
+        "notify-sound-on-end": "Sound on success",
+        "notify-sound-on-esc": "Sound on escape",
+        "notify-sound-on-error": "Sound on error",
+      };
+      ctx.ui.notify(`${labelMap[choice]} ${enabled ? "enabled" : "disabled"}`, "info");
       continue;
     }
-    if (choice === "toggle-beep-on-escape") {
-      const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-esc");
-      ctx.ui.notify(`Beep on escape ${enabled ? "enabled" : "disabled"}`, "info");
+    if (choice === "notify-command") {
+      const value = await ctx.ui.input("Notify command", config.PI_NOTIFY_CMD);
+      if (value !== undefined) {
+        config.PI_NOTIFY_CMD = normalizePiNotifyCommand(value, DEFAULT_PI_NOTIFY_CMD);
+        ctx.ui.notify("Updated notify command", "info");
+      }
       continue;
     }
-    if (choice === "toggle-beep-on-error") {
-      const enabled = togglePiNotifyBeepFlag(config, "notify-beep-on-error");
-      ctx.ui.notify(`Beep on error ${enabled ? "enabled" : "disabled"}`, "info");
-      continue;
-    }
-    if (choice === "selected-notify-command") {
+    if (choice === "selected-sound-command") {
       const nextLevel = await selectPiNotifySoundLevel(ctx, config["notify-sound"]);
-      if (nextLevel) {
+      if (nextLevel !== undefined) {
         config["notify-sound"] = nextLevel;
-        ctx.ui.notify(`Selected notify command set to ${nextLevel}`, "info");
+        ctx.ui.notify(`Selected sound command set to ${nextLevel}`, "info");
       }
       continue;
     }
@@ -1003,27 +1160,36 @@ async function configurePiNotifyMenu(
       }
       continue;
     }
-    if (choice === "notify-command-low") {
-      const value = await ctx.ui.input("Notify command (low vol.)", config.PI_NOTIFY_SOUND_LOW_CMD);
-      if (value?.trim()) {
-        config.PI_NOTIFY_SOUND_LOW_CMD = value.trim();
-        ctx.ui.notify("Updated notify command (low vol.)", "info");
+    if (choice === "sound-command-low") {
+      const value = await ctx.ui.input("Sound command (low vol.)", config.PI_NOTIFY_SOUND_LOW_CMD);
+      if (value !== undefined) {
+        config.PI_NOTIFY_SOUND_LOW_CMD = normalizePiNotifyCommand(
+          value,
+          DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
+        );
+        ctx.ui.notify("Updated sound command (low vol.)", "info");
       }
       continue;
     }
-    if (choice === "notify-command-mid") {
-      const value = await ctx.ui.input("Notify command (mid vol.)", config.PI_NOTIFY_SOUND_MID_CMD);
-      if (value?.trim()) {
-        config.PI_NOTIFY_SOUND_MID_CMD = value.trim();
-        ctx.ui.notify("Updated notify command (mid vol.)", "info");
+    if (choice === "sound-command-mid") {
+      const value = await ctx.ui.input("Sound command (mid vol.)", config.PI_NOTIFY_SOUND_MID_CMD);
+      if (value !== undefined) {
+        config.PI_NOTIFY_SOUND_MID_CMD = normalizePiNotifyCommand(
+          value,
+          DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
+        );
+        ctx.ui.notify("Updated sound command (mid vol.)", "info");
       }
       continue;
     }
-    if (choice === "notify-command-high") {
-      const value = await ctx.ui.input("Notify command (high vol.)", config.PI_NOTIFY_SOUND_HIGH_CMD);
-      if (value?.trim()) {
-        config.PI_NOTIFY_SOUND_HIGH_CMD = value.trim();
-        ctx.ui.notify("Updated notify command (high vol.)", "info");
+    if (choice === "sound-command-high") {
+      const value = await ctx.ui.input("Sound command (high vol.)", config.PI_NOTIFY_SOUND_HIGH_CMD);
+      if (value !== undefined) {
+        config.PI_NOTIFY_SOUND_HIGH_CMD = normalizePiNotifyCommand(
+          value,
+          DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
+        );
+        ctx.ui.notify("Updated sound command (high vol.)", "info");
       }
       continue;
     }
@@ -2146,8 +2312,8 @@ function buildPiUsereqMenuChoices(
     {
       id: "notifications",
       label: "notifications",
-      value: `beep:${formatPiNotifyBeepStatus(config)} • sound:${config["notify-sound"]}`,
-      description: "Manage terminal beep flags, selected notify command, hotkey bind, per-level notify commands, and the nested Pushover submenu.",
+      value: `notify:${formatPiNotifyStatus(config)} • beep:${formatPiNotifyBeepStatus(config)} • sound:${config["notify-sound"]} • pushover:${formatPiNotifyPushoverStatus(config)}`,
+      description: "Manage command-notify, terminal-beep, sound, and nested Pushover settings in one unified menu.",
     },
     {
       id: "show-config",

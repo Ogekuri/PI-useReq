@@ -17,7 +17,11 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
 import { normalizePathSlashes } from "./path-context.js";
-import { formatPiNotifyBeepStatus, formatPiNotifyPushoverStatus } from "./pi-notify.js";
+import {
+  formatPiNotifyBeepStatus,
+  formatPiNotifyPushoverStatus,
+  formatPiNotifyStatus,
+} from "./pi-notify.js";
 
 /**
  * @brief Enumerates the CLI-supported theme tokens consumed by status rendering.
@@ -478,14 +482,14 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders base, context, elapsed, beep, sound, and pushover fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(1). No external state is mutated.
+ * @details Renders base, context, elapsed, notify, beep, sound, and pushover fields in the canonical order with dim bullet separators and threshold-specific context-bar overlays. Runtime is O(1). No external state is mutated.
  * @param[in] cwd {string} Runtime working directory used for base-path derivation.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-156, REQ-159, REQ-170, REQ-171
+ * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-156, REQ-159, REQ-170, REQ-171, REQ-180
  */
 function buildPiUsereqStatusText(
   cwd: string,
@@ -496,6 +500,7 @@ function buildPiUsereqStatusText(
 ): string {
   const baseText = normalizePathSlashes(path.resolve(cwd));
   const elapsedText = formatElapsedStatusValue(state, nowMs);
+  const notifyText = formatPiNotifyStatus(config);
   const beepText = formatPiNotifyBeepStatus(config);
   const soundText = config["notify-sound"];
   const pushoverText = formatPiNotifyPushoverStatus(config);
@@ -507,6 +512,7 @@ function buildPiUsereqStatusText(
       formatContextUsageBar(theme, state.contextUsage),
     ),
     formatStatusField(theme, "elapsed", elapsedText),
+    formatStatusField(theme, "notify", notifyText),
     formatStatusField(theme, "beep", beepText),
     formatStatusField(theme, "sound", soundText),
     formatStatusField(theme, "pushover", pushoverText),
@@ -604,7 +610,7 @@ export function setPiUsereqStatusConfig(
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-159, REQ-170, REQ-171
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-135, REQ-136, REQ-148, REQ-159, REQ-170, REQ-171, REQ-180
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,
