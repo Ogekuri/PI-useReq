@@ -1385,22 +1385,16 @@ test("configuration menus expose show-config ordering and omit overview or notif
   assert.doesNotMatch(renderedMenu, /beep:/);
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "Enable notification",
-    "Toggle notification on success",
-    "Toggle notification on escape",
-    "Toggle notification on error",
+    "Notification events",
     "Notify command",
     "Enable sound",
-    "Toggle sound on success",
-    "Toggle sound on escape",
-    "Toggle sound on error",
+    "Sound events",
     "Sound toggle hotkey bind",
     "Sound command (low vol.)",
     "Sound command (mid vol.)",
     "Sound command (high vol.)",
     "Enable pushover",
-    "Toggle pushover on success",
-    "Toggle pushover on escape",
-    "Toggle pushover on error",
+    "Pushover events",
     "Pushover priority",
     "Pushover title",
     "Pushover text",
@@ -1421,7 +1415,9 @@ test("notifications menu preserves focus on toggled and edited rows", async () =
   const ctx = createFakeCtx(cwd, {
     selects: [
       "notifications",
-      "Toggle notification on error",
+      "Notification events",
+      "Prompt failed",
+      "Save and close",
       "Notify command",
       "Save and close",
       "Save and close",
@@ -1433,8 +1429,19 @@ test("notifications menu preserves focus on toggled and edited rows", async () =
 
   const notificationCalls = ctx.__state.selectCalls.filter((call) => call.title === "Notifications");
   assert.equal(notificationCalls[0]?.selectedChoiceId, "notify-enabled");
-  assert.equal(notificationCalls[1]?.selectedChoiceId, "notify-on-error");
+  assert.equal(notificationCalls[1]?.selectedChoiceId, "notification-events");
   assert.equal(notificationCalls[2]?.selectedChoiceId, "notify-command");
+
+  const notificationEventCalls = ctx.__state.selectCalls.filter((call) => call.title === "Notification events");
+  assert.deepEqual(notificationEventCalls[0]?.items ?? [], [
+    "Prompt completed",
+    "Prompt interrupted",
+    "Prompt failed",
+    "Reset defaults",
+    "Save and close",
+  ]);
+  assert.equal(notificationEventCalls[0]?.selectedChoiceId, "notify-on-completed");
+  assert.equal(notificationEventCalls[1]?.selectedChoiceId, "notify-on-failed");
 });
 
 test("notifications reset defaults preserves non-notification settings", async () => {
@@ -1867,17 +1874,17 @@ test("default configuration applies the documented notify, sound, and pushover d
   const config = getDefaultConfig(createTempDir("pi-usereq-default-notify-"));
 
   assert.equal(config["notify-enabled"], false);
-  assert.equal(config["notify-on-end"], true);
-  assert.equal(config["notify-on-esc"], false);
-  assert.equal(config["notify-on-error"], false);
+  assert.equal(config["notify-on-completed"], true);
+  assert.equal(config["notify-on-interrupted"], false);
+  assert.equal(config["notify-on-failed"], false);
   assert.equal(config["notify-sound"], "none");
-  assert.equal(config["notify-sound-on-end"], true);
-  assert.equal(config["notify-sound-on-esc"], false);
-  assert.equal(config["notify-sound-on-error"], false);
+  assert.equal(config["notify-sound-on-completed"], true);
+  assert.equal(config["notify-sound-on-interrupted"], false);
+  assert.equal(config["notify-sound-on-failed"], false);
   assert.equal(config["notify-pushover-enabled"], false);
-  assert.equal(config["notify-pushover-on-end"], true);
-  assert.equal(config["notify-pushover-on-esc"], false);
-  assert.equal(config["notify-pushover-on-error"], false);
+  assert.equal(config["notify-pushover-on-completed"], true);
+  assert.equal(config["notify-pushover-on-interrupted"], false);
+  assert.equal(config["notify-pushover-on-failed"], false);
 });
 
 test("configuration menu can enable embedded builtin tools", async () => {
@@ -1931,10 +1938,14 @@ test("configuration menu can persist notify and sound settings", async () => {
     selects: [
       "notifications",
       "Enable notification",
-      "Toggle notification on error",
+      "Notification events",
+      "Prompt failed",
+      "Save and close",
       "Enable sound",
       "high",
-      "Toggle sound on escape",
+      "Sound events",
+      "Prompt interrupted",
+      "Save and close",
       "Sound toggle hotkey bind",
       "Notify command",
       "Sound command (low vol.)",
@@ -1956,13 +1967,13 @@ test("configuration menu can persist notify and sound settings", async () => {
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(config["notify-enabled"], true);
-  assert.equal(config["notify-on-end"], true);
-  assert.equal(config["notify-on-esc"], false);
-  assert.equal(config["notify-on-error"], true);
+  assert.equal(config["notify-on-completed"], true);
+  assert.equal(config["notify-on-interrupted"], false);
+  assert.equal(config["notify-on-failed"], true);
   assert.equal(config["notify-sound"], "high");
-  assert.equal(config["notify-sound-on-end"], true);
-  assert.equal(config["notify-sound-on-esc"], true);
-  assert.equal(config["notify-sound-on-error"], false);
+  assert.equal(config["notify-sound-on-completed"], true);
+  assert.equal(config["notify-sound-on-interrupted"], true);
+  assert.equal(config["notify-sound-on-failed"], false);
   assert.equal(config["notify-sound-toggle-shortcut"], "alt+shift+s");
   assert.equal(config.PI_NOTIFY_CMD, "notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png \"%%PROMT%% @ %%BASE%% [%%TIME%%]\" \"%%ARGS%%\"");
   assert.equal(config.PI_NOTIFY_SOUND_LOW_CMD, "echo low %%INSTALLATION_PATH%%");
@@ -1993,6 +2004,9 @@ test("configuration menu can persist pushover settings", async () => {
     selects: [
       "notifications",
       "Enable pushover",
+      "Pushover events",
+      "Prompt failed",
+      "Save and close",
       "Pushover priority",
       "High",
       "Pushover title",
@@ -2014,9 +2028,9 @@ test("configuration menu can persist pushover settings", async () => {
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(config["notify-pushover-enabled"], true);
-  assert.equal(config["notify-pushover-on-end"], true);
-  assert.equal(config["notify-pushover-on-esc"], false);
-  assert.equal(config["notify-pushover-on-error"], false);
+  assert.equal(config["notify-pushover-on-completed"], true);
+  assert.equal(config["notify-pushover-on-interrupted"], false);
+  assert.equal(config["notify-pushover-on-failed"], true);
   assert.equal(config["notify-pushover-user-key"], "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
   assert.equal(config["notify-pushover-api-token"], "ah6bf5u2sj63mcvou6qamiabeoubbe");
   assert.equal(config["notify-pushover-priority"], 1);
@@ -2080,7 +2094,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
   try {
     writeConfig({
       "notify-pushover-enabled": true,
-      "notify-pushover-on-end": true,
+      "notify-pushover-on-completed": true,
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-priority": 1,
@@ -2146,7 +2160,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
 
     writeConfig({
       "notify-pushover-enabled": true,
-      "notify-pushover-on-error": true,
+      "notify-pushover-on-failed": true,
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-priority": 1,
@@ -2175,7 +2189,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
 
     writeConfig({
       "notify-pushover-enabled": true,
-      "notify-pushover-on-end": true,
+      "notify-pushover-on-completed": true,
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "notify-pushover-api-token": "",
       "notify-pushover-priority": 1,
@@ -2229,7 +2243,7 @@ test("pushover global enable controls status and suppresses delivery when disabl
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(config["notify-pushover-enabled"], false);
-  assert.equal(config["notify-pushover-on-end"], true);
+  assert.equal(config["notify-pushover-on-completed"], true);
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
@@ -2321,9 +2335,9 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
   try {
     writeConfig({
       "notify-enabled": true,
-      "notify-on-end": true,
-      "notify-on-esc": false,
-      "notify-on-error": true,
+      "notify-on-completed": true,
+      "notify-on-interrupted": false,
+      "notify-on-failed": true,
       "notify-sound": "none",
       PI_NOTIFY_CMD: 'notify-send "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%ARGS%%"',
     });
@@ -2407,7 +2421,7 @@ test("sound routing honors the selected sound state and per-event toggles", asyn
     writeConfig({
       "notify-enabled": false,
       "notify-sound": "none",
-      "notify-sound-on-end": true,
+      "notify-sound-on-completed": true,
       PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
@@ -2422,9 +2436,9 @@ test("sound routing honors the selected sound state and per-event toggles", asyn
     writeConfig({
       "notify-enabled": false,
       "notify-sound": "high",
-      "notify-sound-on-end": false,
-      "notify-sound-on-esc": true,
-      "notify-sound-on-error": false,
+      "notify-sound-on-completed": false,
+      "notify-sound-on-interrupted": true,
+      "notify-sound-on-failed": false,
       PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
@@ -2439,9 +2453,9 @@ test("sound routing honors the selected sound state and per-event toggles", asyn
     writeConfig({
       "notify-enabled": false,
       "notify-sound": "high",
-      "notify-sound-on-end": false,
-      "notify-sound-on-esc": false,
-      "notify-sound-on-error": true,
+      "notify-sound-on-completed": false,
+      "notify-sound-on-interrupted": false,
+      "notify-sound-on-failed": true,
       PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);

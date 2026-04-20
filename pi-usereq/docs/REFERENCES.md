@@ -1,6 +1,6 @@
 
 > pi-usereq@0.6.0 cli
-> node --import tsx ./src/cli.ts --references --here /home/ogekuri/Git/useReq-PI-useReq-work-20260420120138
+> node --import tsx ./src/cli.ts --references --here /home/ogekuri/Git/PI-useReq
 
 {
   "summary": {
@@ -8,21 +8,21 @@
     "analyzed_file_count": 26,
     "error_file_count": 0,
     "skipped_file_count": 0,
-    "total_symbol_count": 429,
+    "total_symbol_count": 439,
     "total_import_count": 128,
-    "total_comment_count": 532,
-    "total_standalone_comment_count": 87,
-    "total_doxygen_field_count": 1912,
+    "total_comment_count": 544,
+    "total_standalone_comment_count": 89,
+    "total_doxygen_field_count": 1957,
     "symbol_kind_counts": {
       "CLASS": 6,
       "ENUM": 1,
-      "FUNCTION": 316,
-      "INTERFACE": 79,
-      "TYPE_ALIAS": 27
+      "FUNCTION": 322,
+      "INTERFACE": 81,
+      "TYPE_ALIAS": 29
     }
   },
   "repository": {
-    "root_directory_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138",
+    "root_directory_path": "/home/ogekuri/Git/PI-useReq",
     "source_directory_paths": [
       "src"
     ],
@@ -271,9 +271,9 @@
         349
       ],
       "request_index": 0,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/cli.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/cli.ts",
       "canonical_path": "src/cli.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/cli.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/cli.ts",
       "file_name": "cli.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -744,9 +744,9 @@
         470
       ],
       "request_index": 1,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/agent-tool-json.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/agent-tool-json.ts",
       "canonical_path": "src/core/agent-tool-json.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/agent-tool-json.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/agent-tool-json.ts",
       "file_name": "agent-tool-json.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -1847,9 +1847,9 @@
         72
       ],
       "request_index": 2,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/compress-files.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-files.ts",
       "canonical_path": "src/core/compress-files.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/compress-files.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-files.ts",
       "file_name": "compress-files.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -2033,9 +2033,9 @@
         640
       ],
       "request_index": 3,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/compress-payload.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-payload.ts",
       "canonical_path": "src/core/compress-payload.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/compress-payload.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-payload.ts",
       "file_name": "compress-payload.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -3004,9 +3004,9 @@
         464
       ],
       "request_index": 4,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/compress.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/compress.ts",
       "canonical_path": "src/core/compress.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/compress.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/compress.ts",
       "file_name": "compress.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -3761,9 +3761,9 @@
         354
       ],
       "request_index": 5,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/config.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/config.ts",
       "canonical_path": "src/core/config.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/config.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/config.ts",
       "file_name": "config.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -4340,9 +4340,9 @@
         318
       ],
       "request_index": 6,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/doxygen-parser.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/doxygen-parser.ts",
       "canonical_path": "src/core/doxygen-parser.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/doxygen-parser.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/doxygen-parser.ts",
       "file_name": "doxygen-parser.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -4993,9 +4993,9 @@
         31
       ],
       "request_index": 7,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/errors.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/errors.ts",
       "canonical_path": "src/core/errors.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/errors.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/errors.ts",
       "file_name": "errors.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -5114,9 +5114,9 @@
         568
       ],
       "request_index": 8,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/extension-status.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/extension-status.ts",
       "canonical_path": "src/core/extension-status.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/extension-status.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/extension-status.ts",
       "file_name": "extension-status.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -6433,9 +6433,9 @@
         319
       ],
       "request_index": 9,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/find-constructs.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/find-constructs.ts",
       "canonical_path": "src/core/find-constructs.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/find-constructs.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/find-constructs.ts",
       "file_name": "find-constructs.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -7144,9 +7144,9 @@
         892
       ],
       "request_index": 10,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/find-payload.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/find-payload.ts",
       "canonical_path": "src/core/find-payload.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/find-payload.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/find-payload.ts",
       "file_name": "find-payload.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -8596,9 +8596,9 @@
         120
       ],
       "request_index": 11,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/generate-markdown.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/generate-markdown.ts",
       "canonical_path": "src/core/generate-markdown.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/generate-markdown.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/generate-markdown.ts",
       "file_name": "generate-markdown.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -8834,9 +8834,9 @@
         196
       ],
       "request_index": 12,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/path-context.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/path-context.ts",
       "canonical_path": "src/core/path-context.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/path-context.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/path-context.ts",
       "file_name": "path-context.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -9315,9 +9315,9 @@
         741
       ],
       "request_index": 13,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/pi-notify.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-notify.ts",
       "canonical_path": "src/core/pi-notify.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/pi-notify.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-notify.ts",
       "file_name": "pi-notify.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -9461,7 +9461,7 @@
               "Represents one supported prompt-end outcome."
             ],
             "details": [
-              "Narrows prompt-end event classification and per-feature toggle routing to the canonical three-outcome domain. Compile-time only and introduces no runtime cost."
+              "Narrows prompt-end event classification and per-feature toggle routing to the canonical completed/interrupted/failed domain. Compile-time only and introduces no runtime cost."
             ]
           },
           "body_comment_entries": [],
@@ -10037,7 +10037,7 @@
               "Tests whether one outcome-specific toggle is enabled."
             ],
             "details": [
-              "Reuses the canonical `end|esc|err` routing order shared by notify, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated."
+              "Reuses the canonical completed/interrupted/failed routing order shared by notify, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated."
             ],
             "params": [
               {
@@ -10048,21 +10048,21 @@
               },
               {
                 "direction": "in",
-                "parameter_name": "endEnabled",
+                "parameter_name": "completedEnabled",
                 "value_type": "boolean",
-                "description": "Enabled state for successful completion."
+                "description": "Enabled state for completed prompt termination."
               },
               {
                 "direction": "in",
-                "parameter_name": "escEnabled",
+                "parameter_name": "interruptedEnabled",
                 "value_type": "boolean",
-                "description": "Enabled state for escape-triggered abortion."
+                "description": "Enabled state for interrupted prompt termination."
               },
               {
                 "direction": "in",
-                "parameter_name": "errEnabled",
+                "parameter_name": "failedEnabled",
                 "value_type": "boolean",
-                "description": "Enabled state for error termination."
+                "description": "Enabled state for failed prompt termination."
               }
             ],
             "returns": [
@@ -10073,15 +10073,15 @@
           "exit_point_entries": [
             {
               "line_number": 285,
-              "text": "return escEnabled;"
+              "text": "return interruptedEnabled;"
             },
             {
               "line_number": 287,
-              "text": "return errEnabled;"
+              "text": "return failedEnabled;"
             },
             {
               "line_number": 289,
-              "text": "return endEnabled;"
+              "text": "return completedEnabled;"
             }
           ]
         },
@@ -10157,7 +10157,7 @@
               "Classifies one agent-end payload into the canonical pi-notify outcome."
             ],
             "details": [
-              "Treats assistant `stopReason=error` as `err`, `stopReason=aborted` as `esc`, and every remaining terminal state as successful `end`. Runtime is O(m) in message count. No external state is mutated."
+              "Treats assistant `stopReason=error` as `failed`, `stopReason=aborted` as `interrupted`, and every remaining terminal state as `completed`. Runtime is O(m) in message count. No external state is mutated."
             ],
             "params": [
               {
@@ -10175,15 +10175,15 @@
           "exit_point_entries": [
             {
               "line_number": 320,
-              "text": "return \"err\";"
+              "text": "return \"failed\";"
             },
             {
               "line_number": 323,
-              "text": "return \"esc\";"
+              "text": "return \"interrupted\";"
             },
             {
               "line_number": 325,
-              "text": "return \"end\";"
+              "text": "return \"completed\";"
             }
           ]
         },
@@ -11351,10 +11351,10 @@
             27,
             30
           ],
-          "text": "@brief Enumerates supported prompt-end outcomes. @details Distinguishes successful completion, escape-triggered abortion, and error termination for per-feature event routing. Access complexity is O(1).",
+          "text": "@brief Enumerates supported prompt-end outcomes. @details Distinguishes completed, interrupted, and failed prompt termination states for cross-channel notification routing. Access complexity is O(1).",
           "text_lines": [
             "@brief Enumerates supported prompt-end outcomes.",
-            "@details Distinguishes successful completion, escape-triggered abortion, and error termination for per-feature event routing. Access complexity is O(1)."
+            "@details Distinguishes completed, interrupted, and failed prompt termination states for cross-channel notification routing. Access complexity is O(1)."
           ]
         },
         {
@@ -11504,9 +11504,9 @@
         140
       ],
       "request_index": 14,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/pi-usereq-tools.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-usereq-tools.ts",
       "canonical_path": "src/core/pi-usereq-tools.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/pi-usereq-tools.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-usereq-tools.ts",
       "file_name": "pi-usereq-tools.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -11830,9 +11830,9 @@
         184
       ],
       "request_index": 15,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/prompts.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/prompts.ts",
       "canonical_path": "src/core/prompts.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/prompts.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/prompts.ts",
       "file_name": "prompts.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -12274,9 +12274,9 @@
         810
       ],
       "request_index": 16,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/reference-payload.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/reference-payload.ts",
       "canonical_path": "src/core/reference-payload.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/reference-payload.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/reference-payload.ts",
       "file_name": "reference-payload.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -13478,9 +13478,9 @@
         63
       ],
       "request_index": 17,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/resources.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/resources.ts",
       "canonical_path": "src/core/resources.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/resources.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/resources.ts",
       "file_name": "resources.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -13711,9 +13711,9 @@
         70
       ],
       "request_index": 18,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/runtime-project-paths.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/runtime-project-paths.ts",
       "canonical_path": "src/core/runtime-project-paths.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/runtime-project-paths.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/runtime-project-paths.ts",
       "file_name": "runtime-project-paths.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -13991,9 +13991,9 @@
         258
       ],
       "request_index": 19,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/settings-menu.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/settings-menu.ts",
       "canonical_path": "src/core/settings-menu.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/settings-menu.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/settings-menu.ts",
       "file_name": "settings-menu.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -14550,9 +14550,9 @@
         1721
       ],
       "request_index": 20,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/source-analyzer.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/source-analyzer.ts",
       "canonical_path": "src/core/source-analyzer.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/source-analyzer.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/source-analyzer.ts",
       "file_name": "source-analyzer.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -15882,9 +15882,9 @@
         538
       ],
       "request_index": 21,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/static-check.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/static-check.ts",
       "canonical_path": "src/core/static-check.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/static-check.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/static-check.ts",
       "file_name": "static-check.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -17021,9 +17021,9 @@
         611
       ],
       "request_index": 22,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/token-counter.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/token-counter.ts",
       "canonical_path": "src/core/token-counter.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/token-counter.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/token-counter.ts",
       "file_name": "token-counter.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -18349,9 +18349,9 @@
         717
       ],
       "request_index": 23,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/tool-runner.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/tool-runner.ts",
       "canonical_path": "src/core/tool-runner.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/tool-runner.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/tool-runner.ts",
       "file_name": "tool-runner.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -20327,9 +20327,9 @@
         185
       ],
       "request_index": 24,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/utils.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/utils.ts",
       "canonical_path": "src/core/utils.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/core/utils.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/utils.ts",
       "file_name": "utils.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -20794,15 +20794,15 @@
     },
     {
       "start_line_number": 1,
-      "end_line_number": 2538,
+      "end_line_number": 2764,
       "line_range": [
         1,
-        2538
+        2764
       ],
       "request_index": 25,
-      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/index.ts",
+      "input_path": "/home/ogekuri/Git/PI-useReq/src/index.ts",
       "canonical_path": "src/index.ts",
-      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420120138/src/index.ts",
+      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/index.ts",
       "file_name": "index.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -20811,10 +20811,10 @@
       "exists": true,
       "is_file": true,
       "import_count": 21,
-      "symbol_count": 53,
-      "comment_count": 56,
-      "standalone_comment_count": 4,
-      "doxygen_field_count": 261,
+      "symbol_count": 63,
+      "comment_count": 68,
+      "standalone_comment_count": 6,
+      "doxygen_field_count": 306,
       "file_doxygen": {
         "brief": [
           "Registers the pi-usereq extension commands, tools, and configuration UI."
@@ -22192,20 +22192,132 @@
               "Represents one persisted boolean notification-setting key."
             ],
             "details": [
-              "Restricts menu toggles to the global enable flags and outcome-specific toggles used by command-notify, sound, and Pushover configuration. Compile-time only and introduces no runtime cost."
+              "Restricts menu toggles to the global enable flags and completed/interrupted/failed event toggles used by command-notify, sound, and Pushover configuration. Compile-time only and introduces no runtime cost."
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": []
         },
         {
-          "start_line_number": 704,
-          "end_line_number": 707,
+          "start_line_number": 701,
+          "end_line_number": 701,
           "line_range": [
-            704,
-            707
+            701,
+            701
           ],
           "declaration_order_index": 24,
+          "symbol_name": "PiNotifyEventBooleanConfigKey",
+          "qualified_name": "PiNotifyEventBooleanConfigKey",
+          "symbol_kind": "TYPE_ALIAS",
+          "type_label": "TYPE_ALIAS",
+          "signature_text": "type PiNotifyEventBooleanConfigKey = Exclude<",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Represents one persisted boolean notification event-toggle key.",
+          "doxygen": {
+            "brief": [
+              "Represents one persisted boolean notification event-toggle key."
+            ],
+            "details": [
+              "Restricts shared event-submenu mutation helpers to completed/interrupted/failed toggles and excludes global enable flags. Compile-time only and introduces no runtime cost."
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 710,
+          "end_line_number": 710,
+          "line_range": [
+            710,
+            710
+          ],
+          "declaration_order_index": 25,
+          "symbol_name": "PiNotifyEventId",
+          "qualified_name": "PiNotifyEventId",
+          "symbol_kind": "TYPE_ALIAS",
+          "type_label": "TYPE_ALIAS",
+          "signature_text": "type PiNotifyEventId = \"completed\" | \"interrupted\" | \"failed\"",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Represents one shared prompt-end event identifier used by notification menus.",
+          "doxygen": {
+            "brief": [
+              "Represents one shared prompt-end event identifier used by notification menus."
+            ],
+            "details": [
+              "Restricts event-submenu rendering to the canonical completed/interrupted/failed domain shared by command-notify, sound, and Pushover routing. Compile-time only and introduces no runtime cost."
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 716,
+          "end_line_number": 720,
+          "line_range": [
+            716,
+            720
+          ],
+          "declaration_order_index": 26,
+          "symbol_name": "PiNotifyEventRowDefinition",
+          "qualified_name": "PiNotifyEventRowDefinition",
+          "symbol_kind": "INTERFACE",
+          "type_label": "INTERFACE",
+          "signature_text": "interface PiNotifyEventRowDefinition",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Describes one shared prompt-end event row rendered inside notification event submenus.",
+          "doxygen": {
+            "brief": [
+              "Describes one shared prompt-end event row rendered inside notification event submenus."
+            ],
+            "details": [
+              "Binds one canonical event identifier to the human-readable label and terminal-outcome description reused across command-notify, sound, and Pushover event menus. The interface is compile-time only and introduces no runtime cost."
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 726,
+          "end_line_number": 732,
+          "line_range": [
+            726,
+            732
+          ],
+          "declaration_order_index": 27,
+          "symbol_name": "PiNotifyEventMenuDefinition",
+          "qualified_name": "PiNotifyEventMenuDefinition",
+          "symbol_kind": "INTERFACE",
+          "type_label": "INTERFACE",
+          "signature_text": "interface PiNotifyEventMenuDefinition",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Describes one notification-system event submenu contract.",
+          "doxygen": {
+            "brief": [
+              "Describes one notification-system event submenu contract."
+            ],
+            "details": [
+              "Binds the top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config keys for one notification transport. The interface is compile-time only and introduces no runtime cost."
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 741,
+          "end_line_number": 744,
+          "line_range": [
+            741,
+            744
+          ],
+          "declaration_order_index": 28,
           "symbol_name": "togglePiNotifyFlag",
           "qualified_name": "togglePiNotifyFlag",
           "symbol_kind": "FUNCTION",
@@ -22243,19 +22355,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 706,
+              "line_number": 743,
               "text": "return config[key];"
             }
           ]
         },
         {
-          "start_line_number": 716,
-          "end_line_number": 740,
+          "start_line_number": 753,
+          "end_line_number": 777,
           "line_range": [
-            716,
-            740
+            753,
+            777
           ],
-          "declaration_order_index": 25,
+          "declaration_order_index": 29,
           "symbol_name": "resetPiNotifyConfigToDefaults",
           "qualified_name": "resetPiNotifyConfigToDefaults",
           "symbol_kind": "FUNCTION",
@@ -22295,13 +22407,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 749,
-          "end_line_number": 751,
+          "start_line_number": 786,
+          "end_line_number": 788,
           "line_range": [
-            749,
-            751
+            786,
+            788
           ],
-          "declaration_order_index": 26,
+          "declaration_order_index": 30,
           "symbol_name": "formatPiNotifyPushoverPriority",
           "qualified_name": "formatPiNotifyPushoverPriority",
           "symbol_kind": "FUNCTION",
@@ -22336,19 +22448,351 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 750,
+              "line_number": 787,
               "text": "return priority === 1 ? \"High\" : \"Normal\";"
             }
           ]
         },
         {
-          "start_line_number": 762,
-          "end_line_number": 819,
+          "start_line_number": 865,
+          "end_line_number": 873,
           "line_range": [
-            762,
-            819
+            865,
+            873
           ],
-          "declaration_order_index": 27,
+          "declaration_order_index": 31,
+          "symbol_name": "formatPiNotifyEventMenuSummary",
+          "qualified_name": "formatPiNotifyEventMenuSummary",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function formatPiNotifyEventMenuSummary(",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Formats the top-level summary value for one notification event submenu.",
+          "doxygen": {
+            "brief": [
+              "Formats the top-level summary value for one notification event submenu."
+            ],
+            "details": [
+              "Counts enabled completed/interrupted/failed toggles for the selected transport and renders the result as `n/3 on` for right-aligned menu display. Runtime is O(1). No external state is mutated."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "config",
+                "value_type": "UseReqConfig",
+                "description": "Effective project configuration."
+              },
+              {
+                "direction": "in",
+                "parameter_name": "eventMenu",
+                "value_type": "PiNotifyEventMenuDefinition",
+                "description": "Notification-system event submenu contract."
+              }
+            ],
+            "returns": [
+              "{string} Compact enabled-toggle summary."
+            ],
+            "satisfies_requirement_ids": [
+              "REQ-198"
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 872,
+              "text": "return `${enabledCount}/3 on`;"
+            }
+          ]
+        },
+        {
+          "start_line_number": 883,
+          "end_line_number": 893,
+          "line_range": [
+            883,
+            893
+          ],
+          "declaration_order_index": 32,
+          "symbol_name": "buildPiNotifyEventLauncherChoice",
+          "qualified_name": "buildPiNotifyEventLauncherChoice",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function buildPiNotifyEventLauncherChoice(",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Builds the top-level launcher row for one notification event submenu.",
+          "doxygen": {
+            "brief": [
+              "Builds the top-level launcher row for one notification event submenu."
+            ],
+            "details": [
+              "Reuses the shared completed/interrupted/failed summary renderer so the `Notifications` menu can expose dedicated event editors for command-notify, sound, and Pushover in a uniform shape. Runtime is O(1). No external state is mutated."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "config",
+                "value_type": "UseReqConfig",
+                "description": "Effective project configuration."
+              },
+              {
+                "direction": "in",
+                "parameter_name": "eventMenu",
+                "value_type": "PiNotifyEventMenuDefinition",
+                "description": "Notification-system event submenu contract."
+              }
+            ],
+            "returns": [
+              "{PiUsereqSettingsMenuChoice} Launcher row for the selected event submenu."
+            ],
+            "satisfies_requirement_ids": [
+              "REQ-181",
+              "REQ-183",
+              "REQ-165",
+              "REQ-198"
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 887,
+              "text": "return {"
+            }
+          ]
+        },
+        {
+          "start_line_number": 903,
+          "end_line_number": 927,
+          "line_range": [
+            903,
+            927
+          ],
+          "declaration_order_index": 33,
+          "symbol_name": "buildPiNotifyEventMenuChoices",
+          "qualified_name": "buildPiNotifyEventMenuChoices",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function buildPiNotifyEventMenuChoices(",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Builds the shared settings-menu choices for one notification event submenu.",
+          "doxygen": {
+            "brief": [
+              "Builds the shared settings-menu choices for one notification event submenu."
+            ],
+            "details": [
+              "Serializes completed/interrupted/failed rows with right-aligned `on|off` values, then appends `Reset defaults` and `Save and close` for submenu-scoped mutation control. Runtime is O(1). No external state is mutated."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "config",
+                "value_type": "UseReqConfig",
+                "description": "Effective project configuration."
+              },
+              {
+                "direction": "in",
+                "parameter_name": "eventMenu",
+                "value_type": "PiNotifyEventMenuDefinition",
+                "description": "Notification-system event submenu contract."
+              }
+            ],
+            "returns": [
+              "{PiUsereqSettingsMenuChoice[]} Ordered event-submenu choice vector."
+            ],
+            "satisfies_requirement_ids": [
+              "REQ-188",
+              "REQ-193",
+              "REQ-198"
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 907,
+              "text": "return ["
+            }
+          ]
+        },
+        {
+          "start_line_number": 937,
+          "end_line_number": 945,
+          "line_range": [
+            937,
+            945
+          ],
+          "declaration_order_index": 34,
+          "symbol_name": "resetPiNotifyEventMenuToDefaults",
+          "qualified_name": "resetPiNotifyEventMenuToDefaults",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function resetPiNotifyEventMenuToDefaults(",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Restores one notification event submenu to its documented defaults.",
+          "doxygen": {
+            "brief": [
+              "Restores one notification event submenu to its documented defaults."
+            ],
+            "details": [
+              "Copies only the completed/interrupted/failed toggles referenced by the supplied submenu contract from a fresh default config into the mutable project config. Runtime is O(1). Side effect: mutates `config`."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "eventMenu",
+                "value_type": "PiNotifyEventMenuDefinition",
+                "description": "Notification-system event submenu contract."
+              },
+              {
+                "direction": "in,out",
+                "parameter_name": "config",
+                "value_type": "UseReqConfig",
+                "description": "Mutable configuration object."
+              }
+            ],
+            "returns": [
+              "{void} No return value."
+            ],
+            "satisfies_requirement_ids": [
+              "REQ-174",
+              "REQ-178",
+              "REQ-184",
+              "REQ-195"
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 955,
+          "end_line_number": 962,
+          "line_range": [
+            955,
+            962
+          ],
+          "declaration_order_index": 35,
+          "symbol_name": "resolvePiNotifyEventLabel",
+          "qualified_name": "resolvePiNotifyEventLabel",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function resolvePiNotifyEventLabel(",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Resolves the human-readable event label for one event-toggle config key.",
+          "doxygen": {
+            "brief": [
+              "Resolves the human-readable event label for one event-toggle config key."
+            ],
+            "details": [
+              "Matches the supplied config key against the submenu contract and returns the corresponding completed/interrupted/failed menu label for deterministic notification toasts. Runtime is O(1). No external state is mutated."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "key",
+                "value_type": "PiNotifyEventBooleanConfigKey",
+                "description": "Event-toggle configuration key."
+              },
+              {
+                "direction": "in",
+                "parameter_name": "eventMenu",
+                "value_type": "PiNotifyEventMenuDefinition",
+                "description": "Notification-system event submenu contract."
+              }
+            ],
+            "returns": [
+              "{string} Human-readable event label."
+            ],
+            "satisfies_requirement_ids": [
+              "REQ-188",
+              "REQ-198"
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 959,
+              "text": "return PI_NOTIFY_EVENT_ROW_DEFINITIONS.find("
+            }
+          ]
+        },
+        {
+          "start_line_number": 973,
+          "end_line_number": 1011,
+          "line_range": [
+            973,
+            1011
+          ],
+          "declaration_order_index": 36,
+          "symbol_name": "configurePiNotifyEventMenu",
+          "qualified_name": "configurePiNotifyEventMenu",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "async function configurePiNotifyEventMenu(",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Runs one dedicated notification event submenu.",
+          "doxygen": {
+            "brief": [
+              "Runs one dedicated notification event submenu."
+            ],
+            "details": [
+              "Reuses the shared settings-menu renderer to toggle completed/interrupted/failed delivery flags, preserve row focus, and apply submenu-scoped reset semantics for command-notify, sound, or Pushover events. Runtime depends on user interaction count. Side effects include UI updates and config mutation."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "ctx",
+                "value_type": "ExtensionCommandContext",
+                "description": "Active command context."
+              },
+              {
+                "direction": "in",
+                "parameter_name": "eventMenu",
+                "value_type": "PiNotifyEventMenuDefinition",
+                "description": "Notification-system event submenu contract."
+              },
+              {
+                "direction": "in,out",
+                "parameter_name": "config",
+                "value_type": "UseReqConfig",
+                "description": "Mutable configuration object."
+              }
+            ],
+            "returns": [
+              "{Promise<void>} Promise resolved when the submenu closes."
+            ],
+            "satisfies_requirement_ids": [
+              "REQ-188",
+              "REQ-192",
+              "REQ-193",
+              "REQ-195",
+              "REQ-198"
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 987,
+              "text": "return;"
+            }
+          ]
+        },
+        {
+          "start_line_number": 1020,
+          "end_line_number": 1063,
+          "line_range": [
+            1020,
+            1063
+          ],
+          "declaration_order_index": 37,
           "symbol_name": "buildPiNotifyPushoverRows",
           "qualified_name": "buildPiNotifyPushoverRows",
           "symbol_kind": "FUNCTION",
@@ -22363,7 +22807,7 @@
               "Builds the direct Pushover rows rendered inside `Notifications`."
             ],
             "details": [
-              "Serializes the global enable flag, per-event toggles, priority,\ntitle, text, and credential rows into right-valued menu items appended after\nthe sound-command rows. Runtime is O(1). No external state is mutated."
+              "Serializes the global enable flag, shared-event submenu launcher, priority, title, text, and credential rows into right-valued menu items appended after the sound-command rows. Runtime is O(1). No external state is mutated."
             ],
             "params": [
               {
@@ -22382,25 +22826,25 @@
               "REQ-172",
               "REQ-184",
               "REQ-185",
-              "REQ-149"
+              "REQ-198"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 763,
+              "line_number": 1021,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 829,
-          "end_line_number": 851,
+          "start_line_number": 1073,
+          "end_line_number": 1095,
           "line_range": [
-            829,
-            851
+            1073,
+            1095
           ],
-          "declaration_order_index": 28,
+          "declaration_order_index": 38,
           "symbol_name": "selectPiNotifyPushoverPriority",
           "qualified_name": "selectPiNotifyPushoverPriority",
           "symbol_kind": "FUNCTION",
@@ -22442,23 +22886,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 848,
+              "line_number": 1092,
               "text": "return undefined;"
             },
             {
-              "line_number": 850,
+              "line_number": 1094,
               "text": "return normalizePiNotifyPushoverPriority(choice);"
             }
           ]
         },
         {
-          "start_line_number": 860,
-          "end_line_number": 954,
+          "start_line_number": 1104,
+          "end_line_number": 1170,
           "line_range": [
-            860,
-            954
+            1104,
+            1170
           ],
-          "declaration_order_index": 29,
+          "declaration_order_index": 39,
           "symbol_name": "buildPiNotifyMenuChoices",
           "qualified_name": "buildPiNotifyMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -22473,7 +22917,7 @@
               "Builds the shared settings-menu choices for notification configuration."
             ],
             "details": [
-              "Serializes command-notify, sound, and direct Pushover rows in the documented order so the shared settings-menu renderer can expose one unified configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated."
+              "Serializes command-notify, sound, and Pushover blocks with dedicated shared-event submenu launchers so the settings-menu renderer can expose one unified but modular configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated."
             ],
             "params": [
               {
@@ -22500,25 +22944,26 @@
               "REQ-181",
               "REQ-183",
               "REQ-188",
-              "REQ-193"
+              "REQ-193",
+              "REQ-198"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 861,
+              "line_number": 1105,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 964,
-          "end_line_number": 995,
+          "start_line_number": 1180,
+          "end_line_number": 1211,
           "line_range": [
-            964,
-            995
+            1180,
+            1211
           ],
-          "declaration_order_index": 30,
+          "declaration_order_index": 40,
           "symbol_name": "selectPiNotifySoundLevel",
           "qualified_name": "selectPiNotifySoundLevel",
           "symbol_kind": "FUNCTION",
@@ -22561,19 +23006,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 994,
+              "line_number": 1210,
               "text": "return choice ? choice as PiNotifySoundLevel : undefined;"
             }
           ]
         },
         {
-          "start_line_number": 1005,
-          "end_line_number": 1166,
+          "start_line_number": 1221,
+          "end_line_number": 1392,
           "line_range": [
-            1005,
-            1166
+            1221,
+            1392
           ],
-          "declaration_order_index": 31,
+          "declaration_order_index": 41,
           "symbol_name": "configurePiNotifyMenu",
           "qualified_name": "configurePiNotifyMenu",
           "symbol_kind": "FUNCTION",
@@ -22588,7 +23033,7 @@
               "Runs the interactive notification-configuration menu."
             ],
             "details": [
-              "Exposes command-notify, sound, and direct Pushover controls through the shared settings-menu renderer while preserving row order, submenu reset semantics, and row-focus retention across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation."
+              "Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, delegates completed/interrupted/failed toggles to dedicated event submenus, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation."
             ],
             "params": [
               {
@@ -22624,25 +23069,26 @@
               "REQ-192",
               "REQ-193",
               "REQ-195",
-              "REQ-196"
+              "REQ-196",
+              "REQ-198"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1019,
+              "line_number": 1235,
               "text": "return config[\"notify-sound-toggle-shortcut\"] !== originalShortcut;"
             }
           ]
         },
         {
-          "start_line_number": 1181,
-          "end_line_number": 1201,
+          "start_line_number": 1407,
+          "end_line_number": 1427,
           "line_range": [
-            1181,
-            1201
+            1407,
+            1427
           ],
-          "declaration_order_index": 32,
+          "declaration_order_index": 42,
           "symbol_name": "registerPiNotifyShortcut",
           "qualified_name": "registerPiNotifyShortcut",
           "symbol_kind": "FUNCTION",
@@ -22651,10 +23097,10 @@
           "child_symbol_names": [],
           "child_qualified_names": [],
           "depth": 0,
-          "attached_comment_summary_text": "Registers the configurable successful-run sound shortcut when supported.",
+          "attached_comment_summary_text": "Registers the configurable notification-sound shortcut when supported.",
           "doxygen": {
             "brief": [
-              "Registers the configurable successful-run sound shortcut when supported."
+              "Registers the configurable notification-sound shortcut when supported."
             ],
             "details": [
               "Loads the current project config, registers one raw pi shortcut when\nthe runtime exposes `registerShortcut(...)`, cycles persisted sound state on\ninvocation, saves the config, refreshes the status bar, and emits one info\nnotification. Runtime is O(1) for registration plus config I/O per shortcut\nuse. Side effects include shortcut registration, config writes, and status\nupdates."
@@ -22685,19 +23131,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1187,
+              "line_number": 1413,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 1211,
-          "end_line_number": 1231,
+          "start_line_number": 1437,
+          "end_line_number": 1457,
           "line_range": [
-            1211,
-            1231
+            1437,
+            1457
           ],
-          "declaration_order_index": 33,
+          "declaration_order_index": 43,
           "symbol_name": "registerPromptCommands",
           "qualified_name": "registerPromptCommands",
           "symbol_kind": "FUNCTION",
@@ -22742,13 +23188,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 1241,
-          "end_line_number": 1540,
+          "start_line_number": 1467,
+          "end_line_number": 1766,
           "line_range": [
-            1241,
-            1540
+            1467,
+            1766
           ],
-          "declaration_order_index": 34,
+          "declaration_order_index": 44,
           "symbol_name": "registerAgentTools",
           "qualified_name": "registerAgentTools",
           "symbol_kind": "FUNCTION",
@@ -22815,47 +23261,47 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1272,
+              "line_number": 1498,
               "text": "return buildStructuredToolExecuteResult(payload);"
             },
             {
-              "line_number": 1305,
+              "line_number": 1531,
               "text": "return buildStructuredToolExecuteResult(payload);"
             },
             {
-              "line_number": 1363,
+              "line_number": 1589,
               "text": "return buildTokenToolExecuteResult(payload);"
             },
             {
-              "line_number": 1386,
+              "line_number": 1612,
               "text": "return buildReferenceToolExecuteResult(payload);"
             },
             {
-              "line_number": 1423,
+              "line_number": 1649,
               "text": "return buildCompressionToolExecuteResult(payload);"
             },
             {
-              "line_number": 1459,
+              "line_number": 1685,
               "text": "return buildFindToolExecuteResult(payload);"
             },
             {
-              "line_number": 1498,
+              "line_number": 1724,
               "text": "return buildReferenceToolExecuteResult(payload);"
             },
             {
-              "line_number": 1535,
+              "line_number": 1761,
               "text": "return buildCompressionToolExecuteResult(payload);"
             }
           ]
         },
         {
-          "start_line_number": 1869,
-          "end_line_number": 1909,
+          "start_line_number": 2095,
+          "end_line_number": 2135,
           "line_range": [
-            1869,
-            1909
+            2095,
+            2135
           ],
-          "declaration_order_index": 35,
+          "declaration_order_index": 45,
           "symbol_name": "buildPiUsereqToolsMenuChoices",
           "qualified_name": "buildPiUsereqToolsMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -22901,19 +23347,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1871,
+              "line_number": 2097,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 1919,
-          "end_line_number": 1935,
+          "start_line_number": 2145,
+          "end_line_number": 2161,
           "line_range": [
-            1919,
-            1935
+            2145,
+            2161
           ],
-          "declaration_order_index": 36,
+          "declaration_order_index": 46,
           "symbol_name": "buildPiUsereqToolToggleChoices",
           "qualified_name": "buildPiUsereqToolToggleChoices",
           "symbol_kind": "FUNCTION",
@@ -22958,19 +23404,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1921,
+              "line_number": 2147,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 1946,
-          "end_line_number": 2001,
+          "start_line_number": 2172,
+          "end_line_number": 2227,
           "line_range": [
-            1946,
-            2001
+            2172,
+            2227
           ],
-          "declaration_order_index": 37,
+          "declaration_order_index": 47,
           "symbol_name": "configurePiUsereqToolsMenu",
           "qualified_name": "configurePiUsereqToolsMenu",
           "symbol_kind": "FUNCTION",
@@ -23024,19 +23470,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1957,
+              "line_number": 2183,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2009,
-          "end_line_number": 2015,
+          "start_line_number": 2235,
+          "end_line_number": 2241,
           "line_range": [
-            2009,
-            2015
+            2235,
+            2241
           ],
-          "declaration_order_index": 38,
+          "declaration_order_index": 48,
           "symbol_name": "formatStaticCheckEntry",
           "qualified_name": "formatStaticCheckEntry",
           "symbol_kind": "FUNCTION",
@@ -23068,23 +23514,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2012,
+              "line_number": 2238,
               "text": "return `${entry.module}(${entry.cmd ?? \"?\"}${params})`;"
             },
             {
-              "line_number": 2014,
+              "line_number": 2240,
               "text": "return `${entry.module}${params ? `(${entry.params!.join(\" \")})` : \"\"}`;"
             }
           ]
         },
         {
-          "start_line_number": 2023,
-          "end_line_number": 2029,
+          "start_line_number": 2249,
+          "end_line_number": 2255,
           "line_range": [
-            2023,
-            2029
+            2249,
+            2255
           ],
-          "declaration_order_index": 39,
+          "declaration_order_index": 49,
           "symbol_name": "formatStaticCheckLanguagesSummary",
           "qualified_name": "formatStaticCheckLanguagesSummary",
           "symbol_kind": "FUNCTION",
@@ -23116,19 +23562,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2028,
+              "line_number": 2254,
               "text": "return languages.join(\", \") || \"(none)\";"
             }
           ]
         },
         {
-          "start_line_number": 2037,
-          "end_line_number": 2065,
+          "start_line_number": 2263,
+          "end_line_number": 2291,
           "line_range": [
-            2037,
-            2065
+            2263,
+            2291
           ],
-          "declaration_order_index": 40,
+          "declaration_order_index": 50,
           "symbol_name": "renderStaticCheckReference",
           "qualified_name": "renderStaticCheckReference",
           "symbol_kind": "FUNCTION",
@@ -23160,19 +23606,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2064,
+              "line_number": 2290,
               "text": "return `${lines.join(\"\\n\")}\\n`;"
             }
           ]
         },
         {
-          "start_line_number": 2074,
-          "end_line_number": 2115,
+          "start_line_number": 2300,
+          "end_line_number": 2341,
           "line_range": [
-            2074,
-            2115
+            2300,
+            2341
           ],
-          "declaration_order_index": 41,
+          "declaration_order_index": 51,
           "symbol_name": "buildStaticCheckMenuChoices",
           "qualified_name": "buildStaticCheckMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23214,19 +23660,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2077,
+              "line_number": 2303,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2123,
-          "end_line_number": 2142,
+          "start_line_number": 2349,
+          "end_line_number": 2368,
           "line_range": [
-            2123,
-            2142
+            2349,
+            2368
           ],
-          "declaration_order_index": 42,
+          "declaration_order_index": 52,
           "symbol_name": "buildSupportedStaticCheckLanguageChoices",
           "qualified_name": "buildSupportedStaticCheckLanguageChoices",
           "symbol_kind": "FUNCTION",
@@ -23258,23 +23704,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2124,
+              "line_number": 2350,
               "text": "return ["
             },
             {
-              "line_number": 2128,
+              "line_number": 2354,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 2150,
-          "end_line_number": 2167,
+          "start_line_number": 2376,
+          "end_line_number": 2393,
           "line_range": [
-            2150,
-            2167
+            2376,
+            2393
           ],
-          "declaration_order_index": 43,
+          "declaration_order_index": 53,
           "symbol_name": "buildConfiguredStaticCheckLanguageChoices",
           "qualified_name": "buildConfiguredStaticCheckLanguageChoices",
           "symbol_kind": "FUNCTION",
@@ -23306,19 +23752,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2151,
+              "line_number": 2377,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2177,
-          "end_line_number": 2252,
+          "start_line_number": 2403,
+          "end_line_number": 2478,
           "line_range": [
-            2177,
-            2252
+            2403,
+            2478
           ],
-          "declaration_order_index": 44,
+          "declaration_order_index": 54,
           "symbol_name": "configureStaticCheckMenu",
           "qualified_name": "configureStaticCheckMenu",
           "symbol_kind": "FUNCTION",
@@ -23367,19 +23813,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2185,
+              "line_number": 2411,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2262,
-          "end_line_number": 2323,
+          "start_line_number": 2488,
+          "end_line_number": 2549,
           "line_range": [
-            2262,
-            2323
+            2488,
+            2549
           ],
-          "declaration_order_index": 45,
+          "declaration_order_index": 55,
           "symbol_name": "buildPiUsereqMenuChoices",
           "qualified_name": "buildPiUsereqMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23429,19 +23875,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2266,
+              "line_number": 2492,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2332,
-          "end_line_number": 2359,
+          "start_line_number": 2558,
+          "end_line_number": 2585,
           "line_range": [
-            2332,
-            2359
+            2558,
+            2585
           ],
-          "declaration_order_index": 46,
+          "declaration_order_index": 56,
           "symbol_name": "buildSrcDirMenuChoices",
           "qualified_name": "buildSrcDirMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23481,19 +23927,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2333,
+              "line_number": 2559,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2368,
-          "end_line_number": 2383,
+          "start_line_number": 2594,
+          "end_line_number": 2609,
           "line_range": [
-            2368,
-            2383
+            2594,
+            2609
           ],
-          "declaration_order_index": 47,
+          "declaration_order_index": 57,
           "symbol_name": "buildSrcDirRemovalChoices",
           "qualified_name": "buildSrcDirRemovalChoices",
           "symbol_kind": "FUNCTION",
@@ -23532,19 +23978,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2369,
+              "line_number": 2595,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2394,
-          "end_line_number": 2492,
+          "start_line_number": 2620,
+          "end_line_number": 2718,
           "line_range": [
-            2394,
-            2492
+            2620,
+            2718
           ],
-          "declaration_order_index": 48,
+          "declaration_order_index": 58,
           "symbol_name": "configurePiUsereq",
           "qualified_name": "configurePiUsereq",
           "symbol_kind": "FUNCTION",
@@ -23604,19 +24050,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2422,
+              "line_number": 2648,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2402,
-          "end_line_number": 2406,
+          "start_line_number": 2628,
+          "end_line_number": 2632,
           "line_range": [
-            2402,
-            2406
+            2628,
+            2632
           ],
-          "declaration_order_index": 49,
+          "declaration_order_index": 59,
           "symbol_name": "ensureSaved",
           "qualified_name": "ensureSaved",
           "symbol_kind": "FUNCTION",
@@ -23629,13 +24075,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2403,
-          "end_line_number": 2406,
+          "start_line_number": 2629,
+          "end_line_number": 2632,
           "line_range": [
-            2403,
-            2406
+            2629,
+            2632
           ],
-          "declaration_order_index": 50,
+          "declaration_order_index": 60,
           "symbol_name": "refreshStatus",
           "qualified_name": "refreshStatus",
           "symbol_kind": "FUNCTION",
@@ -23648,13 +24094,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2502,
-          "end_line_number": 2512,
+          "start_line_number": 2728,
+          "end_line_number": 2738,
           "line_range": [
-            2502,
-            2512
+            2728,
+            2738
           ],
-          "declaration_order_index": 51,
+          "declaration_order_index": 61,
           "symbol_name": "registerConfigCommands",
           "qualified_name": "registerConfigCommands",
           "symbol_kind": "FUNCTION",
@@ -23697,13 +24143,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2530,
-          "end_line_number": 2538,
+          "start_line_number": 2756,
+          "end_line_number": 2764,
           "line_range": [
-            2530,
-            2538
+            2756,
+            2764
           ],
-          "declaration_order_index": 52,
+          "declaration_order_index": 62,
           "symbol_name": "piUsereqExtension",
           "qualified_name": "piUsereqExtension",
           "symbol_kind": "FUNCTION",
@@ -23718,7 +24164,7 @@
               "Registers the complete pi-usereq extension."
             ],
             "details": [
-              "Validates installation-owned bundled resources, registers prompt and\nconfiguration commands plus agent tools, registers the configurable\nsuccessful-run sound shortcut when the runtime supports shortcuts, and\ninstalls shared wrappers for all supported pi lifecycle hooks so status\ntelemetry, context usage, prompt timing, cumulative runtime, prompt-specific\nPushover metadata, and pi-notify effects remain synchronized with runtime\nevents. Runtime is O(h) in hook\ncount during registration. Side effects include filesystem reads,\ncommand/tool/shortcut registration, UI updates, active-tool changes, and\ntimer scheduling."
+              "Validates installation-owned bundled resources, registers prompt and\nconfiguration commands plus agent tools, registers the configurable\nnotification-sound shortcut when the runtime supports shortcuts, and\ninstalls shared wrappers for all supported pi lifecycle hooks so status\ntelemetry, context usage, prompt timing, cumulative runtime, prompt-specific\nPushover metadata, and pi-notify effects remain synchronized with runtime\nevents. Runtime is O(h) in hook\ncount during registration. Side effects include filesystem reads,\ncommand/tool/shortcut registration, UI updates, active-tool changes, and\ntimer scheduling."
             ],
             "params": [
               {
@@ -23844,6 +24290,34 @@
           "text_lines": [
             "@brief Defines the stable language order used by find-tool supported-tag guidance.",
             "@details Keeps registration descriptions aligned with the repository-supported language matrix and preserves deterministic inspection snapshots. Access complexity is O(1)."
+          ]
+        },
+        {
+          "start_line_number": 790,
+          "end_line_number": 794,
+          "line_range": [
+            790,
+            794
+          ],
+          "text": "@brief Defines the shared prompt-end event rows reused across notification submenus. @details Encodes the human-readable completed/interrupted/failed labels and terminal-state descriptions required by the command-notify, sound, and Pushover event menus. Access complexity is O(1). @satisfies REQ-188, REQ-198",
+          "text_lines": [
+            "@brief Defines the shared prompt-end event rows reused across notification submenus.",
+            "@details Encodes the human-readable completed/interrupted/failed labels and terminal-state descriptions required by the command-notify, sound, and Pushover event menus. Access complexity is O(1).",
+            "@satisfies REQ-188, REQ-198"
+          ]
+        },
+        {
+          "start_line_number": 813,
+          "end_line_number": 817,
+          "line_range": [
+            813,
+            817
+          ],
+          "text": "@brief Defines the shared event-submenu contracts for command-notify, sound, and Pushover. @details Binds each notification transport to its top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config-key set. Access complexity is O(1). @satisfies REQ-174, REQ-178, REQ-184, REQ-198",
+          "text_lines": [
+            "@brief Defines the shared event-submenu contracts for command-notify, sound, and Pushover.",
+            "@details Binds each notification transport to its top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config-key set. Access complexity is O(1).",
+            "@satisfies REQ-174, REQ-178, REQ-184, REQ-198"
           ]
         }
       ]

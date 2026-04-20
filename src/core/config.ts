@@ -52,18 +52,18 @@ export interface UseReqConfig {
   "static-check": Record<string, StaticCheckEntry[]>;
   "enabled-tools": string[];
   "notify-enabled": boolean;
-  "notify-on-end": boolean;
-  "notify-on-esc": boolean;
-  "notify-on-error": boolean;
+  "notify-on-completed": boolean;
+  "notify-on-interrupted": boolean;
+  "notify-on-failed": boolean;
   "notify-sound": "none" | "low" | "mid" | "high";
-  "notify-sound-on-end": boolean;
-  "notify-sound-on-esc": boolean;
-  "notify-sound-on-error": boolean;
+  "notify-sound-on-completed": boolean;
+  "notify-sound-on-interrupted": boolean;
+  "notify-sound-on-failed": boolean;
   "notify-sound-toggle-shortcut": string;
   "notify-pushover-enabled": boolean;
-  "notify-pushover-on-end": boolean;
-  "notify-pushover-on-esc": boolean;
-  "notify-pushover-on-error": boolean;
+  "notify-pushover-on-completed": boolean;
+  "notify-pushover-on-interrupted": boolean;
+  "notify-pushover-on-failed": boolean;
   "notify-pushover-user-key": string;
   "notify-pushover-api-token": string;
   "notify-pushover-priority": 0 | 1;
@@ -116,18 +116,18 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     "static-check": {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
     "notify-enabled": false,
-    "notify-on-end": true,
-    "notify-on-esc": false,
-    "notify-on-error": false,
+    "notify-on-completed": true,
+    "notify-on-interrupted": false,
+    "notify-on-failed": false,
     "notify-sound": "none",
-    "notify-sound-on-end": true,
-    "notify-sound-on-esc": false,
-    "notify-sound-on-error": false,
+    "notify-sound-on-completed": true,
+    "notify-sound-on-interrupted": false,
+    "notify-sound-on-failed": false,
     "notify-sound-toggle-shortcut": DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
     "notify-pushover-enabled": false,
-    "notify-pushover-on-end": true,
-    "notify-pushover-on-esc": false,
-    "notify-pushover-on-error": false,
+    "notify-pushover-on-completed": true,
+    "notify-pushover-on-interrupted": false,
+    "notify-pushover-on-failed": false,
     "notify-pushover-user-key": "",
     "notify-pushover-api-token": "",
     "notify-pushover-priority": 0,
@@ -175,18 +175,18 @@ export function loadConfig(projectBase: string): UseReqConfig {
     : {};
   const enabledTools = normalizeEnabledPiUsereqTools(data["enabled-tools"]);
   const notifyEnabled = data["notify-enabled"] === true;
-  const notifyOnEnd = data["notify-on-end"] !== false;
-  const notifyOnEsc = data["notify-on-esc"] === true;
-  const notifyOnError = data["notify-on-error"] === true;
+  const notifyOnCompleted = data["notify-on-completed"] !== false;
+  const notifyOnInterrupted = data["notify-on-interrupted"] === true;
+  const notifyOnFailed = data["notify-on-failed"] === true;
   const notifySound = normalizePiNotifySoundLevel(data["notify-sound"]);
-  const notifySoundOnEnd = data["notify-sound-on-end"] !== false;
-  const notifySoundOnEsc = data["notify-sound-on-esc"] === true;
-  const notifySoundOnError = data["notify-sound-on-error"] === true;
+  const notifySoundOnCompleted = data["notify-sound-on-completed"] !== false;
+  const notifySoundOnInterrupted = data["notify-sound-on-interrupted"] === true;
+  const notifySoundOnFailed = data["notify-sound-on-failed"] === true;
   const notifySoundToggleShortcut = normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]);
   const pushoverEnabled = data["notify-pushover-enabled"] === true;
-  const pushoverOnEnd = data["notify-pushover-on-end"] !== false;
-  const pushoverOnEsc = data["notify-pushover-on-esc"] === true;
-  const pushoverOnError = data["notify-pushover-on-error"] === true;
+  const pushoverOnCompleted = data["notify-pushover-on-completed"] !== false;
+  const pushoverOnInterrupted = data["notify-pushover-on-interrupted"] === true;
+  const pushoverOnFailed = data["notify-pushover-on-failed"] === true;
   const pushoverUserKey = normalizePiNotifyPushoverCredential(data["notify-pushover-user-key"]);
   const pushoverApiToken = normalizePiNotifyPushoverCredential(data["notify-pushover-api-token"]);
   const pushoverPriority = normalizePiNotifyPushoverPriority(data["notify-pushover-priority"]);
@@ -210,18 +210,18 @@ export function loadConfig(projectBase: string): UseReqConfig {
     "static-check": staticCheck,
     "enabled-tools": enabledTools,
     "notify-enabled": notifyEnabled,
-    "notify-on-end": notifyOnEnd,
-    "notify-on-esc": notifyOnEsc,
-    "notify-on-error": notifyOnError,
+    "notify-on-completed": notifyOnCompleted,
+    "notify-on-interrupted": notifyOnInterrupted,
+    "notify-on-failed": notifyOnFailed,
     "notify-sound": notifySound,
-    "notify-sound-on-end": notifySoundOnEnd,
-    "notify-sound-on-esc": notifySoundOnEsc,
-    "notify-sound-on-error": notifySoundOnError,
+    "notify-sound-on-completed": notifySoundOnCompleted,
+    "notify-sound-on-interrupted": notifySoundOnInterrupted,
+    "notify-sound-on-failed": notifySoundOnFailed,
     "notify-sound-toggle-shortcut": notifySoundToggleShortcut,
     "notify-pushover-enabled": pushoverEnabled,
-    "notify-pushover-on-end": pushoverOnEnd,
-    "notify-pushover-on-esc": pushoverOnEsc,
-    "notify-pushover-on-error": pushoverOnError,
+    "notify-pushover-on-completed": pushoverOnCompleted,
+    "notify-pushover-on-interrupted": pushoverOnInterrupted,
+    "notify-pushover-on-failed": pushoverOnFailed,
     "notify-pushover-user-key": pushoverUserKey,
     "notify-pushover-api-token": pushoverApiToken,
     "notify-pushover-priority": pushoverPriority,
@@ -258,18 +258,18 @@ function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
     ),
     "enabled-tools": [...config["enabled-tools"]],
     "notify-enabled": config["notify-enabled"],
-    "notify-on-end": config["notify-on-end"],
-    "notify-on-esc": config["notify-on-esc"],
-    "notify-on-error": config["notify-on-error"],
+    "notify-on-completed": config["notify-on-completed"],
+    "notify-on-interrupted": config["notify-on-interrupted"],
+    "notify-on-failed": config["notify-on-failed"],
     "notify-sound": config["notify-sound"],
-    "notify-sound-on-end": config["notify-sound-on-end"],
-    "notify-sound-on-esc": config["notify-sound-on-esc"],
-    "notify-sound-on-error": config["notify-sound-on-error"],
+    "notify-sound-on-completed": config["notify-sound-on-completed"],
+    "notify-sound-on-interrupted": config["notify-sound-on-interrupted"],
+    "notify-sound-on-failed": config["notify-sound-on-failed"],
     "notify-sound-toggle-shortcut": config["notify-sound-toggle-shortcut"],
     "notify-pushover-enabled": config["notify-pushover-enabled"],
-    "notify-pushover-on-end": config["notify-pushover-on-end"],
-    "notify-pushover-on-esc": config["notify-pushover-on-esc"],
-    "notify-pushover-on-error": config["notify-pushover-on-error"],
+    "notify-pushover-on-completed": config["notify-pushover-on-completed"],
+    "notify-pushover-on-interrupted": config["notify-pushover-on-interrupted"],
+    "notify-pushover-on-failed": config["notify-pushover-on-failed"],
     "notify-pushover-user-key": config["notify-pushover-user-key"],
     "notify-pushover-api-token": config["notify-pushover-api-token"],
     "notify-pushover-priority": config["notify-pushover-priority"],

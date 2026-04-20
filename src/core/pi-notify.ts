@@ -26,13 +26,13 @@ export type PiNotifySoundLevel = (typeof PI_NOTIFY_SOUND_LEVELS)[number];
 
 /**
  * @brief Enumerates supported prompt-end outcomes.
- * @details Distinguishes successful completion, escape-triggered abortion, and error termination for per-feature event routing. Access complexity is O(1).
+ * @details Distinguishes completed, interrupted, and failed prompt termination states for cross-channel notification routing. Access complexity is O(1).
  */
-export const PI_NOTIFY_OUTCOMES = ["end", "esc", "err"] as const;
+export const PI_NOTIFY_OUTCOMES = ["completed", "interrupted", "failed"] as const;
 
 /**
  * @brief Represents one supported prompt-end outcome.
- * @details Narrows prompt-end event classification and per-feature toggle routing to the canonical three-outcome domain. Compile-time only and introduces no runtime cost.
+ * @details Narrows prompt-end event classification and per-feature toggle routing to the canonical completed/interrupted/failed domain. Compile-time only and introduces no runtime cost.
  */
 export type PiNotifyOutcome = (typeof PI_NOTIFY_OUTCOMES)[number];
 
@@ -115,18 +115,18 @@ export interface PiNotifyEventRequest {
 export type PiNotifyConfigFields = Pick<
   UseReqConfig,
   | "notify-enabled"
-  | "notify-on-end"
-  | "notify-on-esc"
-  | "notify-on-error"
+  | "notify-on-completed"
+  | "notify-on-interrupted"
+  | "notify-on-failed"
   | "notify-sound"
-  | "notify-sound-on-end"
-  | "notify-sound-on-esc"
-  | "notify-sound-on-error"
+  | "notify-sound-on-completed"
+  | "notify-sound-on-interrupted"
+  | "notify-sound-on-failed"
   | "notify-sound-toggle-shortcut"
   | "notify-pushover-enabled"
-  | "notify-pushover-on-end"
-  | "notify-pushover-on-esc"
-  | "notify-pushover-on-error"
+  | "notify-pushover-on-completed"
+  | "notify-pushover-on-interrupted"
+  | "notify-pushover-on-failed"
   | "notify-pushover-user-key"
   | "notify-pushover-api-token"
   | "notify-pushover-priority"
@@ -267,26 +267,26 @@ export function cyclePiNotifySoundLevel(currentLevel: PiNotifySoundLevel): PiNot
 
 /**
  * @brief Tests whether one outcome-specific toggle is enabled.
- * @details Reuses the canonical `end|esc|err` routing order shared by notify, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated.
+ * @details Reuses the canonical completed/interrupted/failed routing order shared by notify, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
- * @param[in] endEnabled {boolean} Enabled state for successful completion.
- * @param[in] escEnabled {boolean} Enabled state for escape-triggered abortion.
- * @param[in] errEnabled {boolean} Enabled state for error termination.
+ * @param[in] completedEnabled {boolean} Enabled state for completed prompt termination.
+ * @param[in] interruptedEnabled {boolean} Enabled state for interrupted prompt termination.
+ * @param[in] failedEnabled {boolean} Enabled state for failed prompt termination.
  * @return {boolean} `true` when the selected outcome flag is enabled.
  */
 function isPiNotifyOutcomeEnabled(
   outcome: PiNotifyOutcome,
-  endEnabled: boolean,
-  escEnabled: boolean,
-  errEnabled: boolean,
+  completedEnabled: boolean,
+  interruptedEnabled: boolean,
+  failedEnabled: boolean,
 ): boolean {
   switch (outcome) {
-    case "esc":
-      return escEnabled;
-    case "err":
-      return errEnabled;
+    case "interrupted":
+      return interruptedEnabled;
+    case "failed":
+      return failedEnabled;
     default:
-      return endEnabled;
+      return completedEnabled;
   }
 }
 
@@ -311,18 +311,18 @@ function hasAgentEndStopReason(
 
 /**
  * @brief Classifies one agent-end payload into the canonical pi-notify outcome.
- * @details Treats assistant `stopReason=error` as `err`, `stopReason=aborted` as `esc`, and every remaining terminal state as successful `end`. Runtime is O(m) in message count. No external state is mutated.
+ * @details Treats assistant `stopReason=error` as `failed`, `stopReason=aborted` as `interrupted`, and every remaining terminal state as `completed`. Runtime is O(m) in message count. No external state is mutated.
  * @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
  * @return {PiNotifyOutcome} Canonical prompt-end outcome.
  */
 export function classifyPiNotifyOutcome(event: Pick<AgentEndEvent, "messages">): PiNotifyOutcome {
   if (hasAgentEndStopReason(event.messages, "error")) {
-    return "err";
+    return "failed";
   }
   if (hasAgentEndStopReason(event.messages, "aborted")) {
-    return "esc";
+    return "interrupted";
   }
-  return "end";
+  return "completed";
 }
 
 /**
@@ -499,9 +499,9 @@ function shouldRunPiNotifyCommand(
     && config["notify-enabled"]
     && isPiNotifyOutcomeEnabled(
       outcome,
-      config["notify-on-end"],
-      config["notify-on-esc"],
-      config["notify-on-error"],
+      config["notify-on-completed"],
+      config["notify-on-interrupted"],
+      config["notify-on-failed"],
     );
 }
 
@@ -562,9 +562,9 @@ function shouldRunPiNotifySound(
   return config["notify-sound"] !== "none"
     && isPiNotifyOutcomeEnabled(
       outcome,
-      config["notify-sound-on-end"],
-      config["notify-sound-on-esc"],
-      config["notify-sound-on-error"],
+      config["notify-sound-on-completed"],
+      config["notify-sound-on-interrupted"],
+      config["notify-sound-on-failed"],
     );
 }
 
@@ -603,9 +603,9 @@ function shouldRunPiNotifyPushover(
     && config["notify-pushover-enabled"]
     && isPiNotifyOutcomeEnabled(
       outcome,
-      config["notify-pushover-on-end"],
-      config["notify-pushover-on-esc"],
-      config["notify-pushover-on-error"],
+      config["notify-pushover-on-completed"],
+      config["notify-pushover-on-interrupted"],
+      config["notify-pushover-on-failed"],
     )
     && config["notify-pushover-user-key"] !== ""
     && config["notify-pushover-api-token"] !== "";

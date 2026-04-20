@@ -679,20 +679,57 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
 
 /**
  * @brief Represents one persisted boolean notification-setting key.
- * @details Restricts menu toggles to the global enable flags and outcome-specific toggles used by command-notify, sound, and Pushover configuration. Compile-time only and introduces no runtime cost.
+ * @details Restricts menu toggles to the global enable flags and completed/interrupted/failed event toggles used by command-notify, sound, and Pushover configuration. Compile-time only and introduces no runtime cost.
  */
 type PiNotifyBooleanConfigKey =
   | "notify-enabled"
-  | "notify-on-end"
-  | "notify-on-esc"
-  | "notify-on-error"
-  | "notify-sound-on-end"
-  | "notify-sound-on-esc"
-  | "notify-sound-on-error"
+  | "notify-on-completed"
+  | "notify-on-interrupted"
+  | "notify-on-failed"
+  | "notify-sound-on-completed"
+  | "notify-sound-on-interrupted"
+  | "notify-sound-on-failed"
   | "notify-pushover-enabled"
-  | "notify-pushover-on-end"
-  | "notify-pushover-on-esc"
-  | "notify-pushover-on-error";
+  | "notify-pushover-on-completed"
+  | "notify-pushover-on-interrupted"
+  | "notify-pushover-on-failed";
+
+/**
+ * @brief Represents one persisted boolean notification event-toggle key.
+ * @details Restricts shared event-submenu mutation helpers to completed/interrupted/failed toggles and excludes global enable flags. Compile-time only and introduces no runtime cost.
+ */
+type PiNotifyEventBooleanConfigKey = Exclude<
+  PiNotifyBooleanConfigKey,
+  "notify-enabled" | "notify-pushover-enabled"
+>;
+
+/**
+ * @brief Represents one shared prompt-end event identifier used by notification menus.
+ * @details Restricts event-submenu rendering to the canonical completed/interrupted/failed domain shared by command-notify, sound, and Pushover routing. Compile-time only and introduces no runtime cost.
+ */
+type PiNotifyEventId = "completed" | "interrupted" | "failed";
+
+/**
+ * @brief Describes one shared prompt-end event row rendered inside notification event submenus.
+ * @details Binds one canonical event identifier to the human-readable label and terminal-outcome description reused across command-notify, sound, and Pushover event menus. The interface is compile-time only and introduces no runtime cost.
+ */
+interface PiNotifyEventRowDefinition {
+  eventId: PiNotifyEventId;
+  label: string;
+  description: string;
+}
+
+/**
+ * @brief Describes one notification-system event submenu contract.
+ * @details Binds the top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config keys for one notification transport. The interface is compile-time only and introduces no runtime cost.
+ */
+interface PiNotifyEventMenuDefinition {
+  topLevelId: string;
+  topLevelLabel: string;
+  submenuTitle: string;
+  systemLabel: string;
+  keys: Record<PiNotifyEventId, PiNotifyEventBooleanConfigKey>;
+}
 
 /**
  * @brief Flips one persisted boolean notification setting.
@@ -716,18 +753,18 @@ function togglePiNotifyFlag(config: UseReqConfig, key: PiNotifyBooleanConfigKey)
 function resetPiNotifyConfigToDefaults(config: UseReqConfig): void {
   const defaults = getDefaultConfig("");
   config["notify-enabled"] = defaults["notify-enabled"];
-  config["notify-on-end"] = defaults["notify-on-end"];
-  config["notify-on-esc"] = defaults["notify-on-esc"];
-  config["notify-on-error"] = defaults["notify-on-error"];
+  config["notify-on-completed"] = defaults["notify-on-completed"];
+  config["notify-on-interrupted"] = defaults["notify-on-interrupted"];
+  config["notify-on-failed"] = defaults["notify-on-failed"];
   config["notify-sound"] = defaults["notify-sound"];
-  config["notify-sound-on-end"] = defaults["notify-sound-on-end"];
-  config["notify-sound-on-esc"] = defaults["notify-sound-on-esc"];
-  config["notify-sound-on-error"] = defaults["notify-sound-on-error"];
+  config["notify-sound-on-completed"] = defaults["notify-sound-on-completed"];
+  config["notify-sound-on-interrupted"] = defaults["notify-sound-on-interrupted"];
+  config["notify-sound-on-failed"] = defaults["notify-sound-on-failed"];
   config["notify-sound-toggle-shortcut"] = defaults["notify-sound-toggle-shortcut"];
   config["notify-pushover-enabled"] = defaults["notify-pushover-enabled"];
-  config["notify-pushover-on-end"] = defaults["notify-pushover-on-end"];
-  config["notify-pushover-on-esc"] = defaults["notify-pushover-on-esc"];
-  config["notify-pushover-on-error"] = defaults["notify-pushover-on-error"];
+  config["notify-pushover-on-completed"] = defaults["notify-pushover-on-completed"];
+  config["notify-pushover-on-interrupted"] = defaults["notify-pushover-on-interrupted"];
+  config["notify-pushover-on-failed"] = defaults["notify-pushover-on-failed"];
   config["notify-pushover-user-key"] = defaults["notify-pushover-user-key"];
   config["notify-pushover-api-token"] = defaults["notify-pushover-api-token"];
   config["notify-pushover-priority"] = defaults["notify-pushover-priority"];
@@ -751,13 +788,234 @@ function formatPiNotifyPushoverPriority(priority: PiNotifyPushoverPriority): str
 }
 
 /**
+ * @brief Defines the shared prompt-end event rows reused across notification submenus.
+ * @details Encodes the human-readable completed/interrupted/failed labels and terminal-state descriptions required by the command-notify, sound, and Pushover event menus. Access complexity is O(1).
+ * @satisfies REQ-188, REQ-198
+ */
+const PI_NOTIFY_EVENT_ROW_DEFINITIONS: PiNotifyEventRowDefinition[] = [
+  {
+    eventId: "completed",
+    label: "Prompt completed",
+    description: "Toggle delivery when the prompt finishes without interruption or failure.",
+  },
+  {
+    eventId: "interrupted",
+    label: "Prompt interrupted",
+    description: "Toggle delivery when the prompt finishes with assistant stopReason `aborted`.",
+  },
+  {
+    eventId: "failed",
+    label: "Prompt failed",
+    description: "Toggle delivery when the prompt finishes with assistant stopReason `error`.",
+  },
+];
+
+/**
+ * @brief Defines the shared event-submenu contracts for command-notify, sound, and Pushover.
+ * @details Binds each notification transport to its top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config-key set. Access complexity is O(1).
+ * @satisfies REQ-174, REQ-178, REQ-184, REQ-198
+ */
+const PI_NOTIFY_EVENT_MENU_DEFINITIONS: Record<
+  "notification" | "sound" | "pushover",
+  PiNotifyEventMenuDefinition
+> = {
+  notification: {
+    topLevelId: "notification-events",
+    topLevelLabel: "Notification events",
+    submenuTitle: "Notification events",
+    systemLabel: "Notification",
+    keys: {
+      completed: "notify-on-completed",
+      interrupted: "notify-on-interrupted",
+      failed: "notify-on-failed",
+    },
+  },
+  sound: {
+    topLevelId: "sound-events",
+    topLevelLabel: "Sound events",
+    submenuTitle: "Sound events",
+    systemLabel: "Sound",
+    keys: {
+      completed: "notify-sound-on-completed",
+      interrupted: "notify-sound-on-interrupted",
+      failed: "notify-sound-on-failed",
+    },
+  },
+  pushover: {
+    topLevelId: "pushover-events",
+    topLevelLabel: "Pushover events",
+    submenuTitle: "Pushover events",
+    systemLabel: "Pushover",
+    keys: {
+      completed: "notify-pushover-on-completed",
+      interrupted: "notify-pushover-on-interrupted",
+      failed: "notify-pushover-on-failed",
+    },
+  },
+};
+
+/**
+ * @brief Formats the top-level summary value for one notification event submenu.
+ * @details Counts enabled completed/interrupted/failed toggles for the selected transport and renders the result as `n/3 on` for right-aligned menu display. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
+ * @return {string} Compact enabled-toggle summary.
+ * @satisfies REQ-198
+ */
+function formatPiNotifyEventMenuSummary(
+  config: UseReqConfig,
+  eventMenu: PiNotifyEventMenuDefinition,
+): string {
+  const enabledCount = PI_NOTIFY_EVENT_ROW_DEFINITIONS.filter(
+    (row) => config[eventMenu.keys[row.eventId]] === true,
+  ).length;
+  return `${enabledCount}/3 on`;
+}
+
+/**
+ * @brief Builds the top-level launcher row for one notification event submenu.
+ * @details Reuses the shared completed/interrupted/failed summary renderer so the `Notifications` menu can expose dedicated event editors for command-notify, sound, and Pushover in a uniform shape. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
+ * @return {PiUsereqSettingsMenuChoice} Launcher row for the selected event submenu.
+ * @satisfies REQ-181, REQ-183, REQ-165, REQ-198
+ */
+function buildPiNotifyEventLauncherChoice(
+  config: UseReqConfig,
+  eventMenu: PiNotifyEventMenuDefinition,
+): PiUsereqSettingsMenuChoice {
+  return {
+    id: eventMenu.topLevelId,
+    label: eventMenu.topLevelLabel,
+    value: formatPiNotifyEventMenuSummary(config, eventMenu),
+    description: `Open the ${eventMenu.submenuTitle} submenu for shared prompt-end delivery events.`,
+  };
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for one notification event submenu.
+ * @details Serializes completed/interrupted/failed rows with right-aligned `on|off` values, then appends `Reset defaults` and `Save and close` for submenu-scoped mutation control. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered event-submenu choice vector.
+ * @satisfies REQ-188, REQ-193, REQ-198
+ */
+function buildPiNotifyEventMenuChoices(
+  config: UseReqConfig,
+  eventMenu: PiNotifyEventMenuDefinition,
+): PiUsereqSettingsMenuChoice[] {
+  return [
+    ...PI_NOTIFY_EVENT_ROW_DEFINITIONS.map((row) => ({
+      id: eventMenu.keys[row.eventId],
+      label: row.label,
+      value: config[eventMenu.keys[row.eventId]] ? "on" : "off",
+      description: `${eventMenu.systemLabel}: ${row.description}`,
+    })),
+    {
+      id: "reset-defaults",
+      label: "Reset defaults",
+      value: "",
+      description: `Restore the documented default ${eventMenu.systemLabel.toLowerCase()} event toggles.`,
+    },
+    {
+      id: "save-and-close",
+      label: "Save and close",
+      value: "",
+      description: "Return to the notifications menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Restores one notification event submenu to its documented defaults.
+ * @details Copies only the completed/interrupted/failed toggles referenced by the supplied submenu contract from a fresh default config into the mutable project config. Runtime is O(1). Side effect: mutates `config`.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
+ * @return {void} No return value.
+ * @satisfies REQ-174, REQ-178, REQ-184, REQ-195
+ */
+function resetPiNotifyEventMenuToDefaults(
+  config: UseReqConfig,
+  eventMenu: PiNotifyEventMenuDefinition,
+): void {
+  const defaults = getDefaultConfig("");
+  for (const key of Object.values(eventMenu.keys) as PiNotifyEventBooleanConfigKey[]) {
+    config[key] = defaults[key];
+  }
+}
+
+/**
+ * @brief Resolves the human-readable event label for one event-toggle config key.
+ * @details Matches the supplied config key against the submenu contract and returns the corresponding completed/interrupted/failed menu label for deterministic notification toasts. Runtime is O(1). No external state is mutated.
+ * @param[in] key {PiNotifyEventBooleanConfigKey} Event-toggle configuration key.
+ * @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
+ * @return {string} Human-readable event label.
+ * @satisfies REQ-188, REQ-198
+ */
+function resolvePiNotifyEventLabel(
+  key: PiNotifyEventBooleanConfigKey,
+  eventMenu: PiNotifyEventMenuDefinition,
+): string {
+  return PI_NOTIFY_EVENT_ROW_DEFINITIONS.find(
+    (row) => eventMenu.keys[row.eventId] === key,
+  )?.label ?? key;
+}
+
+/**
+ * @brief Runs one dedicated notification event submenu.
+ * @details Reuses the shared settings-menu renderer to toggle completed/interrupted/failed delivery flags, preserve row focus, and apply submenu-scoped reset semantics for command-notify, sound, or Pushover events. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
+ * @return {Promise<void>} Promise resolved when the submenu closes.
+ * @satisfies REQ-188, REQ-192, REQ-193, REQ-195, REQ-198
+ */
+async function configurePiNotifyEventMenu(
+  ctx: ExtensionCommandContext,
+  config: UseReqConfig,
+  eventMenu: PiNotifyEventMenuDefinition,
+): Promise<void> {
+  let focusedChoiceId: string | undefined;
+  while (true) {
+    const choice = await showPiUsereqSettingsMenu(
+      ctx,
+      eventMenu.submenuTitle,
+      buildPiNotifyEventMenuChoices(config, eventMenu),
+      { initialSelectedId: focusedChoiceId },
+    );
+    if (!choice || choice === "save-and-close") {
+      return;
+    }
+    focusedChoiceId = choice;
+    if (choice === "reset-defaults") {
+      resetPiNotifyEventMenuToDefaults(config, eventMenu);
+      ctx.ui.notify(
+        `Restored default ${eventMenu.systemLabel.toLowerCase()} events`,
+        "info",
+      );
+      continue;
+    }
+    const enabled = togglePiNotifyFlag(
+      config,
+      choice as PiNotifyEventBooleanConfigKey,
+    );
+    const eventLabel = resolvePiNotifyEventLabel(
+      choice as PiNotifyEventBooleanConfigKey,
+      eventMenu,
+    );
+    ctx.ui.notify(
+      `${eventMenu.systemLabel} ${eventLabel} ${enabled ? "enabled" : "disabled"}`,
+      "info",
+    );
+  }
+}
+
+/**
  * @brief Builds the direct Pushover rows rendered inside `Notifications`.
- * @details Serializes the global enable flag, per-event toggles, priority,
- * title, text, and credential rows into right-valued menu items appended after
- * the sound-command rows. Runtime is O(1). No external state is mutated.
+ * @details Serializes the global enable flag, shared-event submenu launcher, priority, title, text, and credential rows into right-valued menu items appended after the sound-command rows. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered direct Pushover rows.
- * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-149
+ * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-198
  */
 function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
@@ -767,24 +1025,10 @@ function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuCh
       value: formatPiNotifyPushoverStatus(config),
       description: "Enable or disable all Pushover delivery globally.",
     },
-    {
-      id: "notify-pushover-on-end",
-      label: "Toggle pushover on success",
-      value: config["notify-pushover-on-end"] ? "on" : "off",
-      description: "Toggle Pushover delivery for successful prompt completion.",
-    },
-    {
-      id: "notify-pushover-on-esc",
-      label: "Toggle pushover on escape",
-      value: config["notify-pushover-on-esc"] ? "on" : "off",
-      description: "Toggle Pushover delivery for escape-triggered prompt abortion.",
-    },
-    {
-      id: "notify-pushover-on-error",
-      label: "Toggle pushover on error",
-      value: config["notify-pushover-on-error"] ? "on" : "off",
-      description: "Toggle Pushover delivery for error-terminated prompt completion.",
-    },
+    buildPiNotifyEventLauncherChoice(
+      config,
+      PI_NOTIFY_EVENT_MENU_DEFINITIONS.pushover,
+    ),
     {
       id: "notify-pushover-priority",
       label: "Pushover priority",
@@ -852,10 +1096,10 @@ async function selectPiNotifyPushoverPriority(
 
 /**
  * @brief Builds the shared settings-menu choices for notification configuration.
- * @details Serializes command-notify, sound, and direct Pushover rows in the documented order so the shared settings-menu renderer can expose one unified configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated.
+ * @details Serializes command-notify, sound, and Pushover blocks with dedicated shared-event submenu launchers so the settings-menu renderer can expose one unified but modular configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
- * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193, REQ-198
  */
 function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
@@ -865,24 +1109,10 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       value: formatPiNotifyStatus(config),
       description: "Enable or disable command-notify delivery globally.",
     },
-    {
-      id: "notify-on-end",
-      label: "Toggle notification on success",
-      value: config["notify-on-end"] ? "on" : "off",
-      description: "Toggle command-notify delivery for successful prompt completion.",
-    },
-    {
-      id: "notify-on-esc",
-      label: "Toggle notification on escape",
-      value: config["notify-on-esc"] ? "on" : "off",
-      description: "Toggle command-notify delivery for escape-triggered prompt abortion.",
-    },
-    {
-      id: "notify-on-error",
-      label: "Toggle notification on error",
-      value: config["notify-on-error"] ? "on" : "off",
-      description: "Toggle command-notify delivery for error-terminated prompt completion.",
-    },
+    buildPiNotifyEventLauncherChoice(
+      config,
+      PI_NOTIFY_EVENT_MENU_DEFINITIONS.notification,
+    ),
     {
       id: "notify-command",
       label: "Notify command",
@@ -895,24 +1125,10 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       value: config["notify-sound"],
       description: "Select which sound command level is currently active.",
     },
-    {
-      id: "notify-sound-on-end",
-      label: "Toggle sound on success",
-      value: config["notify-sound-on-end"] ? "on" : "off",
-      description: "Toggle sound-command delivery for successful prompt completion.",
-    },
-    {
-      id: "notify-sound-on-esc",
-      label: "Toggle sound on escape",
-      value: config["notify-sound-on-esc"] ? "on" : "off",
-      description: "Toggle sound-command delivery for escape-triggered prompt abortion.",
-    },
-    {
-      id: "notify-sound-on-error",
-      label: "Toggle sound on error",
-      value: config["notify-sound-on-error"] ? "on" : "off",
-      description: "Toggle sound-command delivery for error-terminated prompt completion.",
-    },
+    buildPiNotifyEventLauncherChoice(
+      config,
+      PI_NOTIFY_EVENT_MENU_DEFINITIONS.sound,
+    ),
     {
       id: "sound-toggle-hotkey-bind",
       label: "Sound toggle hotkey bind",
@@ -996,11 +1212,11 @@ async function selectPiNotifySoundLevel(
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes command-notify, sound, and direct Pushover controls through the shared settings-menu renderer while preserving row order, submenu reset semantics, and row-focus retention across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, delegates completed/interrupted/failed toggles to dedicated event submenus, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196
+ * @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196, REQ-198
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
@@ -1019,34 +1235,37 @@ async function configurePiNotifyMenu(
       return config["notify-sound-toggle-shortcut"] !== originalShortcut;
     }
     focusedChoiceId = choice;
-    if (
-      choice === "notify-enabled"
-      || choice === "notify-on-end"
-      || choice === "notify-on-esc"
-      || choice === "notify-on-error"
-      || choice === "notify-sound-on-end"
-      || choice === "notify-sound-on-esc"
-      || choice === "notify-sound-on-error"
-      || choice === "notify-pushover-enabled"
-      || choice === "notify-pushover-on-end"
-      || choice === "notify-pushover-on-esc"
-      || choice === "notify-pushover-on-error"
-    ) {
+    if (choice === "notify-enabled" || choice === "notify-pushover-enabled") {
       const enabled = togglePiNotifyFlag(config, choice as PiNotifyBooleanConfigKey);
       const labelMap: Record<string, string> = {
         "notify-enabled": "Notification",
-        "notify-on-end": "Notification on success",
-        "notify-on-esc": "Notification on escape",
-        "notify-on-error": "Notification on error",
-        "notify-sound-on-end": "Sound on success",
-        "notify-sound-on-esc": "Sound on escape",
-        "notify-sound-on-error": "Sound on error",
         "notify-pushover-enabled": "Pushover",
-        "notify-pushover-on-end": "Pushover on success",
-        "notify-pushover-on-esc": "Pushover on escape",
-        "notify-pushover-on-error": "Pushover on error",
       };
       ctx.ui.notify(`${labelMap[choice]} ${enabled ? "enabled" : "disabled"}`, "info");
+      continue;
+    }
+    if (choice === PI_NOTIFY_EVENT_MENU_DEFINITIONS.notification.topLevelId) {
+      await configurePiNotifyEventMenu(
+        ctx,
+        config,
+        PI_NOTIFY_EVENT_MENU_DEFINITIONS.notification,
+      );
+      continue;
+    }
+    if (choice === PI_NOTIFY_EVENT_MENU_DEFINITIONS.sound.topLevelId) {
+      await configurePiNotifyEventMenu(
+        ctx,
+        config,
+        PI_NOTIFY_EVENT_MENU_DEFINITIONS.sound,
+      );
+      continue;
+    }
+    if (choice === PI_NOTIFY_EVENT_MENU_DEFINITIONS.pushover.topLevelId) {
+      await configurePiNotifyEventMenu(
+        ctx,
+        config,
+        PI_NOTIFY_EVENT_MENU_DEFINITIONS.pushover,
+      );
       continue;
     }
     if (choice === "notify-command") {
@@ -1066,10 +1285,16 @@ async function configurePiNotifyMenu(
       continue;
     }
     if (choice === "sound-toggle-hotkey-bind") {
-      const value = await ctx.ui.input("Sound toggle hotkey bind", config["notify-sound-toggle-shortcut"]);
+      const value = await ctx.ui.input(
+        "Sound toggle hotkey bind",
+        config["notify-sound-toggle-shortcut"],
+      );
       if (value?.trim()) {
         config["notify-sound-toggle-shortcut"] = value.trim();
-        ctx.ui.notify(`Sound toggle hotkey bind set to ${config["notify-sound-toggle-shortcut"]}`, "info");
+        ctx.ui.notify(
+          `Sound toggle hotkey bind set to ${config["notify-sound-toggle-shortcut"]}`,
+          "info",
+        );
       }
       continue;
     }
@@ -1161,12 +1386,13 @@ async function configurePiNotifyMenu(
     if (choice === "reset-defaults") {
       resetPiNotifyConfigToDefaults(config);
       ctx.ui.notify("Restored notification defaults", "info");
+      continue;
     }
   }
 }
 
 /**
- * @brief Registers the configurable successful-run sound shortcut when supported.
+ * @brief Registers the configurable notification-sound shortcut when supported.
  * @details Loads the current project config, registers one raw pi shortcut when
  * the runtime exposes `registerShortcut(...)`, cycles persisted sound state on
  * invocation, saves the config, refreshes the status bar, and emits one info
@@ -1188,7 +1414,7 @@ function registerPiNotifyShortcut(
   }
   const config = loadProjectConfig(process.cwd());
   shortcutRegistrar.registerShortcut(config["notify-sound-toggle-shortcut"], {
-    description: "Cycle pi-usereq prompt-success sound level",
+    description: "Cycle pi-usereq notification sound level",
     handler: async (ctx) => {
       const nextConfig = loadProjectConfig(ctx.cwd);
       nextConfig["notify-sound"] = cyclePiNotifySoundLevel(nextConfig["notify-sound"]);
@@ -2298,7 +2524,7 @@ function buildPiUsereqMenuChoices(
       id: "notifications",
       label: "Notifications",
       value: `notification:${formatPiNotifyStatus(config)} • sound:${config["notify-sound"]} • pushover:${formatPiNotifyPushoverStatus(config)}`,
-      description: "Manage command-notify, sound, and direct Pushover settings in one unified menu.",
+      description: "Manage command-notify, sound, and Pushover settings with dedicated event submenus.",
     },
     {
       id: "show-config",
@@ -2515,7 +2741,7 @@ function registerConfigCommands(
  * @brief Registers the complete pi-usereq extension.
  * @details Validates installation-owned bundled resources, registers prompt and
  * configuration commands plus agent tools, registers the configurable
- * successful-run sound shortcut when the runtime supports shortcuts, and
+ * notification-sound shortcut when the runtime supports shortcuts, and
  * installs shared wrappers for all supported pi lifecycle hooks so status
  * telemetry, context usage, prompt timing, cumulative runtime, prompt-specific
  * Pushover metadata, and pi-notify effects remain synchronized with runtime
