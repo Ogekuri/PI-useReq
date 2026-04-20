@@ -245,33 +245,33 @@ export function normalizePiNotifyPushoverPriority(value: unknown): PiNotifyPusho
 }
 
 /**
- * @brief Formats the global command-notify flag for status rendering.
- * @details Serializes only the persisted global command-notify enable state so the status bar reports `notify:on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
+ * @brief Formats the global command-notify flag for UI value rendering.
+ * @details Serializes only the persisted global command-notify enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
  * @param[in] config {Pick<UseReqConfig, "notify-enabled">} Effective command-notify configuration subset.
  * @return {string} `on` when command-notify is globally enabled; otherwise `off`.
- * @satisfies REQ-135
+ * @satisfies REQ-196
  */
 export function formatPiNotifyStatus(config: Pick<UseReqConfig, "notify-enabled">): string {
   return config["notify-enabled"] ? "on" : "off";
 }
 
 /**
- * @brief Formats the global terminal-beep flag for status rendering.
- * @details Serializes only the persisted global terminal-beep enable state so the status bar reports `beep:on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
+ * @brief Formats the global terminal-beep flag for UI value rendering.
+ * @details Serializes only the persisted global terminal-beep enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
  * @param[in] config {Pick<UseReqConfig, "notify-beep-enabled">} Effective terminal-beep configuration subset.
  * @return {string} `on` when terminal beep is globally enabled; otherwise `off`.
- * @satisfies REQ-136
+ * @satisfies REQ-129
  */
 export function formatPiNotifyBeepStatus(config: Pick<UseReqConfig, "notify-beep-enabled">): string {
   return config["notify-beep-enabled"] ? "on" : "off";
 }
 
 /**
- * @brief Formats the global Pushover flag for status rendering.
- * @details Serializes only the persisted global Pushover enable state so the status bar reports `pushover:on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
+ * @brief Formats the global Pushover flag for UI value rendering.
+ * @details Serializes only the persisted global Pushover enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
  * @param[in] config {Pick<UseReqConfig, "notify-pushover-enabled">} Effective Pushover configuration subset.
  * @return {string} `on` when Pushover is globally enabled; otherwise `off`.
- * @satisfies REQ-171
+ * @satisfies REQ-163
  */
 export function formatPiNotifyPushoverStatus(config: Pick<UseReqConfig, "notify-pushover-enabled">): string {
   return config["notify-pushover-enabled"] ? "on" : "off";

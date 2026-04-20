@@ -26,8 +26,19 @@ export interface PiUsereqSettingsMenuChoice {
 export interface PiUsereqSettingsMenuBridge {
   title: string;
   choices: PiUsereqSettingsMenuChoice[];
+  selectedChoiceId?: string;
   selectByLabel: (label: string) => boolean;
   cancel: () => void;
+}
+
+/**
+ * @brief Describes optional behavior overrides for one settings-menu render.
+ * @details Carries the caller-selected initial focus row so menu re-renders can
+ * preserve selection after an in-place toggle or value edit. The interface is
+ * compile-time only and introduces no runtime cost.
+ */
+export interface PiUsereqSettingsMenuOptions {
+  initialSelectedId?: string;
 }
 
 /**
@@ -177,13 +188,15 @@ function buildSettingItems(
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] title {string} Menu title displayed in the heading and offline bridge.
  * @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
+ * @param[in] options {PiUsereqSettingsMenuOptions | undefined} Optional initial-focus override.
  * @return {Promise<string | undefined>} Selected choice identifier or `undefined` when cancelled.
- * @satisfies REQ-151, REQ-152, REQ-153, REQ-154, REQ-156
+ * @satisfies REQ-151, REQ-152, REQ-153, REQ-154, REQ-156, REQ-192
  */
 export async function showPiUsereqSettingsMenu(
   ctx: ExtensionCommandContext,
   title: string,
   choices: PiUsereqSettingsMenuChoice[],
+  options: PiUsereqSettingsMenuOptions = {},
 ): Promise<string | undefined> {
   return ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
     const container = new Container();
@@ -199,6 +212,12 @@ export async function showPiUsereqSettingsMenu(
       () => undefined,
       () => done(undefined),
     );
+    const initialSelectedIndex = options.initialSelectedId === undefined
+      ? 0
+      : choices.findIndex((choice) => choice.id === options.initialSelectedId);
+    if (initialSelectedIndex >= 0) {
+      (settingsList as SettingsList & { selectedIndex: number }).selectedIndex = initialSelectedIndex;
+    }
     container.addChild(titleText);
     container.addChild(new Text("", 0, 0));
     container.addChild(settingsList);
@@ -218,6 +237,7 @@ export async function showPiUsereqSettingsMenu(
       __piUsereqSettingsMenu: {
         title,
         choices,
+        selectedChoiceId: initialSelectedIndex >= 0 ? choices[initialSelectedIndex]?.id : undefined,
         selectByLabel(label: string): boolean {
           const choice = choices.find(
             (candidate) => candidate.label === label || candidate.id === label,

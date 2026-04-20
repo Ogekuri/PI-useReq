@@ -110,7 +110,7 @@ export function getProjectConfigPath(projectBase: string): string {
  * @details Populates canonical docs/test/source directories, the default startup tool set, default command-notify, terminal-beep, sound, and Pushover fields, and excludes runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
- * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185
+ * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185, REQ-196
  */
 export function getDefaultConfig(_projectBase: string): UseReqConfig {
   return {
@@ -119,10 +119,10 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     "src-dir": [...DEFAULT_SRC_DIRS],
     "static-check": {},
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
-    "notify-enabled": true,
+    "notify-enabled": false,
     "notify-on-end": true,
-    "notify-on-esc": true,
-    "notify-on-error": true,
+    "notify-on-esc": false,
+    "notify-on-error": false,
     "notify-beep-enabled": true,
     "notify-beep-on-end": true,
     "notify-beep-on-esc": true,
@@ -133,7 +133,7 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     "notify-sound-on-error": false,
     "notify-sound-toggle-shortcut": DEFAULT_PI_NOTIFY_SOUND_TOGGLE_SHORTCUT,
     "notify-pushover-enabled": false,
-    "notify-pushover-on-end": false,
+    "notify-pushover-on-end": true,
     "notify-pushover-on-esc": false,
     "notify-pushover-on-error": false,
     "notify-pushover-user-key": "",
@@ -154,7 +154,7 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
- * @satisfies CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185
+ * @satisfies CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185, REQ-196
  */
 export function loadConfig(projectBase: string): UseReqConfig {
   const configPath = getProjectConfigPath(projectBase);
@@ -182,10 +182,10 @@ export function loadConfig(projectBase: string): UseReqConfig {
     ? (data["static-check"] as Record<string, StaticCheckEntry[]>)
     : {};
   const enabledTools = normalizeEnabledPiUsereqTools(data["enabled-tools"]);
-  const notifyEnabled = data["notify-enabled"] !== false;
+  const notifyEnabled = data["notify-enabled"] === true;
   const notifyOnEnd = data["notify-on-end"] !== false;
-  const notifyOnEsc = data["notify-on-esc"] !== false;
-  const notifyOnError = data["notify-on-error"] !== false;
+  const notifyOnEsc = data["notify-on-esc"] === true;
+  const notifyOnError = data["notify-on-error"] === true;
   const notifyBeepEnabled = data["notify-beep-enabled"] !== false;
   const notifyBeepOnEnd = data["notify-beep-on-end"] !== false;
   const notifyBeepOnEsc = data["notify-beep-on-esc"] !== false;
@@ -196,7 +196,7 @@ export function loadConfig(projectBase: string): UseReqConfig {
   const notifySoundOnError = data["notify-sound-on-error"] === true;
   const notifySoundToggleShortcut = normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]);
   const pushoverEnabled = data["notify-pushover-enabled"] === true;
-  const pushoverOnEnd = data["notify-pushover-on-end"] === true;
+  const pushoverOnEnd = data["notify-pushover-on-end"] !== false;
   const pushoverOnEsc = data["notify-pushover-on-esc"] === true;
   const pushoverOnError = data["notify-pushover-on-error"] === true;
   const pushoverUserKey = normalizePiNotifyPushoverCredential(data["notify-pushover-user-key"]);

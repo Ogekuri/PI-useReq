@@ -294,42 +294,43 @@ function formatFakeThemeBackgroundFromForeground(color: string, text: string): s
 }
 
 /**
- * @brief Builds the expected fake context-bar payload for assertions.
- * @details Resolves the empty-state `◀ CLEAR ▶ ` overlay for unavailable or
- * non-positive percent, resolves the centered ` ◀ FULL ▶ ` overlay for percent
- * above 90, and otherwise reconstructs the 10-cell bar. Runtime is O(1). No
- * external state is mutated.
- * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-bar facts.
- * @return {string} Encoded context-bar string.
+ * @brief Builds the expected fake context-gauge payload for assertions.
+ * @details Resolves the documented icon thresholds for `0-100%` and emits the
+ * blinking red overflow icon for percent values above `100`. Runtime is O(1).
+ * No external state is mutated.
+ * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-gauge facts.
+ * @return {string} Encoded context-gauge string.
  */
 function buildExpectedFakeContextBar(options: {
   filledCells: number;
   percent?: number | null;
 }): string {
-  if (options.percent === undefined || options.percent === null || options.percent <= 0) {
-    return formatFakeThemeBackgroundFromForeground(
-      "accent",
-      formatFakeThemeForeground("warning", "◀ CLEAR ▶ "),
-    );
+  const percent = options.percent;
+  if (percent === undefined || percent === null || percent <= 0) {
+    return formatFakeThemeForeground("warning", "▕_▏");
   }
-  if (options.percent > 90) {
-    return formatFakeThemeBackgroundFromForeground(
-      "warning",
-      formatFakeThemeForeground("error", " ◀ FULL ▶ "),
-    );
+  if (percent > 100) {
+    return formatFakeThemeForeground("error", "\u001b[5m▕█▏\u001b[25m");
   }
-  return Array.from({ length: 10 }, (_value, index) =>
-    formatFakeThemeBackgroundFromForeground(
-      "accent",
-      formatFakeThemeForeground(index < options.filledCells ? "warning" : "dim", "▓"),
-    ),
-  ).join("");
+  if (percent <= 25) {
+    return formatFakeThemeForeground("warning", "▕▂▏");
+  }
+  if (percent <= 50) {
+    return formatFakeThemeForeground("warning", "▕▄▏");
+  }
+  if (percent <= 90) {
+    return formatFakeThemeForeground("warning", "▕▆▏");
+  }
+  return formatFakeThemeForeground("warning", "▕█▏");
 }
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, separators, context bar, consolidated elapsed field, and global notify, beep, sound, and Pushover status fields emitted by the extension using deterministic fake theme markers. Runtime is O(1). No external state is mutated.
- * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; notify?: string; beep?: string; sound?: string; pushover?: string }} Expected status facts.
+ * @details Reconstructs the field order, separators, icon-based context gauge,
+ * consolidated elapsed field, and sound field emitted by the extension using
+ * deterministic fake theme markers. Runtime is O(1). No external state is
+ * mutated.
+ * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -340,10 +341,7 @@ function buildExpectedFakeStatusText(options: {
   contextFilledCells: number;
   contextPercent?: number | null;
   et: string;
-  notify?: string;
-  beep?: string;
   sound?: string;
-  pushover?: string;
 }): string {
   const buildField = (fieldName: string, value: string): string =>
     `${formatFakeThemeForeground("accent", `${fieldName}:`)}${formatFakeThemeForeground("warning", value)}`;
@@ -355,10 +353,7 @@ function buildExpectedFakeStatusText(options: {
     buildField("base", options.basePath),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
     buildField("elapsed", options.et),
-    buildField("notify", options.notify ?? "on"),
-    buildField("beep", options.beep ?? "on"),
     buildField("sound", options.sound ?? "none"),
-    buildField("pushover", options.pushover ?? "off"),
   ].join(formatFakeThemeForeground("dim", " • "));
 }
 
@@ -415,7 +410,7 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
     editorText: "",
     statuses: new Map<string, string>(),
     notifications: [] as Array<{ message: string; level: string }>,
-    selectCalls: [] as Array<{ title: string; items: string[] }>,
+    selectCalls: [] as Array<{ title: string; items: string[]; selectedChoiceId?: string }>,
     customRenderLines: [] as string[][],
     waitForIdleCalls: 0,
     newSessions: [] as Array<{ messages: string[] }>,
@@ -486,6 +481,7 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
           __piUsereqSettingsMenu?: {
             title: string;
             choices: Array<{ label: string }>;
+            selectedChoiceId?: string;
             selectByLabel: (label: string) => boolean;
             cancel: () => void;
           };
@@ -496,7 +492,11 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
           state.customRenderLines.push(component.render(120));
         }
         const response = selects.shift();
-        state.selectCalls.push({ title: bridge.title, items: bridge.choices.map((choice) => choice.label) });
+        state.selectCalls.push({
+          title: bridge.title,
+          items: bridge.choices.map((choice) => choice.label),
+          selectedChoiceId: bridge.selectedChoiceId,
+        });
         if (response === undefined) {
           bridge.cancel();
         } else {
@@ -1365,34 +1365,34 @@ test("configuration menus expose show-config ordering and omit overview or notif
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
-  const ctx = createFakeCtx(cwd, { selects: ["show-config", "notifications", "Back", "Save and close"] });
+  const ctx = createFakeCtx(cwd, { selects: ["show-config", "notifications", "Save and close", "Save and close"] });
 
   await command!.handler("", ctx);
 
   const renderedMenu = (ctx.__state.customRenderLines[0] ?? []).join("\n");
   assert.deepEqual(ctx.__state.selectCalls[0]?.items ?? [], [
-    "docs-dir",
-    "tests-dir",
-    "src-dir",
-    "static-check",
-    "startup tools",
-    "notifications",
-    "show-config",
+    "Document directory",
+    "Source-code directories",
+    "Unit tests directory",
+    "Static code checkers",
+    "Enable tools",
+    "Notifications",
+    "Show configuration",
     "Reset defaults",
     "Save and close",
   ]);
   assert.ok(renderedMenu.includes(formatRuntimePathForDisplay(getProjectConfigPath(cwd))));
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "Enable notification",
-    "Toggle notify on success",
-    "Toggle notify on escape",
-    "Toggle notify on error",
+    "Toggle notification on success",
+    "Toggle notification on escape",
+    "Toggle notification on error",
     "Notify command",
     "Enable terminal beep",
-    "Toggle beep on success",
-    "Toggle beep on escape",
-    "Toggle beep on error",
-    "Selected sound command",
+    "Toggle terminal beep on success",
+    "Toggle terminal beep on escape",
+    "Toggle terminal beep on error",
+    "Enable sound",
     "Toggle sound on success",
     "Toggle sound on escape",
     "Toggle sound on error",
@@ -1400,9 +1400,102 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "Sound command (low vol.)",
     "Sound command (mid vol.)",
     "Sound command (high vol.)",
-    "Pushover notifications",
-    "Back",
+    "Enable pushover",
+    "Toggle pushover on success",
+    "Toggle pushover on escape",
+    "Toggle pushover on error",
+    "Pushover priority",
+    "Pushover title",
+    "Pushover text",
+    "Pushover User Key/Delivery Group Key",
+    "Pushover Token/API Token Key",
+    "Reset defaults",
+    "Save and close",
   ]);
+});
+
+test("notifications menu preserves focus on toggled and edited rows", async () => {
+  const cwd = createTempDir("pi-usereq-menu-focus-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "notifications",
+      "Toggle notification on error",
+      "Notify command",
+      "Save and close",
+      "Save and close",
+    ],
+    inputs: ["echo notify"],
+  });
+
+  await command!.handler("", ctx);
+
+  const notificationCalls = ctx.__state.selectCalls.filter((call) => call.title === "Notifications");
+  assert.equal(notificationCalls[0]?.selectedChoiceId, "notify-enabled");
+  assert.equal(notificationCalls[1]?.selectedChoiceId, "notify-on-error");
+  assert.equal(notificationCalls[2]?.selectedChoiceId, "notify-command");
+});
+
+test("notifications reset defaults preserves non-notification settings", async () => {
+  const cwd = createTempDir("pi-usereq-menu-reset-notifications-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "docs-dir",
+      "notifications",
+      "Enable notification",
+      "Enable sound",
+      "high",
+      "Reset defaults",
+      "Save and close",
+      "Save and close",
+    ],
+    inputs: ["docs/custom"],
+  });
+
+  await command!.handler("", ctx);
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(config["docs-dir"], "docs/custom");
+  assert.equal(config["notify-enabled"], false);
+  assert.equal(config["notify-sound"], "none");
+  assert.equal(config["notify-pushover-enabled"], false);
+});
+
+test("top-level reset defaults restores all configuration values", async () => {
+  const cwd = createTempDir("pi-usereq-menu-reset-all-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "docs-dir",
+      "notifications",
+      "Enable notification",
+      "Save and close",
+      "Reset defaults",
+      "Save and close",
+    ],
+    inputs: ["docs/custom"],
+  });
+
+  await command!.handler("", ctx);
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(config["docs-dir"], DEFAULT_DOCS_DIR);
+  assert.deepEqual(config["src-dir"], ["src"]);
+  assert.equal(config["notify-enabled"], false);
+  assert.equal(config["notify-sound"], "none");
 });
 
 test("configuration menus reuse CLI settings theme semantics", async () => {
@@ -1486,12 +1579,12 @@ test("session_start applies configured pi-usereq startup tools", async () => {
       testsDir: "tests",
       srcDir: ["src", "foobar"],
       contextFilledCells: 0,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );
 });
 
-test("session_start renders the CLEAR overlay when context usage is empty", async () => {
+test("session_start renders the 0-percent context icon when context usage is empty", async () => {
   const cwd = createTempDir("pi-usereq-context-empty-status-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -1511,7 +1604,7 @@ test("session_start renders the CLEAR overlay when context usage is empty", asyn
       srcDir: ["src"],
       contextFilledCells: 0,
       contextPercent: 0,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );
 });
@@ -1578,12 +1671,12 @@ test("context hook refreshes context usage and rounds progress cells upward", as
       srcDir: ["src"],
       contextFilledCells: 2,
       contextPercent: 19.1,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );
 });
 
-test("context hook renders the FULL! overlay when usage exceeds ninety percent", async () => {
+test("context hook renders the full context icon when usage exceeds ninety percent", async () => {
   const cwd = createTempDir("pi-usereq-context-full-status-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const contextUsage = { tokens: 910, contextWindow: 1000, percent: 91 };
@@ -1605,19 +1698,19 @@ test("context hook renders the FULL! overlay when usage exceeds ninety percent",
       srcDir: ["src"],
       contextFilledCells: 10,
       contextPercent: 91,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );
 });
 
-test("status FULL overlay uses only CLI-supported theme tokens", async () => {
+test("status overflow context icon uses only CLI-supported theme tokens", async () => {
   const cwd = createTempDir("pi-usereq-context-theme-contract-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const usedColors = new Set<string>();
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(cwd, { selects: [] }, {
-    getContextUsage: () => ({ tokens: 910, contextWindow: 1000, percent: 91 }),
+    getContextUsage: () => ({ tokens: 1250, contextWindow: 1000, percent: 125 }),
     theme: {
       fg(color: string, text: string) {
         assert.ok(["accent", "warning", "dim", "error"].includes(color));
@@ -1646,8 +1739,8 @@ test("status FULL overlay uses only CLI-supported theme tokens", async () => {
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 10,
-      contextPercent: 91,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+      contextPercent: 125,
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );
 });
@@ -1686,7 +1779,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: " ⏱︎ 0:00 ⚑ --:-- ⌛︎ --:--",
+        et: "⏱︎ 0:00 ⚑ --:-- ⌛︎--:--",
       }),
     );
 
@@ -1700,7 +1793,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: " ⏱︎ 1:01 ⚑ --:-- ⌛︎ --:--",
+        et: "⏱︎ 1:01 ⚑ --:-- ⌛︎--:--",
       }),
     );
 
@@ -1721,7 +1814,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: " ⏱︎ --:-- ⚑ 1:01 ⌛︎ 1:01",
+        et: "⏱︎ --:-- ⚑ 1:01 ⌛︎1:01",
       }),
     );
 
@@ -1745,7 +1838,7 @@ test("agent timing status updates et while preserving accumulated completed runt
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: " ⏱︎ --:-- ⚑ 1:01 ⌛︎ 1:01",
+        et: "⏱︎ --:-- ⚑ 1:01 ⌛︎1:01",
       }),
     );
     assert.ok(clearedHandles.length >= 2);
@@ -1776,10 +1869,10 @@ test("session_start enables default custom tools and default embedded tools only
 test("default configuration applies the documented notify, beep, sound, and pushover defaults", () => {
   const config = getDefaultConfig(createTempDir("pi-usereq-default-notify-"));
 
-  assert.equal(config["notify-enabled"], true);
+  assert.equal(config["notify-enabled"], false);
   assert.equal(config["notify-on-end"], true);
-  assert.equal(config["notify-on-esc"], true);
-  assert.equal(config["notify-on-error"], true);
+  assert.equal(config["notify-on-esc"], false);
+  assert.equal(config["notify-on-error"], false);
   assert.equal(config["notify-beep-enabled"], true);
   assert.equal(config["notify-beep-on-end"], true);
   assert.equal(config["notify-beep-on-esc"], true);
@@ -1789,7 +1882,7 @@ test("default configuration applies the documented notify, beep, sound, and push
   assert.equal(config["notify-sound-on-esc"], false);
   assert.equal(config["notify-sound-on-error"], false);
   assert.equal(config["notify-pushover-enabled"], false);
-  assert.equal(config["notify-pushover-on-end"], false);
+  assert.equal(config["notify-pushover-on-end"], true);
   assert.equal(config["notify-pushover-on-esc"], false);
   assert.equal(config["notify-pushover-on-error"], false);
 });
@@ -1805,7 +1898,7 @@ test("configuration menu can enable embedded builtin tools", async () => {
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["startup tools", "Toggle tool", "grep", "Back", "Save and close"],
+      selects: ["Enable tools", "Toggle tool", "grep", "Save and close", "Save and close"],
     }),
   );
 
@@ -1825,7 +1918,7 @@ test("configuration menu can disable configurable active tools", async () => {
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["startup tools", "Disable all configurable tools", "Back", "Save and close"],
+      selects: ["Enable tools", "Disable all configurable tools", "Save and close", "Save and close"],
     }),
   );
 
@@ -1845,9 +1938,9 @@ test("configuration menu can persist notify, beep, and sound settings", async ()
     selects: [
       "notifications",
       "Enable notification",
-      "Toggle notify on error",
+      "Toggle notification on error",
       "Enable terminal beep",
-      "Selected sound command",
+      "Enable sound",
       "high",
       "Toggle sound on escape",
       "Sound toggle hotkey bind",
@@ -1855,7 +1948,7 @@ test("configuration menu can persist notify, beep, and sound settings", async ()
       "Sound command (low vol.)",
       "Sound command (mid vol.)",
       "Sound command (high vol.)",
-      "Back",
+      "Save and close",
       "Save and close",
     ],
     inputs: [
@@ -1870,10 +1963,10 @@ test("configuration menu can persist notify, beep, and sound settings", async ()
   await command!.handler("", ctx);
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["notify-enabled"], false);
+  assert.equal(config["notify-enabled"], true);
   assert.equal(config["notify-on-end"], true);
-  assert.equal(config["notify-on-esc"], true);
-  assert.equal(config["notify-on-error"], false);
+  assert.equal(config["notify-on-esc"], false);
+  assert.equal(config["notify-on-error"], true);
   assert.equal(config["notify-beep-enabled"], false);
   assert.equal(config["notify-beep-on-end"], true);
   assert.equal(config["notify-beep-on-esc"], true);
@@ -1895,9 +1988,7 @@ test("configuration menu can persist notify, beep, and sound settings", async ()
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
-      notify: "off",
-      beep: "off",
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
       sound: "high",
     }),
   );
@@ -1913,17 +2004,14 @@ test("configuration menu can persist pushover settings", async () => {
   const ctx = createFakeCtx(cwd, {
     selects: [
       "notifications",
-      "Pushover notifications",
       "Enable pushover",
-      "Toggle pushover on success",
       "Pushover priority",
       "High",
       "Pushover title",
       "Pushover text",
-      "User Key/Delivery Group Key",
-      "Token/API Token Key",
-      "Back",
-      "Back",
+      "Pushover User Key/Delivery Group Key",
+      "Pushover Token/API Token Key",
+      "Save and close",
       "Save and close",
     ],
     inputs: [
@@ -1954,8 +2042,8 @@ test("configuration menu can persist pushover settings", async () => {
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
-      pushover: "on",
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      sound: "none",
     }),
   );
 });
@@ -2138,12 +2226,9 @@ test("pushover global enable controls status and suppresses delivery when disabl
   const ctx = createFakeCtx(cwd, {
     selects: [
       "notifications",
-      "Pushover notifications",
-      "Toggle pushover on success",
-      "User Key/Delivery Group Key",
-      "Token/API Token Key",
-      "Back",
-      "Back",
+      "Pushover User Key/Delivery Group Key",
+      "Pushover Token/API Token Key",
+      "Save and close",
       "Save and close",
     ],
     inputs: [
@@ -2165,8 +2250,8 @@ test("pushover global enable controls status and suppresses delivery when disabl
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
-      pushover: "off",
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      sound: "none",
     }),
   );
 
@@ -2432,7 +2517,7 @@ test("sound toggle shortcut cycles persisted pi-notify sound levels", async () =
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: " ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--",
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
         sound: expectedSound,
       }),
     );
@@ -2482,7 +2567,7 @@ test("configuration menu can add static-check entries from raw specs", async () 
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["static-check", "Add entry from LANG=MODULE[,CMD[,PARAM...]]", "Back", "Save and close"],
+      selects: ["static-check", "Add entry from LANG=MODULE[,CMD[,PARAM...]]", "Save and close", "Save and close"],
       inputs: ["Python=Command,true"],
     }),
   );
@@ -2526,7 +2611,7 @@ test("configuration menu can add guided static-check entries for explicit suppor
         "static-check",
         "Add entry for supported language",
         "Python",
-        "Back",
+        "Save and close",
         "Save and close",
       ],
       inputs: ["true", ""],

@@ -248,11 +248,11 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.equal(report.effectiveProcessCwd, projectBase);
     const normalizedBasePath = projectBase.split(path.sep).join("/");
     assert.match(status, new RegExp(`<accent>base:</accent><warning>${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</warning>`));
-    assert.match(status, /<accent>context:<\/accent><bg-from-fg-accent><warning>◀ CLEAR ▶ <\/warning><\/bg-from-fg-accent>/);
-    assert.match(status, /<accent>elapsed:<\/accent><warning> ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--<\/warning>/);
-    assert.match(status, /<accent>beep:<\/accent><warning>end,esc,err<\/warning>/);
+    assert.match(status, /<accent>context:<\/accent><warning>▕_▏<\/warning>/);
+    assert.match(status, /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
-    assert.match(status, /<accent>pushover:<\/accent><warning>off<\/warning>/);
+    assert.doesNotMatch(status, /<accent>beep:<\/accent>/);
+    assert.doesNotMatch(status, /<accent>pushover:<\/accent>/);
     assert.doesNotMatch(status, /<accent>docs:<\/accent>/);
     assert.doesNotMatch(status, /<accent>src:<\/accent>/);
     assert.doesNotMatch(status, /<accent>tests:<\/accent>/);
@@ -287,7 +287,7 @@ test("replayCommand captures interactive UI side effects", async () => {
       projectBase,
       undefined,
       {
-        selects: ["startup tools", "Disable all configurable tools", "Back", "Save and close"],
+        selects: ["Enable tools", "Disable all configurable tools", "Save and close", "Save and close"],
         inputs: [],
       },
     );
@@ -295,7 +295,7 @@ test("replayCommand captures interactive UI side effects", async () => {
     assert.deepEqual(report.activeTools, []);
     assert.ok(report.ui.notifications.some((entry) => entry.message === "Disabled all configurable active tools"));
     assert.doesNotMatch(report.ui.statuses["pi-usereq"] ?? "", /<accent>tools:<\/accent>/);
-    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>elapsed:<\/accent><warning> ⏱︎ --:-- ⚑ --:-- ⌛︎ --:--<\/warning>/);
+    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

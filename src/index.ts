@@ -52,6 +52,7 @@ import {
   type FindToolScope,
 } from "./core/find-payload.js";
 import {
+  DEFAULT_SRC_DIRS,
   getDefaultConfig,
   getProjectConfigPath,
   loadConfig,
@@ -712,6 +713,45 @@ function togglePiNotifyFlag(config: UseReqConfig, key: PiNotifyBooleanConfigKey)
 }
 
 /**
+ * @brief Restores notification-related settings to their documented defaults.
+ * @details Copies the command-notify, terminal-beep, sound, and Pushover
+ * configuration subtree from a fresh default config into the supplied mutable
+ * project config. Runtime is O(1). Side effect: mutates `config`.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {void} No return value.
+ * @satisfies REQ-174, REQ-177, REQ-178, REQ-184, REQ-195, REQ-196
+ */
+function resetPiNotifyConfigToDefaults(config: UseReqConfig): void {
+  const defaults = getDefaultConfig("");
+  config["notify-enabled"] = defaults["notify-enabled"];
+  config["notify-on-end"] = defaults["notify-on-end"];
+  config["notify-on-esc"] = defaults["notify-on-esc"];
+  config["notify-on-error"] = defaults["notify-on-error"];
+  config["notify-beep-enabled"] = defaults["notify-beep-enabled"];
+  config["notify-beep-on-end"] = defaults["notify-beep-on-end"];
+  config["notify-beep-on-esc"] = defaults["notify-beep-on-esc"];
+  config["notify-beep-on-error"] = defaults["notify-beep-on-error"];
+  config["notify-sound"] = defaults["notify-sound"];
+  config["notify-sound-on-end"] = defaults["notify-sound-on-end"];
+  config["notify-sound-on-esc"] = defaults["notify-sound-on-esc"];
+  config["notify-sound-on-error"] = defaults["notify-sound-on-error"];
+  config["notify-sound-toggle-shortcut"] = defaults["notify-sound-toggle-shortcut"];
+  config["notify-pushover-enabled"] = defaults["notify-pushover-enabled"];
+  config["notify-pushover-on-end"] = defaults["notify-pushover-on-end"];
+  config["notify-pushover-on-esc"] = defaults["notify-pushover-on-esc"];
+  config["notify-pushover-on-error"] = defaults["notify-pushover-on-error"];
+  config["notify-pushover-user-key"] = defaults["notify-pushover-user-key"];
+  config["notify-pushover-api-token"] = defaults["notify-pushover-api-token"];
+  config["notify-pushover-priority"] = defaults["notify-pushover-priority"];
+  config["notify-pushover-title"] = defaults["notify-pushover-title"];
+  config["notify-pushover-text"] = defaults["notify-pushover-text"];
+  config.PI_NOTIFY_CMD = defaults.PI_NOTIFY_CMD;
+  config.PI_NOTIFY_SOUND_LOW_CMD = defaults.PI_NOTIFY_SOUND_LOW_CMD;
+  config.PI_NOTIFY_SOUND_MID_CMD = defaults.PI_NOTIFY_SOUND_MID_CMD;
+  config.PI_NOTIFY_SOUND_HIGH_CMD = defaults.PI_NOTIFY_SOUND_HIGH_CMD;
+}
+
+/**
  * @brief Formats one persisted Pushover priority for menu display.
  * @details Maps the canonical `0|1` priority domain to deterministic `Normal|High` labels reused by the Pushover configuration UI. Runtime is O(1). No external state is mutated.
  * @param[in] priority {PiNotifyPushoverPriority} Persisted Pushover priority.
@@ -723,13 +763,15 @@ function formatPiNotifyPushoverPriority(priority: PiNotifyPushoverPriority): str
 }
 
 /**
- * @brief Builds the shared settings-menu choices for Pushover configuration.
- * @details Serializes the global enable flag, per-event toggles, priority, title, text, and credential rows into right-valued menu items consumed by the shared settings-menu renderer. Runtime is O(1). No external state is mutated.
+ * @brief Builds the direct Pushover rows rendered inside `Notifications`.
+ * @details Serializes the global enable flag, per-event toggles, priority,
+ * title, text, and credential rows into right-valued menu items appended after
+ * the sound-command rows. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {PiUsereqSettingsMenuChoice[]} Ordered Pushover-menu choice vector.
- * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered direct Pushover rows.
+ * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-149
  */
-function buildPiNotifyPushoverMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
     {
       id: "notify-pushover-enabled",
@@ -775,21 +817,15 @@ function buildPiNotifyPushoverMenuChoices(config: UseReqConfig): PiUsereqSetting
     },
     {
       id: "notify-pushover-user-key",
-      label: "User Key/Delivery Group Key",
+      label: "Pushover User Key/Delivery Group Key",
       value: config["notify-pushover-user-key"] || "(empty)",
       description: "Edit the Pushover user key or delivery group key used for outbound requests.",
     },
     {
       id: "notify-pushover-api-token",
-      label: "Token/API Token Key",
+      label: "Pushover Token/API Token Key",
       value: config["notify-pushover-api-token"] || "(empty)",
       description: "Edit the Pushover application token used for outbound requests.",
-    },
-    {
-      id: "back",
-      label: "Back",
-      value: "",
-      description: "Return to the notifications menu.",
     },
   ];
 }
@@ -800,7 +836,7 @@ function buildPiNotifyPushoverMenuChoices(config: UseReqConfig): PiUsereqSetting
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] currentPriority {PiNotifyPushoverPriority} Persisted priority value.
  * @return {Promise<PiNotifyPushoverPriority | undefined>} Selected priority or `undefined` when cancelled.
- * @satisfies REQ-172
+ * @satisfies REQ-172, REQ-192
  */
 async function selectPiNotifyPushoverPriority(
   ctx: ExtensionCommandContext,
@@ -819,7 +855,7 @@ async function selectPiNotifyPushoverPriority(
       value: currentPriority === 1 ? "selected" : "",
       description: "Send outbound Pushover messages with high priority `1`.",
     },
-  ]);
+  ], { initialSelectedId: String(currentPriority) });
   if (!choice) {
     return undefined;
   }
@@ -827,102 +863,14 @@ async function selectPiNotifyPushoverPriority(
 }
 
 /**
- * @brief Runs the interactive Pushover-configuration menu.
- * @details Exposes the global enable flag, per-event toggles, priority selector, title and text templates, and credentials through the shared settings-menu renderer. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
- * @param[in] ctx {ExtensionCommandContext} Active command context.
- * @param[in,out] config {UseReqConfig} Mutable configuration object.
- * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185
- */
-async function configurePiNotifyPushoverMenu(
-  ctx: ExtensionCommandContext,
-  config: UseReqConfig,
-): Promise<void> {
-  while (true) {
-    const choice = await showPiUsereqSettingsMenu(
-      ctx,
-      "Pushover notifications",
-      buildPiNotifyPushoverMenuChoices(config),
-    );
-    if (!choice || choice === "back") {
-      return;
-    }
-    if (
-      choice === "notify-pushover-enabled"
-      || choice === "notify-pushover-on-end"
-      || choice === "notify-pushover-on-esc"
-      || choice === "notify-pushover-on-error"
-    ) {
-      const enabled = togglePiNotifyFlag(config, choice as PiNotifyBooleanConfigKey);
-      const labelMap: Record<string, string> = {
-        "notify-pushover-enabled": "Pushover",
-        "notify-pushover-on-end": "Pushover on success",
-        "notify-pushover-on-esc": "Pushover on escape",
-        "notify-pushover-on-error": "Pushover on error",
-      };
-      ctx.ui.notify(`${labelMap[choice]} ${enabled ? "enabled" : "disabled"}`, "info");
-      continue;
-    }
-    if (choice === "notify-pushover-priority") {
-      const nextPriority = await selectPiNotifyPushoverPriority(ctx, config["notify-pushover-priority"]);
-      if (nextPriority !== undefined) {
-        config["notify-pushover-priority"] = nextPriority;
-        ctx.ui.notify(`Pushover priority set to ${formatPiNotifyPushoverPriority(nextPriority)}`, "info");
-      }
-      continue;
-    }
-    if (choice === "notify-pushover-title") {
-      const value = await ctx.ui.input("Pushover title", config["notify-pushover-title"]);
-      if (value !== undefined) {
-        config["notify-pushover-title"] = normalizePiNotifyTemplateValue(
-          value,
-          DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
-        );
-        ctx.ui.notify("Updated Pushover title", "info");
-      }
-      continue;
-    }
-    if (choice === "notify-pushover-text") {
-      const value = await ctx.ui.input("Pushover text", config["notify-pushover-text"]);
-      if (value !== undefined) {
-        config["notify-pushover-text"] = normalizePiNotifyTemplateValue(
-          value,
-          DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
-        );
-        ctx.ui.notify("Updated Pushover text", "info");
-      }
-      continue;
-    }
-    if (choice === "notify-pushover-user-key") {
-      const value = await ctx.ui.input(
-        "User Key/Delivery Group Key",
-        config["notify-pushover-user-key"],
-      );
-      if (value !== undefined) {
-        config["notify-pushover-user-key"] = normalizePiNotifyPushoverCredential(value);
-        ctx.ui.notify("Updated Pushover user key", "info");
-      }
-      continue;
-    }
-    if (choice === "notify-pushover-api-token") {
-      const value = await ctx.ui.input(
-        "Token/API Token Key",
-        config["notify-pushover-api-token"],
-      );
-      if (value !== undefined) {
-        config["notify-pushover-api-token"] = normalizePiNotifyPushoverCredential(value);
-        ctx.ui.notify("Updated Pushover API token", "info");
-      }
-    }
-  }
-}
-
-/**
  * @brief Builds the shared settings-menu choices for notification configuration.
- * @details Serializes command-notify, terminal-beep, sound, and nested Pushover rows in the documented order so the shared settings-menu renderer can expose a uniform configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated.
+ * @details Serializes command-notify, terminal-beep, sound, and direct
+ * Pushover rows in the documented order so the shared settings-menu renderer
+ * can expose one unified configuration surface. Runtime is O(1) plus
+ * command-length formatting. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
- * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183, REQ-188, REQ-189, REQ-193
  */
 function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
@@ -934,19 +882,19 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
     },
     {
       id: "notify-on-end",
-      label: "Toggle notify on success",
+      label: "Toggle notification on success",
       value: config["notify-on-end"] ? "on" : "off",
       description: "Toggle command-notify delivery for successful prompt completion.",
     },
     {
       id: "notify-on-esc",
-      label: "Toggle notify on escape",
+      label: "Toggle notification on escape",
       value: config["notify-on-esc"] ? "on" : "off",
       description: "Toggle command-notify delivery for escape-triggered prompt abortion.",
     },
     {
       id: "notify-on-error",
-      label: "Toggle notify on error",
+      label: "Toggle notification on error",
       value: config["notify-on-error"] ? "on" : "off",
       description: "Toggle command-notify delivery for error-terminated prompt completion.",
     },
@@ -964,25 +912,25 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
     },
     {
       id: "notify-beep-on-end",
-      label: "Toggle beep on success",
+      label: "Toggle terminal beep on success",
       value: config["notify-beep-on-end"] ? "on" : "off",
       description: "Toggle terminal-beep delivery for successful prompt completion.",
     },
     {
       id: "notify-beep-on-esc",
-      label: "Toggle beep on escape",
+      label: "Toggle terminal beep on escape",
       value: config["notify-beep-on-esc"] ? "on" : "off",
       description: "Toggle terminal-beep delivery for escape-triggered prompt abortion.",
     },
     {
       id: "notify-beep-on-error",
-      label: "Toggle beep on error",
+      label: "Toggle terminal beep on error",
       value: config["notify-beep-on-error"] ? "on" : "off",
       description: "Toggle terminal-beep delivery for error-terminated prompt completion.",
     },
     {
       id: "selected-sound-command",
-      label: "Selected sound command",
+      label: "Enable sound",
       value: config["notify-sound"],
       description: "Select which sound command level is currently active.",
     },
@@ -1028,15 +976,16 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       value: config.PI_NOTIFY_SOUND_HIGH_CMD,
       description: "Edit the shell command used when the selected sound command is `high`.",
     },
+    ...buildPiNotifyPushoverRows(config),
     {
-      id: "pushover-notifications",
-      label: "Pushover notifications",
-      value: formatPiNotifyPushoverStatus(config),
-      description: "Open the Pushover submenu for global enablement, per-event toggles, templates, credentials, and priority.",
+      id: "reset-defaults",
+      label: "Reset defaults",
+      value: "",
+      description: "Restore the documented notification defaults for command-notify, terminal-beep, sound, and Pushover settings.",
     },
     {
-      id: "back",
-      label: "Back",
+      id: "save-and-close",
+      label: "Save and close",
       value: "",
       description: "Return to the parent configuration menu.",
     },
@@ -1044,18 +993,18 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
 }
 
 /**
- * @brief Opens the shared settings-menu selector for the selected sound command.
- * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the main configuration UI and returns the chosen sound level or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @brief Opens the shared settings-menu selector for the active sound level.
+ * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the notification menu and returns the chosen sound level or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] currentLevel {PiNotifySoundLevel} Currently selected sound level.
  * @return {Promise<PiNotifySoundLevel | undefined>} Selected sound level or `undefined` when cancelled.
- * @satisfies REQ-131, REQ-179
+ * @satisfies REQ-131, REQ-179, REQ-192
  */
 async function selectPiNotifySoundLevel(
   ctx: ExtensionCommandContext,
   currentLevel: PiNotifySoundLevel,
 ): Promise<PiNotifySoundLevel | undefined> {
-  const choice = await showPiUsereqSettingsMenu(ctx, "Selected sound command", [
+  const choice = await showPiUsereqSettingsMenu(ctx, "Enable sound", [
     {
       id: "none",
       label: "none",
@@ -1080,32 +1029,39 @@ async function selectPiNotifySoundLevel(
       value: currentLevel === "high" ? "selected" : "",
       description: "Use the high-volume sound command when sound delivery is enabled for the current event.",
     },
-  ]);
+  ], { initialSelectedId: currentLevel });
   return choice ? choice as PiNotifySoundLevel : undefined;
 }
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes command-notify, terminal-beep, sound, and nested Pushover controls through the shared settings-menu renderer while preserving the documented row ordering. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes command-notify, terminal-beep, sound, and direct Pushover
+ * controls through the shared settings-menu renderer while preserving row order,
+ * submenu reset semantics, and row-focus retention across menu re-renders.
+ * Runtime depends on user interaction count. Side effects include UI updates
+ * and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183
+ * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183, REQ-184, REQ-188, REQ-189, REQ-192, REQ-193, REQ-195, REQ-196
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
   config: UseReqConfig,
 ): Promise<boolean> {
   const originalShortcut = config["notify-sound-toggle-shortcut"];
+  let focusedChoiceId: string | undefined;
   while (true) {
     const choice = await showPiUsereqSettingsMenu(
       ctx,
-      "notifications",
+      "Notifications",
       buildPiNotifyMenuChoices(config),
+      { initialSelectedId: focusedChoiceId },
     );
-    if (!choice || choice === "back") {
+    if (!choice || choice === "save-and-close") {
       return config["notify-sound-toggle-shortcut"] !== originalShortcut;
     }
+    focusedChoiceId = choice;
     if (
       choice === "notify-enabled"
       || choice === "notify-on-end"
@@ -1118,20 +1074,28 @@ async function configurePiNotifyMenu(
       || choice === "notify-sound-on-end"
       || choice === "notify-sound-on-esc"
       || choice === "notify-sound-on-error"
+      || choice === "notify-pushover-enabled"
+      || choice === "notify-pushover-on-end"
+      || choice === "notify-pushover-on-esc"
+      || choice === "notify-pushover-on-error"
     ) {
       const enabled = togglePiNotifyFlag(config, choice as PiNotifyBooleanConfigKey);
       const labelMap: Record<string, string> = {
         "notify-enabled": "Notification",
-        "notify-on-end": "Notify on success",
-        "notify-on-esc": "Notify on escape",
-        "notify-on-error": "Notify on error",
+        "notify-on-end": "Notification on success",
+        "notify-on-esc": "Notification on escape",
+        "notify-on-error": "Notification on error",
         "notify-beep-enabled": "Terminal beep",
-        "notify-beep-on-end": "Beep on success",
-        "notify-beep-on-esc": "Beep on escape",
-        "notify-beep-on-error": "Beep on error",
+        "notify-beep-on-end": "Terminal beep on success",
+        "notify-beep-on-esc": "Terminal beep on escape",
+        "notify-beep-on-error": "Terminal beep on error",
         "notify-sound-on-end": "Sound on success",
         "notify-sound-on-esc": "Sound on escape",
         "notify-sound-on-error": "Sound on error",
+        "notify-pushover-enabled": "Pushover",
+        "notify-pushover-on-end": "Pushover on success",
+        "notify-pushover-on-esc": "Pushover on escape",
+        "notify-pushover-on-error": "Pushover on error",
       };
       ctx.ui.notify(`${labelMap[choice]} ${enabled ? "enabled" : "disabled"}`, "info");
       continue;
@@ -1148,7 +1112,7 @@ async function configurePiNotifyMenu(
       const nextLevel = await selectPiNotifySoundLevel(ctx, config["notify-sound"]);
       if (nextLevel !== undefined) {
         config["notify-sound"] = nextLevel;
-        ctx.ui.notify(`Selected sound command set to ${nextLevel}`, "info");
+        ctx.ui.notify(`Enable sound set to ${nextLevel}`, "info");
       }
       continue;
     }
@@ -1193,8 +1157,61 @@ async function configurePiNotifyMenu(
       }
       continue;
     }
-    if (choice === "pushover-notifications") {
-      await configurePiNotifyPushoverMenu(ctx, config);
+    if (choice === "notify-pushover-priority") {
+      const nextPriority = await selectPiNotifyPushoverPriority(ctx, config["notify-pushover-priority"]);
+      if (nextPriority !== undefined) {
+        config["notify-pushover-priority"] = nextPriority;
+        ctx.ui.notify(`Pushover priority set to ${formatPiNotifyPushoverPriority(nextPriority)}`, "info");
+      }
+      continue;
+    }
+    if (choice === "notify-pushover-title") {
+      const value = await ctx.ui.input("Pushover title", config["notify-pushover-title"]);
+      if (value !== undefined) {
+        config["notify-pushover-title"] = normalizePiNotifyTemplateValue(
+          value,
+          DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
+        );
+        ctx.ui.notify("Updated Pushover title", "info");
+      }
+      continue;
+    }
+    if (choice === "notify-pushover-text") {
+      const value = await ctx.ui.input("Pushover text", config["notify-pushover-text"]);
+      if (value !== undefined) {
+        config["notify-pushover-text"] = normalizePiNotifyTemplateValue(
+          value,
+          DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+        );
+        ctx.ui.notify("Updated Pushover text", "info");
+      }
+      continue;
+    }
+    if (choice === "notify-pushover-user-key") {
+      const value = await ctx.ui.input(
+        "Pushover User Key/Delivery Group Key",
+        config["notify-pushover-user-key"],
+      );
+      if (value !== undefined) {
+        config["notify-pushover-user-key"] = normalizePiNotifyPushoverCredential(value);
+        ctx.ui.notify("Updated Pushover user key", "info");
+      }
+      continue;
+    }
+    if (choice === "notify-pushover-api-token") {
+      const value = await ctx.ui.input(
+        "Pushover Token/API Token Key",
+        config["notify-pushover-api-token"],
+      );
+      if (value !== undefined) {
+        config["notify-pushover-api-token"] = normalizePiNotifyPushoverCredential(value);
+        ctx.ui.notify("Updated Pushover API token", "info");
+      }
+      continue;
+    }
+    if (choice === "reset-defaults") {
+      resetPiNotifyConfigToDefaults(config);
+      ctx.ui.notify("Restored notification defaults", "info");
     }
   }
 }
@@ -1210,7 +1227,7 @@ async function configurePiNotifyMenu(
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-131, REQ-134, REQ-136
+ * @satisfies REQ-131, REQ-134, REQ-180
  */
 function registerPiNotifyShortcut(
   pi: ExtensionAPI,
@@ -1898,7 +1915,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
- * @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
  */
 function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const tools = getPiUsereqStartupTools(pi);
@@ -1928,14 +1945,14 @@ function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): 
       description: "Disable every configurable startup tool for future session starts.",
     },
     {
-      id: "reset-tool-defaults",
-      label: "Reset configurable-tool defaults",
+      id: "reset-defaults",
+      label: "Reset defaults",
       value: `${normalizeEnabledPiUsereqTools(undefined).length} defaults`,
       description: "Restore the documented default startup-tool selection.",
     },
     {
-      id: "back",
-      label: "Back",
+      id: "save-and-close",
+      label: "Save and close",
       value: "",
       description: "Return to the parent configuration menu.",
     },
@@ -1975,18 +1992,22 @@ function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig):
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-007, REQ-063, REQ-064, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-007, REQ-063, REQ-064, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
  */
 async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   applyConfiguredPiUsereqTools(pi, config);
+  let focusedChoiceId: string | undefined;
   while (true) {
     const tools = getPiUsereqStartupTools(pi);
     const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
-    const choice = await showPiUsereqSettingsMenu(ctx, "startup tools", buildPiUsereqToolsMenuChoices(pi, config));
+    const choice = await showPiUsereqSettingsMenu(ctx, "Enable tools", buildPiUsereqToolsMenuChoices(pi, config), {
+      initialSelectedId: focusedChoiceId,
+    });
 
-    if (!choice || choice === "back") {
+    if (!choice || choice === "save-and-close") {
       return;
     }
+    focusedChoiceId = choice;
 
     if (choice === "show-tool-status") {
       ctx.ui.setEditorText(renderPiUsereqToolsReference(pi, config));
@@ -2005,7 +2026,7 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
       continue;
     }
 
-    if (choice === "reset-tool-defaults") {
+    if (choice === "reset-defaults") {
       setConfiguredPiUsereqTools(pi, config, normalizeEnabledPiUsereqTools(undefined));
       ctx.ui.notify("Restored default configurable active tools", "info");
       continue;
@@ -2099,7 +2120,7 @@ function renderStaticCheckReference(config: UseReqConfig): string {
  * @details Serializes Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting user-facing module selection. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
- * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
  */
 function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const supportedLanguageCount = getSupportedStaticCheckLanguageSupport().length;
@@ -2130,8 +2151,14 @@ function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenu
       description: "Open the static-check reference report in the editor.",
     },
     {
-      id: "back",
-      label: "Back",
+      id: "reset-defaults",
+      label: "Reset defaults",
+      value: configuredLanguageCount > 0 ? `${configuredLanguageCount} configured` : "(none)",
+      description: "Remove every configured static-check entry and restore the default empty static-check configuration.",
+    },
+    {
+      id: "save-and-close",
+      label: "Save and close",
       value: "",
       description: "Return to the parent configuration menu.",
     },
@@ -2196,15 +2223,19 @@ function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUser
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-195
  */
 async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
+  let focusedChoiceId: string | undefined;
   while (true) {
-    const staticChoice = await showPiUsereqSettingsMenu(ctx, "static-check", buildStaticCheckMenuChoices(config));
+    const staticChoice = await showPiUsereqSettingsMenu(ctx, "Static code checkers", buildStaticCheckMenuChoices(config), {
+      initialSelectedId: focusedChoiceId,
+    });
 
-    if (!staticChoice || staticChoice === "back") {
+    if (!staticChoice || staticChoice === "save-and-close") {
       return;
     }
+    focusedChoiceId = staticChoice;
 
     if (staticChoice === "show-supported-languages") {
       ctx.ui.setEditorText(renderStaticCheckReference(config));
@@ -2256,12 +2287,17 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
     }
 
     if (staticChoice === "remove-language-entry") {
-      const configuredLanguage = await showPiUsereqSettingsMenu(ctx, "remove static-check language", buildConfiguredStaticCheckLanguageChoices(config));
+      const configuredLanguage = await showPiUsereqSettingsMenu(ctx, "Remove static code checker language", buildConfiguredStaticCheckLanguageChoices(config));
       if (!configuredLanguage || configuredLanguage === "back") {
         continue;
       }
       delete config["static-check"][configuredLanguage];
       ctx.ui.notify(`Removed static-check entries for ${configuredLanguage}`, "info");
+      continue;
+    }
+    if (staticChoice === "reset-defaults") {
+      config["static-check"] = {};
+      ctx.ui.notify("Restored default static code checker configuration", "info");
     }
   }
 }
@@ -2272,7 +2308,7 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191
  */
 function buildPiUsereqMenuChoices(
   cwd: string,
@@ -2281,43 +2317,43 @@ function buildPiUsereqMenuChoices(
   return [
     {
       id: "docs-dir",
-      label: "docs-dir",
+      label: "Document directory",
       value: config["docs-dir"],
       description: "Edit the repository-relative directory that stores REQUIREMENTS, WORKFLOW, and REFERENCES documents.",
     },
     {
-      id: "tests-dir",
-      label: "tests-dir",
-      value: config["tests-dir"],
-      description: "Edit the repository-relative directory used for project test assets and static-check selection.",
-    },
-    {
       id: "src-dir",
-      label: "src-dir",
+      label: "Source-code directories",
       value: config["src-dir"].join(", "),
       description: "Manage the repository-relative source directories scanned by project-scope tools.",
     },
     {
+      id: "tests-dir",
+      label: "Unit tests directory",
+      value: config["tests-dir"],
+      description: "Edit the repository-relative directory used for project test assets and static-check selection.",
+    },
+    {
       id: "static-check",
-      label: "static-check",
+      label: "Static code checkers",
       value: formatStaticCheckLanguagesSummary(config),
       description: "Manage configured static-check entries and inspect supported languages and modules.",
     },
     {
       id: "startup-tools",
-      label: "startup tools",
+      label: "Enable tools",
       value: `${getConfiguredEnabledPiUsereqTools(config).length} enabled`,
       description: "Manage which configurable tools become active during session_start.",
     },
     {
       id: "notifications",
-      label: "notifications",
-      value: `notify:${formatPiNotifyStatus(config)} • beep:${formatPiNotifyBeepStatus(config)} • sound:${config["notify-sound"]} • pushover:${formatPiNotifyPushoverStatus(config)}`,
-      description: "Manage command-notify, terminal-beep, sound, and nested Pushover settings in one unified menu.",
+      label: "Notifications",
+      value: `notification:${formatPiNotifyStatus(config)} • beep:${formatPiNotifyBeepStatus(config)} • sound:${config["notify-sound"]} • pushover:${formatPiNotifyPushoverStatus(config)}`,
+      description: "Manage command-notify, terminal-beep, sound, and direct Pushover settings in one unified menu.",
     },
     {
       id: "show-config",
-      label: "show-config",
+      label: "Show configuration",
       value: formatProjectConfigPathForMenu(cwd),
       valueTone: "dim",
       description: "Write the current project configuration JSON into the editor without saving additional changes.",
@@ -2342,25 +2378,31 @@ function buildPiUsereqMenuChoices(
  * @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
- * @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
  */
 function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
     {
       id: "add-src-dir-entry",
-      label: "Add src-dir entry",
+      label: "Add source-code directory",
       value: `${config["src-dir"].length} configured`,
       description: "Append one repository-relative source directory to the current configuration.",
     },
     {
       id: "remove-src-dir-entry",
-      label: "Remove src-dir entry",
+      label: "Remove source-code directory",
       value: config["src-dir"].join(", "),
       description: "Select one configured source directory to remove from the current configuration.",
     },
     {
-      id: "back",
-      label: "Back",
+      id: "reset-defaults",
+      label: "Reset defaults",
+      value: `${DEFAULT_SRC_DIRS.join(", ")}`,
+      description: "Restore the documented default source-directory configuration.",
+    },
+    {
+      id: "save-and-close",
+      label: "Save and close",
       value: "",
       description: "Return to the parent configuration menu.",
     },
@@ -2398,7 +2440,7 @@ function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuCh
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195
  */
 async function configurePiUsereq(
   pi: ExtensionAPI,
@@ -2414,11 +2456,13 @@ async function configurePiUsereq(
     renderPiUsereqStatus(statusController, ctx);
   };
 
+  let focusedChoiceId: string | undefined;
   while (true) {
     const choice = await showPiUsereqSettingsMenu(
       ctx,
       "pi-usereq",
       buildPiUsereqMenuChoices(ctx.cwd, config),
+      { initialSelectedId: focusedChoiceId },
     );
     if (!choice || choice === "save-and-close") {
       ensureSaved();
@@ -2428,37 +2472,47 @@ async function configurePiUsereq(
       }
       return;
     }
+    focusedChoiceId = choice;
     if (choice === "docs-dir") {
-      const value = await ctx.ui.input("docs-dir", config["docs-dir"]);
+      const value = await ctx.ui.input("Document directory", config["docs-dir"]);
       if (value?.trim()) config["docs-dir"] = value.trim();
       continue;
     }
     if (choice === "tests-dir") {
-      const value = await ctx.ui.input("tests-dir", config["tests-dir"]);
+      const value = await ctx.ui.input("Unit tests directory", config["tests-dir"]);
       if (value?.trim()) config["tests-dir"] = value.trim();
       continue;
     }
     if (choice === "src-dir") {
+      let srcFocusedChoiceId: string | undefined;
       while (true) {
-        const srcAction = await showPiUsereqSettingsMenu(ctx, "src-dir", buildSrcDirMenuChoices(config));
-        if (!srcAction || srcAction === "back") {
+        const srcAction = await showPiUsereqSettingsMenu(ctx, "Source-code directories", buildSrcDirMenuChoices(config), {
+          initialSelectedId: srcFocusedChoiceId,
+        });
+        if (!srcAction || srcAction === "save-and-close") {
           break;
         }
+        srcFocusedChoiceId = srcAction;
         if (srcAction === "add-src-dir-entry") {
-          const value = await ctx.ui.input("New src-dir entry", "src");
+          const value = await ctx.ui.input("New source-code directory", "src");
           if (value?.trim()) {
             config["src-dir"] = [...config["src-dir"], value.trim()];
           }
           continue;
         }
         if (srcAction === "remove-src-dir-entry") {
-          const toRemove = await showPiUsereqSettingsMenu(ctx, "remove src-dir entry", buildSrcDirRemovalChoices(config));
+          const toRemove = await showPiUsereqSettingsMenu(ctx, "Remove source-code directory", buildSrcDirRemovalChoices(config));
           if (toRemove && toRemove !== "back") {
             config["src-dir"] = config["src-dir"].filter((entry) => entry !== toRemove);
             if (config["src-dir"].length === 0) {
               config["src-dir"] = ["src"];
             }
           }
+          continue;
+        }
+        if (srcAction === "reset-defaults") {
+          config["src-dir"] = [...DEFAULT_SRC_DIRS];
+          ctx.ui.notify("Restored default source-code directories", "info");
         }
       }
       continue;
@@ -2478,6 +2532,7 @@ async function configurePiUsereq(
     if (choice === "reset-defaults") {
       config = getDefaultConfig(projectBase);
       applyConfiguredPiUsereqTools(pi, config);
+      ctx.ui.notify("Restored all default configuration values", "info");
       continue;
     }
     if (choice === "show-config") {
@@ -2521,7 +2576,7 @@ function registerConfigCommands(
  * timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-135, REQ-136, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-170, REQ-171, REQ-172
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-189, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();
