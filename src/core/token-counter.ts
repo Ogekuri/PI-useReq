@@ -6,9 +6,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getEncoding } from "js-tiktoken";
+import { createRequire } from "node:module";
 import { detectLanguage as detectSourceLanguage } from "./compress.js";
 import { parseDoxygenComment, type DoxygenFieldMap } from "./doxygen-parser.js";
+import { ReqError } from "./errors.js";
 
 /**
  * @brief Declares the tokenizer encoding used by token-count workflows.
@@ -196,6 +197,57 @@ export interface BuildTokenToolPayloadOptions {
   encodingName?: string;
 }
 
+type TokenCounterEncoding = {
+  encode(content: string): ArrayLike<number>;
+};
+
+type JsTiktokenModule = {
+  getEncoding(encodingName: string): TokenCounterEncoding;
+};
+
+const require = createRequire(import.meta.url);
+
+function defaultJsTiktokenModuleLoader(): JsTiktokenModule {
+  return require("js-tiktoken") as JsTiktokenModule;
+}
+
+let jsTiktokenModuleLoader: () => JsTiktokenModule = defaultJsTiktokenModuleLoader;
+
+/**
+ * @brief Overrides the `js-tiktoken` loader for tests.
+ * @details Enables deterministic dependency-failure tests without mutating repository dependencies on disk. Runtime is O(1). Side effects are limited to module-local test state.
+ * @param[in] loader {(() => JsTiktokenModule) | undefined} Replacement loader, or `undefined` to restore the default loader.
+ * @return {void} No return value.
+ */
+export function setJsTiktokenModuleLoaderForTests(loader?: () => JsTiktokenModule): void {
+  jsTiktokenModuleLoader = loader ?? defaultJsTiktokenModuleLoader;
+}
+
+/**
+ * @brief Loads the `js-tiktoken` module on demand.
+ * @details Defers dependency resolution until token counting is requested so extension registration can succeed even when the optional runtime dependency has not yet been installed. Runtime is O(1) plus module resolution cost. Side effects are limited to Node module loading.
+ * @return {JsTiktokenModule} Loaded tokenizer module.
+ * @throws {ReqError} Throws when `js-tiktoken` is unavailable.
+ */
+function loadJsTiktokenModule(): JsTiktokenModule {
+  try {
+    const module = jsTiktokenModuleLoader();
+    if (!module || typeof module.getEncoding !== "function") {
+      throw new ReqError("Error: token-count dependency 'js-tiktoken' is unavailable. Run `npm ci` in the PI-useReq repository.", 1);
+    }
+    return module;
+  } catch (error) {
+    if (error instanceof ReqError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Cannot find (module|package) 'js-tiktoken'|ERR_MODULE_NOT_FOUND/.test(message)) {
+      throw new ReqError("Error: token-count dependency 'js-tiktoken' is not installed. Run `npm ci` in the PI-useReq repository.", 1);
+    }
+    throw error;
+  }
+}
+
 /**
  * @brief Encapsulates one tokenizer instance for repeated token counting.
  * @details Caches a `js-tiktoken` encoding object so multiple documents can be counted without repeated encoding lookup. Counting cost is O(n) in content length. The class mutates only instance state during construction.
@@ -205,7 +257,7 @@ export class TokenCounter {
    * @brief Stores the tokenizer implementation used for subsequent counts.
    * @details The field holds the encoder returned by `getEncoding`. Access complexity is O(1). The value is initialized once per instance.
    */
-  private encoding;
+  private encoding: TokenCounterEncoding;
 
   /**
    * @brief Initializes a token counter for one encoding family.
@@ -214,7 +266,7 @@ export class TokenCounter {
    * @return {TokenCounter} New token counter instance.
    */
   constructor(encodingName = TOKEN_COUNTER_ENCODING) {
-    this.encoding = getEncoding(encodingName);
+    this.encoding = loadJsTiktokenModule().getEncoding(encodingName);
   }
 
   /**

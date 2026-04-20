@@ -12,6 +12,9 @@ import {
 } from "../src/core/config.js";
 import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
 import {
+  setJsTiktokenModuleLoaderForTests,
+} from "../src/core/token-counter.js";
+import {
   setPiNotifyHttpsRequestForTests,
   setPiNotifySpawnForTests,
 } from "../src/core/pi-notify.js";
@@ -751,6 +754,46 @@ test("files-tokens returns token-optimized structured source facts", async () =>
     assert.equal(payload.files[1]?.error_message, "not found");
     assert.match(payload.execution.stderr, new RegExp(`skipped: ${DEFAULT_DOCS_DIR.replace("/", "\\/")}/MISSING\\.md: not found`));
   } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("files-tokens defers js-tiktoken loading until execution and returns structured dependency failures", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const missingModuleError = new Error("Cannot find module 'js-tiktoken'");
+  setJsTiktokenModuleLoaderForTests(() => {
+    throw missingModuleError;
+  });
+  try {
+    const pi = createFakePi();
+    assert.doesNotThrow(() => piUsereqExtension(pi));
+    const result = await executeRegisteredTool(pi, "files-tokens", projectBase, {
+      files: [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`],
+    }) as {
+      details?: {
+        summary: {
+          counted_file_count: number;
+          skipped_file_count: number;
+          processable_file_count: number;
+        };
+        files: unknown[];
+        execution: {
+          code: number;
+          stderr: string;
+        };
+      };
+    };
+
+    const payload = result.details!;
+    assert.equal(payload.summary.processable_file_count, 0);
+    assert.equal(payload.summary.counted_file_count, 0);
+    assert.equal(payload.summary.skipped_file_count, 0);
+    assert.deepEqual(payload.files, []);
+    assert.equal(payload.execution.code, 1);
+    assert.match(payload.execution.stderr, /js-tiktoken/);
+    assert.match(payload.execution.stderr, /npm ci/);
+  } finally {
+    setJsTiktokenModuleLoaderForTests(undefined);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });

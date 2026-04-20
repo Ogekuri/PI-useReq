@@ -288,6 +288,43 @@ function buildTokenToolExecuteResult(
 }
 
 /**
+ * @brief Builds the fallback execute result returned when token counting fails before payload construction.
+ * @details Normalizes one thrown `ReqError` into the stable token-tool response shape so missing runtime dependencies or other pre-count failures do not abort extension tool execution. Runtime is O(1). No external state is mutated.
+ * @param[in] error {unknown} Thrown token-tool failure.
+ * @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Structured token-tool failure result.
+ */
+function buildFailedTokenToolExecuteResult(
+  error: unknown,
+): {
+  content: Array<{ type: "text"; text: string }>;
+  details: TokenToolPayload & { execution: { code: number; stderr: string } };
+} {
+  const result = normalizeToolFailure(error);
+  const details = {
+    summary: {
+      processable_file_count: 0,
+      counted_file_count: 0,
+      error_file_count: 0,
+      skipped_file_count: 0,
+      total_token_count: 0,
+      total_character_count: 0,
+      total_byte_count: 0,
+      total_line_count: 0,
+      average_token_count_per_counted_file: 0,
+      average_character_count_per_counted_file: 0,
+      average_byte_count_per_counted_file: 0,
+      average_line_count_per_counted_file: 0,
+    },
+    files: [],
+    execution: {
+      code: result.code,
+      stderr: result.stderr,
+    },
+  };
+  return buildStructuredToolExecuteResult(details);
+}
+
+/**
  * @brief Builds the agent-oriented execute result returned by references tools.
  * @details Mirrors the structured references payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
  * @param[in] payload {ReferenceToolPayload} Structured references payload.
@@ -1579,14 +1616,18 @@ function registerAgentTools(pi: ExtensionAPI): void {
     ],
     parameters: filesTokensSchema,
     async execute(_toolCallId, params) {
-      const payload = buildTokenToolPayload({
-        toolName: "files-tokens",
-        scope: "explicit-files",
-        baseDir: process.cwd(),
-        requestedPaths: params.files,
-        encodingName: TOKEN_COUNTER_ENCODING,
-      });
-      return buildTokenToolExecuteResult(payload);
+      try {
+        const payload = buildTokenToolPayload({
+          toolName: "files-tokens",
+          scope: "explicit-files",
+          baseDir: process.cwd(),
+          requestedPaths: params.files,
+          encodingName: TOKEN_COUNTER_ENCODING,
+        });
+        return buildTokenToolExecuteResult(payload);
+      } catch (error) {
+        return buildFailedTokenToolExecuteResult(error);
+      }
     },
   });
 
@@ -1811,20 +1852,24 @@ function registerAgentTools(pi: ExtensionAPI): void {
     ],
     parameters: tokensSchema,
     async execute() {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const docsDir = config["docs-dir"].replace(/[/\\]+$/, "");
-      const canonicalDocNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"];
-      const payload = buildTokenToolPayload({
-        toolName: "tokens",
-        scope: "canonical-docs",
-        baseDir: projectBase,
-        requestedPaths: canonicalDocNames.map((name) => path.join(docsDir, name)),
-        docsDir,
-        canonicalDocNames,
-        encodingName: TOKEN_COUNTER_ENCODING,
-      });
-      return buildTokenToolExecuteResult(payload);
+      try {
+        const projectBase = getProjectBase(process.cwd());
+        const config = loadProjectConfig(process.cwd());
+        const docsDir = config["docs-dir"].replace(/[/\\]+$/, "");
+        const canonicalDocNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"];
+        const payload = buildTokenToolPayload({
+          toolName: "tokens",
+          scope: "canonical-docs",
+          baseDir: projectBase,
+          requestedPaths: canonicalDocNames.map((name) => path.join(docsDir, name)),
+          docsDir,
+          canonicalDocNames,
+          encodingName: TOKEN_COUNTER_ENCODING,
+        });
+        return buildTokenToolExecuteResult(payload);
+      } catch (error) {
+        return buildFailedTokenToolExecuteResult(error);
+      }
     },
   });
 

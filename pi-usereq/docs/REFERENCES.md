@@ -8,17 +8,17 @@
     "analyzed_file_count": 26,
     "error_file_count": 0,
     "skipped_file_count": 0,
-    "total_symbol_count": 439,
-    "total_import_count": 128,
-    "total_comment_count": 544,
+    "total_symbol_count": 445,
+    "total_import_count": 129,
+    "total_comment_count": 547,
     "total_standalone_comment_count": 89,
-    "total_doxygen_field_count": 1957,
+    "total_doxygen_field_count": 1969,
     "symbol_kind_counts": {
       "CLASS": 6,
       "ENUM": 1,
-      "FUNCTION": 322,
+      "FUNCTION": 326,
       "INTERFACE": 81,
-      "TYPE_ALIAS": 29
+      "TYPE_ALIAS": 31
     }
   },
   "repository": {
@@ -17015,10 +17015,10 @@
     },
     {
       "start_line_number": 1,
-      "end_line_number": 611,
+      "end_line_number": 663,
       "line_range": [
         1,
-        611
+        663
       ],
       "request_index": 22,
       "input_path": "/home/ogekuri/Git/PI-useReq/src/core/token-counter.ts",
@@ -17031,11 +17031,11 @@
       "status": "analyzed",
       "exists": true,
       "is_file": true,
-      "import_count": 5,
-      "symbol_count": 28,
-      "comment_count": 34,
+      "import_count": 6,
+      "symbol_count": 33,
+      "comment_count": 36,
       "standalone_comment_count": 5,
-      "doxygen_field_count": 95,
+      "doxygen_field_count": 103,
       "file_doxygen": {
         "brief": [
           "Provides token, size, and structure counting utilities for agent-oriented file payloads."
@@ -17072,8 +17072,8 @@
             9,
             9
           ],
-          "import_name": "{ getEncoding } from \"js-tiktoken\";",
-          "statement_text": "import { getEncoding } from \"js-tiktoken\";"
+          "import_name": "{ createRequire } from \"node:module\";",
+          "statement_text": "import { createRequire } from \"node:module\";"
         },
         {
           "start_line_number": 10,
@@ -17094,15 +17094,25 @@
           ],
           "import_name": "{ parseDoxygenComment, type DoxygenFieldMap } from \"./doxygen-parser.js\";",
           "statement_text": "import { parseDoxygenComment, type DoxygenFieldMap } from \"./doxygen-parser.js\";"
+        },
+        {
+          "start_line_number": 12,
+          "end_line_number": 12,
+          "line_range": [
+            12,
+            12
+          ],
+          "import_name": "{ ReqError } from \"./errors.js\";",
+          "statement_text": "import { ReqError } from \"./errors.js\";"
         }
       ],
       "symbols": [
         {
-          "start_line_number": 23,
-          "end_line_number": 23,
+          "start_line_number": 24,
+          "end_line_number": 24,
           "line_range": [
-            23,
-            23
+            24,
+            24
           ],
           "declaration_order_index": 0,
           "symbol_name": "TokenToolScope",
@@ -17126,11 +17136,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 29,
-          "end_line_number": 29,
+          "start_line_number": 30,
+          "end_line_number": 30,
           "line_range": [
-            29,
-            29
+            30,
+            30
           ],
           "declaration_order_index": 1,
           "symbol_name": "TokenFileStatus",
@@ -17154,11 +17164,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 35,
-          "end_line_number": 48,
+          "start_line_number": 36,
+          "end_line_number": 49,
           "line_range": [
-            35,
-            48
+            36,
+            49
           ],
           "declaration_order_index": 2,
           "symbol_name": "CountFileMetricsResult",
@@ -17182,11 +17192,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 54,
-          "end_line_number": 77,
+          "start_line_number": 55,
+          "end_line_number": 78,
           "line_range": [
-            54,
-            77
+            55,
+            78
           ],
           "declaration_order_index": 3,
           "symbol_name": "TokenToolFileEntry",
@@ -17210,11 +17220,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 83,
-          "end_line_number": 93,
+          "start_line_number": 84,
+          "end_line_number": 94,
           "line_range": [
-            83,
-            93
+            84,
+            94
           ],
           "declaration_order_index": 4,
           "symbol_name": "TokenToolRequestSection",
@@ -17238,11 +17248,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 99,
-          "end_line_number": 112,
+          "start_line_number": 100,
+          "end_line_number": 113,
           "line_range": [
-            99,
-            112
+            100,
+            113
           ],
           "declaration_order_index": 5,
           "symbol_name": "TokenToolSummarySection",
@@ -17266,11 +17276,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 118,
-          "end_line_number": 122,
+          "start_line_number": 119,
+          "end_line_number": 123,
           "line_range": [
-            118,
-            122
+            119,
+            123
           ],
           "declaration_order_index": 6,
           "symbol_name": "TokenToolPathIssue",
@@ -17294,11 +17304,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 128,
-          "end_line_number": 132,
+          "start_line_number": 129,
+          "end_line_number": 133,
           "line_range": [
-            128,
-            132
+            129,
+            133
           ],
           "declaration_order_index": 7,
           "symbol_name": "TokenToolDominantFileObservation",
@@ -17322,11 +17332,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 138,
-          "end_line_number": 144,
+          "start_line_number": 139,
+          "end_line_number": 145,
           "line_range": [
-            138,
-            144
+            139,
+            145
           ],
           "declaration_order_index": 8,
           "symbol_name": "TokenToolSourceObservationsSection",
@@ -17350,11 +17360,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 150,
-          "end_line_number": 154,
+          "start_line_number": 151,
+          "end_line_number": 155,
           "line_range": [
-            150,
-            154
+            151,
+            155
           ],
           "declaration_order_index": 9,
           "symbol_name": "TokenToolRecommendation",
@@ -17378,11 +17388,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 160,
-          "end_line_number": 164,
+          "start_line_number": 161,
+          "end_line_number": 165,
           "line_range": [
-            160,
-            164
+            161,
+            165
           ],
           "declaration_order_index": 10,
           "symbol_name": "TokenToolNextStepHint",
@@ -17406,11 +17416,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 170,
-          "end_line_number": 174,
+          "start_line_number": 171,
+          "end_line_number": 175,
           "line_range": [
-            170,
-            174
+            171,
+            175
           ],
           "declaration_order_index": 11,
           "symbol_name": "TokenToolGuidanceSection",
@@ -17434,11 +17444,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 180,
-          "end_line_number": 183,
+          "start_line_number": 181,
+          "end_line_number": 184,
           "line_range": [
-            180,
-            183
+            181,
+            184
           ],
           "declaration_order_index": 12,
           "symbol_name": "TokenToolPayload",
@@ -17462,11 +17472,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 189,
-          "end_line_number": 197,
+          "start_line_number": 190,
+          "end_line_number": 198,
           "line_range": [
-            189,
-            197
+            190,
+            198
           ],
           "declaration_order_index": 13,
           "symbol_name": "BuildTokenToolPayloadOptions",
@@ -17490,13 +17500,169 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 203,
-          "end_line_number": 243,
+          "start_line_number": 200,
+          "end_line_number": 200,
           "line_range": [
-            203,
-            243
+            200,
+            200
           ],
           "declaration_order_index": 14,
+          "symbol_name": "TokenCounterEncoding",
+          "qualified_name": "TokenCounterEncoding",
+          "symbol_kind": "TYPE_ALIAS",
+          "type_label": "TYPE_ALIAS",
+          "signature_text": "type TokenCounterEncoding =",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 204,
+          "end_line_number": 204,
+          "line_range": [
+            204,
+            204
+          ],
+          "declaration_order_index": 15,
+          "symbol_name": "JsTiktokenModule",
+          "qualified_name": "JsTiktokenModule",
+          "symbol_kind": "TYPE_ALIAS",
+          "type_label": "TYPE_ALIAS",
+          "signature_text": "type JsTiktokenModule =",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 210,
+          "end_line_number": 212,
+          "line_range": [
+            210,
+            212
+          ],
+          "declaration_order_index": 16,
+          "symbol_name": "defaultJsTiktokenModuleLoader",
+          "qualified_name": "defaultJsTiktokenModuleLoader",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function defaultJsTiktokenModuleLoader(): JsTiktokenModule",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 211,
+              "text": "return require(\"js-tiktoken\") as JsTiktokenModule;"
+            }
+          ]
+        },
+        {
+          "start_line_number": 222,
+          "end_line_number": 224,
+          "line_range": [
+            222,
+            224
+          ],
+          "declaration_order_index": 17,
+          "symbol_name": "setJsTiktokenModuleLoaderForTests",
+          "qualified_name": "setJsTiktokenModuleLoaderForTests",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "export function setJsTiktokenModuleLoaderForTests(loader?: () => JsTiktokenModule): void",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Overrides the `js-tiktoken` loader for tests.",
+          "doxygen": {
+            "brief": [
+              "Overrides the `js-tiktoken` loader for tests."
+            ],
+            "details": [
+              "Enables deterministic dependency-failure tests without mutating repository dependencies on disk. Runtime is O(1). Side effects are limited to module-local test state."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "loader",
+                "value_type": "(() => JsTiktokenModule) | undefined",
+                "description": "Replacement loader, or `undefined` to restore the default loader."
+              }
+            ],
+            "returns": [
+              "{void} No return value."
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": []
+        },
+        {
+          "start_line_number": 232,
+          "end_line_number": 249,
+          "line_range": [
+            232,
+            249
+          ],
+          "declaration_order_index": 18,
+          "symbol_name": "loadJsTiktokenModule",
+          "qualified_name": "loadJsTiktokenModule",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function loadJsTiktokenModule(): JsTiktokenModule",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Loads the `js-tiktoken` module on demand.",
+          "doxygen": {
+            "brief": [
+              "Loads the `js-tiktoken` module on demand."
+            ],
+            "details": [
+              "Defers dependency resolution until token counting is requested so extension registration can succeed even when the optional runtime dependency has not yet been installed. Runtime is O(1) plus module resolution cost. Side effects are limited to Node module loading."
+            ],
+            "returns": [
+              "{JsTiktokenModule} Loaded tokenizer module."
+            ],
+            "throws": [
+              "{ReqError} Throws when `js-tiktoken` is unavailable."
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 236,
+              "text": "throw new ReqError(\"Error: token-count dependency 'js-tiktoken' is unavailable. Run `npm ci` in the PI-useReq repository.\", 1);"
+            },
+            {
+              "line_number": 238,
+              "text": "return module;"
+            },
+            {
+              "line_number": 241,
+              "text": "throw error;"
+            },
+            {
+              "line_number": 245,
+              "text": "throw new ReqError(\"Error: token-count dependency 'js-tiktoken' is not installed. Run `npm ci` in the PI-useReq repository.\", 1);"
+            },
+            {
+              "line_number": 247,
+              "text": "throw error;"
+            }
+          ]
+        },
+        {
+          "start_line_number": 255,
+          "end_line_number": 295,
+          "line_range": [
+            255,
+            295
+          ],
+          "declaration_order_index": 19,
           "symbol_name": "TokenCounter",
           "qualified_name": "TokenCounter",
           "symbol_kind": "CLASS",
@@ -17518,11 +17684,11 @@
           },
           "body_comment_entries": [
             {
-              "start_line_number": 204,
-              "end_line_number": 207,
+              "start_line_number": 256,
+              "end_line_number": 259,
               "line_range": [
-                204,
-                207
+                256,
+                259
               ],
               "text": "@brief Stores the tokenizer implementation used for subsequent counts. @details The field holds the encoder returned by `getEncoding`. Access complexity is O(1). The value is initialized once per instance.",
               "text_lines": [
@@ -17530,11 +17696,11 @@
               ]
             },
             {
-              "start_line_number": 210,
-              "end_line_number": 215,
+              "start_line_number": 262,
+              "end_line_number": 267,
               "line_range": [
-                210,
-                215
+                262,
+                267
               ],
               "text": "@brief Initializes a token counter for one encoding family. @details Resolves the named tokenizer once and reuses it across `countTokens` calls. Construction complexity is O(1) relative to caller-controlled input size. Side effects are limited to instance initialization. @param[in] encodingName {string} `js-tiktoken` encoding identifier. Defaults to `cl100k_base`. @return {TokenCounter} New token counter instance.",
               "text_lines": [
@@ -17542,11 +17708,11 @@
               ]
             },
             {
-              "start_line_number": 220,
-              "end_line_number": 225,
+              "start_line_number": 272,
+              "end_line_number": 277,
               "line_range": [
-                220,
-                225
+                272,
+                277
               ],
               "text": "@brief Counts tokenizer tokens for one content string. @details Encodes the provided text with the cached tokenizer and returns the token sequence length. Returns `0` when encoding throws, which prevents counting failures from aborting higher-level workflows. Time complexity is O(n). No external state is mutated. @param[in] content {string} Text to tokenize. @return {number} Token count, or `0` when encoding fails.",
               "text_lines": [
@@ -17554,11 +17720,11 @@
               ]
             },
             {
-              "start_line_number": 234,
-              "end_line_number": 239,
+              "start_line_number": 286,
+              "end_line_number": 291,
               "line_range": [
-                234,
-                239
+                286,
+                291
               ],
               "text": "@brief Counts UTF-16 code-unit characters for one string. @details Returns JavaScript string length directly without normalization. Time complexity is O(1) under engine-maintained length metadata. No side effects occur. @param[in] content {string} Text to measure. @return {number} Raw character count.",
               "text_lines": [
@@ -17568,27 +17734,27 @@
           ],
           "exit_point_entries": [
             {
-              "line_number": 228,
+              "line_number": 280,
               "text": "return this.encoding.encode(content).length;"
             },
             {
-              "line_number": 230,
+              "line_number": 282,
               "text": "return 0;"
             },
             {
-              "line_number": 241,
+              "line_number": 293,
               "text": "return content.length;"
             }
           ]
         },
         {
-          "start_line_number": 252,
-          "end_line_number": 260,
+          "start_line_number": 304,
+          "end_line_number": 312,
           "line_range": [
-            252,
-            260
+            304,
+            312
           ],
-          "declaration_order_index": 15,
+          "declaration_order_index": 20,
           "symbol_name": "canonicalizeTokenPath",
           "qualified_name": "canonicalizeTokenPath",
           "symbol_kind": "FUNCTION",
@@ -17626,23 +17792,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 257,
+              "line_number": 309,
               "text": "return relativePath;"
             },
             {
-              "line_number": 259,
+              "line_number": 311,
               "text": "return absolutePath.split(path.sep).join(\"/\");"
             }
           ]
         },
         {
-          "start_line_number": 268,
-          "end_line_number": 274,
+          "start_line_number": 320,
+          "end_line_number": 326,
           "line_range": [
-            268,
-            274
+            320,
+            326
           ],
-          "declaration_order_index": 16,
+          "declaration_order_index": 21,
           "symbol_name": "countLines",
           "qualified_name": "countLines",
           "symbol_kind": "FUNCTION",
@@ -17674,23 +17840,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 270,
+              "line_number": 322,
               "text": "return 0;"
             },
             {
-              "line_number": 273,
+              "line_number": 325,
               "text": "return /(?:\\r\\n|\\r|\\n)$/.test(content) ? newlineCount : newlineCount + 1;"
             }
           ]
         },
         {
-          "start_line_number": 282,
-          "end_line_number": 285,
+          "start_line_number": 334,
+          "end_line_number": 337,
           "line_range": [
-            282,
-            285
+            334,
+            337
           ],
-          "declaration_order_index": 17,
+          "declaration_order_index": 22,
           "symbol_name": "stripMarkdownFrontMatter",
           "qualified_name": "stripMarkdownFrontMatter",
           "symbol_kind": "FUNCTION",
@@ -17722,19 +17888,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 284,
+              "line_number": 336,
               "text": "return frontMatterMatch ? content.slice(frontMatterMatch[0].length) : content;"
             }
           ]
         },
         {
-          "start_line_number": 294,
-          "end_line_number": 301,
+          "start_line_number": 346,
+          "end_line_number": 353,
           "line_range": [
-            294,
-            301
+            346,
+            353
           ],
-          "declaration_order_index": 18,
+          "declaration_order_index": 23,
           "symbol_name": "extractPrimaryHeadingText",
           "qualified_name": "extractPrimaryHeadingText",
           "symbol_kind": "FUNCTION",
@@ -17772,23 +17938,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 297,
+              "line_number": 349,
               "text": "return undefined;"
             },
             {
-              "line_number": 300,
+              "line_number": 352,
               "text": "return headingMatch?.[1]?.trim() || undefined;"
             }
           ]
         },
         {
-          "start_line_number": 309,
-          "end_line_number": 318,
+          "start_line_number": 361,
+          "end_line_number": 370,
           "line_range": [
-            309,
-            318
+            361,
+            370
           ],
-          "declaration_order_index": 19,
+          "declaration_order_index": 24,
           "symbol_name": "inferLanguageName",
           "qualified_name": "inferLanguageName",
           "symbol_kind": "FUNCTION",
@@ -17820,27 +17986,27 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 312,
+              "line_number": 364,
               "text": "return \"markdown\";"
             },
             {
-              "line_number": 315,
+              "line_number": 367,
               "text": "return \"mdx\";"
             },
             {
-              "line_number": 317,
+              "line_number": 369,
               "text": "return detectSourceLanguage(filePath) ?? (extension ? extension.slice(1) : undefined);"
             }
           ]
         },
         {
-          "start_line_number": 326,
-          "end_line_number": 344,
+          "start_line_number": 378,
+          "end_line_number": 396,
           "line_range": [
-            326,
-            344
+            378,
+            396
           ],
-          "declaration_order_index": 20,
+          "declaration_order_index": 25,
           "symbol_name": "extractLeadingDoxygenFields",
           "qualified_name": "extractLeadingDoxygenFields",
           "symbol_kind": "FUNCTION",
@@ -17872,23 +18038,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 340,
+              "line_number": 392,
               "text": "return fields;"
             },
             {
-              "line_number": 343,
+              "line_number": 395,
               "text": "return undefined;"
             }
           ]
         },
         {
-          "start_line_number": 353,
-          "end_line_number": 358,
+          "start_line_number": 405,
+          "end_line_number": 410,
           "line_range": [
-            353,
-            358
+            405,
+            410
           ],
-          "declaration_order_index": 21,
+          "declaration_order_index": 26,
           "symbol_name": "roundRatio",
           "qualified_name": "roundRatio",
           "symbol_kind": "FUNCTION",
@@ -17926,23 +18092,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 355,
+              "line_number": 407,
               "text": "return 0;"
             },
             {
-              "line_number": 357,
+              "line_number": 409,
               "text": "return Number((numerator / denominator).toFixed(6));"
             }
           ]
         },
         {
-          "start_line_number": 366,
-          "end_line_number": 380,
+          "start_line_number": 418,
+          "end_line_number": 432,
           "line_range": [
-            366,
-            380
+            418,
+            432
           ],
-          "declaration_order_index": 22,
+          "declaration_order_index": 27,
           "symbol_name": "probeRequestedPath",
           "qualified_name": "probeRequestedPath",
           "symbol_kind": "FUNCTION",
@@ -17974,27 +18140,27 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 368,
+              "line_number": 420,
               "text": "return { exists: false, isFile: false, reason: \"not found\" };"
             },
             {
-              "line_number": 372,
+              "line_number": 424,
               "text": "return isFile ? { exists: true, isFile: true } : { exists: true, isFile: false, reason: \"not a file\" };"
             },
             {
-              "line_number": 374,
+              "line_number": 426,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 390,
-          "end_line_number": 405,
+          "start_line_number": 442,
+          "end_line_number": 457,
           "line_range": [
-            390,
-            405
+            442,
+            457
           ],
-          "declaration_order_index": 23,
+          "declaration_order_index": 28,
           "symbol_name": "buildCountFileMetricsResult",
           "qualified_name": "buildCountFileMetricsResult",
           "symbol_kind": "FUNCTION",
@@ -18038,19 +18204,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 392,
+              "line_number": 444,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 414,
-          "end_line_number": 427,
+          "start_line_number": 466,
+          "end_line_number": 479,
           "line_range": [
-            414,
-            427
+            466,
+            479
           ],
-          "declaration_order_index": 24,
+          "declaration_order_index": 29,
           "symbol_name": "countFileMetrics",
           "qualified_name": "countFileMetrics",
           "symbol_kind": "FUNCTION",
@@ -18088,19 +18254,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 421,
+              "line_number": 473,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 437,
-          "end_line_number": 458,
+          "start_line_number": 489,
+          "end_line_number": 510,
           "line_range": [
-            437,
-            458
+            489,
+            510
           ],
-          "declaration_order_index": 25,
+          "declaration_order_index": 30,
           "symbol_name": "countFilesMetrics",
           "qualified_name": "countFilesMetrics",
           "symbol_kind": "FUNCTION",
@@ -18143,27 +18309,27 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 439,
+              "line_number": 491,
               "text": "return filePaths.map((filePath) => {"
             },
             {
-              "line_number": 442,
+              "line_number": 494,
               "text": "return buildCountFileMetricsResult(filePath, content, counter);"
             },
             {
-              "line_number": 444,
+              "line_number": 496,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 467,
-          "end_line_number": 579,
+          "start_line_number": 519,
+          "end_line_number": 631,
           "line_range": [
-            467,
-            579
+            519,
+            631
           ],
-          "declaration_order_index": 26,
+          "declaration_order_index": 31,
           "symbol_name": "buildTokenToolPayload",
           "qualified_name": "buildTokenToolPayload",
           "symbol_kind": "FUNCTION",
@@ -18205,31 +18371,31 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 473,
+              "line_number": 525,
               "text": "return {"
             },
             {
-              "line_number": 492,
+              "line_number": 544,
               "text": "return {"
             },
             {
-              "line_number": 516,
+              "line_number": 568,
               "text": "return {"
             },
             {
-              "line_number": 562,
+              "line_number": 614,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 587,
-          "end_line_number": 611,
+          "start_line_number": 639,
+          "end_line_number": 663,
           "line_range": [
-            587,
-            611
+            639,
+            663
           ],
-          "declaration_order_index": 27,
+          "declaration_order_index": 32,
           "symbol_name": "formatPackSummary",
           "qualified_name": "formatPackSummary",
           "symbol_kind": "FUNCTION",
@@ -18261,7 +18427,7 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 610,
+              "line_number": 662,
               "text": "return lines.join(\"\\n\");"
             }
           ]
@@ -18269,11 +18435,11 @@
       ],
       "standalone_comments": [
         {
-          "start_line_number": 13,
-          "end_line_number": 16,
+          "start_line_number": 14,
+          "end_line_number": 17,
           "line_range": [
-            13,
-            16
+            14,
+            17
           ],
           "text": "@brief Declares the tokenizer encoding used by token-count workflows. @details Stores the canonical `js-tiktoken` encoding identifier reused by CLI and agent-tool token metrics. Access complexity is O(1). No side effects occur.",
           "text_lines": [
@@ -18282,11 +18448,11 @@
           ]
         },
         {
-          "start_line_number": 204,
-          "end_line_number": 207,
+          "start_line_number": 256,
+          "end_line_number": 259,
           "line_range": [
-            204,
-            207
+            256,
+            259
           ],
           "text": "@brief Stores the tokenizer implementation used for subsequent counts. @details The field holds the encoder returned by `getEncoding`. Access complexity is O(1). The value is initialized once per instance.",
           "text_lines": [
@@ -18295,11 +18461,11 @@
           ]
         },
         {
-          "start_line_number": 210,
-          "end_line_number": 215,
+          "start_line_number": 262,
+          "end_line_number": 267,
           "line_range": [
-            210,
-            215
+            262,
+            267
           ],
           "text": "@brief Initializes a token counter for one encoding family. @details Resolves the named tokenizer once and reuses it across `countTokens` calls. Construction complexity is O(1) relative to caller-controlled input size. Side effects are limited to instance initialization. @param[in] encodingName {string} `js-tiktoken` encoding identifier. Defaults to `cl100k_base`. ...",
           "text_lines": [
@@ -18310,11 +18476,11 @@
           ]
         },
         {
-          "start_line_number": 220,
-          "end_line_number": 225,
+          "start_line_number": 272,
+          "end_line_number": 277,
           "line_range": [
-            220,
-            225
+            272,
+            277
           ],
           "text": "@brief Counts tokenizer tokens for one content string. @details Encodes the provided text with the cached tokenizer and returns the token sequence length. Returns `0` when encoding throws, which prevents counting failures from aborting higher-level workflows. Time complexity is O(n). No external state is mutated. @param[in] content {string} Text to tokenize. ...",
           "text_lines": [
@@ -18325,11 +18491,11 @@
           ]
         },
         {
-          "start_line_number": 234,
-          "end_line_number": 239,
+          "start_line_number": 286,
+          "end_line_number": 291,
           "line_range": [
-            234,
-            239
+            286,
+            291
           ],
           "text": "@brief Counts UTF-16 code-unit characters for one string. @details Returns JavaScript string length directly without normalization. Time complexity is O(1) under engine-maintained length metadata. No side effects occur. @param[in] content {string} Text to measure. ...",
           "text_lines": [
@@ -20794,10 +20960,10 @@
     },
     {
       "start_line_number": 1,
-      "end_line_number": 2764,
+      "end_line_number": 2809,
       "line_range": [
         1,
-        2764
+        2809
       ],
       "request_index": 25,
       "input_path": "/home/ogekuri/Git/PI-useReq/src/index.ts",
@@ -20811,10 +20977,10 @@
       "exists": true,
       "is_file": true,
       "import_count": 21,
-      "symbol_count": 63,
-      "comment_count": 68,
+      "symbol_count": 64,
+      "comment_count": 69,
       "standalone_comment_count": 6,
-      "doxygen_field_count": 306,
+      "doxygen_field_count": 310,
       "file_doxygen": {
         "brief": [
           "Registers the pi-usereq extension commands, tools, and configuration UI."
@@ -21409,13 +21575,57 @@
           ]
         },
         {
-          "start_line_number": 297,
-          "end_line_number": 313,
+          "start_line_number": 296,
+          "end_line_number": 325,
           "line_range": [
-            297,
-            313
+            296,
+            325
           ],
           "declaration_order_index": 8,
+          "symbol_name": "buildFailedTokenToolExecuteResult",
+          "qualified_name": "buildFailedTokenToolExecuteResult",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function buildFailedTokenToolExecuteResult(",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Builds the fallback execute result returned when token counting fails before payload construction.",
+          "doxygen": {
+            "brief": [
+              "Builds the fallback execute result returned when token counting fails before payload construction."
+            ],
+            "details": [
+              "Normalizes one thrown `ReqError` into the stable token-tool response shape so missing runtime dependencies or other pre-count failures do not abort extension tool execution. Runtime is O(1). No external state is mutated."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "error",
+                "value_type": "unknown",
+                "description": "Thrown token-tool failure."
+              }
+            ],
+            "returns": [
+              "{{ content: Array<{ type: \"text\"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Structured token-tool failure result."
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 324,
+              "text": "return buildStructuredToolExecuteResult(details);"
+            }
+          ]
+        },
+        {
+          "start_line_number": 334,
+          "end_line_number": 350,
+          "line_range": [
+            334,
+            350
+          ],
+          "declaration_order_index": 9,
           "symbol_name": "buildReferenceToolExecuteResult",
           "qualified_name": "buildReferenceToolExecuteResult",
           "symbol_kind": "FUNCTION",
@@ -21455,19 +21665,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 312,
+              "line_number": 349,
               "text": "return buildStructuredToolExecuteResult(details);"
             }
           ]
         },
         {
-          "start_line_number": 322,
-          "end_line_number": 338,
+          "start_line_number": 359,
+          "end_line_number": 375,
           "line_range": [
-            322,
-            338
+            359,
+            375
           ],
-          "declaration_order_index": 9,
+          "declaration_order_index": 10,
           "symbol_name": "buildCompressionToolExecuteResult",
           "qualified_name": "buildCompressionToolExecuteResult",
           "symbol_kind": "FUNCTION",
@@ -21510,19 +21720,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 337,
+              "line_number": 374,
               "text": "return buildStructuredToolExecuteResult(details);"
             }
           ]
         },
         {
-          "start_line_number": 399,
-          "end_line_number": 403,
+          "start_line_number": 436,
+          "end_line_number": 440,
           "line_range": [
-            399,
-            403
+            436,
+            440
           ],
-          "declaration_order_index": 10,
+          "declaration_order_index": 11,
           "symbol_name": "buildFindToolSupportedTagGuidelines",
           "qualified_name": "buildFindToolSupportedTagGuidelines",
           "symbol_kind": "FUNCTION",
@@ -21546,19 +21756,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 400,
+              "line_number": 437,
               "text": "return FIND_TOOL_LANGUAGE_ORDER"
             }
           ]
         },
         {
-          "start_line_number": 411,
-          "end_line_number": 416,
+          "start_line_number": 448,
+          "end_line_number": 453,
           "line_range": [
-            411,
-            416
+            448,
+            453
           ],
-          "declaration_order_index": 11,
+          "declaration_order_index": 12,
           "symbol_name": "buildFindToolSchemaDescription",
           "qualified_name": "buildFindToolSchemaDescription",
           "symbol_kind": "FUNCTION",
@@ -21590,19 +21800,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 415,
+              "line_number": 452,
               "text": "return `${inputContract} Output contract: JSON object with summary, repository, files, and execution. Static supported-tag matrices are documented in tool registration metadata instead of runtime responses. File entries expose structured statuses, file_doxygen, and match records with typed line ranges, stripped code lines, and structured Doxygen fields. Regex matches construct names only.`;"
             }
           ]
         },
         {
-          "start_line_number": 424,
-          "end_line_number": 440,
+          "start_line_number": 461,
+          "end_line_number": 477,
           "line_range": [
-            424,
-            440
+            461,
+            477
           ],
-          "declaration_order_index": 12,
+          "declaration_order_index": 13,
           "symbol_name": "buildFindToolPromptGuidelines",
           "qualified_name": "buildFindToolPromptGuidelines",
           "symbol_kind": "FUNCTION",
@@ -21634,19 +21844,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 431,
+              "line_number": 468,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 449,
-          "end_line_number": 466,
+          "start_line_number": 486,
+          "end_line_number": 503,
           "line_range": [
-            449,
-            466
+            486,
+            503
           ],
-          "declaration_order_index": 13,
+          "declaration_order_index": 14,
           "symbol_name": "buildFindToolExecuteResult",
           "qualified_name": "buildFindToolExecuteResult",
           "symbol_kind": "FUNCTION",
@@ -21690,19 +21900,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 465,
+              "line_number": 502,
               "text": "return buildStructuredToolExecuteResult(details);"
             }
           ]
         },
         {
-          "start_line_number": 476,
-          "end_line_number": 478,
+          "start_line_number": 513,
+          "end_line_number": 515,
           "line_range": [
-            476,
-            478
+            513,
+            515
           ],
-          "declaration_order_index": 14,
+          "declaration_order_index": 15,
           "symbol_name": "deliverPromptCommand",
           "qualified_name": "deliverPromptCommand",
           "symbol_kind": "FUNCTION",
@@ -21746,13 +21956,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 487,
-          "end_line_number": 492,
+          "start_line_number": 524,
+          "end_line_number": 529,
           "line_range": [
-            487,
-            492
+            524,
+            529
           ],
-          "declaration_order_index": 15,
+          "declaration_order_index": 16,
           "symbol_name": "getPiUsereqStartupTools",
           "qualified_name": "getPiUsereqStartupTools",
           "symbol_kind": "FUNCTION",
@@ -21788,19 +21998,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 488,
+              "line_number": 525,
               "text": "return pi.getAllTools()"
             }
           ]
         },
         {
-          "start_line_number": 500,
-          "end_line_number": 504,
+          "start_line_number": 537,
+          "end_line_number": 541,
           "line_range": [
-            500,
-            504
+            537,
+            541
           ],
-          "declaration_order_index": 16,
+          "declaration_order_index": 17,
           "symbol_name": "getConfiguredEnabledPiUsereqTools",
           "qualified_name": "getConfiguredEnabledPiUsereqTools",
           "symbol_kind": "FUNCTION",
@@ -21832,19 +22042,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 503,
+              "line_number": 540,
               "text": "return enabledTools;"
             }
           ]
         },
         {
-          "start_line_number": 512,
-          "end_line_number": 517,
+          "start_line_number": 549,
+          "end_line_number": 554,
           "line_range": [
-            512,
-            517
+            549,
+            554
           ],
-          "declaration_order_index": 17,
+          "declaration_order_index": 18,
           "symbol_name": "getPiUsereqToolKind",
           "qualified_name": "getPiUsereqToolKind",
           "symbol_kind": "FUNCTION",
@@ -21876,23 +22086,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 514,
+              "line_number": 551,
               "text": "return \"builtin\";"
             },
             {
-              "line_number": 516,
+              "line_number": 553,
               "text": "return \"extension\";"
             }
           ]
         },
         {
-          "start_line_number": 527,
-          "end_line_number": 544,
+          "start_line_number": 564,
+          "end_line_number": 581,
           "line_range": [
-            527,
-            544
+            564,
+            581
           ],
-          "declaration_order_index": 18,
+          "declaration_order_index": 19,
           "symbol_name": "applyConfiguredPiUsereqTools",
           "qualified_name": "applyConfiguredPiUsereqTools",
           "symbol_kind": "FUNCTION",
@@ -21935,13 +22145,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 565,
-          "end_line_number": 602,
+          "start_line_number": 602,
+          "end_line_number": 639,
           "line_range": [
-            565,
-            602
+            602,
+            639
           ],
-          "declaration_order_index": 19,
+          "declaration_order_index": 20,
           "symbol_name": "handleExtensionStatusEvent",
           "qualified_name": "handleExtensionStatusEvent",
           "symbol_kind": "FUNCTION",
@@ -22017,13 +22227,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 615,
-          "end_line_number": 628,
+          "start_line_number": 652,
+          "end_line_number": 665,
           "line_range": [
-            615,
-            628
+            652,
+            665
           ],
-          "declaration_order_index": 20,
+          "declaration_order_index": 21,
           "symbol_name": "registerExtensionStatusHooks",
           "qualified_name": "registerExtensionStatusHooks",
           "symbol_kind": "FUNCTION",
@@ -22070,13 +22280,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 638,
-          "end_line_number": 641,
+          "start_line_number": 675,
+          "end_line_number": 678,
           "line_range": [
-            638,
-            641
+            675,
+            678
           ],
-          "declaration_order_index": 21,
+          "declaration_order_index": 22,
           "symbol_name": "setConfiguredPiUsereqTools",
           "qualified_name": "setConfiguredPiUsereqTools",
           "symbol_kind": "FUNCTION",
@@ -22121,13 +22331,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 650,
-          "end_line_number": 678,
+          "start_line_number": 687,
+          "end_line_number": 715,
           "line_range": [
-            650,
-            678
+            687,
+            715
           ],
-          "declaration_order_index": 22,
+          "declaration_order_index": 23,
           "symbol_name": "renderPiUsereqToolsReference",
           "qualified_name": "renderPiUsereqToolsReference",
           "symbol_kind": "FUNCTION",
@@ -22165,19 +22375,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 677,
+              "line_number": 714,
               "text": "return `${lines.join(\"\\n\")}\\n`;"
             }
           ]
         },
         {
-          "start_line_number": 684,
-          "end_line_number": 684,
+          "start_line_number": 721,
+          "end_line_number": 721,
           "line_range": [
-            684,
-            684
+            721,
+            721
           ],
-          "declaration_order_index": 23,
+          "declaration_order_index": 24,
           "symbol_name": "PiNotifyBooleanConfigKey",
           "qualified_name": "PiNotifyBooleanConfigKey",
           "symbol_kind": "TYPE_ALIAS",
@@ -22199,13 +22409,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 701,
-          "end_line_number": 701,
+          "start_line_number": 738,
+          "end_line_number": 738,
           "line_range": [
-            701,
-            701
+            738,
+            738
           ],
-          "declaration_order_index": 24,
+          "declaration_order_index": 25,
           "symbol_name": "PiNotifyEventBooleanConfigKey",
           "qualified_name": "PiNotifyEventBooleanConfigKey",
           "symbol_kind": "TYPE_ALIAS",
@@ -22227,13 +22437,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 710,
-          "end_line_number": 710,
+          "start_line_number": 747,
+          "end_line_number": 747,
           "line_range": [
-            710,
-            710
+            747,
+            747
           ],
-          "declaration_order_index": 25,
+          "declaration_order_index": 26,
           "symbol_name": "PiNotifyEventId",
           "qualified_name": "PiNotifyEventId",
           "symbol_kind": "TYPE_ALIAS",
@@ -22255,13 +22465,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 716,
-          "end_line_number": 720,
+          "start_line_number": 753,
+          "end_line_number": 757,
           "line_range": [
-            716,
-            720
+            753,
+            757
           ],
-          "declaration_order_index": 26,
+          "declaration_order_index": 27,
           "symbol_name": "PiNotifyEventRowDefinition",
           "qualified_name": "PiNotifyEventRowDefinition",
           "symbol_kind": "INTERFACE",
@@ -22283,13 +22493,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 726,
-          "end_line_number": 732,
+          "start_line_number": 763,
+          "end_line_number": 769,
           "line_range": [
-            726,
-            732
+            763,
+            769
           ],
-          "declaration_order_index": 27,
+          "declaration_order_index": 28,
           "symbol_name": "PiNotifyEventMenuDefinition",
           "qualified_name": "PiNotifyEventMenuDefinition",
           "symbol_kind": "INTERFACE",
@@ -22311,13 +22521,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 741,
-          "end_line_number": 744,
+          "start_line_number": 778,
+          "end_line_number": 781,
           "line_range": [
-            741,
-            744
+            778,
+            781
           ],
-          "declaration_order_index": 28,
+          "declaration_order_index": 29,
           "symbol_name": "togglePiNotifyFlag",
           "qualified_name": "togglePiNotifyFlag",
           "symbol_kind": "FUNCTION",
@@ -22355,19 +22565,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 743,
+              "line_number": 780,
               "text": "return config[key];"
             }
           ]
         },
         {
-          "start_line_number": 753,
-          "end_line_number": 777,
+          "start_line_number": 790,
+          "end_line_number": 814,
           "line_range": [
-            753,
-            777
+            790,
+            814
           ],
-          "declaration_order_index": 29,
+          "declaration_order_index": 30,
           "symbol_name": "resetPiNotifyConfigToDefaults",
           "qualified_name": "resetPiNotifyConfigToDefaults",
           "symbol_kind": "FUNCTION",
@@ -22407,13 +22617,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 786,
-          "end_line_number": 788,
+          "start_line_number": 823,
+          "end_line_number": 825,
           "line_range": [
-            786,
-            788
+            823,
+            825
           ],
-          "declaration_order_index": 30,
+          "declaration_order_index": 31,
           "symbol_name": "formatPiNotifyPushoverPriority",
           "qualified_name": "formatPiNotifyPushoverPriority",
           "symbol_kind": "FUNCTION",
@@ -22448,19 +22658,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 787,
+              "line_number": 824,
               "text": "return priority === 1 ? \"High\" : \"Normal\";"
             }
           ]
         },
         {
-          "start_line_number": 865,
-          "end_line_number": 873,
+          "start_line_number": 902,
+          "end_line_number": 910,
           "line_range": [
-            865,
-            873
+            902,
+            910
           ],
-          "declaration_order_index": 31,
+          "declaration_order_index": 32,
           "symbol_name": "formatPiNotifyEventMenuSummary",
           "qualified_name": "formatPiNotifyEventMenuSummary",
           "symbol_kind": "FUNCTION",
@@ -22501,19 +22711,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 872,
+              "line_number": 909,
               "text": "return `${enabledCount}/3 on`;"
             }
           ]
         },
         {
-          "start_line_number": 883,
-          "end_line_number": 893,
+          "start_line_number": 920,
+          "end_line_number": 930,
           "line_range": [
-            883,
-            893
+            920,
+            930
           ],
-          "declaration_order_index": 32,
+          "declaration_order_index": 33,
           "symbol_name": "buildPiNotifyEventLauncherChoice",
           "qualified_name": "buildPiNotifyEventLauncherChoice",
           "symbol_kind": "FUNCTION",
@@ -22557,19 +22767,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 887,
+              "line_number": 924,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 903,
-          "end_line_number": 927,
+          "start_line_number": 940,
+          "end_line_number": 964,
           "line_range": [
-            903,
-            927
+            940,
+            964
           ],
-          "declaration_order_index": 33,
+          "declaration_order_index": 34,
           "symbol_name": "buildPiNotifyEventMenuChoices",
           "qualified_name": "buildPiNotifyEventMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -22612,19 +22822,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 907,
+              "line_number": 944,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 937,
-          "end_line_number": 945,
+          "start_line_number": 974,
+          "end_line_number": 982,
           "line_range": [
-            937,
-            945
+            974,
+            982
           ],
-          "declaration_order_index": 34,
+          "declaration_order_index": 35,
           "symbol_name": "resetPiNotifyEventMenuToDefaults",
           "qualified_name": "resetPiNotifyEventMenuToDefaults",
           "symbol_kind": "FUNCTION",
@@ -22669,13 +22879,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 955,
-          "end_line_number": 962,
+          "start_line_number": 992,
+          "end_line_number": 999,
           "line_range": [
-            955,
-            962
+            992,
+            999
           ],
-          "declaration_order_index": 35,
+          "declaration_order_index": 36,
           "symbol_name": "resolvePiNotifyEventLabel",
           "qualified_name": "resolvePiNotifyEventLabel",
           "symbol_kind": "FUNCTION",
@@ -22717,19 +22927,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 959,
+              "line_number": 996,
               "text": "return PI_NOTIFY_EVENT_ROW_DEFINITIONS.find("
             }
           ]
         },
         {
-          "start_line_number": 973,
-          "end_line_number": 1011,
+          "start_line_number": 1010,
+          "end_line_number": 1048,
           "line_range": [
-            973,
-            1011
+            1010,
+            1048
           ],
-          "declaration_order_index": 36,
+          "declaration_order_index": 37,
           "symbol_name": "configurePiNotifyEventMenu",
           "qualified_name": "configurePiNotifyEventMenu",
           "symbol_kind": "FUNCTION",
@@ -22780,19 +22990,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 987,
+              "line_number": 1024,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 1020,
-          "end_line_number": 1063,
+          "start_line_number": 1057,
+          "end_line_number": 1100,
           "line_range": [
-            1020,
-            1063
+            1057,
+            1100
           ],
-          "declaration_order_index": 37,
+          "declaration_order_index": 38,
           "symbol_name": "buildPiNotifyPushoverRows",
           "qualified_name": "buildPiNotifyPushoverRows",
           "symbol_kind": "FUNCTION",
@@ -22832,19 +23042,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1021,
+              "line_number": 1058,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 1073,
-          "end_line_number": 1095,
+          "start_line_number": 1110,
+          "end_line_number": 1132,
           "line_range": [
-            1073,
-            1095
+            1110,
+            1132
           ],
-          "declaration_order_index": 38,
+          "declaration_order_index": 39,
           "symbol_name": "selectPiNotifyPushoverPriority",
           "qualified_name": "selectPiNotifyPushoverPriority",
           "symbol_kind": "FUNCTION",
@@ -22886,23 +23096,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1092,
+              "line_number": 1129,
               "text": "return undefined;"
             },
             {
-              "line_number": 1094,
+              "line_number": 1131,
               "text": "return normalizePiNotifyPushoverPriority(choice);"
             }
           ]
         },
         {
-          "start_line_number": 1104,
-          "end_line_number": 1170,
+          "start_line_number": 1141,
+          "end_line_number": 1207,
           "line_range": [
-            1104,
-            1170
+            1141,
+            1207
           ],
-          "declaration_order_index": 39,
+          "declaration_order_index": 40,
           "symbol_name": "buildPiNotifyMenuChoices",
           "qualified_name": "buildPiNotifyMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -22951,19 +23161,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1105,
+              "line_number": 1142,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 1180,
-          "end_line_number": 1211,
+          "start_line_number": 1217,
+          "end_line_number": 1248,
           "line_range": [
-            1180,
-            1211
+            1217,
+            1248
           ],
-          "declaration_order_index": 40,
+          "declaration_order_index": 41,
           "symbol_name": "selectPiNotifySoundLevel",
           "qualified_name": "selectPiNotifySoundLevel",
           "symbol_kind": "FUNCTION",
@@ -23006,19 +23216,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1210,
+              "line_number": 1247,
               "text": "return choice ? choice as PiNotifySoundLevel : undefined;"
             }
           ]
         },
         {
-          "start_line_number": 1221,
-          "end_line_number": 1392,
+          "start_line_number": 1258,
+          "end_line_number": 1429,
           "line_range": [
-            1221,
-            1392
+            1258,
+            1429
           ],
-          "declaration_order_index": 41,
+          "declaration_order_index": 42,
           "symbol_name": "configurePiNotifyMenu",
           "qualified_name": "configurePiNotifyMenu",
           "symbol_kind": "FUNCTION",
@@ -23076,19 +23286,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1235,
+              "line_number": 1272,
               "text": "return config[\"notify-sound-toggle-shortcut\"] !== originalShortcut;"
             }
           ]
         },
         {
-          "start_line_number": 1407,
-          "end_line_number": 1427,
+          "start_line_number": 1444,
+          "end_line_number": 1464,
           "line_range": [
-            1407,
-            1427
+            1444,
+            1464
           ],
-          "declaration_order_index": 42,
+          "declaration_order_index": 43,
           "symbol_name": "registerPiNotifyShortcut",
           "qualified_name": "registerPiNotifyShortcut",
           "symbol_kind": "FUNCTION",
@@ -23131,19 +23341,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1413,
+              "line_number": 1450,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 1437,
-          "end_line_number": 1457,
+          "start_line_number": 1474,
+          "end_line_number": 1494,
           "line_range": [
-            1437,
-            1457
+            1474,
+            1494
           ],
-          "declaration_order_index": 43,
+          "declaration_order_index": 44,
           "symbol_name": "registerPromptCommands",
           "qualified_name": "registerPromptCommands",
           "symbol_kind": "FUNCTION",
@@ -23188,13 +23398,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 1467,
-          "end_line_number": 1766,
+          "start_line_number": 1504,
+          "end_line_number": 1803,
           "line_range": [
-            1467,
-            1766
+            1504,
+            1803
           ],
-          "declaration_order_index": 44,
+          "declaration_order_index": 45,
           "symbol_name": "registerAgentTools",
           "qualified_name": "registerAgentTools",
           "symbol_kind": "FUNCTION",
@@ -23261,47 +23471,51 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1498,
+              "line_number": 1535,
               "text": "return buildStructuredToolExecuteResult(payload);"
             },
             {
-              "line_number": 1531,
+              "line_number": 1568,
               "text": "return buildStructuredToolExecuteResult(payload);"
             },
             {
-              "line_number": 1589,
+              "line_number": 1627,
               "text": "return buildTokenToolExecuteResult(payload);"
             },
             {
-              "line_number": 1612,
+              "line_number": 1629,
+              "text": "return buildFailedTokenToolExecuteResult(error);"
+            },
+            {
+              "line_number": 1653,
               "text": "return buildReferenceToolExecuteResult(payload);"
             },
             {
-              "line_number": 1649,
+              "line_number": 1690,
               "text": "return buildCompressionToolExecuteResult(payload);"
             },
             {
-              "line_number": 1685,
+              "line_number": 1726,
               "text": "return buildFindToolExecuteResult(payload);"
             },
             {
-              "line_number": 1724,
+              "line_number": 1765,
               "text": "return buildReferenceToolExecuteResult(payload);"
             },
             {
-              "line_number": 1761,
+              "line_number": 1802,
               "text": "return buildCompressionToolExecuteResult(payload);"
             }
           ]
         },
         {
-          "start_line_number": 2095,
-          "end_line_number": 2135,
+          "start_line_number": 2140,
+          "end_line_number": 2180,
           "line_range": [
-            2095,
-            2135
+            2140,
+            2180
           ],
-          "declaration_order_index": 45,
+          "declaration_order_index": 46,
           "symbol_name": "buildPiUsereqToolsMenuChoices",
           "qualified_name": "buildPiUsereqToolsMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23347,19 +23561,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2097,
+              "line_number": 2142,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2145,
-          "end_line_number": 2161,
+          "start_line_number": 2190,
+          "end_line_number": 2206,
           "line_range": [
-            2145,
-            2161
+            2190,
+            2206
           ],
-          "declaration_order_index": 46,
+          "declaration_order_index": 47,
           "symbol_name": "buildPiUsereqToolToggleChoices",
           "qualified_name": "buildPiUsereqToolToggleChoices",
           "symbol_kind": "FUNCTION",
@@ -23404,19 +23618,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2147,
+              "line_number": 2192,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2172,
-          "end_line_number": 2227,
+          "start_line_number": 2217,
+          "end_line_number": 2272,
           "line_range": [
-            2172,
-            2227
+            2217,
+            2272
           ],
-          "declaration_order_index": 47,
+          "declaration_order_index": 48,
           "symbol_name": "configurePiUsereqToolsMenu",
           "qualified_name": "configurePiUsereqToolsMenu",
           "symbol_kind": "FUNCTION",
@@ -23470,19 +23684,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2183,
+              "line_number": 2228,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2235,
-          "end_line_number": 2241,
+          "start_line_number": 2280,
+          "end_line_number": 2286,
           "line_range": [
-            2235,
-            2241
+            2280,
+            2286
           ],
-          "declaration_order_index": 48,
+          "declaration_order_index": 49,
           "symbol_name": "formatStaticCheckEntry",
           "qualified_name": "formatStaticCheckEntry",
           "symbol_kind": "FUNCTION",
@@ -23514,23 +23728,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2238,
+              "line_number": 2283,
               "text": "return `${entry.module}(${entry.cmd ?? \"?\"}${params})`;"
             },
             {
-              "line_number": 2240,
+              "line_number": 2285,
               "text": "return `${entry.module}${params ? `(${entry.params!.join(\" \")})` : \"\"}`;"
             }
           ]
         },
         {
-          "start_line_number": 2249,
-          "end_line_number": 2255,
+          "start_line_number": 2294,
+          "end_line_number": 2300,
           "line_range": [
-            2249,
-            2255
+            2294,
+            2300
           ],
-          "declaration_order_index": 49,
+          "declaration_order_index": 50,
           "symbol_name": "formatStaticCheckLanguagesSummary",
           "qualified_name": "formatStaticCheckLanguagesSummary",
           "symbol_kind": "FUNCTION",
@@ -23562,19 +23776,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2254,
+              "line_number": 2299,
               "text": "return languages.join(\", \") || \"(none)\";"
             }
           ]
         },
         {
-          "start_line_number": 2263,
-          "end_line_number": 2291,
+          "start_line_number": 2308,
+          "end_line_number": 2336,
           "line_range": [
-            2263,
-            2291
+            2308,
+            2336
           ],
-          "declaration_order_index": 50,
+          "declaration_order_index": 51,
           "symbol_name": "renderStaticCheckReference",
           "qualified_name": "renderStaticCheckReference",
           "symbol_kind": "FUNCTION",
@@ -23606,19 +23820,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2290,
+              "line_number": 2335,
               "text": "return `${lines.join(\"\\n\")}\\n`;"
             }
           ]
         },
         {
-          "start_line_number": 2300,
-          "end_line_number": 2341,
+          "start_line_number": 2345,
+          "end_line_number": 2386,
           "line_range": [
-            2300,
-            2341
+            2345,
+            2386
           ],
-          "declaration_order_index": 51,
+          "declaration_order_index": 52,
           "symbol_name": "buildStaticCheckMenuChoices",
           "qualified_name": "buildStaticCheckMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23660,19 +23874,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2303,
+              "line_number": 2348,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2349,
-          "end_line_number": 2368,
+          "start_line_number": 2394,
+          "end_line_number": 2413,
           "line_range": [
-            2349,
-            2368
+            2394,
+            2413
           ],
-          "declaration_order_index": 52,
+          "declaration_order_index": 53,
           "symbol_name": "buildSupportedStaticCheckLanguageChoices",
           "qualified_name": "buildSupportedStaticCheckLanguageChoices",
           "symbol_kind": "FUNCTION",
@@ -23704,23 +23918,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2350,
+              "line_number": 2395,
               "text": "return ["
             },
             {
-              "line_number": 2354,
+              "line_number": 2399,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 2376,
-          "end_line_number": 2393,
+          "start_line_number": 2421,
+          "end_line_number": 2438,
           "line_range": [
-            2376,
-            2393
+            2421,
+            2438
           ],
-          "declaration_order_index": 53,
+          "declaration_order_index": 54,
           "symbol_name": "buildConfiguredStaticCheckLanguageChoices",
           "qualified_name": "buildConfiguredStaticCheckLanguageChoices",
           "symbol_kind": "FUNCTION",
@@ -23752,19 +23966,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2377,
+              "line_number": 2422,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2403,
-          "end_line_number": 2478,
+          "start_line_number": 2448,
+          "end_line_number": 2523,
           "line_range": [
-            2403,
-            2478
+            2448,
+            2523
           ],
-          "declaration_order_index": 54,
+          "declaration_order_index": 55,
           "symbol_name": "configureStaticCheckMenu",
           "qualified_name": "configureStaticCheckMenu",
           "symbol_kind": "FUNCTION",
@@ -23813,19 +24027,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2411,
+              "line_number": 2456,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2488,
-          "end_line_number": 2549,
+          "start_line_number": 2533,
+          "end_line_number": 2594,
           "line_range": [
-            2488,
-            2549
+            2533,
+            2594
           ],
-          "declaration_order_index": 55,
+          "declaration_order_index": 56,
           "symbol_name": "buildPiUsereqMenuChoices",
           "qualified_name": "buildPiUsereqMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23875,19 +24089,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2492,
+              "line_number": 2537,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2558,
-          "end_line_number": 2585,
+          "start_line_number": 2603,
+          "end_line_number": 2630,
           "line_range": [
-            2558,
-            2585
+            2603,
+            2630
           ],
-          "declaration_order_index": 56,
+          "declaration_order_index": 57,
           "symbol_name": "buildSrcDirMenuChoices",
           "qualified_name": "buildSrcDirMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23927,19 +24141,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2559,
+              "line_number": 2604,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2594,
-          "end_line_number": 2609,
+          "start_line_number": 2639,
+          "end_line_number": 2654,
           "line_range": [
-            2594,
-            2609
+            2639,
+            2654
           ],
-          "declaration_order_index": 57,
+          "declaration_order_index": 58,
           "symbol_name": "buildSrcDirRemovalChoices",
           "qualified_name": "buildSrcDirRemovalChoices",
           "symbol_kind": "FUNCTION",
@@ -23978,19 +24192,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2595,
+              "line_number": 2640,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2620,
-          "end_line_number": 2718,
+          "start_line_number": 2665,
+          "end_line_number": 2763,
           "line_range": [
-            2620,
-            2718
+            2665,
+            2763
           ],
-          "declaration_order_index": 58,
+          "declaration_order_index": 59,
           "symbol_name": "configurePiUsereq",
           "qualified_name": "configurePiUsereq",
           "symbol_kind": "FUNCTION",
@@ -24050,19 +24264,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2648,
+              "line_number": 2693,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2628,
-          "end_line_number": 2632,
+          "start_line_number": 2673,
+          "end_line_number": 2677,
           "line_range": [
-            2628,
-            2632
+            2673,
+            2677
           ],
-          "declaration_order_index": 59,
+          "declaration_order_index": 60,
           "symbol_name": "ensureSaved",
           "qualified_name": "ensureSaved",
           "symbol_kind": "FUNCTION",
@@ -24075,13 +24289,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2629,
-          "end_line_number": 2632,
+          "start_line_number": 2674,
+          "end_line_number": 2677,
           "line_range": [
-            2629,
-            2632
+            2674,
+            2677
           ],
-          "declaration_order_index": 60,
+          "declaration_order_index": 61,
           "symbol_name": "refreshStatus",
           "qualified_name": "refreshStatus",
           "symbol_kind": "FUNCTION",
@@ -24094,13 +24308,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2728,
-          "end_line_number": 2738,
+          "start_line_number": 2773,
+          "end_line_number": 2783,
           "line_range": [
-            2728,
-            2738
+            2773,
+            2783
           ],
-          "declaration_order_index": 61,
+          "declaration_order_index": 62,
           "symbol_name": "registerConfigCommands",
           "qualified_name": "registerConfigCommands",
           "symbol_kind": "FUNCTION",
@@ -24143,13 +24357,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2756,
-          "end_line_number": 2764,
+          "start_line_number": 2801,
+          "end_line_number": 2809,
           "line_range": [
-            2756,
-            2764
+            2801,
+            2809
           ],
-          "declaration_order_index": 62,
+          "declaration_order_index": 63,
           "symbol_name": "piUsereqExtension",
           "qualified_name": "piUsereqExtension",
           "symbol_kind": "FUNCTION",
@@ -24267,11 +24481,11 @@
           ]
         },
         {
-          "start_line_number": 340,
-          "end_line_number": 343,
+          "start_line_number": 377,
+          "end_line_number": 380,
           "line_range": [
-            340,
-            343
+            377,
+            380
           ],
           "text": "@brief Maps find-payload language identifiers to stable registration labels. @details Preserves the canonical capitalization used by tool descriptions so supported-tag guidance remains deterministic across inspection snapshots. Access complexity is O(1).",
           "text_lines": [
@@ -24280,11 +24494,11 @@
           ]
         },
         {
-          "start_line_number": 367,
-          "end_line_number": 370,
+          "start_line_number": 404,
+          "end_line_number": 407,
           "line_range": [
-            367,
-            370
+            404,
+            407
           ],
           "text": "@brief Defines the stable language order used by find-tool supported-tag guidance. @details Keeps registration descriptions aligned with the repository-supported language matrix and preserves deterministic inspection snapshots. Access complexity is O(1).",
           "text_lines": [
@@ -24293,11 +24507,11 @@
           ]
         },
         {
-          "start_line_number": 790,
-          "end_line_number": 794,
+          "start_line_number": 827,
+          "end_line_number": 831,
           "line_range": [
-            790,
-            794
+            827,
+            831
           ],
           "text": "@brief Defines the shared prompt-end event rows reused across notification submenus. @details Encodes the human-readable completed/interrupted/failed labels and terminal-state descriptions required by the command-notify, sound, and Pushover event menus. Access complexity is O(1). @satisfies REQ-188, REQ-198",
           "text_lines": [
@@ -24307,11 +24521,11 @@
           ]
         },
         {
-          "start_line_number": 813,
-          "end_line_number": 817,
+          "start_line_number": 850,
+          "end_line_number": 854,
           "line_range": [
-            813,
-            817
+            850,
+            854
           ],
           "text": "@brief Defines the shared event-submenu contracts for command-notify, sound, and Pushover. @details Binds each notification transport to its top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config-key set. Access complexity is O(1). @satisfies REQ-174, REQ-178, REQ-184, REQ-198",
           "text_lines": [
