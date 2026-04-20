@@ -1,7 +1,7 @@
 /**
  * @file
- * @brief Implements pi-usereq command-notify, terminal-beep, sound, and Pushover prompt-end helpers.
- * @details Centralizes configuration defaults, status serialization, prompt-end outcome classification, placeholder substitution, detached shell-command execution, terminal bell emission, and native Pushover delivery. Runtime is O(m + c + b) in `agent_end` message count plus command length and Pushover payload size. Side effects include stdout writes, detached child-process spawning, and outbound HTTPS requests.
+ * @brief Implements pi-usereq command-notify, sound, and Pushover prompt-end helpers.
+ * @details Centralizes configuration defaults, status serialization, prompt-end outcome classification, placeholder substitution, detached shell-command execution, and native Pushover delivery. Runtime is O(m + c + b) in `agent_end` message count plus command length and Pushover payload size. Side effects include detached child-process spawning and outbound HTTPS requests.
  */
 
 import os from "node:os";
@@ -110,7 +110,7 @@ export interface PiNotifyEventRequest {
 
 /**
  * @brief Describes the configuration fields consumed by pi-notify helpers.
- * @details Narrows the full project config to the persisted notify, beep, sound, and Pushover fields used by status rendering, prompt-end routing, and shortcut toggles. Compile-time only and introduces no runtime cost.
+ * @details Narrows the full project config to the persisted notify, sound, and Pushover fields used by status rendering, prompt-end routing, and shortcut toggles. Compile-time only and introduces no runtime cost.
  */
 export type PiNotifyConfigFields = Pick<
   UseReqConfig,
@@ -118,10 +118,6 @@ export type PiNotifyConfigFields = Pick<
   | "notify-on-end"
   | "notify-on-esc"
   | "notify-on-error"
-  | "notify-beep-enabled"
-  | "notify-beep-on-end"
-  | "notify-beep-on-esc"
-  | "notify-beep-on-error"
   | "notify-sound"
   | "notify-sound-on-end"
   | "notify-sound-on-esc"
@@ -149,12 +145,6 @@ export type PiNotifyConfigFields = Pick<
 type PiNotifySpawn = typeof spawn;
 
 /**
- * @brief Describes the stdout-write callback used by terminal-beep dispatch.
- * @details Narrows the injected stdout surface so deterministic tests can capture bell emissions without relying on a real terminal device. Compile-time only and introduces no runtime cost.
- */
-type PiNotifyStdoutWrite = (chunk: string) => boolean;
-
-/**
  * @brief Stores the currently configured native HTTPS request function used for Pushover delivery.
  * @details Defaults to `node:https.request` and can be replaced by deterministic tests so Pushover dispatch remains observable without real network I/O. Access complexity is O(1). Side effect: mutated only through the dedicated test hook.
  */
@@ -165,12 +155,6 @@ let piNotifyHttpsRequest: typeof https.request = https.request;
  * @details Defaults to `node:child_process.spawn` and can be replaced by deterministic tests so detached shell-command execution remains observable without launching real child processes. Access complexity is O(1). Side effect: mutated only through the dedicated test hook.
  */
 let piNotifySpawn: PiNotifySpawn = spawn;
-
-/**
- * @brief Stores the currently configured stdout-write function used for terminal beeps.
- * @details Defaults to `process.stdout.write` and can be replaced by deterministic tests so terminal bell emissions remain observable without writing to the live terminal. Access complexity is O(1). Side effect: mutated only through the dedicated test hook.
- */
-let piNotifyStdoutWrite: PiNotifyStdoutWrite = (chunk) => process.stdout.write(chunk);
 
 /**
  * @brief Normalizes one persisted sound level.
@@ -256,17 +240,6 @@ export function formatPiNotifyStatus(config: Pick<UseReqConfig, "notify-enabled"
 }
 
 /**
- * @brief Formats the global terminal-beep flag for UI value rendering.
- * @details Serializes only the persisted global terminal-beep enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
- * @param[in] config {Pick<UseReqConfig, "notify-beep-enabled">} Effective terminal-beep configuration subset.
- * @return {string} `on` when terminal beep is globally enabled; otherwise `off`.
- * @satisfies REQ-129
- */
-export function formatPiNotifyBeepStatus(config: Pick<UseReqConfig, "notify-beep-enabled">): string {
-  return config["notify-beep-enabled"] ? "on" : "off";
-}
-
-/**
  * @brief Formats the global Pushover flag for UI value rendering.
  * @details Serializes only the persisted global Pushover enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
  * @param[in] config {Pick<UseReqConfig, "notify-pushover-enabled">} Effective Pushover configuration subset.
@@ -294,7 +267,7 @@ export function cyclePiNotifySoundLevel(currentLevel: PiNotifySoundLevel): PiNot
 
 /**
  * @brief Tests whether one outcome-specific toggle is enabled.
- * @details Reuses the canonical `end|esc|err` routing order shared by notify, beep, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated.
+ * @details Reuses the canonical `end|esc|err` routing order shared by notify, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
  * @param[in] endEnabled {boolean} Enabled state for successful completion.
  * @param[in] escEnabled {boolean} Enabled state for escape-triggered abortion.
@@ -509,16 +482,6 @@ function runPiNotifyShellCommand(command: string): void {
 }
 
 /**
- * @brief Emits one terminal bell control byte.
- * @details Writes `\a` directly to stdout so terminal-beep delivery stays shell-free and deterministic across prompt-end outcomes. Runtime is O(1). Side effect: writes to stdout.
- * @return {void} No return value.
- * @satisfies REQ-130
- */
-function runPiNotifyBeep(): void {
-  piNotifyStdoutWrite("\u0007");
-}
-
-/**
  * @brief Determines whether one prompt-end outcome should trigger command-notify.
  * @details Requires a prompt-end request, the global command-notify enable flag, and the corresponding per-event notify toggle. Runtime is O(1). No external state is mutated.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -561,27 +524,6 @@ function runPiNotifyCommand(
     installationPath,
   );
   runPiNotifyShellCommand(command);
-}
-
-/**
- * @brief Determines whether one prompt-end outcome should trigger terminal-beep.
- * @details Requires the global terminal-beep enable flag and the corresponding per-event beep toggle. Runtime is O(1). No external state is mutated.
- * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
- * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
- * @return {boolean} `true` when terminal-beep prerequisites are satisfied.
- * @satisfies REQ-129, REQ-177
- */
-function shouldRunPiNotifyBeep(
-  config: PiNotifyConfigFields,
-  outcome: PiNotifyOutcome,
-): boolean {
-  return config["notify-beep-enabled"]
-    && isPiNotifyOutcomeEnabled(
-      outcome,
-      config["notify-beep-on-end"],
-      config["notify-beep-on-esc"],
-      config["notify-beep-on-error"],
-    );
 }
 
 /**
@@ -769,23 +711,13 @@ export function setPiNotifySpawnForTests(spawnImpl: PiNotifySpawn | undefined): 
 }
 
 /**
- * @brief Replaces the stdout-write function used for terminal-beep delivery in deterministic tests.
- * @details Accepts a drop-in bell-writer replacement and restores the native stdout writer when `undefined` is supplied. Runtime is O(1). Side effect: mutates the module-local stdout transport hook.
- * @param[in] writeImpl {PiNotifyStdoutWrite | undefined} Replacement stdout-write function.
- * @return {void} No return value.
- */
-export function setPiNotifyStdoutWriteForTests(writeImpl: PiNotifyStdoutWrite | undefined): void {
-  piNotifyStdoutWrite = writeImpl ?? ((chunk) => process.stdout.write(chunk));
-}
-
-/**
- * @brief Dispatches prompt-end notify, beep, sound, and Pushover effects for one agent-end payload.
- * @details Classifies the terminal outcome, emits a terminal bell when the global beep flag and the matching event toggle are enabled, executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include stdout writes, child-process spawning, and outbound HTTPS requests.
+ * @brief Dispatches prompt-end notify, sound, and Pushover effects for one agent-end payload.
+ * @details Classifies the terminal outcome, executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
  * @param[in] request {PiNotifyEventRequest | undefined} Optional prompt-end request metadata used for command-notify and Pushover substitution.
  * @return {void} No return value.
- * @satisfies REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-177, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187
+ * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187
  */
 export function runPiNotifyEffects(
   config: PiNotifyConfigFields,
@@ -793,9 +725,6 @@ export function runPiNotifyEffects(
   request?: PiNotifyEventRequest,
 ): void {
   const outcome = classifyPiNotifyOutcome(event);
-  if (shouldRunPiNotifyBeep(config, outcome)) {
-    runPiNotifyBeep();
-  }
   if (shouldRunPiNotifyCommand(config, outcome, request)) {
     runPiNotifyCommand(config, request as PiNotifyEventRequest);
   }

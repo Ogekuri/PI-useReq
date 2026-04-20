@@ -14,7 +14,6 @@ import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
 import {
   setPiNotifyHttpsRequestForTests,
   setPiNotifySpawnForTests,
-  setPiNotifyStdoutWriteForTests,
 } from "../src/core/pi-notify.js";
 import {
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
@@ -1382,16 +1381,14 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "Save and close",
   ]);
   assert.ok(renderedMenu.includes(formatRuntimePathForDisplay(getProjectConfigPath(cwd))));
+  assert.ok(renderedMenu.includes("notification:off • sound:none • pushover:off"));
+  assert.doesNotMatch(renderedMenu, /beep:/);
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "Enable notification",
     "Toggle notification on success",
     "Toggle notification on escape",
     "Toggle notification on error",
     "Notify command",
-    "Enable terminal beep",
-    "Toggle terminal beep on success",
-    "Toggle terminal beep on escape",
-    "Toggle terminal beep on error",
     "Enable sound",
     "Toggle sound on success",
     "Toggle sound on escape",
@@ -1866,17 +1863,13 @@ test("session_start enables default custom tools and default embedded tools only
   assert.equal(activeTools.has("ls"), false);
 });
 
-test("default configuration applies the documented notify, beep, sound, and pushover defaults", () => {
+test("default configuration applies the documented notify, sound, and pushover defaults", () => {
   const config = getDefaultConfig(createTempDir("pi-usereq-default-notify-"));
 
   assert.equal(config["notify-enabled"], false);
   assert.equal(config["notify-on-end"], true);
   assert.equal(config["notify-on-esc"], false);
   assert.equal(config["notify-on-error"], false);
-  assert.equal(config["notify-beep-enabled"], true);
-  assert.equal(config["notify-beep-on-end"], true);
-  assert.equal(config["notify-beep-on-esc"], true);
-  assert.equal(config["notify-beep-on-error"], true);
   assert.equal(config["notify-sound"], "none");
   assert.equal(config["notify-sound-on-end"], true);
   assert.equal(config["notify-sound-on-esc"], false);
@@ -1927,7 +1920,7 @@ test("configuration menu can disable configurable active tools", async () => {
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
 
-test("configuration menu can persist notify, beep, and sound settings", async () => {
+test("configuration menu can persist notify and sound settings", async () => {
   const cwd = createTempDir("pi-usereq-menu-notify-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -1939,7 +1932,6 @@ test("configuration menu can persist notify, beep, and sound settings", async ()
       "notifications",
       "Enable notification",
       "Toggle notification on error",
-      "Enable terminal beep",
       "Enable sound",
       "high",
       "Toggle sound on escape",
@@ -1967,10 +1959,6 @@ test("configuration menu can persist notify, beep, and sound settings", async ()
   assert.equal(config["notify-on-end"], true);
   assert.equal(config["notify-on-esc"], false);
   assert.equal(config["notify-on-error"], true);
-  assert.equal(config["notify-beep-enabled"], false);
-  assert.equal(config["notify-beep-on-end"], true);
-  assert.equal(config["notify-beep-on-esc"], true);
-  assert.equal(config["notify-beep-on-error"], true);
   assert.equal(config["notify-sound"], "high");
   assert.equal(config["notify-sound-on-end"], true);
   assert.equal(config["notify-sound-on-esc"], true);
@@ -2336,7 +2324,6 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
       "notify-on-end": true,
       "notify-on-esc": false,
       "notify-on-error": true,
-      "notify-beep-enabled": false,
       "notify-sound": "none",
       PI_NOTIFY_CMD: 'notify-send "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%ARGS%%"',
     });
@@ -2387,8 +2374,8 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
   }
 });
 
-test("terminal beep and sound routing honor global state and per-event toggles", async () => {
-  const cwd = createTempDir("pi-usereq-beep-sound-routing-");
+test("sound routing honors the selected sound state and per-event toggles", async () => {
+  const cwd = createTempDir("pi-usereq-sound-routing-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const configPath = getProjectConfigPath(cwd);
   const writeConfig = (overrides: Record<string, unknown>) => {
@@ -2402,7 +2389,6 @@ test("terminal beep and sound routing honor global state and per-event toggles",
   piUsereqExtension(pi);
   const ctx = createFakeCtx(cwd);
   const recordedCommands: string[] = [];
-  const recordedBeeps: string[] = [];
   setPiNotifySpawnForTests(((command: string, args?: readonly string[] | undefined, _options?: Record<string, unknown>) => {
     void command;
     recordedCommands.push(String(args && args.length > 0 ? args[args.length - 1] : ""));
@@ -2416,35 +2402,25 @@ test("terminal beep and sound routing honor global state and per-event toggles",
     };
     return fakeChild as unknown as ReturnType<typeof import("node:child_process").spawn>;
   }) as typeof import("node:child_process").spawn);
-  setPiNotifyStdoutWriteForTests((chunk) => {
-    recordedBeeps.push(chunk);
-    return true;
-  });
 
   try {
     writeConfig({
       "notify-enabled": false,
-      "notify-beep-enabled": false,
-      "notify-beep-on-end": true,
-      "notify-sound": "high",
+      "notify-sound": "none",
       "notify-sound-on-end": true,
       PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedCommands.length = 0;
-    recordedBeeps.length = 0;
     await pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx);
     await pi.emit("agent_start", {}, ctx);
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
-    assert.deepEqual(recordedBeeps, []);
-    assert.equal(recordedCommands.length, 1);
+    assert.deepEqual(recordedCommands, []);
 
     writeConfig({
       "notify-enabled": false,
-      "notify-beep-enabled": true,
-      "notify-beep-on-esc": false,
       "notify-sound": "high",
       "notify-sound-on-end": false,
       "notify-sound-on-esc": true,
@@ -2453,38 +2429,31 @@ test("terminal beep and sound routing honor global state and per-event toggles",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedCommands.length = 0;
-    recordedBeeps.length = 0;
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
     await pi.emit("agent_start", {}, ctx);
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "aborted", content: [] }],
     }, ctx);
-    assert.deepEqual(recordedBeeps, []);
     assert.equal(recordedCommands.length, 1);
 
     writeConfig({
       "notify-enabled": false,
-      "notify-beep-enabled": true,
-      "notify-beep-on-error": true,
       "notify-sound": "high",
       "notify-sound-on-end": false,
       "notify-sound-on-esc": false,
-      "notify-sound-on-error": false,
+      "notify-sound-on-error": true,
       PI_NOTIFY_SOUND_HIGH_CMD: "echo high %%INSTALLATION_PATH%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedCommands.length = 0;
-    recordedBeeps.length = 0;
     await pi.commands.get("req-write")!.handler("Write docs", ctx);
     await pi.emit("agent_start", {}, ctx);
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "error", content: [] }],
     }, ctx);
-    assert.deepEqual(recordedBeeps, ["\u0007"]);
-    assert.deepEqual(recordedCommands, []);
+    assert.equal(recordedCommands.length, 1);
   } finally {
     setPiNotifySpawnForTests(undefined);
-    setPiNotifyStdoutWriteForTests(undefined);
   }
 });
 

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.37"
+version: "0.0.38"
 date: "2026-04-20"
 author: "OpenAI Codex"
 scope:
@@ -133,13 +133,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-126**: MUST render `context` gauge icons with theme `warning`, except the overflow state uses theme `error`.
 - **REQ-127**: MUST render `context` as blinking `▕█▏` when normalized usage exceeds 100 percent and terminal blink control is supported.
 - **REQ-128**: MUST render `context` as theme `error` `▕█▏` when normalized usage exceeds 100 percent and terminal blink control is unavailable.
-- **REQ-129**: MUST persist a global terminal-beep enable flag defaulting to enabled.
-- **REQ-130**: MUST emit the terminal bell control byte `\a` when terminal beep is globally enabled and the corresponding prompt-end beep event toggle is enabled.
 - **REQ-131**: MUST persist a sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
 - **REQ-132**: MUST execute the configured sound command when the corresponding prompt-end sound event toggle is enabled and the sound level is not `none`.
 - **REQ-133**: MUST persist configurable shell-command strings for sound levels `low`, `mid`, and `high`, and MUST substitute `%%INSTALLATION_PATH%%` with the runtime extension installation path before execution.
 - **REQ-134**: MUST persist a configurable sound-level toggle shortcut, defaulting to `alt+s`, and MUST cycle sound levels in the order `none`, `low`, `mid`, `high`, `none`.
-- **REQ-137**: MUST make the `Notifications` menu order command-notify rows, terminal-beep rows, sound rows, and direct Pushover rows after `Sound command (high vol.)`.
+- **REQ-137**: MUST make the `Notifications` menu order command-notify rows, sound rows, and direct Pushover rows after `Sound command (high vol.)`.
 - **REQ-163**: MUST persist a global Pushover enable flag defaulting to disabled.
 - **REQ-164**: MUST NOT expose a `Pushover notifications` submenu and MUST expose Pushover settings directly in `Notifications`.
 - **REQ-165**: MUST order direct Pushover rows as `Enable pushover`, event toggles, `Pushover priority`, `Pushover title`, `Pushover text`, `Pushover User Key/Delivery Group Key`, and `Pushover Token/API Token Key`.
@@ -151,19 +149,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-174**: MUST persist independent command-notify event toggles for successful completion, escape, and error, defaulting to success enabled and escape plus error disabled.
 - **REQ-175**: MUST persist a configurable `PI_NOTIFY_CMD` whose default template invokes `notify-send` with the bundled icon plus runtime title and argument placeholders.
 - **REQ-176**: MUST implement command-notify exclusively by executing `PI_NOTIFY_CMD` when command-notify is globally enabled and the corresponding prompt-end notify event toggle is enabled.
-- **REQ-177**: MUST persist independent terminal-beep event toggles for successful completion, escape, and error, defaulting each toggle to enabled.
 - **REQ-178**: MUST persist independent sound event toggles for successful completion, escape, and error, defaulting to success enabled and escape plus error disabled.
 - **REQ-179**: MUST label sound rows as `Enable sound` and `Sound command (low vol.)`, `Sound command (mid vol.)`, and `Sound command (high vol.)`.
 - **REQ-180**: MUST render `sound` immediately after `elapsed`, showing one of `none`, `low`, `mid`, or `high`.
-- **REQ-181**: MUST make the `Notifications` menu expose `Enable notification`, notification event toggles, and `Notify command` before terminal-beep rows.
-- **REQ-182**: MUST make the `Notifications` menu expose `Enable terminal beep` before `Toggle terminal beep on success`, `Toggle terminal beep on escape`, and `Toggle terminal beep on error`.
+- **REQ-181**: MUST make the `Notifications` menu expose `Enable notification`, notification event toggles, and `Notify command` before sound rows.
 - **REQ-183**: MUST make the `Notifications` menu expose sound event toggles immediately after `Enable sound` and before sound hotkey plus command rows.
 - **REQ-184**: MUST persist independent Pushover event toggles for successful completion, escape, and error, defaulting to success enabled and escape plus error disabled.
 - **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%ARGS%%`.
 - **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, and `%%ARGS%%` at runtime inside `Pushover title` and `Pushover text`.
 - **REQ-187**: MUST render `%%BASE%%` as the runtime base path relative to user home using `~/...` form and `%%TIME%%` as final elapsed `M:SS`.
 - **REQ-188**: MUST label notification toggle rows as `Toggle notification on success`, `Toggle notification on escape`, and `Toggle notification on error`.
-- **REQ-189**: MUST label terminal-beep toggle rows as `Toggle terminal beep on success`, `Toggle terminal beep on escape`, and `Toggle terminal beep on error`.
 - **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Static code checkers`, `Enable tools`, `Notifications`, and `Show configuration`.
 - **REQ-191**: MUST order top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Static code checkers`, `Enable tools`, `Notifications`, `Show configuration`, `Reset defaults`, and `Save and close`.
 - **REQ-192**: MUST preserve the selected settings-menu row after toggling or editing a setting value.
@@ -171,6 +166,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-194**: MUST make top-level `Reset defaults` restore all top-level and submenu settings to defaults.
 - **REQ-195**: MUST make submenu `Reset defaults` restore only settings within that submenu subtree.
 - **REQ-196**: MUST persist a global command-notify enable flag defaulting to disabled.
+- **REQ-197**: MUST summarize top-level `Notifications` as `notification:<state> • sound:<level> • pushover:<state>`.
 - **REQ-159**: MUST increase `Σ` by each normally completed prompt duration and MUST NOT change `Σ` on escape-triggered cancellation.
 - **REQ-173**: MUST optimize every agent-tool response for minimum token usage by excluding caller-known, static, duplicated, and registration-described facts from runtime payloads.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
@@ -280,15 +276,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-031**: MUST verify the status bar renders the explicit base path, omits `docs`, `src`, `tests`, `git`, and `tools`, and preserves active-theme `accent`/`warning` field-value token separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
 - **TST-033**: MUST verify the status bar renders ordered `base`, `context`, `elapsed`, and `sound` fields plus the documented icon-based `context` gauge thresholds.
-- **TST-037**: MUST verify the `Notifications` menu persists notification, terminal-beep, sound, and direct Pushover settings using the documented labels, order, reset actions, and save-close actions.
+- **TST-037**: MUST verify the `Notifications` menu persists notification, sound, and direct Pushover settings using the documented labels, order, reset actions, and save-close actions.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
 - **TST-047**: MUST verify the `Notifications` menu exposes direct Pushover rows after sound rows and persists Pushover enable, event toggles, priority, title, text, user key, and token values.
 - **TST-048**: MUST verify native Pushover requests honor global enable, event toggles, credentials, priority, title, and text placeholder substitution for enabled prompt-end outcomes.
 - **TST-049**: MUST verify the status bar renders ordered `base`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
 - **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution and routing honor global notify enable plus per-event notify toggles.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
-- **TST-045**: MUST verify default configuration disables notify globally, enables terminal-beep globally, initializes sound to `none`, disables Pushover globally, and applies the documented per-event default toggles.
-- **TST-051**: MUST verify terminal beep and sound routing honor their global enable or state and per-event toggles across success, escape, and error.
+- **TST-045**: MUST verify default configuration disables notify globally, initializes sound to `none`, disables Pushover globally, and applies the documented per-event default toggles.
+- **TST-051**: MUST verify sound routing honors the selected sound state and per-event toggles across success, escape, and error.
 - **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with the theme `warning` token.
 - **TST-036**: MUST verify context usage above 100 percent renders `▕█▏` with blink control when preserved or with the theme `error` token otherwise.
 - **TST-043**: MUST verify configuration menus reuse the active CLI settings-list theme semantics for labels, values, descriptions, cursor, and hints.
@@ -320,7 +316,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify `.pi-usereq/config.json` omits `base-path` and `git-path`, while runtime path tools and status rendering still derive both values correctly.
-- **TST-041**: MUST verify the `pi-usereq` menu uses the documented labels and order, exposes `Show configuration` after `Notifications`, shows the home-relative config path, and omits notification reference-only actions.
+- **TST-041**: MUST verify the `pi-usereq` menu uses the documented labels and order, exposes `Show configuration` after `Notifications`, shows the home-relative config path, summarizes `Notifications` without terminal-beep state, and omits notification reference-only actions.
 - **TST-052**: MUST verify toggling or editing a settings entry preserves focus on the affected row when the menu re-renders.
 - **TST-053**: MUST verify top-level reset restores all settings and submenu reset restores only the targeted submenu subtree.
 

@@ -55,10 +55,6 @@ export interface UseReqConfig {
   "notify-on-end": boolean;
   "notify-on-esc": boolean;
   "notify-on-error": boolean;
-  "notify-beep-enabled": boolean;
-  "notify-beep-on-end": boolean;
-  "notify-beep-on-esc": boolean;
-  "notify-beep-on-error": boolean;
   "notify-sound": "none" | "low" | "mid" | "high";
   "notify-sound-on-end": boolean;
   "notify-sound-on-esc": boolean;
@@ -107,10 +103,10 @@ export function getProjectConfigPath(projectBase: string): string {
 
 /**
  * @brief Builds the default project configuration.
- * @details Populates canonical docs/test/source directories, the default startup tool set, default command-notify, terminal-beep, sound, and Pushover fields, and excludes runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
+ * @details Populates canonical docs/test/source directories, the default startup tool set, default command-notify, sound, and Pushover fields, and excludes runtime-derived path metadata. Time complexity is O(n) in default tool count. No filesystem side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Fresh default configuration object.
- * @satisfies CTN-001, CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185, REQ-196
+ * @satisfies CTN-001, CTN-012, REQ-066, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196
  */
 export function getDefaultConfig(_projectBase: string): UseReqConfig {
   return {
@@ -123,10 +119,6 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     "notify-on-end": true,
     "notify-on-esc": false,
     "notify-on-error": false,
-    "notify-beep-enabled": true,
-    "notify-beep-on-end": true,
-    "notify-beep-on-esc": true,
-    "notify-beep-on-error": true,
     "notify-sound": "none",
     "notify-sound-on-end": true,
     "notify-sound-on-esc": false,
@@ -150,11 +142,11 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
 
 /**
  * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names plus notify, beep, sound, and Pushover fields, applies documented per-flag defaults for missing payloads, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and static-check field shapes, normalizes enabled tool names plus notify, sound, and Pushover fields, applies documented per-flag defaults for missing payloads, and ignores removed or runtime-derived path metadata. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @return {UseReqConfig} Sanitized effective configuration.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
- * @satisfies CTN-012, REQ-066, REQ-129, REQ-146, REQ-163, REQ-174, REQ-177, REQ-178, REQ-184, REQ-185, REQ-196
+ * @satisfies CTN-012, REQ-066, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196
  */
 export function loadConfig(projectBase: string): UseReqConfig {
   const configPath = getProjectConfigPath(projectBase);
@@ -186,10 +178,6 @@ export function loadConfig(projectBase: string): UseReqConfig {
   const notifyOnEnd = data["notify-on-end"] !== false;
   const notifyOnEsc = data["notify-on-esc"] === true;
   const notifyOnError = data["notify-on-error"] === true;
-  const notifyBeepEnabled = data["notify-beep-enabled"] !== false;
-  const notifyBeepOnEnd = data["notify-beep-on-end"] !== false;
-  const notifyBeepOnEsc = data["notify-beep-on-esc"] !== false;
-  const notifyBeepOnError = data["notify-beep-on-error"] !== false;
   const notifySound = normalizePiNotifySoundLevel(data["notify-sound"]);
   const notifySoundOnEnd = data["notify-sound-on-end"] !== false;
   const notifySoundOnEsc = data["notify-sound-on-esc"] === true;
@@ -225,10 +213,6 @@ export function loadConfig(projectBase: string): UseReqConfig {
     "notify-on-end": notifyOnEnd,
     "notify-on-esc": notifyOnEsc,
     "notify-on-error": notifyOnError,
-    "notify-beep-enabled": notifyBeepEnabled,
-    "notify-beep-on-end": notifyBeepOnEnd,
-    "notify-beep-on-esc": notifyBeepOnEsc,
-    "notify-beep-on-error": notifyBeepOnError,
     "notify-sound": notifySound,
     "notify-sound-on-end": notifySoundOnEnd,
     "notify-sound-on-esc": notifySoundOnEsc,
@@ -277,10 +261,6 @@ function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
     "notify-on-end": config["notify-on-end"],
     "notify-on-esc": config["notify-on-esc"],
     "notify-on-error": config["notify-on-error"],
-    "notify-beep-enabled": config["notify-beep-enabled"],
-    "notify-beep-on-end": config["notify-beep-on-end"],
-    "notify-beep-on-esc": config["notify-beep-on-esc"],
-    "notify-beep-on-error": config["notify-beep-on-error"],
     "notify-sound": config["notify-sound"],
     "notify-sound-on-end": config["notify-sound-on-end"],
     "notify-sound-on-esc": config["notify-sound-on-esc"],

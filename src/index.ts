@@ -69,7 +69,6 @@ import {
   DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
   DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
   cyclePiNotifySoundLevel,
-  formatPiNotifyBeepStatus,
   formatPiNotifyPushoverStatus,
   formatPiNotifyStatus,
   normalizePiNotifyCommand,
@@ -549,20 +548,19 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
  * @details Applies session-start-specific resource validation, project-config
  * refresh, and startup-tool enablement before forwarding the originating hook
  * name and payload into the shared `updateExtensionStatus(...)` pipeline.
- * On `agent_end`, also dispatches configured command-notify, terminal-beep,
- * sound, and prompt-specific Pushover effects when the current run originates
- * from a bundled prompt command. Runtime is dominated by configuration loading during
+ * On `agent_end`, also dispatches configured command-notify, sound, and
+ * prompt-specific Pushover effects when the current run originates from a
+ * bundled prompt command. Runtime is dominated by configuration loading during
  * `session_start`; all other hooks are O(1). Side effects include resource
  * checks, active-tool mutation, status updates, live-ticker disposal on
- * shutdown, stdout writes, optional child-process spawning, and outbound
- * HTTPS requests.
+ * shutdown, optional child-process spawning, and outbound HTTPS requests.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-177, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -681,17 +679,13 @@ function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): s
 
 /**
  * @brief Represents one persisted boolean notification-setting key.
- * @details Restricts menu toggles to the global enable flags and outcome-specific toggles used by command-notify, terminal-beep, sound, and Pushover configuration. Compile-time only and introduces no runtime cost.
+ * @details Restricts menu toggles to the global enable flags and outcome-specific toggles used by command-notify, sound, and Pushover configuration. Compile-time only and introduces no runtime cost.
  */
 type PiNotifyBooleanConfigKey =
   | "notify-enabled"
   | "notify-on-end"
   | "notify-on-esc"
   | "notify-on-error"
-  | "notify-beep-enabled"
-  | "notify-beep-on-end"
-  | "notify-beep-on-esc"
-  | "notify-beep-on-error"
   | "notify-sound-on-end"
   | "notify-sound-on-esc"
   | "notify-sound-on-error"
@@ -714,12 +708,10 @@ function togglePiNotifyFlag(config: UseReqConfig, key: PiNotifyBooleanConfigKey)
 
 /**
  * @brief Restores notification-related settings to their documented defaults.
- * @details Copies the command-notify, terminal-beep, sound, and Pushover
- * configuration subtree from a fresh default config into the supplied mutable
- * project config. Runtime is O(1). Side effect: mutates `config`.
+ * @details Copies the command-notify, sound, and Pushover configuration subtree from a fresh default config into the supplied mutable project config. Runtime is O(1). Side effect: mutates `config`.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {void} No return value.
- * @satisfies REQ-174, REQ-177, REQ-178, REQ-184, REQ-195, REQ-196
+ * @satisfies REQ-174, REQ-178, REQ-184, REQ-195, REQ-196
  */
 function resetPiNotifyConfigToDefaults(config: UseReqConfig): void {
   const defaults = getDefaultConfig("");
@@ -727,10 +719,6 @@ function resetPiNotifyConfigToDefaults(config: UseReqConfig): void {
   config["notify-on-end"] = defaults["notify-on-end"];
   config["notify-on-esc"] = defaults["notify-on-esc"];
   config["notify-on-error"] = defaults["notify-on-error"];
-  config["notify-beep-enabled"] = defaults["notify-beep-enabled"];
-  config["notify-beep-on-end"] = defaults["notify-beep-on-end"];
-  config["notify-beep-on-esc"] = defaults["notify-beep-on-esc"];
-  config["notify-beep-on-error"] = defaults["notify-beep-on-error"];
   config["notify-sound"] = defaults["notify-sound"];
   config["notify-sound-on-end"] = defaults["notify-sound-on-end"];
   config["notify-sound-on-esc"] = defaults["notify-sound-on-esc"];
@@ -864,13 +852,10 @@ async function selectPiNotifyPushoverPriority(
 
 /**
  * @brief Builds the shared settings-menu choices for notification configuration.
- * @details Serializes command-notify, terminal-beep, sound, and direct
- * Pushover rows in the documented order so the shared settings-menu renderer
- * can expose one unified configuration surface. Runtime is O(1) plus
- * command-length formatting. No external state is mutated.
+ * @details Serializes command-notify, sound, and direct Pushover rows in the documented order so the shared settings-menu renderer can expose one unified configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
- * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183, REQ-188, REQ-189, REQ-193
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193
  */
 function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
@@ -903,30 +888,6 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       label: "Notify command",
       value: config.PI_NOTIFY_CMD,
       description: "Edit the shell command used for command-notify delivery.",
-    },
-    {
-      id: "notify-beep-enabled",
-      label: "Enable terminal beep",
-      value: formatPiNotifyBeepStatus(config),
-      description: "Enable or disable terminal-beep delivery globally.",
-    },
-    {
-      id: "notify-beep-on-end",
-      label: "Toggle terminal beep on success",
-      value: config["notify-beep-on-end"] ? "on" : "off",
-      description: "Toggle terminal-beep delivery for successful prompt completion.",
-    },
-    {
-      id: "notify-beep-on-esc",
-      label: "Toggle terminal beep on escape",
-      value: config["notify-beep-on-esc"] ? "on" : "off",
-      description: "Toggle terminal-beep delivery for escape-triggered prompt abortion.",
-    },
-    {
-      id: "notify-beep-on-error",
-      label: "Toggle terminal beep on error",
-      value: config["notify-beep-on-error"] ? "on" : "off",
-      description: "Toggle terminal-beep delivery for error-terminated prompt completion.",
     },
     {
       id: "selected-sound-command",
@@ -981,7 +942,7 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       id: "reset-defaults",
       label: "Reset defaults",
       value: "",
-      description: "Restore the documented notification defaults for command-notify, terminal-beep, sound, and Pushover settings.",
+      description: "Restore the documented notification defaults for command-notify, sound, and Pushover settings.",
     },
     {
       id: "save-and-close",
@@ -1035,15 +996,11 @@ async function selectPiNotifySoundLevel(
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes command-notify, terminal-beep, sound, and direct Pushover
- * controls through the shared settings-menu renderer while preserving row order,
- * submenu reset semantics, and row-focus retention across menu re-renders.
- * Runtime depends on user interaction count. Side effects include UI updates
- * and config mutation.
+ * @details Exposes command-notify, sound, and direct Pushover controls through the shared settings-menu renderer while preserving row order, submenu reset semantics, and row-focus retention across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-129, REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-182, REQ-183, REQ-184, REQ-188, REQ-189, REQ-192, REQ-193, REQ-195, REQ-196
+ * @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
@@ -1067,10 +1024,6 @@ async function configurePiNotifyMenu(
       || choice === "notify-on-end"
       || choice === "notify-on-esc"
       || choice === "notify-on-error"
-      || choice === "notify-beep-enabled"
-      || choice === "notify-beep-on-end"
-      || choice === "notify-beep-on-esc"
-      || choice === "notify-beep-on-error"
       || choice === "notify-sound-on-end"
       || choice === "notify-sound-on-esc"
       || choice === "notify-sound-on-error"
@@ -1085,10 +1038,6 @@ async function configurePiNotifyMenu(
         "notify-on-end": "Notification on success",
         "notify-on-esc": "Notification on escape",
         "notify-on-error": "Notification on error",
-        "notify-beep-enabled": "Terminal beep",
-        "notify-beep-on-end": "Terminal beep on success",
-        "notify-beep-on-esc": "Terminal beep on escape",
-        "notify-beep-on-error": "Terminal beep on error",
         "notify-sound-on-end": "Sound on success",
         "notify-sound-on-esc": "Sound on escape",
         "notify-sound-on-error": "Sound on error",
@@ -2308,7 +2257,7 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197
  */
 function buildPiUsereqMenuChoices(
   cwd: string,
@@ -2348,8 +2297,8 @@ function buildPiUsereqMenuChoices(
     {
       id: "notifications",
       label: "Notifications",
-      value: `notification:${formatPiNotifyStatus(config)} • beep:${formatPiNotifyBeepStatus(config)} • sound:${config["notify-sound"]} • pushover:${formatPiNotifyPushoverStatus(config)}`,
-      description: "Manage command-notify, terminal-beep, sound, and direct Pushover settings in one unified menu.",
+      value: `notification:${formatPiNotifyStatus(config)} • sound:${config["notify-sound"]} • pushover:${formatPiNotifyPushoverStatus(config)}`,
+      description: "Manage command-notify, sound, and direct Pushover settings in one unified menu.",
     },
     {
       id: "show-config",
@@ -2576,7 +2525,7 @@ function registerConfigCommands(
  * timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-129, REQ-130, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-189, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();
