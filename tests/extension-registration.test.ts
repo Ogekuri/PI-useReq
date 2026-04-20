@@ -10,7 +10,6 @@ import {
   getDefaultConfig,
   getProjectConfigPath,
 } from "../src/core/config.js";
-import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
 import {
   setJsTiktokenModuleLoaderForTests,
 } from "../src/core/token-counter.js";
@@ -388,6 +387,35 @@ function buildExpectedNotifyBasePath(cwd: string): string {
     return `~/${relativePath.split(path.sep).join("/")}`;
   }
   return resolvedPath.split(path.sep).join("/");
+}
+
+/**
+ * @brief Formats the expected `Show configuration` path value.
+ * @details Resolves the current project config path and rewrites a leading home-directory prefix to `~` so top-level menu assertions match the documented display-only substitution without changing stored paths. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] cwd {string} Runtime working directory.
+ * @return {string} `~`-relative or absolute config-path display string.
+ */
+function buildExpectedShowConfigPath(cwd: string): string {
+  return buildExpectedNotifyBasePath(path.dirname(path.dirname(getProjectConfigPath(cwd)))) === buildExpectedNotifyBasePath(cwd)
+    ? `${buildExpectedNotifyBasePath(cwd)}/.pi-usereq/config.json`
+    : getProjectConfigPath(cwd).split(path.sep).join("/");
+}
+
+/**
+ * @brief Formats the expected `%%RESULT%%` placeholder value for one terminal stop reason.
+ * @details Maps the tested assistant stop reasons to the literal runtime result tokens required by the default notify and Pushover templates. Runtime is O(1). No external state is mutated.
+ * @param[in] stopReason {"stop" | "aborted" | "error"} Terminal stop reason under test.
+ * @return {string} `successed`, `aborted`, or `failed`.
+ */
+function buildExpectedNotifyResult(stopReason: "stop" | "aborted" | "error"): string {
+  switch (stopReason) {
+    case "aborted":
+      return "aborted";
+    case "error":
+      return "failed";
+    default:
+      return "successed";
+  }
 }
 
 /**
@@ -1416,14 +1444,14 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "Document directory",
     "Source-code directories",
     "Unit tests directory",
-    "Static code checkers",
+    "Language static code checkers",
     "Enable tools",
     "Notifications",
     "Show configuration",
     "Reset defaults",
     "Save and close",
   ]);
-  assert.ok(renderedMenu.includes(formatRuntimePathForDisplay(getProjectConfigPath(cwd))));
+  assert.ok(renderedMenu.includes(buildExpectedShowConfigPath(cwd)));
   assert.ok(renderedMenu.includes("notification:off • sound:none • pushover:off"));
   assert.doesNotMatch(renderedMenu, /beep:/);
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
@@ -1928,6 +1956,8 @@ test("default configuration applies the documented notify, sound, and pushover d
   assert.equal(config["notify-pushover-on-completed"], true);
   assert.equal(config["notify-pushover-on-interrupted"], false);
   assert.equal(config["notify-pushover-on-failed"], false);
+  assert.equal(config.PI_NOTIFY_CMD, 'notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a "PI-useReq" "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"');
+  assert.equal(config["notify-pushover-text"], "%%RESULT%%\n%%ARGS%%");
 });
 
 test("configuration menu can enable embedded builtin tools", async () => {
@@ -1941,7 +1971,7 @@ test("configuration menu can enable embedded builtin tools", async () => {
   await command!.handler(
     "",
     createFakeCtx(cwd, {
-      selects: ["Enable tools", "Toggle tool", "grep", "Save and close", "Save and close"],
+      selects: ["Enable tools", "Enable tools", "grep", "Save and close", "Save and close"],
     }),
   );
 
@@ -1999,7 +2029,7 @@ test("configuration menu can persist notify and sound settings", async () => {
     ],
     inputs: [
       "alt+shift+s",
-      "notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png \"%%PROMT%% @ %%BASE%% [%%TIME%%]\" \"%%ARGS%%\"",
+      "notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a \"PI-useReq\" \"%%PROMT%% @ %%BASE%% [%%TIME%%]\" \"%%RESULT%%\"",
       "echo low %%INSTALLATION_PATH%%",
       "echo mid %%INSTALLATION_PATH%%",
       "echo high %%INSTALLATION_PATH%%",
@@ -2018,7 +2048,7 @@ test("configuration menu can persist notify and sound settings", async () => {
   assert.equal(config["notify-sound-on-interrupted"], true);
   assert.equal(config["notify-sound-on-failed"], false);
   assert.equal(config["notify-sound-toggle-shortcut"], "alt+shift+s");
-  assert.equal(config.PI_NOTIFY_CMD, "notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png \"%%PROMT%% @ %%BASE%% [%%TIME%%]\" \"%%ARGS%%\"");
+  assert.equal(config.PI_NOTIFY_CMD, "notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a \"PI-useReq\" \"%%PROMT%% @ %%BASE%% [%%TIME%%]\" \"%%RESULT%%\"");
   assert.equal(config.PI_NOTIFY_SOUND_LOW_CMD, "echo low %%INSTALLATION_PATH%%");
   assert.equal(config.PI_NOTIFY_SOUND_MID_CMD, "echo mid %%INSTALLATION_PATH%%");
   assert.equal(config.PI_NOTIFY_SOUND_HIGH_CMD, "echo high %%INSTALLATION_PATH%%");
@@ -2061,7 +2091,7 @@ test("configuration menu can persist pushover settings", async () => {
     ],
     inputs: [
       "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "%%ARGS%%",
+      "%%RESULT%%\n%%ARGS%%",
       "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "ah6bf5u2sj63mcvou6qamiabeoubbe",
     ],
@@ -2078,7 +2108,7 @@ test("configuration menu can persist pushover settings", async () => {
   assert.equal(config["notify-pushover-api-token"], "ah6bf5u2sj63mcvou6qamiabeoubbe");
   assert.equal(config["notify-pushover-priority"], 1);
   assert.equal(config["notify-pushover-title"], "%%PROMT%% @ %%BASE%% [%%TIME%%]");
-  assert.equal(config["notify-pushover-text"], "%%ARGS%%");
+  assert.equal(config["notify-pushover-text"], "%%RESULT%%\n%%ARGS%%");
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
@@ -2142,7 +2172,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
       "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-priority": 1,
       "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "notify-pushover-text": "%%ARGS%%",
+      "notify-pushover-text": "%%RESULT%%\n%%ARGS%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
@@ -2166,7 +2196,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     assert.equal(successParams.get("token"), "ah6bf5u2sj63mcvou6qamiabeoubbe");
     assert.equal(successParams.get("user"), "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
     assert.equal(successParams.get("priority"), "1");
-    assert.equal(successParams.get("message"), "Inspect src/index.ts");
+    assert.equal(successParams.get("message"), `${buildExpectedNotifyResult("stop")}\nInspect src/index.ts`);
     assert.equal(successParams.get("title"), `analyze @ ${buildExpectedNotifyBasePath(cwd)} [0:05]`);
 
     recordedRequests.length = 0;
@@ -2203,19 +2233,39 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
 
     writeConfig({
       "notify-pushover-enabled": true,
+      "notify-pushover-on-interrupted": true,
       "notify-pushover-on-failed": true,
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-priority": 1,
       "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "notify-pushover-text": "%%ARGS%%",
+      "notify-pushover-text": "%%RESULT%%\n%%ARGS%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
     nowMs = 30_000;
-    await pi.commands.get("req-write")!.handler("Write docs", ctx);
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
     await pi.emit("agent_start", {}, ctx);
     nowMs = 32_000;
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "aborted",
+          content: [],
+        },
+      ],
+    }, ctx);
+    assert.equal(recordedRequests.length, 1);
+    const abortedParams = new URLSearchParams(recordedRequests[0]?.body ?? "");
+    assert.equal(abortedParams.get("title"), `change @ ${buildExpectedNotifyBasePath(cwd)} [0:02]`);
+    assert.equal(abortedParams.get("message"), `${buildExpectedNotifyResult("aborted")}\nAdjust docs`);
+
+    recordedRequests.length = 0;
+    nowMs = 40_000;
+    await pi.commands.get("req-write")!.handler("Write docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 42_000;
     await pi.emit("agent_end", {
       messages: [
         {
@@ -2228,7 +2278,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     assert.equal(recordedRequests.length, 1);
     const errorParams = new URLSearchParams(recordedRequests[0]?.body ?? "");
     assert.equal(errorParams.get("title"), `write @ ${buildExpectedNotifyBasePath(cwd)} [0:02]`);
-    assert.equal(errorParams.get("message"), "Write docs");
+    assert.equal(errorParams.get("message"), `${buildExpectedNotifyResult("error")}\nWrite docs`);
 
     writeConfig({
       "notify-pushover-enabled": true,
@@ -2237,14 +2287,14 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
       "notify-pushover-api-token": "",
       "notify-pushover-priority": 1,
       "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "notify-pushover-text": "%%ARGS%%",
+      "notify-pushover-text": "%%RESULT%%\n%%ARGS%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
-    nowMs = 40_000;
+    nowMs = 50_000;
     await pi.commands.get("req-check")!.handler("Check docs", ctx);
     await pi.emit("agent_start", {}, ctx);
-    nowMs = 43_000;
+    nowMs = 53_000;
     await pi.emit("agent_end", {
       messages: [
         {
@@ -2382,7 +2432,7 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
       "notify-on-interrupted": false,
       "notify-on-failed": true,
       "notify-sound": "none",
-      PI_NOTIFY_CMD: 'notify-send "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%ARGS%%"',
+      PI_NOTIFY_CMD: 'notify-send "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"',
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedCommands.length = 0;
@@ -2399,7 +2449,7 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
       recordedCommands[0] ?? "",
       new RegExp(`analyze @ ${buildExpectedNotifyBasePath(cwd).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\[0:05\\]`),
     );
-    assert.match(recordedCommands[0] ?? "", /Inspect src\/index\.ts/);
+    assert.match(recordedCommands[0] ?? "", new RegExp(buildExpectedNotifyResult("stop")));
 
     recordedCommands.length = 0;
     nowMs = 10_000;
@@ -2411,11 +2461,35 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
     }, ctx);
     assert.equal(recordedCommands.length, 0);
 
+    writeConfig({
+      "notify-enabled": true,
+      "notify-on-completed": true,
+      "notify-on-interrupted": true,
+      "notify-on-failed": true,
+      "notify-sound": "none",
+      PI_NOTIFY_CMD: 'notify-send "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"',
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedCommands.length = 0;
     nowMs = 20_000;
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 22_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "aborted", content: [] }],
+    }, ctx);
+    assert.equal(recordedCommands.length, 1);
+    assert.match(
+      recordedCommands[0] ?? "",
+      new RegExp(`change @ ${buildExpectedNotifyBasePath(cwd).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\[0:02\\]`),
+    );
+    assert.match(recordedCommands[0] ?? "", new RegExp(buildExpectedNotifyResult("aborted")));
+
+    recordedCommands.length = 0;
+    nowMs = 30_000;
     await pi.commands.get("req-write")!.handler("Write docs", ctx);
     await pi.emit("agent_start", {}, ctx);
-    nowMs = 23_000;
+    nowMs = 33_000;
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "error", content: [] }],
     }, ctx);
@@ -2424,7 +2498,7 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
       recordedCommands[0] ?? "",
       new RegExp(`write @ ${buildExpectedNotifyBasePath(cwd).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\[0:03\\]`),
     );
-    assert.match(recordedCommands[0] ?? "", /Write docs/);
+    assert.match(recordedCommands[0] ?? "", new RegExp(buildExpectedNotifyResult("error")));
   } finally {
     setPiNotifySpawnForTests(undefined);
     Date.now = originalDateNow;
@@ -2582,24 +2656,24 @@ test("static-check exposes the supported programming languages", () => {
   });
 });
 
-test("configuration menu can add static-check entries from raw specs", async () => {
+test("configuration menu omits removed static-check raw-spec and reference actions", async () => {
   const cwd = createTempDir("pi-usereq-menu-sc-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["static-check"],
+  });
 
-  await command!.handler(
-    "",
-    createFakeCtx(cwd, {
-      selects: ["static-check", "Add entry from LANG=MODULE[,CMD[,PARAM...]]", "Save and close", "Save and close"],
-      inputs: ["Python=Command,true"],
-    }),
-  );
+  await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.deepEqual(config["static-check"].Python, [{ module: "Command", cmd: "true" }]);
+  const renderedStaticCheckMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
+  assert.match(renderedStaticCheckMenu, /Add static code checker/);
+  assert.match(renderedStaticCheckMenu, /Remove static code checker/);
+  assert.doesNotMatch(renderedStaticCheckMenu, /Add entry from LANG=MODULE\[,CMD\[,PARAM\.\.\.\]\]/);
+  assert.doesNotMatch(renderedStaticCheckMenu, /Show supported languages/);
 });
 
 test("configuration menu hides removed static-check modules from user-facing actions", async () => {
@@ -2616,7 +2690,7 @@ test("configuration menu hides removed static-check modules from user-facing act
   await command!.handler("", ctx);
 
   const renderedStaticCheckMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
-  assert.match(renderedStaticCheckMenu, /Add entry for supported language/);
+  assert.match(renderedStaticCheckMenu, /Add static code checker/);
   assert.doesNotMatch(renderedStaticCheckMenu, /Pylance/);
   assert.doesNotMatch(renderedStaticCheckMenu, /Ruff/);
   assert.doesNotMatch(renderedStaticCheckMenu, /Dummy/);
@@ -2635,7 +2709,7 @@ test("configuration menu can add guided static-check entries for explicit suppor
     createFakeCtx(cwd, {
       selects: [
         "static-check",
-        "Add entry for supported language",
+        "Add static code checker",
         "Python",
         "Save and close",
         "Save and close",

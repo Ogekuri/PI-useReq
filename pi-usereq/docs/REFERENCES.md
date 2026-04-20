@@ -1,6 +1,6 @@
 
 > pi-usereq@0.6.0 cli
-> node --import tsx ./src/cli.ts --references --here /home/ogekuri/Git/PI-useReq
+> node --import tsx ./src/cli.ts --references --here /home/ogekuri/Git/useReq-PI-useReq-work-20260420133758
 
 {
   "summary": {
@@ -8,21 +8,21 @@
     "analyzed_file_count": 26,
     "error_file_count": 0,
     "skipped_file_count": 0,
-    "total_symbol_count": 445,
+    "total_symbol_count": 442,
     "total_import_count": 129,
-    "total_comment_count": 547,
+    "total_comment_count": 544,
     "total_standalone_comment_count": 89,
-    "total_doxygen_field_count": 1969,
+    "total_doxygen_field_count": 1965,
     "symbol_kind_counts": {
       "CLASS": 6,
       "ENUM": 1,
-      "FUNCTION": 326,
+      "FUNCTION": 323,
       "INTERFACE": 81,
       "TYPE_ALIAS": 31
     }
   },
   "repository": {
-    "root_directory_path": "/home/ogekuri/Git/PI-useReq",
+    "root_directory_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758",
     "source_directory_paths": [
       "src"
     ],
@@ -271,9 +271,9 @@
         349
       ],
       "request_index": 0,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/cli.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/cli.ts",
       "canonical_path": "src/cli.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/cli.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/cli.ts",
       "file_name": "cli.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -744,9 +744,9 @@
         470
       ],
       "request_index": 1,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/agent-tool-json.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/agent-tool-json.ts",
       "canonical_path": "src/core/agent-tool-json.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/agent-tool-json.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/agent-tool-json.ts",
       "file_name": "agent-tool-json.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -1847,9 +1847,9 @@
         72
       ],
       "request_index": 2,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-files.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/compress-files.ts",
       "canonical_path": "src/core/compress-files.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-files.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/compress-files.ts",
       "file_name": "compress-files.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -2033,9 +2033,9 @@
         640
       ],
       "request_index": 3,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-payload.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/compress-payload.ts",
       "canonical_path": "src/core/compress-payload.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/compress-payload.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/compress-payload.ts",
       "file_name": "compress-payload.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -3004,9 +3004,9 @@
         464
       ],
       "request_index": 4,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/compress.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/compress.ts",
       "canonical_path": "src/core/compress.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/compress.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/compress.ts",
       "file_name": "compress.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -3761,9 +3761,9 @@
         354
       ],
       "request_index": 5,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/config.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/config.ts",
       "canonical_path": "src/core/config.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/config.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/config.ts",
       "file_name": "config.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -4340,9 +4340,9 @@
         318
       ],
       "request_index": 6,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/doxygen-parser.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/doxygen-parser.ts",
       "canonical_path": "src/core/doxygen-parser.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/doxygen-parser.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/doxygen-parser.ts",
       "file_name": "doxygen-parser.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -4993,9 +4993,9 @@
         31
       ],
       "request_index": 7,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/errors.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/errors.ts",
       "canonical_path": "src/core/errors.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/errors.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/errors.ts",
       "file_name": "errors.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -5114,9 +5114,9 @@
         568
       ],
       "request_index": 8,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/extension-status.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/extension-status.ts",
       "canonical_path": "src/core/extension-status.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/extension-status.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/extension-status.ts",
       "file_name": "extension-status.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -6433,9 +6433,9 @@
         319
       ],
       "request_index": 9,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/find-constructs.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/find-constructs.ts",
       "canonical_path": "src/core/find-constructs.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/find-constructs.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/find-constructs.ts",
       "file_name": "find-constructs.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -7144,9 +7144,9 @@
         892
       ],
       "request_index": 10,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/find-payload.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/find-payload.ts",
       "canonical_path": "src/core/find-payload.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/find-payload.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/find-payload.ts",
       "file_name": "find-payload.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -8596,9 +8596,9 @@
         120
       ],
       "request_index": 11,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/generate-markdown.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/generate-markdown.ts",
       "canonical_path": "src/core/generate-markdown.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/generate-markdown.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/generate-markdown.ts",
       "file_name": "generate-markdown.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -8834,9 +8834,9 @@
         196
       ],
       "request_index": 12,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/path-context.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/path-context.ts",
       "canonical_path": "src/core/path-context.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/path-context.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/path-context.ts",
       "file_name": "path-context.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -9309,15 +9309,15 @@
     },
     {
       "start_line_number": 1,
-      "end_line_number": 741,
+      "end_line_number": 777,
       "line_range": [
         1,
-        741
+        777
       ],
       "request_index": 13,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-notify.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/pi-notify.ts",
       "canonical_path": "src/core/pi-notify.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-notify.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/pi-notify.ts",
       "file_name": "pi-notify.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -9326,10 +9326,10 @@
       "exists": true,
       "is_file": true,
       "import_count": 7,
-      "symbol_count": 40,
-      "comment_count": 53,
+      "symbol_count": 41,
+      "comment_count": 54,
       "standalone_comment_count": 12,
-      "doxygen_field_count": 198,
+      "doxygen_field_count": 211,
       "file_doxygen": {
         "brief": [
           "Implements pi-usereq command-notify, sound, and Pushover prompt-end helpers."
@@ -10290,13 +10290,70 @@
           ]
         },
         {
-          "start_line_number": 368,
-          "end_line_number": 377,
+          "start_line_number": 369,
+          "end_line_number": 378,
           "line_range": [
-            368,
-            377
+            369,
+            378
           ],
           "declaration_order_index": 20,
+          "symbol_name": "formatPiNotifyResult",
+          "qualified_name": "formatPiNotifyResult",
+          "symbol_kind": "FUNCTION",
+          "type_label": "FUNCTION",
+          "signature_text": "function formatPiNotifyResult(outcome: PiNotifyOutcome): string",
+          "child_symbol_names": [],
+          "child_qualified_names": [],
+          "depth": 0,
+          "attached_comment_summary_text": "Formats one prompt-end outcome for `%%RESULT%%` substitution.",
+          "doxygen": {
+            "brief": [
+              "Formats one prompt-end outcome for `%%RESULT%%` substitution."
+            ],
+            "details": [
+              "Maps canonical prompt-end outcomes to the persisted human-readable result tokens reused by default notify-command and Pushover templates. Runtime is O(1). No external state is mutated."
+            ],
+            "params": [
+              {
+                "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
+              }
+            ],
+            "returns": [
+              "{string} `successed`, `aborted`, or `failed`."
+            ],
+            "satisfies_requirement_ids": [
+              "REQ-169",
+              "REQ-186",
+              "REQ-199"
+            ]
+          },
+          "body_comment_entries": [],
+          "exit_point_entries": [
+            {
+              "line_number": 372,
+              "text": "return \"aborted\";"
+            },
+            {
+              "line_number": 374,
+              "text": "return \"failed\";"
+            },
+            {
+              "line_number": 376,
+              "text": "return \"successed\";"
+            }
+          ]
+        },
+        {
+          "start_line_number": 387,
+          "end_line_number": 398,
+          "line_range": [
+            387,
+            398
+          ],
+          "declaration_order_index": 21,
           "symbol_name": "buildPiNotifyRuntimeTemplateValues",
           "qualified_name": "buildPiNotifyRuntimeTemplateValues",
           "symbol_kind": "FUNCTION",
@@ -10311,7 +10368,7 @@
               "Builds the raw runtime placeholder map for one prompt-end request."
             ],
             "details": [
-              "Resolves every placeholder value exactly once so notify-command and Pushover template substitution reuse the same prompt name, base path, elapsed time, and argument string. Runtime is O(p) in path length. No external state is mutated."
+              "Resolves every placeholder value exactly once so notify-command and Pushover template substitution reuse the same prompt name, base path, elapsed time, argument string, and terminal outcome token. Runtime is O(p) in path length. No external state is mutated."
             ],
             "params": [
               {
@@ -10319,28 +10376,34 @@
                 "parameter_name": "request",
                 "value_type": "PiNotifyEventRequest",
                 "description": "Prompt-end request metadata."
+              },
+              {
+                "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
               }
             ],
             "returns": [
-              "{{ \"%%PROMT%%\": string; \"%%BASE%%\": string; \"%%TIME%%\": string; \"%%ARGS%%\": string }} Raw placeholder-value map."
+              "{{ \"%%PROMT%%\": string; \"%%BASE%%\": string; \"%%TIME%%\": string; \"%%ARGS%%\": string; \"%%RESULT%%\": string }} Raw placeholder-value map."
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 371,
+              "line_number": 391,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 385,
-          "end_line_number": 390,
+          "start_line_number": 406,
+          "end_line_number": 411,
           "line_range": [
-            385,
-            390
+            406,
+            411
           ],
-          "declaration_order_index": 21,
+          "declaration_order_index": 22,
           "symbol_name": "quotePiNotifyInstallPath",
           "qualified_name": "quotePiNotifyInstallPath",
           "symbol_kind": "FUNCTION",
@@ -10372,23 +10435,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 387,
+              "line_number": 408,
               "text": "return `\"${installationPath.replace(/\"/g, '\"\"')}\"`;"
             },
             {
-              "line_number": 389,
+              "line_number": 410,
               "text": "return `'${installationPath.replace(/'/g, `'\\\\''`)}'`;"
             }
           ]
         },
         {
-          "start_line_number": 398,
-          "end_line_number": 407,
+          "start_line_number": 419,
+          "end_line_number": 428,
           "line_range": [
-            398,
-            407
+            419,
+            428
           ],
-          "declaration_order_index": 22,
+          "declaration_order_index": 23,
           "symbol_name": "escapePiNotifyShellTemplateValue",
           "qualified_name": "escapePiNotifyShellTemplateValue",
           "symbol_kind": "FUNCTION",
@@ -10420,23 +10483,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 400,
+              "line_number": 421,
               "text": "return value.replace(/%/g, \"%%\").replace(/\"/g, '\"\"');"
             },
             {
-              "line_number": 402,
+              "line_number": 423,
               "text": "return value"
             }
           ]
         },
         {
-          "start_line_number": 417,
-          "end_line_number": 422,
+          "start_line_number": 438,
+          "end_line_number": 443,
           "line_range": [
-            417,
-            422
+            438,
+            443
           ],
-          "declaration_order_index": 23,
+          "declaration_order_index": 24,
           "symbol_name": "substitutePiNotifyInstallPath",
           "qualified_name": "substitutePiNotifyInstallPath",
           "symbol_kind": "FUNCTION",
@@ -10477,19 +10540,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 418,
+              "line_number": 439,
               "text": "return command.replaceAll("
             }
           ]
         },
         {
-          "start_line_number": 433,
-          "end_line_number": 444,
+          "start_line_number": 455,
+          "end_line_number": 467,
           "line_range": [
-            433,
-            444
+            455,
+            467
           ],
-          "declaration_order_index": 24,
+          "declaration_order_index": 25,
           "symbol_name": "substitutePiNotifyShellTemplate",
           "qualified_name": "substitutePiNotifyShellTemplate",
           "symbol_kind": "FUNCTION",
@@ -10504,7 +10567,7 @@
               "Substitutes runtime placeholders inside one shell-command template."
             ],
             "details": [
-              "Applies shell-quoted installation-path substitution plus shell-escaped prompt, base-path, elapsed-time, and raw-argument substitution expected by `PI_NOTIFY_CMD`. Runtime is O(n) in template length. No external state is mutated."
+              "Applies shell-quoted installation-path substitution plus shell-escaped prompt, base-path, elapsed-time, raw-argument, and outcome-result substitution expected by `PI_NOTIFY_CMD`. Runtime is O(n) in template length. No external state is mutated."
             ],
             "params": [
               {
@@ -10521,6 +10584,12 @@
               },
               {
                 "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
+              },
+              {
+                "direction": "in",
                 "parameter_name": "installationPath",
                 "value_type": "string",
                 "description": "Absolute extension installation path."
@@ -10530,25 +10599,26 @@
               "{string} Runtime-ready shell command."
             ],
             "satisfies_requirement_ids": [
-              "REQ-169"
+              "REQ-169",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 443,
+              "line_number": 466,
               "text": "return result;"
             }
           ]
         },
         {
-          "start_line_number": 454,
-          "end_line_number": 463,
+          "start_line_number": 478,
+          "end_line_number": 488,
           "line_range": [
-            454,
-            463
+            478,
+            488
           ],
-          "declaration_order_index": 25,
+          "declaration_order_index": 26,
           "symbol_name": "substitutePiNotifyTextTemplate",
           "qualified_name": "substitutePiNotifyTextTemplate",
           "symbol_kind": "FUNCTION",
@@ -10563,7 +10633,7 @@
               "Substitutes runtime placeholders inside one text template."
             ],
             "details": [
-              "Applies raw prompt name, home-relative base path, elapsed time, and raw prompt-argument substitution without shell escaping so Pushover payloads preserve literal text. Runtime is O(n) in template length. No external state is mutated."
+              "Applies raw prompt name, home-relative base path, elapsed time, raw prompt arguments, and terminal outcome text without shell escaping so Pushover payloads preserve literal text. Runtime is O(n) in template length. No external state is mutated."
             ],
             "params": [
               {
@@ -10577,6 +10647,12 @@
                 "parameter_name": "request",
                 "value_type": "PiNotifyEventRequest",
                 "description": "Prompt-end request metadata."
+              },
+              {
+                "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
               }
             ],
             "returns": [
@@ -10584,25 +10660,26 @@
             ],
             "satisfies_requirement_ids": [
               "REQ-186",
-              "REQ-187"
+              "REQ-187",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 462,
+              "line_number": 487,
               "text": "return result;"
             }
           ]
         },
         {
-          "start_line_number": 471,
-          "end_line_number": 482,
+          "start_line_number": 496,
+          "end_line_number": 507,
           "line_range": [
-            471,
-            482
+            496,
+            507
           ],
-          "declaration_order_index": 26,
+          "declaration_order_index": 27,
           "symbol_name": "runPiNotifyShellCommand",
           "qualified_name": "runPiNotifyShellCommand",
           "symbol_kind": "FUNCTION",
@@ -10635,13 +10712,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 493,
-          "end_line_number": 506,
+          "start_line_number": 518,
+          "end_line_number": 531,
           "line_range": [
-            493,
-            506
+            518,
+            531
           ],
-          "declaration_order_index": 27,
+          "declaration_order_index": 28,
           "symbol_name": "shouldRunPiNotifyCommand",
           "qualified_name": "shouldRunPiNotifyCommand",
           "symbol_kind": "FUNCTION",
@@ -10689,19 +10766,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 498,
+              "line_number": 523,
               "text": "return request !== undefined"
             }
           ]
         },
         {
-          "start_line_number": 516,
-          "end_line_number": 527,
+          "start_line_number": 542,
+          "end_line_number": 555,
           "line_range": [
-            516,
-            527
+            542,
+            555
           ],
-          "declaration_order_index": 28,
+          "declaration_order_index": 29,
           "symbol_name": "runPiNotifyCommand",
           "qualified_name": "runPiNotifyCommand",
           "symbol_kind": "FUNCTION",
@@ -10727,6 +10804,12 @@
               },
               {
                 "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
+              },
+              {
+                "direction": "in",
                 "parameter_name": "request",
                 "value_type": "PiNotifyEventRequest",
                 "description": "Prompt-end request metadata."
@@ -10738,20 +10821,21 @@
             "satisfies_requirement_ids": [
               "REQ-169",
               "REQ-175",
-              "REQ-176"
+              "REQ-176",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": []
         },
         {
-          "start_line_number": 536,
-          "end_line_number": 548,
+          "start_line_number": 564,
+          "end_line_number": 576,
           "line_range": [
-            536,
-            548
+            564,
+            576
           ],
-          "declaration_order_index": 29,
+          "declaration_order_index": 30,
           "symbol_name": "resolvePiNotifySoundCommand",
           "qualified_name": "resolvePiNotifySoundCommand",
           "symbol_kind": "FUNCTION",
@@ -10789,27 +10873,27 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 542,
+              "line_number": 570,
               "text": "return config.PI_NOTIFY_SOUND_LOW_CMD;"
             },
             {
-              "line_number": 544,
+              "line_number": 572,
               "text": "return config.PI_NOTIFY_SOUND_MID_CMD;"
             },
             {
-              "line_number": 546,
+              "line_number": 574,
               "text": "return config.PI_NOTIFY_SOUND_HIGH_CMD;"
             }
           ]
         },
         {
-          "start_line_number": 558,
-          "end_line_number": 569,
+          "start_line_number": 586,
+          "end_line_number": 597,
           "line_range": [
-            558,
-            569
+            586,
+            597
           ],
-          "declaration_order_index": 30,
+          "declaration_order_index": 31,
           "symbol_name": "shouldRunPiNotifySound",
           "qualified_name": "shouldRunPiNotifySound",
           "symbol_kind": "FUNCTION",
@@ -10850,19 +10934,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 562,
+              "line_number": 590,
               "text": "return config[\"notify-sound\"] !== \"none\""
             }
           ]
         },
         {
-          "start_line_number": 579,
-          "end_line_number": 586,
+          "start_line_number": 607,
+          "end_line_number": 614,
           "line_range": [
-            579,
-            586
+            607,
+            614
           ],
-          "declaration_order_index": 31,
+          "declaration_order_index": 32,
           "symbol_name": "runPiNotifySoundCommand",
           "qualified_name": "runPiNotifySoundCommand",
           "symbol_kind": "FUNCTION",
@@ -10905,13 +10989,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 597,
-          "end_line_number": 612,
+          "start_line_number": 625,
+          "end_line_number": 640,
           "line_range": [
-            597,
-            612
+            625,
+            640
           ],
-          "declaration_order_index": 32,
+          "declaration_order_index": 33,
           "symbol_name": "shouldRunPiNotifyPushover",
           "qualified_name": "shouldRunPiNotifyPushover",
           "symbol_kind": "FUNCTION",
@@ -10960,19 +11044,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 602,
+              "line_number": 630,
               "text": "return request !== undefined"
             }
           ]
         },
         {
-          "start_line_number": 622,
-          "end_line_number": 627,
+          "start_line_number": 651,
+          "end_line_number": 657,
           "line_range": [
-            622,
-            627
+            651,
+            657
           ],
-          "declaration_order_index": 33,
+          "declaration_order_index": 34,
           "symbol_name": "buildPiNotifyPushoverTitle",
           "qualified_name": "buildPiNotifyPushoverTitle",
           "symbol_kind": "FUNCTION",
@@ -10998,6 +11082,12 @@
               },
               {
                 "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
+              },
+              {
+                "direction": "in",
                 "parameter_name": "request",
                 "value_type": "PiNotifyEventRequest",
                 "description": "Prompt-end request metadata."
@@ -11009,25 +11099,26 @@
             "satisfies_requirement_ids": [
               "REQ-185",
               "REQ-186",
-              "REQ-187"
+              "REQ-187",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 626,
-              "text": "return substitutePiNotifyTextTemplate(config[\"notify-pushover-title\"], request);"
+              "line_number": 656,
+              "text": "return substitutePiNotifyTextTemplate(config[\"notify-pushover-title\"], request, outcome);"
             }
           ]
         },
         {
-          "start_line_number": 637,
-          "end_line_number": 642,
+          "start_line_number": 668,
+          "end_line_number": 674,
           "line_range": [
-            637,
-            642
+            668,
+            674
           ],
-          "declaration_order_index": 34,
+          "declaration_order_index": 35,
           "symbol_name": "buildPiNotifyPushoverBody",
           "qualified_name": "buildPiNotifyPushoverBody",
           "symbol_kind": "FUNCTION",
@@ -11053,6 +11144,12 @@
               },
               {
                 "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
+              },
+              {
+                "direction": "in",
                 "parameter_name": "request",
                 "value_type": "PiNotifyEventRequest",
                 "description": "Prompt-end request metadata."
@@ -11064,25 +11161,26 @@
             "satisfies_requirement_ids": [
               "REQ-185",
               "REQ-186",
-              "REQ-187"
+              "REQ-187",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 641,
-              "text": "return substitutePiNotifyTextTemplate(config[\"notify-pushover-text\"], request);"
+              "line_number": 673,
+              "text": "return substitutePiNotifyTextTemplate(config[\"notify-pushover-text\"], request, outcome);"
             }
           ]
         },
         {
-          "start_line_number": 652,
-          "end_line_number": 663,
+          "start_line_number": 685,
+          "end_line_number": 697,
           "line_range": [
-            652,
-            663
+            685,
+            697
           ],
-          "declaration_order_index": 35,
+          "declaration_order_index": 36,
           "symbol_name": "buildPiNotifyPushoverPayload",
           "qualified_name": "buildPiNotifyPushoverPayload",
           "symbol_kind": "FUNCTION",
@@ -11108,6 +11206,12 @@
               },
               {
                 "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
+              },
+              {
+                "direction": "in",
                 "parameter_name": "request",
                 "value_type": "PiNotifyEventRequest",
                 "description": "Prompt-end request metadata."
@@ -11120,25 +11224,26 @@
               "REQ-167",
               "REQ-172",
               "REQ-185",
-              "REQ-186"
+              "REQ-186",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 656,
+              "line_number": 690,
               "text": "return new URLSearchParams({"
             }
           ]
         },
         {
-          "start_line_number": 673,
-          "end_line_number": 691,
+          "start_line_number": 708,
+          "end_line_number": 727,
           "line_range": [
-            673,
-            691
+            708,
+            727
           ],
-          "declaration_order_index": 36,
+          "declaration_order_index": 37,
           "symbol_name": "runPiNotifyPushoverRequest",
           "qualified_name": "runPiNotifyPushoverRequest",
           "symbol_kind": "FUNCTION",
@@ -11164,6 +11269,12 @@
               },
               {
                 "direction": "in",
+                "parameter_name": "outcome",
+                "value_type": "PiNotifyOutcome",
+                "description": "Classified prompt-end outcome."
+              },
+              {
+                "direction": "in",
                 "parameter_name": "request",
                 "value_type": "PiNotifyEventRequest",
                 "description": "Prompt-end request metadata."
@@ -11173,20 +11284,21 @@
               "{void} No return value."
             ],
             "satisfies_requirement_ids": [
-              "REQ-167"
+              "REQ-167",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": []
         },
         {
-          "start_line_number": 699,
-          "end_line_number": 701,
+          "start_line_number": 735,
+          "end_line_number": 737,
           "line_range": [
-            699,
-            701
+            735,
+            737
           ],
-          "declaration_order_index": 37,
+          "declaration_order_index": 38,
           "symbol_name": "setPiNotifyHttpsRequestForTests",
           "qualified_name": "setPiNotifyHttpsRequestForTests",
           "symbol_kind": "FUNCTION",
@@ -11219,13 +11331,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 709,
-          "end_line_number": 711,
+          "start_line_number": 745,
+          "end_line_number": 747,
           "line_range": [
-            709,
-            711
+            745,
+            747
           ],
-          "declaration_order_index": 38,
+          "declaration_order_index": 39,
           "symbol_name": "setPiNotifySpawnForTests",
           "qualified_name": "setPiNotifySpawnForTests",
           "symbol_kind": "FUNCTION",
@@ -11258,13 +11370,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 722,
-          "end_line_number": 741,
+          "start_line_number": 758,
+          "end_line_number": 777,
           "line_range": [
-            722,
-            741
+            758,
+            777
           ],
-          "declaration_order_index": 39,
+          "declaration_order_index": 40,
           "symbol_name": "runPiNotifyEffects",
           "qualified_name": "runPiNotifyEffects",
           "symbol_kind": "FUNCTION",
@@ -11318,13 +11430,14 @@
               "REQ-184",
               "REQ-185",
               "REQ-186",
-              "REQ-187"
+              "REQ-187",
+              "REQ-199"
             ]
           },
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 738,
+              "line_number": 774,
               "text": "return;"
             }
           ]
@@ -11378,10 +11491,10 @@
             46,
             50
           ],
-          "text": "@brief Defines the default command-notify shell command. @details Uses `notify-send`, the bundled icon, and runtime placeholder substitution for prompt name, base path, elapsed time, and raw prompt arguments. Access complexity is O(1). @satisfies REQ-175",
+          "text": "@brief Defines the default command-notify shell command. @details Uses `notify-send`, the bundled icon, the fixed `PI-useReq` application name, and runtime placeholder substitution for prompt name, base path, elapsed time, and terminal outcome text. Access complexity is O(1). @satisfies REQ-175",
           "text_lines": [
             "@brief Defines the default command-notify shell command.",
-            "@details Uses `notify-send`, the bundled icon, and runtime placeholder substitution for prompt name, base path, elapsed time, and raw prompt arguments. Access complexity is O(1).",
+            "@details Uses `notify-send`, the bundled icon, the fixed `PI-useReq` application name, and runtime placeholder substitution for prompt name, base path, elapsed time, and terminal outcome text. Access complexity is O(1).",
             "@satisfies REQ-175"
           ]
         },
@@ -11448,10 +11561,10 @@
             81,
             85
           ],
-          "text": "@brief Defines the default Pushover text template. @details Reuses the raw prompt-argument placeholder so outbound Pushover messages remain traceable to the invoked prompt command. Access complexity is O(1). @satisfies REQ-185",
+          "text": "@brief Defines the default Pushover text template. @details Prefixes outbound Pushover messages with the terminal outcome token and preserves the raw prompt arguments on the following line so notifications remain traceable to the invoked prompt command. Access complexity is O(1). @satisfies REQ-185",
           "text_lines": [
             "@brief Defines the default Pushover text template.",
-            "@details Reuses the raw prompt-argument placeholder so outbound Pushover messages remain traceable to the invoked prompt command. Access complexity is O(1).",
+            "@details Prefixes outbound Pushover messages with the terminal outcome token and preserves the raw prompt arguments on the following line so notifications remain traceable to the invoked prompt command. Access complexity is O(1).",
             "@satisfies REQ-185"
           ]
         },
@@ -11504,9 +11617,9 @@
         140
       ],
       "request_index": 14,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-usereq-tools.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/pi-usereq-tools.ts",
       "canonical_path": "src/core/pi-usereq-tools.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/pi-usereq-tools.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/pi-usereq-tools.ts",
       "file_name": "pi-usereq-tools.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -11830,9 +11943,9 @@
         184
       ],
       "request_index": 15,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/prompts.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/prompts.ts",
       "canonical_path": "src/core/prompts.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/prompts.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/prompts.ts",
       "file_name": "prompts.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -12274,9 +12387,9 @@
         810
       ],
       "request_index": 16,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/reference-payload.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/reference-payload.ts",
       "canonical_path": "src/core/reference-payload.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/reference-payload.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/reference-payload.ts",
       "file_name": "reference-payload.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -13478,9 +13591,9 @@
         63
       ],
       "request_index": 17,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/resources.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/resources.ts",
       "canonical_path": "src/core/resources.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/resources.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/resources.ts",
       "file_name": "resources.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -13711,9 +13824,9 @@
         70
       ],
       "request_index": 18,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/runtime-project-paths.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/runtime-project-paths.ts",
       "canonical_path": "src/core/runtime-project-paths.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/runtime-project-paths.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/runtime-project-paths.ts",
       "file_name": "runtime-project-paths.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -13991,9 +14104,9 @@
         258
       ],
       "request_index": 19,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/settings-menu.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/settings-menu.ts",
       "canonical_path": "src/core/settings-menu.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/settings-menu.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/settings-menu.ts",
       "file_name": "settings-menu.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -14550,9 +14663,9 @@
         1721
       ],
       "request_index": 20,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/source-analyzer.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/source-analyzer.ts",
       "canonical_path": "src/core/source-analyzer.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/source-analyzer.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/source-analyzer.ts",
       "file_name": "source-analyzer.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -15882,9 +15995,9 @@
         538
       ],
       "request_index": 21,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/static-check.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/static-check.ts",
       "canonical_path": "src/core/static-check.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/static-check.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/static-check.ts",
       "file_name": "static-check.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -17021,9 +17134,9 @@
         663
       ],
       "request_index": 22,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/token-counter.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/token-counter.ts",
       "canonical_path": "src/core/token-counter.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/token-counter.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/token-counter.ts",
       "file_name": "token-counter.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -18515,9 +18628,9 @@
         717
       ],
       "request_index": 23,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/tool-runner.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/tool-runner.ts",
       "canonical_path": "src/core/tool-runner.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/tool-runner.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/tool-runner.ts",
       "file_name": "tool-runner.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -20493,9 +20606,9 @@
         185
       ],
       "request_index": 24,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/core/utils.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/utils.ts",
       "canonical_path": "src/core/utils.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/core/utils.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/core/utils.ts",
       "file_name": "utils.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -20960,15 +21073,15 @@
     },
     {
       "start_line_number": 1,
-      "end_line_number": 2809,
+      "end_line_number": 2665,
       "line_range": [
         1,
-        2809
+        2665
       ],
       "request_index": 25,
-      "input_path": "/home/ogekuri/Git/PI-useReq/src/index.ts",
+      "input_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/index.ts",
       "canonical_path": "src/index.ts",
-      "absolute_path": "/home/ogekuri/Git/PI-useReq/src/index.ts",
+      "absolute_path": "/home/ogekuri/Git/useReq-PI-useReq-work-20260420133758/src/index.ts",
       "file_name": "index.ts",
       "file_extension": ".ts",
       "language_id": "typescript",
@@ -20977,10 +21090,10 @@
       "exists": true,
       "is_file": true,
       "import_count": 21,
-      "symbol_count": 64,
-      "comment_count": 69,
+      "symbol_count": 60,
+      "comment_count": 65,
       "standalone_comment_count": 6,
-      "doxygen_field_count": 310,
+      "doxygen_field_count": 293,
       "file_doxygen": {
         "brief": [
           "Registers the pi-usereq extension commands, tools, and configuration UI."
@@ -21191,11 +21304,11 @@
           "statement_text": "import {"
         },
         {
-          "start_line_number": 120,
-          "end_line_number": 120,
+          "start_line_number": 118,
+          "end_line_number": 118,
           "line_range": [
-            120,
-            120
+            118,
+            118
           ],
           "import_name": "{ makeRelativeIfContainsProject, shellSplit } from \"./core/utils.js\";",
           "statement_text": "import { makeRelativeIfContainsProject, shellSplit } from \"./core/utils.js\";"
@@ -21203,11 +21316,11 @@
       ],
       "symbols": [
         {
-          "start_line_number": 152,
-          "end_line_number": 160,
+          "start_line_number": 150,
+          "end_line_number": 158,
           "line_range": [
-            152,
-            160
+            150,
+            158
           ],
           "declaration_order_index": 0,
           "symbol_name": "PiShortcutRegistrar",
@@ -21231,11 +21344,11 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 168,
-          "end_line_number": 170,
+          "start_line_number": 166,
+          "end_line_number": 168,
           "line_range": [
-            168,
-            170
+            166,
+            168
           ],
           "declaration_order_index": 1,
           "symbol_name": "getProjectBase",
@@ -21269,17 +21382,17 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 169,
+              "line_number": 167,
               "text": "return path.resolve(cwd);"
             }
           ]
         },
         {
-          "start_line_number": 179,
-          "end_line_number": 182,
+          "start_line_number": 177,
+          "end_line_number": 180,
           "line_range": [
-            179,
-            182
+            177,
+            180
           ],
           "declaration_order_index": 2,
           "symbol_name": "loadProjectConfig",
@@ -21318,17 +21431,17 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 181,
+              "line_number": 179,
               "text": "return normalizeConfigPaths(projectBase, loadConfig(projectBase));"
             }
           ]
         },
         {
-          "start_line_number": 192,
-          "end_line_number": 195,
+          "start_line_number": 190,
+          "end_line_number": 193,
           "line_range": [
-            192,
-            195
+            190,
+            193
           ],
           "declaration_order_index": 3,
           "symbol_name": "saveProjectConfig",
@@ -21372,10 +21485,10 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 206,
+          "start_line_number": 202,
           "end_line_number": 208,
           "line_range": [
-            206,
+            202,
             208
           ],
           "declaration_order_index": 4,
@@ -21393,7 +21506,7 @@
               "Formats the current project config path for top-level menu display."
             ],
             "details": [
-              "Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived\nproject base and formats it relative to the user home when possible. Runtime\nis O(p) in path length. No external state is mutated."
+              "Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived project base, reuses the shared runtime-path formatter, and rewrites a leading POSIX `$HOME` token to `~` for the `Show configuration` row only. Runtime is O(p) in path length. No external state is mutated."
             ],
             "params": [
               {
@@ -21404,7 +21517,7 @@
               }
             ],
             "returns": [
-              "{string} User-home-relative or absolute config path display value."
+              "{string} `~`-relative or absolute config path display value."
             ],
             "satisfies_requirement_ids": [
               "REQ-162"
@@ -21413,8 +21526,12 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
+              "line_number": 205,
+              "text": "return \"~\";"
+            },
+            {
               "line_number": 207,
-              "text": "return formatRuntimePathForDisplay(getProjectConfigPath(getProjectBase(cwd)));"
+              "text": "return displayPath.startsWith(\"$HOME/\") ? `~/${displayPath.slice(\"$HOME/\".length)}` : displayPath;"
             }
           ]
         },
@@ -22048,61 +22165,13 @@
           ]
         },
         {
-          "start_line_number": 549,
-          "end_line_number": 554,
+          "start_line_number": 551,
+          "end_line_number": 568,
           "line_range": [
-            549,
-            554
+            551,
+            568
           ],
           "declaration_order_index": 18,
-          "symbol_name": "getPiUsereqToolKind",
-          "qualified_name": "getPiUsereqToolKind",
-          "symbol_kind": "FUNCTION",
-          "type_label": "FUNCTION",
-          "signature_text": "function getPiUsereqToolKind(tool: ToolInfo): \"builtin\" | \"extension\"",
-          "child_symbol_names": [],
-          "child_qualified_names": [],
-          "depth": 0,
-          "attached_comment_summary_text": "Classifies one configurable tool as embedded or extension-owned.",
-          "doxygen": {
-            "brief": [
-              "Classifies one configurable tool as embedded or extension-owned."
-            ],
-            "details": [
-              "Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated."
-            ],
-            "params": [
-              {
-                "direction": "in",
-                "parameter_name": "tool",
-                "value_type": "ToolInfo",
-                "description": "Runtime tool descriptor."
-              }
-            ],
-            "returns": [
-              "{\"builtin\" | \"extension\"} Stable tool-kind label."
-            ]
-          },
-          "body_comment_entries": [],
-          "exit_point_entries": [
-            {
-              "line_number": 551,
-              "text": "return \"builtin\";"
-            },
-            {
-              "line_number": 553,
-              "text": "return \"extension\";"
-            }
-          ]
-        },
-        {
-          "start_line_number": 564,
-          "end_line_number": 581,
-          "line_range": [
-            564,
-            581
-          ],
-          "declaration_order_index": 19,
           "symbol_name": "applyConfiguredPiUsereqTools",
           "qualified_name": "applyConfiguredPiUsereqTools",
           "symbol_kind": "FUNCTION",
@@ -22145,13 +22214,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 602,
-          "end_line_number": 639,
+          "start_line_number": 589,
+          "end_line_number": 626,
           "line_range": [
-            602,
-            639
+            589,
+            626
           ],
-          "declaration_order_index": 20,
+          "declaration_order_index": 19,
           "symbol_name": "handleExtensionStatusEvent",
           "qualified_name": "handleExtensionStatusEvent",
           "symbol_kind": "FUNCTION",
@@ -22227,13 +22296,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 652,
-          "end_line_number": 665,
+          "start_line_number": 639,
+          "end_line_number": 652,
           "line_range": [
-            652,
-            665
+            639,
+            652
           ],
-          "declaration_order_index": 21,
+          "declaration_order_index": 20,
           "symbol_name": "registerExtensionStatusHooks",
           "qualified_name": "registerExtensionStatusHooks",
           "symbol_kind": "FUNCTION",
@@ -22280,13 +22349,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 675,
-          "end_line_number": 678,
+          "start_line_number": 662,
+          "end_line_number": 665,
           "line_range": [
-            675,
-            678
+            662,
+            665
           ],
-          "declaration_order_index": 22,
+          "declaration_order_index": 21,
           "symbol_name": "setConfiguredPiUsereqTools",
           "qualified_name": "setConfiguredPiUsereqTools",
           "symbol_kind": "FUNCTION",
@@ -22331,63 +22400,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 687,
-          "end_line_number": 715,
+          "start_line_number": 671,
+          "end_line_number": 671,
           "line_range": [
-            687,
-            715
+            671,
+            671
           ],
-          "declaration_order_index": 23,
-          "symbol_name": "renderPiUsereqToolsReference",
-          "qualified_name": "renderPiUsereqToolsReference",
-          "symbol_kind": "FUNCTION",
-          "type_label": "FUNCTION",
-          "signature_text": "function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string",
-          "child_symbol_names": [],
-          "child_qualified_names": [],
-          "depth": 0,
-          "attached_comment_summary_text": "Renders a textual reference for configurable-tool configuration and runtime state.",
-          "doxygen": {
-            "brief": [
-              "Renders a textual reference for configurable-tool configuration and runtime state."
-            ],
-            "details": [
-              "Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur."
-            ],
-            "params": [
-              {
-                "direction": "in",
-                "parameter_name": "pi",
-                "value_type": "ExtensionAPI",
-                "description": "Active extension API instance."
-              },
-              {
-                "direction": "in",
-                "parameter_name": "config",
-                "value_type": "UseReqConfig",
-                "description": "Effective project configuration."
-              }
-            ],
-            "returns": [
-              "{string} Multiline tool-status report."
-            ]
-          },
-          "body_comment_entries": [],
-          "exit_point_entries": [
-            {
-              "line_number": 714,
-              "text": "return `${lines.join(\"\\n\")}\\n`;"
-            }
-          ]
-        },
-        {
-          "start_line_number": 721,
-          "end_line_number": 721,
-          "line_range": [
-            721,
-            721
-          ],
-          "declaration_order_index": 24,
+          "declaration_order_index": 22,
           "symbol_name": "PiNotifyBooleanConfigKey",
           "qualified_name": "PiNotifyBooleanConfigKey",
           "symbol_kind": "TYPE_ALIAS",
@@ -22409,13 +22428,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 738,
-          "end_line_number": 738,
+          "start_line_number": 688,
+          "end_line_number": 688,
           "line_range": [
-            738,
-            738
+            688,
+            688
           ],
-          "declaration_order_index": 25,
+          "declaration_order_index": 23,
           "symbol_name": "PiNotifyEventBooleanConfigKey",
           "qualified_name": "PiNotifyEventBooleanConfigKey",
           "symbol_kind": "TYPE_ALIAS",
@@ -22437,13 +22456,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 747,
-          "end_line_number": 747,
+          "start_line_number": 697,
+          "end_line_number": 697,
           "line_range": [
-            747,
-            747
+            697,
+            697
           ],
-          "declaration_order_index": 26,
+          "declaration_order_index": 24,
           "symbol_name": "PiNotifyEventId",
           "qualified_name": "PiNotifyEventId",
           "symbol_kind": "TYPE_ALIAS",
@@ -22465,13 +22484,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 753,
-          "end_line_number": 757,
+          "start_line_number": 703,
+          "end_line_number": 707,
           "line_range": [
-            753,
-            757
+            703,
+            707
           ],
-          "declaration_order_index": 27,
+          "declaration_order_index": 25,
           "symbol_name": "PiNotifyEventRowDefinition",
           "qualified_name": "PiNotifyEventRowDefinition",
           "symbol_kind": "INTERFACE",
@@ -22493,13 +22512,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 763,
-          "end_line_number": 769,
+          "start_line_number": 713,
+          "end_line_number": 719,
           "line_range": [
-            763,
-            769
+            713,
+            719
           ],
-          "declaration_order_index": 28,
+          "declaration_order_index": 26,
           "symbol_name": "PiNotifyEventMenuDefinition",
           "qualified_name": "PiNotifyEventMenuDefinition",
           "symbol_kind": "INTERFACE",
@@ -22521,13 +22540,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 778,
-          "end_line_number": 781,
+          "start_line_number": 728,
+          "end_line_number": 731,
           "line_range": [
-            778,
-            781
+            728,
+            731
           ],
-          "declaration_order_index": 29,
+          "declaration_order_index": 27,
           "symbol_name": "togglePiNotifyFlag",
           "qualified_name": "togglePiNotifyFlag",
           "symbol_kind": "FUNCTION",
@@ -22565,19 +22584,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 780,
+              "line_number": 730,
               "text": "return config[key];"
             }
           ]
         },
         {
-          "start_line_number": 790,
-          "end_line_number": 814,
+          "start_line_number": 740,
+          "end_line_number": 764,
           "line_range": [
-            790,
-            814
+            740,
+            764
           ],
-          "declaration_order_index": 30,
+          "declaration_order_index": 28,
           "symbol_name": "resetPiNotifyConfigToDefaults",
           "qualified_name": "resetPiNotifyConfigToDefaults",
           "symbol_kind": "FUNCTION",
@@ -22617,13 +22636,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 823,
-          "end_line_number": 825,
+          "start_line_number": 773,
+          "end_line_number": 775,
           "line_range": [
-            823,
-            825
+            773,
+            775
           ],
-          "declaration_order_index": 31,
+          "declaration_order_index": 29,
           "symbol_name": "formatPiNotifyPushoverPriority",
           "qualified_name": "formatPiNotifyPushoverPriority",
           "symbol_kind": "FUNCTION",
@@ -22658,19 +22677,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 824,
+              "line_number": 774,
               "text": "return priority === 1 ? \"High\" : \"Normal\";"
             }
           ]
         },
         {
-          "start_line_number": 902,
-          "end_line_number": 910,
+          "start_line_number": 852,
+          "end_line_number": 860,
           "line_range": [
-            902,
-            910
+            852,
+            860
           ],
-          "declaration_order_index": 32,
+          "declaration_order_index": 30,
           "symbol_name": "formatPiNotifyEventMenuSummary",
           "qualified_name": "formatPiNotifyEventMenuSummary",
           "symbol_kind": "FUNCTION",
@@ -22711,19 +22730,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 909,
+              "line_number": 859,
               "text": "return `${enabledCount}/3 on`;"
             }
           ]
         },
         {
-          "start_line_number": 920,
-          "end_line_number": 930,
+          "start_line_number": 870,
+          "end_line_number": 880,
           "line_range": [
-            920,
-            930
+            870,
+            880
           ],
-          "declaration_order_index": 33,
+          "declaration_order_index": 31,
           "symbol_name": "buildPiNotifyEventLauncherChoice",
           "qualified_name": "buildPiNotifyEventLauncherChoice",
           "symbol_kind": "FUNCTION",
@@ -22767,19 +22786,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 924,
+              "line_number": 874,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 940,
-          "end_line_number": 964,
+          "start_line_number": 890,
+          "end_line_number": 914,
           "line_range": [
-            940,
-            964
+            890,
+            914
           ],
-          "declaration_order_index": 34,
+          "declaration_order_index": 32,
           "symbol_name": "buildPiNotifyEventMenuChoices",
           "qualified_name": "buildPiNotifyEventMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -22822,19 +22841,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 944,
+              "line_number": 894,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 974,
-          "end_line_number": 982,
+          "start_line_number": 924,
+          "end_line_number": 932,
           "line_range": [
-            974,
-            982
+            924,
+            932
           ],
-          "declaration_order_index": 35,
+          "declaration_order_index": 33,
           "symbol_name": "resetPiNotifyEventMenuToDefaults",
           "qualified_name": "resetPiNotifyEventMenuToDefaults",
           "symbol_kind": "FUNCTION",
@@ -22879,13 +22898,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 992,
-          "end_line_number": 999,
+          "start_line_number": 942,
+          "end_line_number": 949,
           "line_range": [
-            992,
-            999
+            942,
+            949
           ],
-          "declaration_order_index": 36,
+          "declaration_order_index": 34,
           "symbol_name": "resolvePiNotifyEventLabel",
           "qualified_name": "resolvePiNotifyEventLabel",
           "symbol_kind": "FUNCTION",
@@ -22927,19 +22946,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 996,
+              "line_number": 946,
               "text": "return PI_NOTIFY_EVENT_ROW_DEFINITIONS.find("
             }
           ]
         },
         {
-          "start_line_number": 1010,
-          "end_line_number": 1048,
+          "start_line_number": 960,
+          "end_line_number": 998,
           "line_range": [
-            1010,
-            1048
+            960,
+            998
           ],
-          "declaration_order_index": 37,
+          "declaration_order_index": 35,
           "symbol_name": "configurePiNotifyEventMenu",
           "qualified_name": "configurePiNotifyEventMenu",
           "symbol_kind": "FUNCTION",
@@ -22990,19 +23009,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1024,
+              "line_number": 974,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 1057,
-          "end_line_number": 1100,
+          "start_line_number": 1007,
+          "end_line_number": 1050,
           "line_range": [
-            1057,
-            1100
+            1007,
+            1050
           ],
-          "declaration_order_index": 38,
+          "declaration_order_index": 36,
           "symbol_name": "buildPiNotifyPushoverRows",
           "qualified_name": "buildPiNotifyPushoverRows",
           "symbol_kind": "FUNCTION",
@@ -23042,19 +23061,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1058,
+              "line_number": 1008,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 1110,
-          "end_line_number": 1132,
+          "start_line_number": 1060,
+          "end_line_number": 1082,
           "line_range": [
-            1110,
-            1132
+            1060,
+            1082
           ],
-          "declaration_order_index": 39,
+          "declaration_order_index": 37,
           "symbol_name": "selectPiNotifyPushoverPriority",
           "qualified_name": "selectPiNotifyPushoverPriority",
           "symbol_kind": "FUNCTION",
@@ -23096,23 +23115,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1129,
+              "line_number": 1079,
               "text": "return undefined;"
             },
             {
-              "line_number": 1131,
+              "line_number": 1081,
               "text": "return normalizePiNotifyPushoverPriority(choice);"
             }
           ]
         },
         {
-          "start_line_number": 1141,
-          "end_line_number": 1207,
+          "start_line_number": 1091,
+          "end_line_number": 1157,
           "line_range": [
-            1141,
-            1207
+            1091,
+            1157
           ],
-          "declaration_order_index": 40,
+          "declaration_order_index": 38,
           "symbol_name": "buildPiNotifyMenuChoices",
           "qualified_name": "buildPiNotifyMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23161,19 +23180,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1142,
+              "line_number": 1092,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 1217,
-          "end_line_number": 1248,
+          "start_line_number": 1167,
+          "end_line_number": 1198,
           "line_range": [
-            1217,
-            1248
+            1167,
+            1198
           ],
-          "declaration_order_index": 41,
+          "declaration_order_index": 39,
           "symbol_name": "selectPiNotifySoundLevel",
           "qualified_name": "selectPiNotifySoundLevel",
           "symbol_kind": "FUNCTION",
@@ -23216,19 +23235,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1247,
+              "line_number": 1197,
               "text": "return choice ? choice as PiNotifySoundLevel : undefined;"
             }
           ]
         },
         {
-          "start_line_number": 1258,
-          "end_line_number": 1429,
+          "start_line_number": 1208,
+          "end_line_number": 1379,
           "line_range": [
-            1258,
-            1429
+            1208,
+            1379
           ],
-          "declaration_order_index": 42,
+          "declaration_order_index": 40,
           "symbol_name": "configurePiNotifyMenu",
           "qualified_name": "configurePiNotifyMenu",
           "symbol_kind": "FUNCTION",
@@ -23286,19 +23305,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1272,
+              "line_number": 1222,
               "text": "return config[\"notify-sound-toggle-shortcut\"] !== originalShortcut;"
             }
           ]
         },
         {
-          "start_line_number": 1444,
-          "end_line_number": 1464,
+          "start_line_number": 1394,
+          "end_line_number": 1414,
           "line_range": [
-            1444,
-            1464
+            1394,
+            1414
           ],
-          "declaration_order_index": 43,
+          "declaration_order_index": 41,
           "symbol_name": "registerPiNotifyShortcut",
           "qualified_name": "registerPiNotifyShortcut",
           "symbol_kind": "FUNCTION",
@@ -23341,19 +23360,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1450,
+              "line_number": 1400,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 1474,
-          "end_line_number": 1494,
+          "start_line_number": 1424,
+          "end_line_number": 1444,
           "line_range": [
-            1474,
-            1494
+            1424,
+            1444
           ],
-          "declaration_order_index": 44,
+          "declaration_order_index": 42,
           "symbol_name": "registerPromptCommands",
           "qualified_name": "registerPromptCommands",
           "symbol_kind": "FUNCTION",
@@ -23398,13 +23417,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 1504,
-          "end_line_number": 1803,
+          "start_line_number": 1454,
+          "end_line_number": 1753,
           "line_range": [
-            1504,
-            1803
+            1454,
+            1753
           ],
-          "declaration_order_index": 45,
+          "declaration_order_index": 43,
           "symbol_name": "registerAgentTools",
           "qualified_name": "registerAgentTools",
           "symbol_kind": "FUNCTION",
@@ -23471,51 +23490,51 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 1535,
+              "line_number": 1485,
               "text": "return buildStructuredToolExecuteResult(payload);"
             },
             {
-              "line_number": 1568,
+              "line_number": 1518,
               "text": "return buildStructuredToolExecuteResult(payload);"
             },
             {
-              "line_number": 1627,
+              "line_number": 1577,
               "text": "return buildTokenToolExecuteResult(payload);"
             },
             {
-              "line_number": 1629,
+              "line_number": 1579,
               "text": "return buildFailedTokenToolExecuteResult(error);"
             },
             {
-              "line_number": 1653,
+              "line_number": 1603,
               "text": "return buildReferenceToolExecuteResult(payload);"
             },
             {
-              "line_number": 1690,
+              "line_number": 1640,
               "text": "return buildCompressionToolExecuteResult(payload);"
             },
             {
-              "line_number": 1726,
+              "line_number": 1676,
               "text": "return buildFindToolExecuteResult(payload);"
             },
             {
-              "line_number": 1765,
+              "line_number": 1715,
               "text": "return buildReferenceToolExecuteResult(payload);"
             },
             {
-              "line_number": 1802,
+              "line_number": 1752,
               "text": "return buildCompressionToolExecuteResult(payload);"
             }
           ]
         },
         {
-          "start_line_number": 2140,
-          "end_line_number": 2180,
+          "start_line_number": 2090,
+          "end_line_number": 2124,
           "line_range": [
-            2140,
-            2180
+            2090,
+            2124
           ],
-          "declaration_order_index": 46,
+          "declaration_order_index": 44,
           "symbol_name": "buildPiUsereqToolsMenuChoices",
           "qualified_name": "buildPiUsereqToolsMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23530,7 +23549,7 @@
               "Builds the shared settings-menu choices for startup-tool management."
             ],
             "details": [
-              "Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(t) in configurable-tool count. No external state is mutated."
+              "Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting the removed status-reference action. Runtime is O(t) in configurable-tool count. No external state is mutated."
             ],
             "params": [
               {
@@ -23551,6 +23570,7 @@
             ],
             "satisfies_requirement_ids": [
               "REQ-007",
+              "REQ-150",
               "REQ-151",
               "REQ-152",
               "REQ-153",
@@ -23561,19 +23581,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2142,
+              "line_number": 2092,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2190,
-          "end_line_number": 2206,
+          "start_line_number": 2134,
+          "end_line_number": 2150,
           "line_range": [
-            2190,
-            2206
+            2134,
+            2150
           ],
-          "declaration_order_index": 47,
+          "declaration_order_index": 45,
           "symbol_name": "buildPiUsereqToolToggleChoices",
           "qualified_name": "buildPiUsereqToolToggleChoices",
           "symbol_kind": "FUNCTION",
@@ -23618,19 +23638,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2192,
+              "line_number": 2136,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2217,
-          "end_line_number": 2272,
+          "start_line_number": 2161,
+          "end_line_number": 2211,
           "line_range": [
-            2217,
-            2272
+            2161,
+            2211
           ],
-          "declaration_order_index": 48,
+          "declaration_order_index": 46,
           "symbol_name": "configurePiUsereqToolsMenu",
           "qualified_name": "configurePiUsereqToolsMenu",
           "symbol_kind": "FUNCTION",
@@ -23674,6 +23694,7 @@
               "REQ-007",
               "REQ-063",
               "REQ-064",
+              "REQ-150",
               "REQ-151",
               "REQ-152",
               "REQ-153",
@@ -23684,67 +23705,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2228,
+              "line_number": 2172,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2280,
-          "end_line_number": 2286,
+          "start_line_number": 2219,
+          "end_line_number": 2225,
           "line_range": [
-            2280,
-            2286
+            2219,
+            2225
           ],
-          "declaration_order_index": 49,
-          "symbol_name": "formatStaticCheckEntry",
-          "qualified_name": "formatStaticCheckEntry",
-          "symbol_kind": "FUNCTION",
-          "type_label": "FUNCTION",
-          "signature_text": "function formatStaticCheckEntry(entry: StaticCheckEntry): string",
-          "child_symbol_names": [],
-          "child_qualified_names": [],
-          "depth": 0,
-          "attached_comment_summary_text": "Formats one static-check configuration entry for UI display.",
-          "doxygen": {
-            "brief": [
-              "Formats one static-check configuration entry for UI display."
-            ],
-            "details": [
-              "Renders command-backed entries as `Command(cmd args...)` and all other modules as `Module(args...)`. Runtime is O(n) in parameter count. No side effects occur."
-            ],
-            "params": [
-              {
-                "direction": "in",
-                "parameter_name": "entry",
-                "value_type": "StaticCheckEntry",
-                "description": "Static-check configuration entry."
-              }
-            ],
-            "returns": [
-              "{string} Human-readable entry summary."
-            ]
-          },
-          "body_comment_entries": [],
-          "exit_point_entries": [
-            {
-              "line_number": 2283,
-              "text": "return `${entry.module}(${entry.cmd ?? \"?\"}${params})`;"
-            },
-            {
-              "line_number": 2285,
-              "text": "return `${entry.module}${params ? `(${entry.params!.join(\" \")})` : \"\"}`;"
-            }
-          ]
-        },
-        {
-          "start_line_number": 2294,
-          "end_line_number": 2300,
-          "line_range": [
-            2294,
-            2300
-          ],
-          "declaration_order_index": 50,
+          "declaration_order_index": 47,
           "symbol_name": "formatStaticCheckLanguagesSummary",
           "qualified_name": "formatStaticCheckLanguagesSummary",
           "symbol_kind": "FUNCTION",
@@ -23776,63 +23749,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2299,
+              "line_number": 2224,
               "text": "return languages.join(\", \") || \"(none)\";"
             }
           ]
         },
         {
-          "start_line_number": 2308,
-          "end_line_number": 2336,
+          "start_line_number": 2234,
+          "end_line_number": 2263,
           "line_range": [
-            2308,
-            2336
+            2234,
+            2263
           ],
-          "declaration_order_index": 51,
-          "symbol_name": "renderStaticCheckReference",
-          "qualified_name": "renderStaticCheckReference",
-          "symbol_kind": "FUNCTION",
-          "type_label": "FUNCTION",
-          "signature_text": "function renderStaticCheckReference(config: UseReqConfig): string",
-          "child_symbol_names": [],
-          "child_qualified_names": [],
-          "depth": 0,
-          "attached_comment_summary_text": "Renders the static-check configuration reference view.",
-          "doxygen": {
-            "brief": [
-              "Renders the static-check configuration reference view."
-            ],
-            "details": [
-              "Produces a markdown-like summary containing configured entries, supported languages, the Command-only user module surface, and canonical example specifications. Runtime is O(l log l). No side effects occur."
-            ],
-            "params": [
-              {
-                "direction": "in",
-                "parameter_name": "config",
-                "value_type": "UseReqConfig",
-                "description": "Effective project configuration."
-              }
-            ],
-            "returns": [
-              "{string} Reference text for the editor view."
-            ]
-          },
-          "body_comment_entries": [],
-          "exit_point_entries": [
-            {
-              "line_number": 2335,
-              "text": "return `${lines.join(\"\\n\")}\\n`;"
-            }
-          ]
-        },
-        {
-          "start_line_number": 2345,
-          "end_line_number": 2386,
-          "line_range": [
-            2345,
-            2386
-          ],
-          "declaration_order_index": 52,
+          "declaration_order_index": 48,
           "symbol_name": "buildStaticCheckMenuChoices",
           "qualified_name": "buildStaticCheckMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -23847,7 +23776,7 @@
               "Builds the shared settings-menu choices for static-check management."
             ],
             "details": [
-              "Serializes Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting user-facing module selection. Runtime is O(1). No external state is mutated."
+              "Serializes guided Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting raw-spec and reference-only actions. Runtime is O(1). No external state is mutated."
             ],
             "params": [
               {
@@ -23862,6 +23791,7 @@
             ],
             "satisfies_requirement_ids": [
               "REQ-008",
+              "REQ-150",
               "REQ-160",
               "REQ-161",
               "REQ-151",
@@ -23874,19 +23804,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2348,
+              "line_number": 2237,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2394,
-          "end_line_number": 2413,
+          "start_line_number": 2271,
+          "end_line_number": 2290,
           "line_range": [
-            2394,
-            2413
+            2271,
+            2290
           ],
-          "declaration_order_index": 53,
+          "declaration_order_index": 49,
           "symbol_name": "buildSupportedStaticCheckLanguageChoices",
           "qualified_name": "buildSupportedStaticCheckLanguageChoices",
           "symbol_kind": "FUNCTION",
@@ -23918,23 +23848,23 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2395,
+              "line_number": 2272,
               "text": "return ["
             },
             {
-              "line_number": 2399,
+              "line_number": 2276,
               "text": "return {"
             }
           ]
         },
         {
-          "start_line_number": 2421,
-          "end_line_number": 2438,
+          "start_line_number": 2298,
+          "end_line_number": 2315,
           "line_range": [
-            2421,
-            2438
+            2298,
+            2315
           ],
-          "declaration_order_index": 54,
+          "declaration_order_index": 50,
           "symbol_name": "buildConfiguredStaticCheckLanguageChoices",
           "qualified_name": "buildConfiguredStaticCheckLanguageChoices",
           "symbol_kind": "FUNCTION",
@@ -23966,19 +23896,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2422,
+              "line_number": 2299,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2448,
-          "end_line_number": 2523,
+          "start_line_number": 2325,
+          "end_line_number": 2379,
           "line_range": [
-            2448,
-            2523
+            2325,
+            2379
           ],
-          "declaration_order_index": 55,
+          "declaration_order_index": 51,
           "symbol_name": "configureStaticCheckMenu",
           "qualified_name": "configureStaticCheckMenu",
           "symbol_kind": "FUNCTION",
@@ -23993,7 +23923,7 @@
               "Runs the interactive static-check configuration menu."
             ],
             "details": [
-              "Lets the user inspect support, add Command entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation."
+              "Lets the user add Command entries by guided prompts, remove configured language entries, and reset the static-check configuration through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation."
             ],
             "params": [
               {
@@ -24014,6 +23944,7 @@
             ],
             "satisfies_requirement_ids": [
               "REQ-008",
+              "REQ-150",
               "REQ-160",
               "REQ-161",
               "REQ-151",
@@ -24027,19 +23958,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2456,
+              "line_number": 2333,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2533,
-          "end_line_number": 2594,
+          "start_line_number": 2389,
+          "end_line_number": 2450,
           "line_range": [
-            2533,
-            2594
+            2389,
+            2450
           ],
-          "declaration_order_index": 56,
+          "declaration_order_index": 52,
           "symbol_name": "buildPiUsereqMenuChoices",
           "qualified_name": "buildPiUsereqMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -24089,19 +24020,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2537,
+              "line_number": 2393,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2603,
-          "end_line_number": 2630,
+          "start_line_number": 2459,
+          "end_line_number": 2486,
           "line_range": [
-            2603,
-            2630
+            2459,
+            2486
           ],
-          "declaration_order_index": 57,
+          "declaration_order_index": 53,
           "symbol_name": "buildSrcDirMenuChoices",
           "qualified_name": "buildSrcDirMenuChoices",
           "symbol_kind": "FUNCTION",
@@ -24141,19 +24072,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2604,
+              "line_number": 2460,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2639,
-          "end_line_number": 2654,
+          "start_line_number": 2495,
+          "end_line_number": 2510,
           "line_range": [
-            2639,
-            2654
+            2495,
+            2510
           ],
-          "declaration_order_index": 58,
+          "declaration_order_index": 54,
           "symbol_name": "buildSrcDirRemovalChoices",
           "qualified_name": "buildSrcDirRemovalChoices",
           "symbol_kind": "FUNCTION",
@@ -24192,19 +24123,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2640,
+              "line_number": 2496,
               "text": "return ["
             }
           ]
         },
         {
-          "start_line_number": 2665,
-          "end_line_number": 2763,
+          "start_line_number": 2521,
+          "end_line_number": 2619,
           "line_range": [
-            2665,
-            2763
+            2521,
+            2619
           ],
-          "declaration_order_index": 59,
+          "declaration_order_index": 55,
           "symbol_name": "configurePiUsereq",
           "qualified_name": "configurePiUsereq",
           "symbol_kind": "FUNCTION",
@@ -24264,19 +24195,19 @@
           "body_comment_entries": [],
           "exit_point_entries": [
             {
-              "line_number": 2693,
+              "line_number": 2549,
               "text": "return;"
             }
           ]
         },
         {
-          "start_line_number": 2673,
-          "end_line_number": 2677,
+          "start_line_number": 2529,
+          "end_line_number": 2533,
           "line_range": [
-            2673,
-            2677
+            2529,
+            2533
           ],
-          "declaration_order_index": 60,
+          "declaration_order_index": 56,
           "symbol_name": "ensureSaved",
           "qualified_name": "ensureSaved",
           "symbol_kind": "FUNCTION",
@@ -24289,13 +24220,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2674,
-          "end_line_number": 2677,
+          "start_line_number": 2530,
+          "end_line_number": 2533,
           "line_range": [
-            2674,
-            2677
+            2530,
+            2533
           ],
-          "declaration_order_index": 61,
+          "declaration_order_index": 57,
           "symbol_name": "refreshStatus",
           "qualified_name": "refreshStatus",
           "symbol_kind": "FUNCTION",
@@ -24308,13 +24239,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2773,
-          "end_line_number": 2783,
+          "start_line_number": 2629,
+          "end_line_number": 2639,
           "line_range": [
-            2773,
-            2783
+            2629,
+            2639
           ],
-          "declaration_order_index": 62,
+          "declaration_order_index": 58,
           "symbol_name": "registerConfigCommands",
           "qualified_name": "registerConfigCommands",
           "symbol_kind": "FUNCTION",
@@ -24357,13 +24288,13 @@
           "exit_point_entries": []
         },
         {
-          "start_line_number": 2801,
-          "end_line_number": 2809,
+          "start_line_number": 2657,
+          "end_line_number": 2665,
           "line_range": [
-            2801,
-            2809
+            2657,
+            2665
           ],
-          "declaration_order_index": 63,
+          "declaration_order_index": 59,
           "symbol_name": "piUsereqExtension",
           "qualified_name": "piUsereqExtension",
           "symbol_kind": "FUNCTION",
@@ -24468,11 +24399,11 @@
           ]
         },
         {
-          "start_line_number": 122,
-          "end_line_number": 125,
+          "start_line_number": 120,
+          "end_line_number": 123,
           "line_range": [
-            122,
-            125
+            120,
+            123
           ],
           "text": "@brief Lists bundled prompt commands exposed by the extension. @details Each entry maps to a `req-<name>` command that renders a bundled prompt and sends it to the active session. Access complexity is O(1).",
           "text_lines": [
@@ -24507,11 +24438,11 @@
           ]
         },
         {
-          "start_line_number": 827,
-          "end_line_number": 831,
+          "start_line_number": 777,
+          "end_line_number": 781,
           "line_range": [
-            827,
-            831
+            777,
+            781
           ],
           "text": "@brief Defines the shared prompt-end event rows reused across notification submenus. @details Encodes the human-readable completed/interrupted/failed labels and terminal-state descriptions required by the command-notify, sound, and Pushover event menus. Access complexity is O(1). @satisfies REQ-188, REQ-198",
           "text_lines": [
@@ -24521,11 +24452,11 @@
           ]
         },
         {
-          "start_line_number": 850,
-          "end_line_number": 854,
+          "start_line_number": 800,
+          "end_line_number": 804,
           "line_range": [
-            850,
-            854
+            800,
+            804
           ],
           "text": "@brief Defines the shared event-submenu contracts for command-notify, sound, and Pushover. @details Binds each notification transport to its top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config-key set. Access complexity is O(1). @satisfies REQ-174, REQ-178, REQ-184, REQ-198",
           "text_lines": [

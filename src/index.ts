@@ -113,9 +113,7 @@ import {
 } from "./core/tool-runner.js";
 import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
-  STATIC_CHECK_MODULES,
   getSupportedStaticCheckLanguageSupport,
-  parseEnableStaticCheck,
 } from "./core/static-check.js";
 import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
 
@@ -196,15 +194,17 @@ function saveProjectConfig(cwd: string, config: UseReqConfig): void {
 
 /**
  * @brief Formats the current project config path for top-level menu display.
- * @details Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived
- * project base and formats it relative to the user home when possible. Runtime
- * is O(p) in path length. No external state is mutated.
+ * @details Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived project base, reuses the shared runtime-path formatter, and rewrites a leading POSIX `$HOME` token to `~` for the `Show configuration` row only. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] cwd {string} Current working directory.
- * @return {string} User-home-relative or absolute config path display value.
+ * @return {string} `~`-relative or absolute config path display value.
  * @satisfies REQ-162
  */
 function formatProjectConfigPathForMenu(cwd: string): string {
-  return formatRuntimePathForDisplay(getProjectConfigPath(getProjectBase(cwd)));
+  const displayPath = formatRuntimePathForDisplay(getProjectConfigPath(getProjectBase(cwd)));
+  if (displayPath === "$HOME") {
+    return "~";
+  }
+  return displayPath.startsWith("$HOME/") ? `~/${displayPath.slice("$HOME/".length)}` : displayPath;
 }
 
 /**
@@ -541,19 +541,6 @@ function getConfiguredEnabledPiUsereqTools(config: UseReqConfig): string[] {
 }
 
 /**
- * @brief Classifies one configurable tool as embedded or extension-owned.
- * @details Uses the runtime `sourceInfo.source` field plus the supported embedded-name subset to produce one stable UI label. Runtime is O(1). No external state is mutated.
- * @param[in] tool {ToolInfo} Runtime tool descriptor.
- * @return {"builtin" | "extension"} Stable tool-kind label.
- */
-function getPiUsereqToolKind(tool: ToolInfo): "builtin" | "extension" {
-  if (tool.sourceInfo?.source === "builtin" && isPiUsereqEmbeddedToolName(tool.name)) {
-    return "builtin";
-  }
-  return "extension";
-}
-
-/**
  * @brief Applies the configured active-tool enablement to the current session.
  * @details Preserves non-configurable active tools, removes every configurable tool from the active set, then re-adds only configured tools that exist in the current runtime inventory. Runtime is O(t). Side effects include `pi.setActiveTools(...)`.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -675,43 +662,6 @@ function registerExtensionStatusHooks(
 function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void {
   config["enabled-tools"] = normalizeEnabledPiUsereqTools(enabledTools);
   applyConfiguredPiUsereqTools(pi, config);
-}
-
-/**
- * @brief Renders a textual reference for configurable-tool configuration and runtime state.
- * @details Lists every configurable tool with configured enablement, runtime activation, builtin-versus-extension classification, source metadata, and optional descriptions. Runtime is O(t). No side effects occur.
- * @param[in] pi {ExtensionAPI} Active extension API instance.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {string} Multiline tool-status report.
- */
-function renderPiUsereqToolsReference(pi: ExtensionAPI, config: UseReqConfig): string {
-  const tools = getPiUsereqStartupTools(pi);
-  const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
-  const activeTools = new Set(pi.getActiveTools());
-  const lines = [
-    "# configurable active tools",
-    "",
-    `Configured enabled tools: ${enabledTools.size}/${tools.length}`,
-    `Currently active tools: ${tools.filter((tool) => activeTools.has(tool.name)).length}/${tools.length}`,
-    "",
-    "Tools:",
-  ];
-
-  for (const tool of tools) {
-    const configured = enabledTools.has(tool.name) ? "enabled" : "disabled";
-    const active = activeTools.has(tool.name) ? "active" : "inactive";
-    const source = tool.sourceInfo ? `${tool.sourceInfo.source}:${tool.sourceInfo.path}` : "unknown";
-    lines.push(`- ${tool.name}`);
-    lines.push(`  kind: ${getPiUsereqToolKind(tool)}`);
-    lines.push(`  configured: ${configured}`);
-    lines.push(`  runtime: ${active}`);
-    lines.push(`  source: ${source}`);
-    if (tool.description) {
-      lines.push(`  description: ${tool.description}`);
-    }
-  }
-
-  return `${lines.join("\n")}\n`;
 }
 
 /**
@@ -2131,26 +2081,20 @@ function registerAgentTools(pi: ExtensionAPI): void {
 
 /**
  * @brief Builds the shared settings-menu choices for startup-tool management.
- * @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(t) in configurable-tool count. No external state is mutated.
+ * @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting the removed status-reference action. Runtime is O(t) in configurable-tool count. No external state is mutated.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
- * @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
+ * @satisfies REQ-007, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
  */
 function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const tools = getPiUsereqStartupTools(pi);
   return [
     {
-      id: "show-tool-status",
-      label: "Show tool status",
-      value: `${getConfiguredEnabledPiUsereqTools(config).length}/${tools.length} enabled`,
-      description: "Open the full startup-tool reference report in the editor.",
-    },
-    {
-      id: "toggle-tool",
-      label: "Toggle tool",
+      id: "enable-tools",
+      label: "Enable tools",
       value: `${getConfiguredEnabledPiUsereqTools(config).length} enabled`,
-      description: "Open the per-tool toggle menu for configurable startup tools.",
+      description: "Open the per-tool enablement menu for configurable startup tools.",
     },
     {
       id: "enable-all-tools",
@@ -2200,7 +2144,7 @@ function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig):
       id: "back",
       label: "Back",
       value: "",
-      description: "Return to the startup-tools menu.",
+      description: "Return to the Enable tools menu.",
     },
   ];
 }
@@ -2212,7 +2156,7 @@ function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig):
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-007, REQ-063, REQ-064, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
+ * @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
  */
 async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   applyConfiguredPiUsereqTools(pi, config);
@@ -2228,11 +2172,6 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
       return;
     }
     focusedChoiceId = choice;
-
-    if (choice === "show-tool-status") {
-      ctx.ui.setEditorText(renderPiUsereqToolsReference(pi, config));
-      continue;
-    }
 
     if (choice === "enable-all-tools") {
       setConfiguredPiUsereqTools(pi, config, tools.map((tool) => tool.name));
@@ -2252,8 +2191,8 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
       continue;
     }
 
-    if (choice === "toggle-tool") {
-      const selectedToolName = await showPiUsereqSettingsMenu(ctx, "toggle startup tool", buildPiUsereqToolToggleChoices(pi, config));
+    if (choice === "enable-tools") {
+      const selectedToolName = await showPiUsereqSettingsMenu(ctx, "Enable tools", buildPiUsereqToolToggleChoices(pi, config));
       if (!selectedToolName || selectedToolName === "back") {
         continue;
       }
@@ -2272,20 +2211,6 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
 }
 
 /**
- * @brief Formats one static-check configuration entry for UI display.
- * @details Renders command-backed entries as `Command(cmd args...)` and all other modules as `Module(args...)`. Runtime is O(n) in parameter count. No side effects occur.
- * @param[in] entry {StaticCheckEntry} Static-check configuration entry.
- * @return {string} Human-readable entry summary.
- */
-function formatStaticCheckEntry(entry: StaticCheckEntry): string {
-  const params = Array.isArray(entry.params) && entry.params.length > 0 ? ` ${entry.params.join(" ")}` : "";
-  if (entry.module === "Command") {
-    return `${entry.module}(${entry.cmd ?? "?"}${params})`;
-  }
-  return `${entry.module}${params ? `(${entry.params!.join(" ")})` : ""}`;
-}
-
-/**
  * @brief Summarizes configured static-check languages.
  * @details Keeps only languages with at least one configured checker, sorts them, and emits a compact `Language (count)` list. Runtime is O(l log l). No side effects occur.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -2300,75 +2225,27 @@ function formatStaticCheckLanguagesSummary(config: UseReqConfig): string {
 }
 
 /**
- * @brief Renders the static-check configuration reference view.
- * @details Produces a markdown-like summary containing configured entries, supported languages, the Command-only user module surface, and canonical example specifications. Runtime is O(l log l). No side effects occur.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {string} Reference text for the editor view.
- */
-function renderStaticCheckReference(config: UseReqConfig): string {
-  const lines = ["# Static-check configuration", "", `Configured languages: ${formatStaticCheckLanguagesSummary(config)}`, ""];
-  const configuredLanguages = Object.entries(config["static-check"])
-    .filter(([, entries]) => Array.isArray(entries) && entries.length > 0)
-    .sort(([left], [right]) => left.localeCompare(right));
-
-  if (configuredLanguages.length === 0) {
-    lines.push("Configured entries: (none)");
-  } else {
-    lines.push("Configured entries:");
-    for (const [language, entries] of configuredLanguages) {
-      lines.push(`- ${language}: ${(entries as StaticCheckEntry[]).map(formatStaticCheckEntry).join(", ")}`);
-    }
-  }
-
-  lines.push("", "Supported languages:");
-  for (const { language, extensions } of getSupportedStaticCheckLanguageSupport()) {
-    lines.push(`- ${language}: ${extensions.join(", ")}`);
-  }
-  lines.push(
-    "",
-    `Supported modules: ${STATIC_CHECK_MODULES.join(", ")}`,
-    "",
-    "Examples:",
-    "- Python=Command,mypy,--strict",
-    "- TypeScript=Command,eslint,--max-warnings,0",
-  );
-  return `${lines.join("\n")}\n`;
-}
-
-/**
  * @brief Builds the shared settings-menu choices for static-check management.
- * @details Serializes Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting user-facing module selection. Runtime is O(1). No external state is mutated.
+ * @details Serializes guided Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting raw-spec and reference-only actions. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
- * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
+ * @satisfies REQ-008, REQ-150, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
  */
 function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const supportedLanguageCount = getSupportedStaticCheckLanguageSupport().length;
   const configuredLanguageCount = Object.values(config["static-check"]).filter((entries) => entries.length > 0).length;
   return [
     {
-      id: "add-entry-supported-language",
-      label: "Add entry for supported language",
+      id: "add-static-check-entry",
+      label: "Add static code checker",
       value: `${supportedLanguageCount} languages`,
-      description: "Select a supported language, then configure the Command static-check executable.",
+      description: "Select a supported language, then configure one Command static-check executable.",
     },
     {
-      id: "add-entry-raw-spec",
-      label: "Add entry from LANG=MODULE[,CMD[,PARAM...]]",
-      value: "raw spec",
-      description: "Enter one raw Command-based static-check specification string in canonical CLI format.",
-    },
-    {
-      id: "remove-language-entry",
-      label: "Remove language entry",
+      id: "remove-static-check-entry",
+      label: "Remove static code checker",
       value: configuredLanguageCount > 0 ? `${configuredLanguageCount} configured` : "(none)",
       description: "Remove every configured static-check entry for one language.",
-    },
-    {
-      id: "show-supported-languages",
-      label: "Show supported languages",
-      value: `${supportedLanguageCount} languages`,
-      description: "Open the static-check reference report in the editor.",
     },
     {
       id: "reset-defaults",
@@ -2407,7 +2284,7 @@ function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsere
       id: "back",
       label: "Back",
       value: "",
-      description: "Return to the static-check menu.",
+      description: "Return to the Language static code checkers menu.",
     },
   ];
 }
@@ -2432,23 +2309,23 @@ function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUser
       id: "back",
       label: "Back",
       value: "",
-      description: "Return to the static-check menu.",
+      description: "Return to the Language static code checkers menu.",
     },
   ];
 }
 
 /**
  * @brief Runs the interactive static-check configuration menu.
- * @details Lets the user inspect support, add Command entries by guided prompts or raw spec strings, and remove configured language entries through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Lets the user add Command entries by guided prompts, remove configured language entries, and reset the static-check configuration through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-008, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-195
+ * @satisfies REQ-008, REQ-150, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-195
  */
 async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
   let focusedChoiceId: string | undefined;
   while (true) {
-    const staticChoice = await showPiUsereqSettingsMenu(ctx, "Static code checkers", buildStaticCheckMenuChoices(config), {
+    const staticChoice = await showPiUsereqSettingsMenu(ctx, "Language static code checkers", buildStaticCheckMenuChoices(config), {
       initialSelectedId: focusedChoiceId,
     });
 
@@ -2457,12 +2334,7 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
     }
     focusedChoiceId = staticChoice;
 
-    if (staticChoice === "show-supported-languages") {
-      ctx.ui.setEditorText(renderStaticCheckReference(config));
-      continue;
-    }
-
-    if (staticChoice === "add-entry-supported-language") {
+    if (staticChoice === "add-static-check-entry") {
       const selectedLanguage = await showPiUsereqSettingsMenu(ctx, "static-check language", buildSupportedStaticCheckLanguageChoices(config));
       if (!selectedLanguage || selectedLanguage === "back") {
         continue;
@@ -2490,24 +2362,8 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
       continue;
     }
 
-    if (staticChoice === "add-entry-raw-spec") {
-      const spec = await ctx.ui.input("Static-check spec", "Python=Command,true");
-      if (!spec?.trim()) {
-        continue;
-      }
-      try {
-        const [canonicalLang, entry] = parseEnableStaticCheck(spec.trim());
-        config["static-check"][canonicalLang] ??= [];
-        config["static-check"][canonicalLang]!.push(entry);
-        ctx.ui.notify(`Added ${entry.module} checker for ${canonicalLang}`, "info");
-      } catch (error) {
-        ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
-      }
-      continue;
-    }
-
-    if (staticChoice === "remove-language-entry") {
-      const configuredLanguage = await showPiUsereqSettingsMenu(ctx, "Remove static code checker language", buildConfiguredStaticCheckLanguageChoices(config));
+    if (staticChoice === "remove-static-check-entry") {
+      const configuredLanguage = await showPiUsereqSettingsMenu(ctx, "Remove static code checker", buildConfiguredStaticCheckLanguageChoices(config));
       if (!configuredLanguage || configuredLanguage === "back") {
         continue;
       }
@@ -2555,9 +2411,9 @@ function buildPiUsereqMenuChoices(
     },
     {
       id: "static-check",
-      label: "Static code checkers",
+      label: "Language static code checkers",
       value: formatStaticCheckLanguagesSummary(config),
-      description: "Manage configured static-check entries and inspect supported languages and modules.",
+      description: "Manage guided Command static-check entries by language.",
     },
     {
       id: "startup-tools",

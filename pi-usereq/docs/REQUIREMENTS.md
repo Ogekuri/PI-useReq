@@ -103,14 +103,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-061**: MUST make `scripts/pi-usereq-debug.sh` expose `inspect`, `session`, `command`, `prompt`, `tool`, `sdk`, `raw`, and `help` subcommands.
 - **REQ-062**: MUST make `scripts/pi-usereq-debug.sh` default to `src/index.ts` plus caller cwd, permit later `--cwd` and `--extension` overrides, auto-prefix bare prompt names with `req-`, and map `session`/`sdk` to `session-start`/`sdk-smoke`.
 - **REQ-065**: MUST make `scripts/pi-usereq-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
-- **REQ-006**: MUST provide a `pi-usereq` menu that edits `Document directory`, `Source-code directories`, and `Unit tests directory`, manages `Static code checkers`, `Enable tools`, `Notifications`, exposes `Show configuration`, resets defaults, and saves configuration on exit.
-- **REQ-007**: MUST provide an `Enable tools` submenu with overview, status display, per-tool toggle, enable-all, disable-all, and reset-defaults actions for configurable custom and embedded pi CLI active tools.
+- **REQ-006**: MUST provide a `pi-usereq` menu that edits `Document directory`, `Source-code directories`, and `Unit tests directory`, manages `Language static code checkers`, `Enable tools`, `Notifications`, exposes `Show configuration`, resets defaults, and saves configuration on exit.
+- **REQ-007**: MUST provide an `Enable tools` submenu with `Enable tools`, enable-all, disable-all, and reset-defaults actions for configurable custom and embedded pi CLI active tools.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `grep`, and `ls`.
 - **REQ-064**: MUST default all custom tools except `find` and embedded `read`, `bash`, `edit`, and `write` to enabled, and custom `find` plus embedded `grep` and `ls` to disabled.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted project configuration.
 - **REQ-067**: MUST send every rendered `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that never creates replacement sessions or pre-reset flows.
-- **REQ-008**: MUST provide a `Static code checkers` submenu that adds Command entries by guided language flow or raw spec, removes language entries, and shows supported languages.
+- **REQ-008**: MUST provide a `Language static code checkers` submenu that adds Command entries by guided language flow, removes configured language entries, and resets the static-check configuration.
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, and publish single-line `pi-usereq` status text during `session_start`.
@@ -144,10 +144,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-166**: MUST deliver Pushover notifications only when global Pushover is enabled and the corresponding prompt-end Pushover event toggle is enabled.
 - **REQ-167**: MUST deliver Pushover notifications through native Node HTTP or HTTPS requests to `https://api.pushover.net/1/messages.json` and MUST NOT invoke shell commands for Pushover delivery.
 - **REQ-168**: MUST send a Pushover message only when persisted `user` plus `token` values are non-empty for the triggered prompt-end outcome.
-- **REQ-169**: MUST substitute `%%INSTALLATION_PATH%%`, `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, and `%%ARGS%%` at runtime inside `PI_NOTIFY_CMD`.
+- **REQ-169**: MUST substitute `%%INSTALLATION_PATH%%`, `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, and `%%RESULT%%` at runtime inside `PI_NOTIFY_CMD`.
 - **REQ-172**: MUST persist Pushover priority values `Normal=0` and `High=1`, defaulting to `Normal`.
 - **REQ-174**: MUST persist command-notify event toggles in keys `notify-on-completed`, `notify-on-interrupted`, and `notify-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
-- **REQ-175**: MUST persist a configurable `PI_NOTIFY_CMD` whose default template invokes `notify-send` with the bundled icon plus runtime title and argument placeholders.
+- **REQ-175**: MUST persist `PI_NOTIFY_CMD` defaulting to `notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a "PI-useReq" "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"`.
 - **REQ-176**: MUST implement command-notify exclusively by executing `PI_NOTIFY_CMD` when command-notify is globally enabled and the corresponding prompt-end notify event toggle is enabled.
 - **REQ-178**: MUST persist sound event toggles in keys `notify-sound-on-completed`, `notify-sound-on-interrupted`, and `notify-sound-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
 - **REQ-179**: MUST label sound rows as `Enable sound` and `Sound command (low vol.)`, `Sound command (mid vol.)`, and `Sound command (high vol.)`.
@@ -155,12 +155,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-181**: MUST make the `Notifications` menu expose `Enable notification`, `Notification events`, and `Notify command` before sound rows.
 - **REQ-183**: MUST make the `Notifications` menu expose `Sound events` immediately after `Enable sound` and before sound hotkey plus command rows.
 - **REQ-184**: MUST persist Pushover event toggles in keys `notify-pushover-on-completed`, `notify-pushover-on-interrupted`, and `notify-pushover-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
-- **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%ARGS%%`.
-- **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, and `%%ARGS%%` at runtime inside `Pushover title` and `Pushover text`.
+- **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%RESULT%%\n%%ARGS%%`.
+- **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
 - **REQ-187**: MUST render `%%BASE%%` as the runtime base path relative to user home using `~/...` form and `%%TIME%%` as final elapsed `M:SS`.
 - **REQ-188**: MUST label notification-event rows as `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
-- **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Static code checkers`, `Enable tools`, `Notifications`, and `Show configuration`.
-- **REQ-191**: MUST order top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Static code checkers`, `Enable tools`, `Notifications`, `Show configuration`, `Reset defaults`, and `Save and close`.
+- **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Language static code checkers`, `Enable tools`, `Notifications`, and `Show configuration`.
+- **REQ-191**: MUST order top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Language static code checkers`, `Enable tools`, `Notifications`, `Show configuration`, `Reset defaults`, and `Save and close`.
 - **REQ-192**: MUST preserve the selected settings-menu row after toggling or editing a setting value.
 - **REQ-193**: MUST append `Reset defaults` and `Save and close` as the final two rows of every configuration submenu.
 - **REQ-194**: MUST make top-level `Reset defaults` restore all top-level and submenu settings to defaults.
@@ -168,6 +168,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-196**: MUST persist a global command-notify enable flag defaulting to disabled.
 - **REQ-197**: MUST summarize top-level `Notifications` as `notification:<state> • sound:<level> • pushover:<state>`.
 - **REQ-198**: MUST render `Notification events`, `Sound events`, and `Pushover events` as identical submenu lists with right-aligned `on|off` values for `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
+- **REQ-199**: MUST render `%%RESULT%%` as `successed`, `aborted`, or `failed` for completed, interrupted, and failed prompt-end outcomes.
 - **REQ-159**: MUST increase `Σ` by each normally completed prompt duration and MUST NOT change `Σ` on escape-triggered cancellation.
 - **REQ-173**: MUST optimize every agent-tool response for minimum token usage by excluding caller-known, static, duplicated, and registration-described facts from runtime payloads.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` emit agent-oriented JSON containing structured per-file metrics, extracted facts, and aggregate metrics.
@@ -231,7 +232,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-106**: MUST make prompt `%%GUIDELINES_FILES%%`, `%%GUIDELINES_PATH%%`, and `%%TEMPLATE_PATH%%` resolve under `<installation-path>/resources`.
 - **REQ-107**: MUST express prompt-visible `installation-path`, `execution-path`, `base-path`, `config-path`, template paths, and guideline paths relative to user home using platform-native home environment variables.
 - **REQ-031**: MUST make the `pi-usereq` menu expose a `Show configuration` action after `Notifications` and before `Reset defaults`, writing the current project configuration JSON to the editor.
-- **REQ-162**: MUST render the `show-config` current value as the user-home-relative extension config path using the settings-list `dim` value style.
+- **REQ-162**: MUST render the `show-config` current value as the `~`-relative extension config path using the settings-list `dim` value style.
 - **REQ-032**: MUST inject a pi.dev conformance block into rendered prompts when `docs/pi.dev/agent-document-manifest.json` exists under the project base.
 - **REQ-033**: MUST make that conformance block require manifest-guided document review before implementing or changing extension code that interfaces with pi CLI.
 - **REQ-034**: MUST make that conformance block require manifest-guided document review before validating, analyzing, or fixing extension code that interfaces with pi CLI.
@@ -259,7 +260,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-146**: MUST NOT read or persist `base-path` or `git-path` in project-configuration JSON.
 - **REQ-148**: MUST render status-bar `base` as the absolute runtime `base-path` with no git-relative shortening.
 - **REQ-149**: MUST label notification settings actions as `Notify command`, `Enable sound`, `Sound toggle hotkey bind`, `Sound command (low|mid|high vol.)`, `Pushover User Key/Delivery Group Key`, and `Pushover Token/API Token Key`.
-- **REQ-150**: MUST omit overview rows and reference-only actions from the main and notification configuration menus.
+- **REQ-150**: MUST omit overview rows and reference-only actions from the main, notification, startup-tool, and static-check configuration menus.
 - **REQ-151**: MUST render `pi-usereq`, notification, static-check, and startup-tool menus with left-aligned labels and right-aligned current values using the active CLI settings-list theme semantics.
 - **REQ-156**: MUST restrict extension-owned status and settings rendering to CLI-supported theme APIs and documented theme tokens.
 - **REQ-152**: MUST render a persistent bottom-line description for the currently selected configuration entry.
@@ -271,8 +272,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-002**: MUST verify installed bundled prompt, template, and guideline resources remain readable from `installation-path` and prompt rendering replaces all dynamic placeholders with runtime path context.
 - **TST-003**: MUST verify standalone `files-*` CLI outputs match the Python oracle and `--test-static-check` dummy/command outputs match archived fixtures for every fixture file.
 - **TST-004**: MUST verify project `compress`, `find`, `tokens`, `git-check`, `docs-check`, `git-path`, and `get-base-path` outputs match the Python oracle, and verify `files-static-check` plus `static-check` against archived fixtures.
-- **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools, adds Command static-check entries, and omits prompt-delivery mode controls.
-- **TST-046**: MUST verify static-check menus omit module selection and hide `Dummy`, `Pylance`, and `Ruff` from user-configurable actions.
+- **TST-005**: MUST verify the configuration menu persists `docs-dir`, disables startup tools through `Enable tools`, adds guided Command static-check entries, and omits prompt-delivery mode controls.
+- **TST-046**: MUST verify `Language static code checkers` omits module selection, raw-spec actions, supported-language reference actions, and hides `Dummy`, `Pylance`, and `Ruff` from user-configurable actions.
 - **TST-006**: MUST verify `session_start` activates configured startup tools and updates the single-line `pi-usereq` status bar.
 - **TST-031**: MUST verify the status bar renders the explicit base path, omits `docs`, `src`, `tests`, `git`, and `tools`, and preserves active-theme `accent`/`warning` field-value token separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
@@ -280,11 +281,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-037**: MUST verify the `Notifications` menu persists notification and sound settings through `Notification events` and `Sound events` submenus using the documented labels, order, reset actions, and save-close actions.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
 - **TST-047**: MUST verify the `Notifications` menu exposes `Pushover events` before direct Pushover settings and persists Pushover enable, event toggles, priority, title, text, user key, and token values.
-- **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution for enabled prompt-end outcomes.
+- **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` for enabled prompt-end outcomes.
 - **TST-049**: MUST verify the status bar renders ordered `base`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
-- **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution and routing honor global notify enable plus completed/interrupted/failed notify toggles.
+- **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
-- **TST-045**: MUST verify default configuration disables notify globally, initializes sound to `none`, disables Pushover globally, and applies the documented completed/interrupted/failed event defaults.
+- **TST-045**: MUST verify default configuration disables notify globally, initializes sound to `none`, disables Pushover globally, applies the documented completed/interrupted/failed event defaults, and persists the documented notify and Pushover templates.
 - **TST-051**: MUST verify sound routing honors the selected sound state and completed/interrupted/failed sound toggles.
 - **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with the theme `warning` token.
 - **TST-036**: MUST verify context usage above 100 percent renders `▕█▏` with blink control when preserved or with the theme `error` token otherwise.
@@ -317,7 +318,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify `.pi-usereq/config.json` omits `base-path` and `git-path`, while runtime path tools and status rendering still derive both values correctly.
-- **TST-041**: MUST verify the `pi-usereq` menu uses the documented labels and order, exposes `Show configuration` after `Notifications`, shows the home-relative config path, summarizes `Notifications` without terminal-beep state, and omits notification reference-only actions.
+- **TST-041**: MUST verify the `pi-usereq` menu uses the documented labels and order, exposes `Show configuration` after `Notifications`, shows the `~`-relative config path, summarizes `Notifications` without terminal-beep state, and omits configuration reference-only actions.
 - **TST-052**: MUST verify toggling or editing a settings entry preserves focus on the affected row when the menu re-renders.
 - **TST-053**: MUST verify top-level reset restores all settings and submenu reset restores only the targeted submenu subtree.
 
@@ -461,9 +462,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-003 | `src/core/prompts.ts` :: `TOOL_REFERENCE_REPLACEMENTS` and `adaptPromptForInternalTools` :: replaces ``req --find`` style text with `find tool` style text. |
 | REQ-004 | `src/index.ts` :: `registerPromptCommands` :: each handler runs `ensureHomeResources()`, renders the prompt, then executes `pi.sendUserMessage(content)`. |
 | REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
-| REQ-006 | `src/index.ts` :: `configurePiUsereq` :: edits docs/tests/src settings, invokes submenus, resets defaults, and persists with `saveProjectConfig`. |
-| REQ-007 | `src/index.ts` :: `configurePiUsereqToolsMenu` :: choices include `Show tool status`, `Toggle tool`, `Enable all`, `Disable all`, `Reset ... defaults`. |
-| REQ-008 | `src/index.ts` :: `configureStaticCheckMenu` :: supports Command-only guided addition, raw-spec addition, language removal, and supported-language display. |
+| REQ-006 | `src/index.ts` :: `configurePiUsereq` :: edits docs/tests/src settings, invokes `Language static code checkers`, resets defaults, and persists with `saveProjectConfig`. |
+| REQ-007 | `src/index.ts` :: `configurePiUsereqToolsMenu` :: choices include `Enable tools`, `Enable all`, `Disable all`, and `Reset defaults`. |
+| REQ-008 | `src/index.ts` :: `configureStaticCheckMenu` :: supports Command-only guided addition, configured-language removal, and reset-only static-check management. |
 | REQ-160 | `src/index.ts` :: `buildStaticCheckMenuChoices` and `configureStaticCheckMenu` :: omit user-facing module selection and hardcode `Command` for guided additions. |
 | REQ-161 | `src/core/static-check.ts` :: `dispatchStaticCheckForFile` and `runStaticCheck` :: keep `Dummy` only for existing config entries and the debug driver. |
 | REQ-009 | `src/index.ts` :: `pi.on("session_start", ...)` :: calls `ensureHomeResources()`, `applyConfiguredPiUsereqTools`, and `ctx.ui.setStatus(...)`. |
@@ -501,7 +502,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-002 | `tests/prompt-rendering.test.ts` :: `embedded resources are copied ...` and `prompt rendering replaces all dynamic placeholders ...`. |
 | TST-003 | `tests/oracle-standalone.test.ts` :: preserves Python-oracle coverage for `files-tokens`, `files-compress`, and `files-find`; `tests/attended-results-scenarios.ts` :: archives `test-static-check` dummy and command scenarios only. |
 | TST-004 | `tests/oracle-project.test.ts` :: preserves Python-oracle coverage for `compress`, `find`, `tokens`, `git-check`, `docs-check`, `git-path`, and `get-base-path`; `tests/attended-results-scenarios.ts` :: archives `files-static-check` and `static-check`. |
-| TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and both Command-oriented static-check menu addition tests. |
+| TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and `configuration menu can add guided static-check entries ...`. |
 | TST-046 | `tests/extension-registration.test.ts` :: `configuration menu hides removed static-check modules from user-facing actions`. |
 | TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
 | TST-007 | `tests/extension-registration.test.ts` :: `git-path dependent commands derive the repository root at runtime`. |
