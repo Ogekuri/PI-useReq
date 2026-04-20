@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/Ogekuri/PI-useReq/compare/v0.5.0..v0.6.0) - 2026-04-20
+### 🚜  Changes
+- BREAKING CHANGE: optimize tool response payloads [useReq] *(core)*
+  - Update requirements for token-minimized tool responses.
+  - Move static response facts into tool registration metadata.
+  - Reduce runtime payload sections and remove repeated request echoes.
+  - Update workflow, references, and targeted tool-contract tests.
+
 ## [0.5.0](https://github.com/Ogekuri/PI-useReq/compare/v0.4.0..v0.5.0) - 2026-04-19
 ### ⛰️  Features
 - add pushover completion notifications [useReq] *(notify)*
@@ -244,9 +252,11 @@
 - \[0.3.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.3.0
 - \[0.4.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.4.0
 - \[0.5.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.5.0
+- \[0.6.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.6.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
 [0.3.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.2.0..v0.3.0
 [0.4.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.3.0..v0.4.0
 [0.5.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.4.0..v0.5.0
+[0.6.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.5.0..v0.6.0
