@@ -7,24 +7,23 @@
 
 import process from "node:process";
 import { ReqError } from "./core/errors.js";
-import { loadConfig, normalizeConfigPaths, saveConfig, type UseReqConfig } from "./core/config.js";
+import {
+  createStaticCheckLanguageConfig,
+  loadConfig,
+  normalizeConfigPaths,
+  saveConfig,
+  type UseReqConfig,
+} from "./core/config.js";
 import {
   loadAndRepairConfig,
   resolveProjectBase,
   runCompress,
-  runDocsCheck,
   runFilesCompress,
-  runFilesFind,
+  runFilesSearch,
   runFilesReferences,
   runFilesStaticCheck,
   runFilesTokens,
-  runFind,
-  runGetBasePath,
-  runGitCheck,
-  runGitPath,
-  runGitWtCreate,
-  runGitWtDelete,
-  runGitWtName,
+  runSearch,
   runProjectStaticCheck,
   runReferences,
   runTokens,
@@ -49,20 +48,13 @@ interface ParsedArgs {
   filesTokens?: string[];
   filesReferences?: string[];
   filesCompress?: string[];
-  filesFind?: string[];
+  filesSearch?: string[];
   references?: boolean;
   compress?: boolean;
-  find?: [string, string];
+  search?: [string, string];
   tokens?: boolean;
   filesStaticCheck?: string[];
   staticCheck?: boolean;
-  gitCheck?: boolean;
-  docsCheck?: boolean;
-  gitWtName?: boolean;
-  gitWtCreate?: string;
-  gitWtDelete?: string;
-  gitPath?: boolean;
-  getBasePath?: boolean;
   testStaticCheck?: string[];
 }
 
@@ -128,7 +120,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       }
       case "--files-find": {
         const [values, next] = takeUntilOption(index + 1);
-        parsed.filesFind = values;
+        parsed.filesSearch = values;
         index = next;
         break;
       }
@@ -141,7 +133,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         index += 1;
         break;
       case "--find":
-        parsed.find = [argv[index + 1]!, argv[index + 2]!];
+        parsed.search = [argv[index + 1]!, argv[index + 2]!];
         index += 3;
         break;
       case "--tokens":
@@ -156,34 +148,6 @@ function parseArgs(argv: string[]): ParsedArgs {
       }
       case "--static-check":
         parsed.staticCheck = true;
-        index += 1;
-        break;
-      case "--git-check":
-        parsed.gitCheck = true;
-        index += 1;
-        break;
-      case "--docs-check":
-        parsed.docsCheck = true;
-        index += 1;
-        break;
-      case "--git-wt-name":
-        parsed.gitWtName = true;
-        index += 1;
-        break;
-      case "--git-wt-create":
-        parsed.gitWtCreate = argv[index + 1];
-        index += 2;
-        break;
-      case "--git-wt-delete":
-        parsed.gitWtDelete = argv[index + 1];
-        index += 2;
-        break;
-      case "--git-path":
-        parsed.gitPath = true;
-        index += 1;
-        break;
-      case "--get-base-path":
-        parsed.getBasePath = true;
         index += 1;
         break;
       case "--test-static-check":
@@ -246,18 +210,18 @@ function loadMutableProjectConfig(projectBase: string): { base: string; config: 
 
 /**
  * @brief Applies repeatable `--enable-static-check` specifications to project config.
- * @details Parses each specification, validates command-backed entries before persistence, appends only non-duplicate identities in argument order, preserves existing entries, and writes the merged config once after all validations succeed. Runtime is O(s + e) plus PATH probing where s is spec count and e is existing entry count. Side effects include config writes.
+ * @details Parses each specification, validates command-backed entries before persistence, appends only non-duplicate identities in argument order, preserves existing per-language checker lists, forces each targeted language enable flag to `enable`, and writes the merged config once after all validations succeed. Runtime is O(s + e) plus PATH probing where s is spec count and e is existing entry count. Side effects include config writes.
  * @param[in] projectBase {string} Candidate project root path.
  * @param[in] specs {string[]} Raw `--enable-static-check` specifications in CLI order.
  * @return {UseReqConfig} Persisted merged project configuration.
  * @throws {ReqError} Throws when parsing or validation fails.
- * @satisfies REQ-035, REQ-036, REQ-037
+ * @satisfies REQ-035, REQ-036, REQ-037, REQ-253
  */
 function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseReqConfig {
   const { base, config } = loadMutableProjectConfig(projectBase);
   const seen = new Set<string>();
-  for (const [language, entries] of Object.entries(config["static-check"] ?? {})) {
-    for (const entry of entries) {
+  for (const [language, languageConfig] of Object.entries(config["static-check"] ?? {})) {
+    for (const entry of languageConfig.checkers) {
       seen.add(buildStaticCheckEntryIdentity(language, entry));
     }
   }
@@ -269,8 +233,9 @@ function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseR
     if (seen.has(identity)) {
       continue;
     }
-    config["static-check"][language] ??= [];
-    config["static-check"][language]!.push(entry);
+    config["static-check"][language] ??= createStaticCheckLanguageConfig([]);
+    config["static-check"][language]!.enabled = "enable";
+    config["static-check"][language]!.checkers.push(entry);
     seen.add(identity);
   }
   saveConfig(base, config);
@@ -291,14 +256,12 @@ export function main(argv = process.argv.slice(2)): number {
     }
     const args = parseArgs(argv);
     const hereOnlyProjectCommand = !!(
-      args.references || args.compress || args.tokens || args.find || args.staticCheck ||
-      args.gitCheck || args.docsCheck || args.gitWtName || args.gitWtCreate || args.gitWtDelete ||
-      args.gitPath || args.getBasePath
+      args.references || args.compress || args.tokens || args.search || args.staticCheck
     );
     if (hereOnlyProjectCommand) {
       if (args.base) {
         throw new ReqError(
-          "Error: --references, --compress, --tokens, --find, --static-check, --git-check, --docs-check, --git-wt-name, --git-wt-create, and --git-wt-delete, --git-path, and --get-base-path do not allow --base; use --here.",
+          "Error: --references, --compress, --tokens, --find, and --static-check do not allow --base; use --here.",
           1,
         );
       }
@@ -320,21 +283,14 @@ export function main(argv = process.argv.slice(2)): number {
     if (args.filesTokens) return writeResult(runFilesTokens(args.filesTokens));
     if (args.filesReferences) return writeResult(runFilesReferences(args.filesReferences, process.cwd(), args.verbose));
     if (args.filesCompress) return writeResult(runFilesCompress(args.filesCompress, process.cwd(), args.enableLineNumbers, args.verbose));
-    if (args.filesFind) return writeResult(runFilesFind(args.filesFind, args.enableLineNumbers, args.verbose));
+    if (args.filesSearch) return writeResult(runFilesSearch(args.filesSearch, args.enableLineNumbers, args.verbose));
     if (args.testStaticCheck) return runStaticCheck(args.testStaticCheck);
     if (args.filesStaticCheck) return writeResult(runFilesStaticCheck(args.filesStaticCheck, projectBase, config));
     if (args.references) return writeResult(runReferences(projectBase, config, args.verbose));
     if (args.compress) return writeResult(runCompress(projectBase, config, args.enableLineNumbers, args.verbose));
-    if (args.find) return writeResult(runFind(projectBase, args.find[0], args.find[1], config, args.enableLineNumbers, args.verbose));
+    if (args.search) return writeResult(runSearch(projectBase, args.search[0], args.search[1], config, args.enableLineNumbers, args.verbose));
     if (args.tokens) return writeResult(runTokens(projectBase, config));
     if (args.staticCheck) return writeResult(runProjectStaticCheck(projectBase, config));
-    if (args.gitCheck) return writeResult(runGitCheck(projectBase, config));
-    if (args.docsCheck) return writeResult(runDocsCheck(projectBase, config));
-    if (args.gitWtName) return writeResult(runGitWtName(projectBase, config));
-    if (args.gitWtCreate) return writeResult(runGitWtCreate(projectBase, args.gitWtCreate, config));
-    if (args.gitWtDelete) return writeResult(runGitWtDelete(projectBase, args.gitWtDelete, config));
-    if (args.gitPath) return writeResult(runGitPath(projectBase, config));
-    if (args.getBasePath) return writeResult(runGetBasePath(projectBase, config));
     return 0;
   } catch (error) {
     const err = error as ReqError & { stdout?: string; stderr?: string };

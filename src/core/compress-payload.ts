@@ -88,32 +88,20 @@ export interface CompressToolSymbolEntry extends CompressLineRange {
 
 /**
  * @brief Describes one per-file compression payload entry.
- * @details Stores path identity, compression metrics, rendered line-number mode, optional file-level and symbol-level metadata, structured compressed lines, and stable failure facts. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores canonical identity, compression metrics, optional file-level and symbol-level metadata, structured compressed lines, and stable failure facts. Derivable identity fields and duplicate monolithic compressed text are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface CompressToolFileEntry extends CompressLineRange {
-  request_index: number;
-  input_path: string;
   canonical_path: string;
-  absolute_path: string;
-  file_name: string;
-  file_extension: string;
-  language_id?: string;
-  language_name?: string;
   status: CompressFileStatus;
-  exists: boolean;
-  is_file: boolean;
-  line_number_mode: CompressLineNumberMode;
   source_line_count: number;
   compressed_line_count: number;
   removed_line_count: number;
   symbol_analysis_status: CompressSymbolAnalysisStatus;
   symbol_count: number;
   doxygen_field_count: number;
-  file_description_text?: string;
   file_doxygen?: StructuredDoxygenFields;
   symbols: CompressToolSymbolEntry[];
   compressed_lines: CompressToolLineEntry[];
-  compressed_source_text?: string;
   error_reason?: string;
   error_message?: string;
   symbol_analysis_error_message?: string;
@@ -154,12 +142,10 @@ export interface CompressToolSummarySection {
 
 /**
  * @brief Describes the repository section of the compression payload.
- * @details Stores the base path, configured source-directory scope, and canonical file list used during compression. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores configured source-directory scope and the canonical file list used during compression. Static root-path echoes are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface CompressToolRepositorySection {
-  root_directory_path: string;
   source_directory_paths: string[];
-  file_count: number;
   file_canonical_paths: string[];
 }
 
@@ -318,8 +304,8 @@ function analyzeCompressedFileSymbols(
       signature_text: element.signature,
       parent_symbol_name: parentSymbolName,
       parent_qualified_name: parentQualifiedName,
-      child_symbol_names: [],
-      child_qualified_names: [],
+      child_symbol_names: [] as string[],
+      child_qualified_names: [] as string[],
       depth: element.depth,
       brief_text: structuredDoxygen.brief?.[0],
       doxygen: Object.keys(structuredDoxygen).length > 0 ? structuredDoxygen : undefined,
@@ -380,9 +366,6 @@ function analyzeCompressFile(
   verbose: boolean,
 ): CompressToolFileEntry {
   const canonicalPath = canonicalizeCompressionPath(absolutePath, baseDir);
-  const fileName = path.basename(absolutePath);
-  const fileExtension = path.extname(absolutePath).toLowerCase();
-  const lineNumberMode: CompressLineNumberMode = includeLineNumbers ? "enabled" : "disabled";
   const languageId = detectLanguage(absolutePath);
 
   if (!languageId) {
@@ -391,16 +374,8 @@ function analyzeCompressFile(
     }
     return {
       ...buildLineRange(0, 0),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
       status: "skipped",
-      exists: true,
-      is_file: true,
-      line_number_mode: lineNumberMode,
       source_line_count: 0,
       compressed_line_count: 0,
       removed_line_count: 0,
@@ -416,20 +391,16 @@ function analyzeCompressFile(
 
   try {
     const compression = compressFileDetailed(absolutePath, languageId, includeLineNumbers);
-    let languageName: string | undefined;
     let symbols: CompressToolSymbolEntry[] = [];
     let fileDoxygen: StructuredDoxygenFields | undefined;
-    let fileDescriptionText: string | undefined;
     let doxygenFieldCount = 0;
     let symbolAnalysisStatus: CompressSymbolAnalysisStatus = "not_attempted";
     let symbolAnalysisErrorMessage: string | undefined;
 
     try {
       const symbolAnalysis = analyzeCompressedFileSymbols(analyzer, absolutePath, canonicalPath, languageId);
-      languageName = symbolAnalysis.languageName;
       symbols = symbolAnalysis.symbols;
       fileDoxygen = symbolAnalysis.fileDoxygen;
-      fileDescriptionText = symbolAnalysis.fileDescriptionText;
       doxygenFieldCount = symbolAnalysis.doxygenFieldCount;
       symbolAnalysisStatus = "analyzed";
     } catch (error) {
@@ -446,29 +417,17 @@ function analyzeCompressFile(
 
     return {
       ...buildLineRange(compression.source_start_line_number, compression.source_end_line_number),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
-      language_id: languageId,
-      language_name: languageName,
       status: "compressed",
-      exists: true,
-      is_file: true,
-      line_number_mode: lineNumberMode,
       source_line_count: compression.source_line_count,
       compressed_line_count: compression.compressed_line_count,
       removed_line_count: compression.removed_line_count,
       symbol_analysis_status: symbolAnalysisStatus,
       symbol_count: symbols.length,
       doxygen_field_count: doxygenFieldCount,
-      file_description_text: fileDescriptionText,
       file_doxygen: fileDoxygen,
       symbols,
       compressed_lines: mapCompressedLines(compression.compressed_lines),
-      compressed_source_text: compression.compressed_source_text,
       symbol_analysis_error_message: symbolAnalysisErrorMessage,
     };
   } catch (error) {
@@ -478,17 +437,8 @@ function analyzeCompressFile(
     }
     return {
       ...buildLineRange(0, 0),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
-      language_id: languageId,
       status: "error",
-      exists: true,
-      is_file: true,
-      line_number_mode: lineNumberMode,
       source_line_count: 0,
       compressed_line_count: 0,
       removed_line_count: 0,
@@ -527,24 +477,14 @@ export function buildCompressToolPayload(options: BuildCompressToolPayloadOption
   const files: CompressToolFileEntry[] = requestedPaths.map((requestedPath, requestIndex) => {
     const absolutePath = path.resolve(absoluteBaseDir, requestedPath);
     const canonicalPath = canonicalizeCompressionPath(absolutePath, absoluteBaseDir);
-    const fileName = path.basename(absolutePath);
-    const fileExtension = path.extname(absolutePath).toLowerCase();
     if (!fs.existsSync(absolutePath)) {
       if (verbose) {
         console.error(`  SKIP  ${requestedPath} (file not found)`);
       }
       return {
         ...buildLineRange(0, 0),
-        request_index: requestIndex,
-        input_path: requestedPath,
         canonical_path: canonicalPath,
-        absolute_path: absolutePath,
-        file_name: fileName,
-        file_extension: fileExtension,
         status: "skipped",
-        exists: false,
-        is_file: false,
-        line_number_mode: lineNumberMode,
         source_line_count: 0,
         compressed_line_count: 0,
         removed_line_count: 0,
@@ -564,16 +504,8 @@ export function buildCompressToolPayload(options: BuildCompressToolPayloadOption
       }
       return {
         ...buildLineRange(0, 0),
-        request_index: requestIndex,
-        input_path: requestedPath,
         canonical_path: canonicalPath,
-        absolute_path: absolutePath,
-        file_name: fileName,
-        file_extension: fileExtension,
         status: "skipped",
-        exists: true,
-        is_file: false,
-        line_number_mode: lineNumberMode,
         source_line_count: 0,
         compressed_line_count: 0,
         removed_line_count: 0,
@@ -610,9 +542,7 @@ export function buildCompressToolPayload(options: BuildCompressToolPayloadOption
       total_doxygen_field_count: compressedFiles.reduce((sum, file) => sum + file.doxygen_field_count, 0),
     },
     repository: {
-      root_directory_path: absoluteBaseDir,
       source_directory_paths: [...sourceDirectoryPaths],
-      file_count: files.length,
       file_canonical_paths: files.map((file) => file.canonical_path),
     },
     files,

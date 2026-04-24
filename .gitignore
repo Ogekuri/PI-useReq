@@ -47,6 +47,8 @@
 !pi-usereq/
 !pi-usereq/docs/
 !pi-usereq/docs/**/*.md
+!pi.dev-src/
+!pi.dev-src/**/*
 !images/
 !images/**/*
 

@@ -97,26 +97,16 @@ export interface ReferenceSymbolEntry extends ReferenceLineRange {
 
 /**
  * @brief Describes one per-file references payload entry.
- * @details Stores canonical path identity, filesystem status, line metrics, structured imports, structured symbols, structured comment evidence, and optional file-level Doxygen metadata. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores canonical identity, line metrics, structured imports, structured symbols, structured comment evidence, and optional file-level Doxygen metadata. Derivable identity and filesystem-probe fields are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface ReferenceToolFileEntry extends ReferenceLineRange {
-  request_index: number;
-  input_path: string;
   canonical_path: string;
-  absolute_path: string;
-  file_name: string;
-  file_extension: string;
-  language_id?: string;
-  language_name?: string;
   status: ReferenceFileStatus;
-  exists: boolean;
-  is_file: boolean;
   import_count: number;
   symbol_count: number;
   comment_count: number;
   standalone_comment_count: number;
   doxygen_field_count: number;
-  file_description_text?: string;
   file_doxygen?: StructuredDoxygenFields;
   imports: ReferenceImportEntry[];
   symbols: ReferenceSymbolEntry[];
@@ -170,12 +160,10 @@ export interface ReferenceRepositoryTreeNode {
 
 /**
  * @brief Describes the repository section of the references payload.
- * @details Stores the base path, configured source-directory scope, canonical file list, and structured directory tree used during analysis. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores configured source-directory scope, the canonical analyzed file list, and the structured directory tree used during analysis. Static root-path echoes are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface ReferenceToolRepositorySection {
-  root_directory_path: string;
   source_directory_paths: string[];
-  file_count: number;
   file_canonical_paths: string[];
   directory_tree: ReferenceRepositoryTreeNode;
 }
@@ -474,8 +462,6 @@ function analyzeReferenceFile(
   verbose: boolean,
 ): ReferenceToolFileEntry {
   const canonicalPath = canonicalizeReferencePath(absolutePath, baseDir);
-  const fileName = path.basename(absolutePath);
-  const fileExtension = path.extname(absolutePath).toLowerCase();
   const languageId = detectLanguage(absolutePath);
   if (!languageId) {
     if (verbose) {
@@ -483,15 +469,8 @@ function analyzeReferenceFile(
     }
     return {
       ...buildLineRange(0, 0),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
       status: "skipped",
-      exists: true,
-      is_file: true,
       import_count: 0,
       symbol_count: 0,
       comment_count: 0,
@@ -507,10 +486,9 @@ function analyzeReferenceFile(
   try {
     const elements = analyzer.analyze(absolutePath, languageId);
     analyzer.enrich(elements, languageId, absolutePath);
-    const languageSpec = analyzer.specs[languageId.toLowerCase().trim().replace(/^\./, "")];
     const fileContent = fs.readFileSync(absolutePath, "utf8");
     const lineCount = fileContent === "" ? 0 : fileContent.split(/\r?\n/).length - (fileContent.endsWith("\n") ? 1 : 0);
-    const [docForDef, standaloneCommentsRaw, fileDescriptionRaw] = buildCommentMaps(elements);
+    const [docForDef, standaloneCommentsRaw] = buildCommentMaps(elements);
     const fileLevelDoxygen = collectFileLevelDoxygenFields(elements);
     const structuredFileDoxygen = structureDoxygenFields(fileLevelDoxygen);
     const imports = elements
@@ -560,8 +538,8 @@ function analyzeReferenceFile(
         visibility: element.visibility,
         parent_symbol_name: parentSymbolName,
         parent_qualified_name: parentQualifiedName,
-        child_symbol_names: [],
-        child_qualified_names: [],
+        child_symbol_names: [] as string[],
+        child_qualified_names: [] as string[],
         depth: element.depth,
         inherits_text: element.inherits,
         decorator_text: decoratorByTargetLine.get(element.lineStart),
@@ -608,23 +586,13 @@ function analyzeReferenceFile(
     }
     return {
       ...buildLineRange(lineCount > 0 ? 1 : 0, lineCount),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
-      language_id: languageId,
-      language_name: languageSpec?.name,
       status: "analyzed",
-      exists: true,
-      is_file: true,
       import_count: imports.length,
       symbol_count: symbols.length,
       comment_count: commentCount,
       standalone_comment_count: standaloneComments.length,
       doxygen_field_count: doxygenFieldCount,
-      file_description_text: structuredFileDoxygen.brief?.[0] ? undefined : fileDescriptionRaw || undefined,
       file_doxygen: Object.keys(structuredFileDoxygen).length > 0 ? structuredFileDoxygen : undefined,
       imports,
       symbols,
@@ -637,16 +605,8 @@ function analyzeReferenceFile(
     }
     return {
       ...buildLineRange(0, 0),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
-      language_id: languageId,
       status: "error",
-      exists: true,
-      is_file: true,
       import_count: 0,
       symbol_count: 0,
       comment_count: 0,
@@ -682,23 +642,14 @@ export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOpti
   const files: ReferenceToolFileEntry[] = requestedPaths.map((requestedPath, requestIndex) => {
     const absolutePath = path.resolve(absoluteBaseDir, requestedPath);
     const canonicalPath = canonicalizeReferencePath(absolutePath, absoluteBaseDir);
-    const fileName = path.basename(absolutePath);
-    const fileExtension = path.extname(absolutePath).toLowerCase();
     if (!fs.existsSync(absolutePath)) {
       if (verbose) {
         console.error(`  SKIP  ${requestedPath} (file not found)`);
       }
       return {
         ...buildLineRange(0, 0),
-        request_index: requestIndex,
-        input_path: requestedPath,
         canonical_path: canonicalPath,
-        absolute_path: absolutePath,
-        file_name: fileName,
-        file_extension: fileExtension,
         status: "skipped",
-        exists: false,
-        is_file: false,
         import_count: 0,
         symbol_count: 0,
         comment_count: 0,
@@ -717,15 +668,8 @@ export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOpti
       }
       return {
         ...buildLineRange(0, 0),
-        request_index: requestIndex,
-        input_path: requestedPath,
         canonical_path: canonicalPath,
-        absolute_path: absolutePath,
-        file_name: fileName,
-        file_extension: fileExtension,
         status: "skipped",
-        exists: true,
-        is_file: false,
         import_count: 0,
         symbol_count: 0,
         comment_count: 0,
@@ -777,9 +721,7 @@ export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOpti
       symbol_kind_counts: orderedSymbolKindCounts,
     },
     repository: {
-      root_directory_path: absoluteBaseDir,
       source_directory_paths: sourceDirectoryPaths.map((sourceDirectoryPath) => canonicalizeReferencePath(sourceDirectoryPath, absoluteBaseDir)),
-      file_count: repositoryFileCanonicalPaths.length,
       file_canonical_paths: repositoryFileCanonicalPaths,
       directory_tree: buildRepositoryTree(repositoryFileCanonicalPaths),
     },

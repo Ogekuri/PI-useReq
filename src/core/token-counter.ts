@@ -50,30 +50,17 @@ export interface CountFileMetricsResult {
 
 /**
  * @brief Describes one file entry in the agent-oriented token payload.
- * @details Orders direct-access path identifiers before source facts and numeric metrics so agents can branch without reparsing formatted strings. Optional metadata captures markdown headings or Doxygen file fields when they can be derived from the source content. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores only the canonical identity, stable status, essential numeric metrics, and optional heading or Doxygen metadata needed for downstream reasoning. Derivable identity and filesystem-probe fields are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface TokenToolFileEntry {
-  request_index: number;
-  input_path: string;
   canonical_path: string;
-  absolute_path: string;
-  file_name: string;
-  file_extension: string;
-  language_name?: string;
   status: TokenFileStatus;
-  exists: boolean;
-  is_file: boolean;
-  start_line_number: number;
-  end_line_number: number;
   line_count: number;
   primary_heading_text?: string;
   doxygen_file_fields?: DoxygenFieldMap;
   token_count: number;
   character_count: number;
   byte_count: number;
-  token_share: number;
-  character_share: number;
-  byte_share: number;
   error_message?: string;
 }
 
@@ -95,7 +82,7 @@ export interface TokenToolRequestSection {
 
 /**
  * @brief Describes the summary section of the agent-oriented token payload.
- * @details Exposes aggregate counts, sizes, totals, and per-file averages as numeric fields with explicit units so agents can branch on totals without reparsing formatted strings. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes only aggregate counts and totals that cannot be reconstructed cheaply from caller-known inputs. Derivable per-file averages are omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface TokenToolSummarySection {
   processable_file_count: number;
@@ -106,10 +93,6 @@ export interface TokenToolSummarySection {
   total_character_count: number;
   total_byte_count: number;
   total_line_count: number;
-  average_token_count_per_counted_file: number;
-  average_character_count_per_counted_file: number;
-  average_byte_count_per_counted_file: number;
-  average_line_count_per_counted_file: number;
 }
 
 /**
@@ -396,20 +379,6 @@ function extractLeadingDoxygenFields(content: string): DoxygenFieldMap | undefin
 }
 
 /**
- * @brief Rounds one ratio to six decimal places.
- * @details Preserves zero exactly and otherwise limits floating-point noise so share fields remain stable across executions. Runtime is O(1). No side effects occur.
- * @param[in] numerator {number} Partial numeric value.
- * @param[in] denominator {number} Total numeric value.
- * @return {number} Rounded ratio in range `[0, 1]` when the denominator is positive; `0` otherwise.
- */
-function roundRatio(numerator: number, denominator: number): number {
-  if (denominator <= 0 || numerator <= 0) {
-    return 0;
-  }
-  return Number((numerator / denominator).toFixed(6));
-}
-
-/**
  * @brief Probes one requested path before token counting.
  * @details Resolves whether the target exists and is a regular file while capturing a stable skip reason for missing or non-file inputs. Runtime is dominated by one filesystem stat. Side effects are limited to filesystem reads.
  * @param[in] absolutePath {string} Absolute path to inspect.
@@ -524,7 +493,6 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
     const pathProbe = probeRequestedPath(absolutePath);
     return {
       requestIndex: index + 1,
-      inputPath,
       absolutePath,
       canonicalPath: canonicalizeTokenPath(absolutePath, baseDir),
       pathProbe,
@@ -538,55 +506,27 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
   });
   const files: TokenToolFileEntry[] = requestedEntries.map((entry) => {
     const measured = measuredByRequestIndex.get(entry.requestIndex);
-    const fileExtension = measured?.fileExtension ?? path.extname(entry.absolutePath).toLowerCase();
-    const languageName = measured?.languageName ?? inferLanguageName(entry.absolutePath);
     if (!entry.pathProbe.isFile) {
       return {
-        request_index: entry.requestIndex,
-        input_path: entry.inputPath,
         canonical_path: entry.canonicalPath,
-        absolute_path: entry.absolutePath.split(path.sep).join("/"),
-        file_name: path.basename(entry.canonicalPath),
-        file_extension: fileExtension,
-        language_name: languageName,
         status: "skipped",
-        exists: entry.pathProbe.exists,
-        is_file: false,
-        start_line_number: 0,
-        end_line_number: 0,
         line_count: 0,
         token_count: 0,
         character_count: 0,
         byte_count: 0,
-        token_share: 0,
-        character_share: 0,
-        byte_share: 0,
         error_message: entry.pathProbe.reason ?? "not a file",
       };
     }
     const status: TokenFileStatus = measured?.error ? "error" : "counted";
     return {
-      request_index: entry.requestIndex,
-      input_path: entry.inputPath,
       canonical_path: entry.canonicalPath,
-      absolute_path: entry.absolutePath.split(path.sep).join("/"),
-      file_name: path.basename(entry.canonicalPath),
-      file_extension: fileExtension,
-      language_name: languageName,
       status,
-      exists: true,
-      is_file: true,
-      start_line_number: measured?.startLineNumber ?? 0,
-      end_line_number: measured?.endLineNumber ?? 0,
       line_count: measured?.lines ?? 0,
       primary_heading_text: measured?.primaryHeadingText,
       doxygen_file_fields: measured?.doxygenFileFields,
       token_count: measured?.tokens ?? 0,
       character_count: measured?.chars ?? 0,
       byte_count: measured?.bytes ?? 0,
-      token_share: 0,
-      character_share: 0,
-      byte_share: 0,
       error_message: measured?.error,
     };
   });
@@ -602,15 +542,9 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
   const totalLineCount = files
     .filter((entry) => entry.status === "counted")
     .reduce((sum, entry) => sum + entry.line_count, 0);
-  const filesWithShares = files.map((entry) => ({
-    ...entry,
-    token_share: roundRatio(entry.token_count, totalTokenCount),
-    character_share: roundRatio(entry.character_count, totalCharacterCount),
-    byte_share: roundRatio(entry.byte_count, totalByteCount),
-  }));
-  const countedFileCount = filesWithShares.filter((entry) => entry.status === "counted").length;
-  const errorFileCount = filesWithShares.filter((entry) => entry.status === "error").length;
-  const skippedFileCount = filesWithShares.filter((entry) => entry.status === "skipped").length;
+  const countedFileCount = files.filter((entry) => entry.status === "counted").length;
+  const errorFileCount = files.filter((entry) => entry.status === "error").length;
+  const skippedFileCount = files.filter((entry) => entry.status === "skipped").length;
   return {
     summary: {
       processable_file_count: countedFileCount + errorFileCount,
@@ -621,12 +555,8 @@ export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): To
       total_character_count: totalCharacterCount,
       total_byte_count: totalByteCount,
       total_line_count: totalLineCount,
-      average_token_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalTokenCount / countedFileCount).toFixed(6)),
-      average_character_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalCharacterCount / countedFileCount).toFixed(6)),
-      average_byte_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalByteCount / countedFileCount).toFixed(6)),
-      average_line_count_per_counted_file: countedFileCount === 0 ? 0 : Number((totalLineCount / countedFileCount).toFixed(6)),
     },
-    files: filesWithShares,
+    files,
   };
 }
 

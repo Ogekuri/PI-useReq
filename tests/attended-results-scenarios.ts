@@ -12,7 +12,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectLanguage } from "../src/core/generate-markdown.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
-import { getProjectConfigPath, type UseReqConfig } from "../src/core/config.js";
+import {
+  createStaticCheckLanguageConfig,
+  getProjectConfigPath,
+  type UseReqConfig,
+} from "../src/core/config.js";
 import {
   initFixtureRepo,
   runNodeCli,
@@ -37,12 +41,6 @@ const ATTENDED_RESULTS_ROOT = path.join(ROOT, "tests", "fixtures_attended_result
  * @details Scenario builders enumerate every `fixture_*` file under this directory when constructing explicit-file CLI cases. Access complexity is O(1).
  */
 const FIXTURES_ROOT = path.join(ROOT, "tests", "fixtures");
-
-/**
- * @brief Defines the deterministic worktree name used by archived worktree scenarios.
- * @details A stable identifier keeps archive fixture paths and side-effect assertions machine-interpretable. Access complexity is O(1).
- */
-const ARCHIVE_WORKTREE_NAME = "pi-usereq-attended-wt";
 
 /**
  * @brief Represents one normalized archived CLI observation.
@@ -221,22 +219,8 @@ function createProjectNormalizer(
 }
 
 /**
- * @brief Normalizes one archived git-worktree-name output.
- * @details Replaces the temporary repository basename and trailing timestamp with stable placeholder tokens while preserving the surrounding output shape. Runtime is O(n) in text length. No side effects occur.
- * @param[in] value {string} Raw normalized stdout or stderr text.
- * @param[in] projectBase {string} Temporary repository root.
- * @return {string} Canonicalized text.
- */
-function normalizeGitWtNameOutput(value: string, projectBase: string): string {
-  let normalized = value;
-  normalized = replaceLiteral(normalized, path.basename(projectBase), "<PROJECT_NAME>");
-  normalized = normalized.replace(/\b\d{14}\b/g, "<TIMESTAMP>");
-  return normalized;
-}
-
-/**
  * @brief Runs `git add .` and commits the current fixture repository state.
- * @details Uses deterministic author metadata so clean-repository scenarios can execute commands such as `--git-check` and `--git-wt-*` without untracked config noise. Runtime is dominated by git subprocess execution. Side effects include index updates and commit creation inside the temporary repository.
+ * @details Uses deterministic author metadata so repository-backed scenarios execute from a clean committed baseline without untracked config noise. Runtime is dominated by git subprocess execution. Side effects include index updates and commit creation inside the temporary repository.
  * @param[in] projectBase {string} Temporary fixture repository root.
  * @param[in] message {string} Commit message.
  * @return {void} No return value.
@@ -370,11 +354,11 @@ function buildStandaloneScenarios(): AttendedScenario[] {
 /**
  * @brief Builds the shared project configuration used by failing static-check archive scenarios.
  * @details Configures Python command-based static checks to call `false`, yielding deterministic failing stdout/stderr blocks in both Python and TypeScript implementations. Runtime is O(1). No side effects occur.
- * @return {Record<string, Array<{ module: string; cmd?: string; params?: string[] }>>} Static-check config payload.
+ * @return {UseReqConfig["static-check"]} Static-check config payload.
  */
-function getFailingStaticCheckConfig(): Record<string, Array<{ module: string; cmd?: string; params?: string[] }>> {
+function getFailingStaticCheckConfig(): UseReqConfig["static-check"] {
   return {
-    Python: [{ module: "Command", cmd: "false" }],
+    Python: createStaticCheckLanguageConfig([{ module: "Command", cmd: "false" }], "enable"),
   };
 }
 
@@ -467,7 +451,9 @@ function buildProjectScenarios(): AttendedScenario[] {
           cleanup: () => removePath(projectBase),
           postAssert: () => {
             const payload = JSON.parse(fs.readFileSync(getProjectConfigPath(projectBase), "utf8")) as UseReqConfig;
-            assert.deepEqual(payload["static-check"].Python, [{ module: "Command", cmd: "git", params: ["--version"] }]);
+            assert.deepEqual(payload["static-check"].Python, createStaticCheckLanguageConfig([
+              { module: "Command", cmd: "git", params: ["--version"] },
+            ], "enable"));
           },
         };
       },
@@ -477,8 +463,24 @@ function buildProjectScenarios(): AttendedScenario[] {
         try {
           const script = [
             "from pathlib import Path",
-            "from usereq.cli import save_config",
-            `save_config(Path(${JSON.stringify(projectBase)}), 'guidelines', 'docs', 'tests', ['src'], static_check_config={'Python': [{'module': 'Command', 'cmd': 'git', 'params': ['--version']} ]})`,
+            "import json",
+            `project_base = Path(${JSON.stringify(projectBase)})`,
+            "project_base.mkdir(parents=True, exist_ok=True)",
+            "payload = {",
+            "  'guidelines-dir': 'guidelines',",
+            "  'docs-dir': 'docs',",
+            "  'tests-dir': 'tests',",
+            "  'src-dir': ['src'],",
+            "  'static-check': {",
+            "    'Python': {",
+            "      'enabled': 'enable',",
+            "      'checkers': [{'module': 'Command', 'cmd': 'git', 'params': ['--version']}],",
+            "    },",
+            "  },",
+            "}",
+            "config_dir = project_base / '.req'",
+            "config_dir.mkdir(parents=True, exist_ok=True)",
+            "(config_dir / 'config.json').write_text(json.dumps(payload, indent=2) + '\\n', encoding='utf8')",
           ].join("\n");
           const result = runPythonInline(script, projectBase);
           return createProjectNormalizer(projectBase)(toArchivedCliResult(result));
@@ -525,114 +527,6 @@ function buildProjectScenarios(): AttendedScenario[] {
       const { projectBase } = initFixtureRepo({ staticCheck: getFailingStaticCheckConfig() });
       return {
         args: ["--static-check"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/git-check-clean", path.posix.join("project", "git-check-clean.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      commitFixtureRepo(projectBase, "clean-state");
-      return {
-        args: ["--git-check"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/git-check-dirty", path.posix.join("project", "git-check-dirty.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      commitFixtureRepo(projectBase, "clean-state");
-      fs.writeFileSync(path.join(projectBase, "dirty.txt"), "dirty\n", "utf8");
-      return {
-        args: ["--git-check"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/git-wt-name", path.posix.join("project", "git-wt-name.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      commitFixtureRepo(projectBase, "clean-state");
-      return {
-        args: ["--git-wt-name"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase, {
-          postNormalize: (value) => normalizeGitWtNameOutput(value, projectBase),
-        }),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/git-wt-create-valid", path.posix.join("project", "git-wt-create-valid.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      commitFixtureRepo(projectBase, "clean-state");
-      const worktreePath = path.join(path.dirname(projectBase), ARCHIVE_WORKTREE_NAME);
-      return {
-        args: ["--git-wt-create", ARCHIVE_WORKTREE_NAME],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase, { worktreeName: ARCHIVE_WORKTREE_NAME }),
-        cleanup: () => {
-          removePath(worktreePath);
-          removePath(projectBase);
-        },
-        postAssert: () => {
-          assert.ok(fs.existsSync(worktreePath), "worktree path was not created");
-          assert.ok(fs.existsSync(getProjectConfigPath(worktreePath)), "worktree config was not copied");
-        },
-      };
-    }),
-    createProjectScenario("project/git-wt-create-invalid", path.posix.join("project", "git-wt-create-invalid.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      commitFixtureRepo(projectBase, "clean-state");
-      return {
-        args: ["--git-wt-create", "bad name with spaces"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/git-wt-delete-valid", path.posix.join("project", "git-wt-delete-valid.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      commitFixtureRepo(projectBase, "clean-state");
-      const worktreePath = path.join(path.dirname(projectBase), ARCHIVE_WORKTREE_NAME);
-      const addResult = spawnSync("git", ["worktree", "add", worktreePath, "-b", ARCHIVE_WORKTREE_NAME], { cwd: projectBase, encoding: "utf8" });
-      assert.equal(addResult.status, 0, addResult.stderr);
-      return {
-        args: ["--git-wt-delete", ARCHIVE_WORKTREE_NAME],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase, { worktreeName: ARCHIVE_WORKTREE_NAME }),
-        cleanup: () => {
-          removePath(worktreePath);
-          removePath(projectBase);
-        },
-        postAssert: () => {
-          assert.ok(!fs.existsSync(worktreePath), "worktree path was not removed");
-        },
-      };
-    }),
-    createProjectScenario("project/git-wt-delete-nonexistent", path.posix.join("project", "git-wt-delete-nonexistent.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      commitFixtureRepo(projectBase, "clean-state");
-      return {
-        args: ["--git-wt-delete", "nonexistent-wt-branch-xyz"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/git-path", path.posix.join("project", "git-path.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      return {
-        args: ["--git-path"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/get-base-path", path.posix.join("project", "get-base-path.json"), () => {
-      const { projectBase } = initFixtureRepo({ fixtures: [] });
-      return {
-        args: ["--get-base-path"],
         cwd: projectBase,
         normalize: createProjectNormalizer(projectBase),
         cleanup: () => removePath(projectBase),

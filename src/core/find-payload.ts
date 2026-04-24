@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief Builds agent-oriented JSON payloads for `files-find` and `find`.
+ * @brief Builds agent-oriented JSON payloads for `files-search` and `search`.
  * @details Converts construct-search results into deterministic JSON sections ordered for LLM traversal, including request metadata, repository scope, file statuses, structured matches, structured Doxygen fields, typed line ranges, and normalized stripped code lines. Runtime is O(F log F + S + M) where F is file count, S is analyzed source size, and M is matched construct count. Side effects are limited to filesystem reads and optional stderr logging.
  */
 
@@ -27,13 +27,13 @@ import {
 } from "./doxygen-parser.js";
 
 /**
- * @brief Enumerates supported find-payload scopes.
+ * @brief Enumerates supported search-payload scopes.
  * @details Distinguishes explicit-file requests from configured project scans while preserving one stable JSON contract. The alias is compile-time only and introduces no runtime cost.
  */
 export type FindToolScope = "explicit-files" | "configured-source-directories";
 
 /**
- * @brief Enumerates supported per-file find-entry statuses.
+ * @brief Enumerates supported per-file search-entry statuses.
  * @details Separates matched files, analyzed no-match files, analysis failures, and skipped inputs so downstream agents can branch without reparsing stderr text. The alias is compile-time only and introduces no runtime cost.
  */
 export type FindFileStatus = "matched" | "no_match" | "error" | "skipped";
@@ -45,13 +45,13 @@ export type FindFileStatus = "matched" | "no_match" | "error" | "skipped";
 export type FindRequestStatus = "valid" | "invalid";
 
 /**
- * @brief Enumerates rendered line-number modes for find output.
+ * @brief Enumerates rendered line-number modes for search output.
  * @details Distinguishes payloads whose display strings include original source line prefixes from payloads whose display strings contain plain stripped code only. The alias is compile-time only and introduces no runtime cost.
  */
 export type FindLineNumberMode = "enabled" | "disabled";
 
 /**
- * @brief Enumerates top-level find execution outcomes.
+ * @brief Enumerates top-level search execution outcomes.
  * @details Separates successful match delivery from invalid request states and valid no-match searches so agents can branch on one canonical field. The alias is compile-time only and introduces no runtime cost.
  */
 export type FindSearchStatus = "matched" | "no_matches" | "invalid_tag_filter" | "invalid_regex";
@@ -79,7 +79,7 @@ export interface FindToolCodeLineEntry {
 
 /**
  * @brief Describes one structured matched construct.
- * @details Orders direct-access identity fields before hierarchy, locations, Doxygen metadata, and stripped code so agents can branch without reparsing monolithic markdown. The interface is compile-time only and introduces no runtime cost.
+ * @details Orders direct-access identity fields before hierarchy, locations, Doxygen metadata, and stripped code-line arrays so agents can branch without reparsing duplicate monolithic source text. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolMatchEntry extends FindLineRange {
   match_index: number;
@@ -97,33 +97,18 @@ export interface FindToolMatchEntry extends FindLineRange {
   brief_text?: string;
   doxygen_field_count: number;
   doxygen?: StructuredDoxygenFields;
-  code_line_count: number;
   code_lines: FindToolCodeLineEntry[];
-  stripped_source_text?: string;
 }
 
 /**
- * @brief Describes one per-file find payload entry.
- * @details Stores path identity, file status, supported-tag metadata, line metrics, file-level Doxygen metadata, and matched-construct records while keeping failure facts structured. The interface is compile-time only and introduces no runtime cost.
+ * @brief Describes one per-file search payload entry.
+ * @details Stores canonical identity, file status, line metrics, file-level Doxygen metadata, and matched-construct records while keeping failure facts structured. Derivable identity fields and static supported-tag metadata are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolFileEntry extends FindLineRange {
-  request_index: number;
-  input_path: string;
   canonical_path: string;
-  absolute_path: string;
-  file_name: string;
-  file_extension: string;
-  language_id?: string;
-  language_name?: string;
   status: FindFileStatus;
-  exists: boolean;
-  is_file: boolean;
-  supported_tag_count: number;
-  supported_tags: string[];
-  line_count: number;
   match_count: number;
   doxygen_field_count: number;
-  file_description_text?: string;
   file_doxygen?: StructuredDoxygenFields;
   matches: FindToolMatchEntry[];
   error_reason?: string;
@@ -131,7 +116,7 @@ export interface FindToolFileEntry extends FindLineRange {
 }
 
 /**
- * @brief Describes the request section of the find payload.
+ * @brief Describes the request section of the search payload.
  * @details Captures tool identity, scope, base directory, line-number mode, tag filter, regex, validation statuses, and requested path inventory so agents can reason about how the search was executed. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolRequestSection {
@@ -155,7 +140,7 @@ export interface FindToolRequestSection {
 }
 
 /**
- * @brief Describes the summary section of the find payload.
+ * @brief Describes the summary section of the search payload.
  * @details Exposes aggregate file, match, line, and Doxygen counts as numeric fields plus one stable search-status discriminator and the normalized validation error when request parsing fails. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolSummarySection {
@@ -172,18 +157,16 @@ export interface FindToolSummarySection {
 }
 
 /**
- * @brief Describes the repository section of the find payload.
- * @details Stores the base path, configured source-directory scope, and canonical file list used during search while omitting the static supported-tag matrix because that data belongs in tool registration metadata. The interface is compile-time only and introduces no runtime cost.
+ * @brief Describes the repository section of the search payload.
+ * @details Stores configured source-directory scope and the canonical file list used during search while omitting static root-path echoes and supported-tag metadata that belong in tool registration. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolRepositorySection {
-  root_directory_path: string;
   source_directory_paths: string[];
-  file_count: number;
   file_canonical_paths: string[];
 }
 
 /**
- * @brief Describes the full agent-oriented find payload.
+ * @brief Describes the full agent-oriented search payload.
  * @details Exposes only aggregate search totals, repository scope, and per-file match records, omitting request echoes and static supported-tag matrices that already belong in registration metadata. The interface is compile-time only and introduces no runtime cost.
  */
 export interface FindToolPayload {
@@ -193,7 +176,7 @@ export interface FindToolPayload {
 }
 
 /**
- * @brief Describes the options required to build one find payload.
+ * @brief Describes the options required to build one search payload.
  * @details Supplies tool identity, scope, base directory, tag filter, regex, requested paths, line-number mode, and optional configured source directories while keeping payload construction deterministic. The interface is compile-time only and introduces no runtime cost.
  */
 export interface BuildFindToolPayloadOptions {
@@ -305,19 +288,6 @@ function mapCodeLines(lineEntries: StrippedConstructLineEntry[]): FindToolCodeLi
 }
 
 /**
- * @brief Joins stripped-code line entries into one optional monolithic text field.
- * @details Preserves rendered display strings in line order so agents that need a contiguous excerpt can read one field without losing access to the structured line array. Runtime is O(n) in stripped line count. No side effects occur.
- * @param[in] lineEntries {FindToolCodeLineEntry[]} Structured stripped-code line entries.
- * @return {string | undefined} Joined stripped-source text, or `undefined` when no lines remain.
- */
-function buildStrippedSourceText(lineEntries: FindToolCodeLineEntry[]): string | undefined {
-  if (lineEntries.length === 0) {
-    return undefined;
-  }
-  return lineEntries.map((entry) => entry.display_text).join("\n");
-}
-
-/**
  * @brief Validates and normalizes one tag filter.
  * @details Parses the raw pipe-delimited filter, sorts the resulting unique tag values, and marks the filter invalid when no recognized tag remains after normalization. Runtime is O(n log n) in requested tag count. No side effects occur.
  * @param[in] tagFilter {string} Raw pipe-delimited tag filter.
@@ -415,25 +385,15 @@ function buildSkippedFileEntry(
   exists: boolean,
   isFile: boolean,
 ): FindToolFileEntry {
+  void inputPath;
+  void requestIndex;
+  void exists;
+  void isFile;
   const canonicalPath = canonicalizeFindPath(absolutePath, baseDir);
-  const fileExtension = path.extname(absolutePath).toLowerCase();
-  const languageId = detectLanguage(absolutePath);
-  const supportedTags = languageId ? [...(LANGUAGE_TAGS[languageId] ?? [])].sort() : [];
   return {
     ...buildLineRange(0, 0),
-    request_index: requestIndex,
-    input_path: inputPath,
     canonical_path: canonicalPath,
-    absolute_path: absolutePath,
-    file_name: path.basename(absolutePath),
-    file_extension: fileExtension,
-    language_id: languageId,
     status: "skipped",
-    exists,
-    is_file: isFile,
-    supported_tag_count: supportedTags.length,
-    supported_tags: supportedTags,
-    line_count: 0,
     match_count: 0,
     doxygen_field_count: 0,
     matches: [],
@@ -493,14 +453,12 @@ function buildMatchEntry(
     brief_text: structuredDoxygen.brief?.[0],
     doxygen_field_count: countDoxygenFieldValues(aggregateDoxygen),
     doxygen: Object.keys(structuredDoxygen).length > 0 ? structuredDoxygen : undefined,
-    code_line_count: strippedCodeLines.length,
     code_lines: strippedCodeLines,
-    stripped_source_text: buildStrippedSourceText(strippedCodeLines),
   };
 }
 
 /**
- * @brief Analyzes one path into a structured find file entry.
+ * @brief Analyzes one path into a structured search file entry.
  * @details Resolves path identity, validates language and tag support, parses the file with `SourceAnalyzer`, builds structured match entries, and preserves stable status facts for no-match or failure outcomes. Runtime is dominated by file I/O and analyzer cost. Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] analyzer {SourceAnalyzer} Shared analyzer instance.
  * @param[in] inputPath {string} Caller-supplied path.
@@ -525,8 +483,6 @@ function analyzeFindFile(
   verbose: boolean,
 ): FindToolFileEntry {
   const canonicalPath = canonicalizeFindPath(absolutePath, baseDir);
-  const fileName = path.basename(absolutePath);
-  const fileExtension = path.extname(absolutePath).toLowerCase();
   const languageId = detectLanguage(absolutePath);
   if (!languageId) {
     if (verbose) {
@@ -534,18 +490,8 @@ function analyzeFindFile(
     }
     return {
       ...buildLineRange(0, 0),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
       status: "skipped",
-      exists: true,
-      is_file: true,
-      supported_tag_count: 0,
-      supported_tags: [],
-      line_count: 0,
       match_count: 0,
       doxygen_field_count: 0,
       matches: [],
@@ -561,20 +507,8 @@ function analyzeFindFile(
     }
     return {
       ...buildLineRange(0, 0),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
-      language_id: languageId,
-      language_name: analyzer.specs[languageId]?.name,
       status: "skipped",
-      exists: true,
-      is_file: true,
-      supported_tag_count: supportedTags.length,
-      supported_tags: supportedTags,
-      line_count: 0,
       match_count: 0,
       doxygen_field_count: 0,
       matches: [],
@@ -624,23 +558,10 @@ function analyzeFindFile(
       }
       return {
         ...buildLineRange(lineCount > 0 ? 1 : 0, lineCount),
-        request_index: requestIndex,
-        input_path: inputPath,
         canonical_path: canonicalPath,
-        absolute_path: absolutePath,
-        file_name: fileName,
-        file_extension: fileExtension,
-        language_id: languageId,
-        language_name: analyzer.specs[languageId]?.name,
         status: "matched",
-        exists: true,
-        is_file: true,
-        supported_tag_count: supportedTags.length,
-        supported_tags: supportedTags,
-        line_count: lineCount,
         match_count: matches.length,
         doxygen_field_count: fileDoxygenFieldCount + matchDoxygenFieldCount,
-        file_description_text: structuredFileDoxygen.brief?.[0] ?? structuredFileDoxygen.details?.[0],
         file_doxygen: Object.keys(structuredFileDoxygen).length > 0 ? structuredFileDoxygen : undefined,
         matches,
       };
@@ -651,23 +572,10 @@ function analyzeFindFile(
     }
     return {
       ...buildLineRange(lineCount > 0 ? 1 : 0, lineCount),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
-      language_id: languageId,
-      language_name: analyzer.specs[languageId]?.name,
       status: "no_match",
-      exists: true,
-      is_file: true,
-      supported_tag_count: supportedTags.length,
-      supported_tags: supportedTags,
-      line_count: lineCount,
       match_count: 0,
       doxygen_field_count: fileDoxygenFieldCount,
-      file_description_text: structuredFileDoxygen.brief?.[0] ?? structuredFileDoxygen.details?.[0],
       file_doxygen: Object.keys(structuredFileDoxygen).length > 0 ? structuredFileDoxygen : undefined,
       matches: [],
     };
@@ -678,20 +586,8 @@ function analyzeFindFile(
     }
     return {
       ...buildLineRange(0, 0),
-      request_index: requestIndex,
-      input_path: inputPath,
       canonical_path: canonicalPath,
-      absolute_path: absolutePath,
-      file_name: fileName,
-      file_extension: fileExtension,
-      language_id: languageId,
-      language_name: analyzer.specs[languageId]?.name,
       status: "error",
-      exists: true,
-      is_file: true,
-      supported_tag_count: supportedTags.length,
-      supported_tags: supportedTags,
-      line_count: 0,
       match_count: 0,
       doxygen_field_count: 0,
       matches: [],
@@ -702,13 +598,13 @@ function analyzeFindFile(
 }
 
 /**
- * @brief Builds the full agent-oriented find payload.
+ * @brief Builds the full agent-oriented search payload.
  * @details Validates request parameters, analyzes requested files in caller order when the request is valid, preserves skipped and no-match outcomes in structured file entries, computes aggregate numeric totals, and omits request echoes plus the static supported-tag matrix already encoded in registration metadata. Runtime is O(F log F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] options {BuildFindToolPayloadOptions} Payload-construction options.
- * @return {FindToolPayload} Structured find payload ordered as summary, repository, and files.
+ * @return {FindToolPayload} Structured search payload ordered as summary, repository, and files.
  * @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-096, REQ-098
  */
-export function buildFindToolPayload(options: BuildFindToolPayloadOptions): FindToolPayload {
+export function buildSearchToolPayload(options: BuildFindToolPayloadOptions): FindToolPayload {
   const {
     toolName,
     scope,
@@ -842,15 +738,13 @@ export function buildFindToolPayload(options: BuildFindToolPayloadOptions): Find
       skipped_file_count: files.filter((file) => file.status === "skipped").length,
       total_match_count: matchedFiles.reduce((sum, file) => sum + file.match_count, 0),
       total_code_line_count: matchedFiles.reduce(
-        (sum, file) => sum + file.matches.reduce((fileSum, match) => fileSum + match.code_line_count, 0),
+        (sum, file) => sum + file.matches.reduce((fileSum, match) => fileSum + match.code_lines.length, 0),
         0,
       ),
       total_doxygen_field_count: files.reduce((sum, file) => sum + file.doxygen_field_count, 0),
     },
     repository: {
-      root_directory_path: absoluteBaseDir,
       source_directory_paths: sourceDirectoryPaths.map((sourceDirectoryPath) => canonicalizeFindPath(sourceDirectoryPath, absoluteBaseDir)),
-      file_count: repositoryFileCanonicalPaths.length,
       file_canonical_paths: repositoryFileCanonicalPaths,
     },
     files,
@@ -858,13 +752,13 @@ export function buildFindToolPayload(options: BuildFindToolPayloadOptions): Find
 }
 
 /**
- * @brief Builds deterministic stderr diagnostics from a find payload.
+ * @brief Builds deterministic stderr diagnostics from a search payload.
  * @details Serializes invalid request states, skipped inputs, no-match files, and analysis failures into stable newline-delimited diagnostics while leaving successful matched files silent. Runtime is O(n) in file-entry count. No side effects occur.
- * @param[in] payload {FindToolPayload} Structured find payload.
+ * @param[in] payload {FindToolPayload} Structured search payload.
  * @return {string} Newline-delimited diagnostics.
  * @satisfies REQ-096
  */
-export function buildFindToolExecutionStderr(payload: FindToolPayload): string {
+export function buildSearchToolExecutionStderr(payload: FindToolPayload): string {
   const diagnostics: string[] = [];
   if (payload.summary.search_status === "invalid_tag_filter") {
     diagnostics.push(`error: tag_filter: ${payload.summary.validation_error_message ?? "invalid tag filter"}`);

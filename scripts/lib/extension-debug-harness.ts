@@ -210,23 +210,16 @@ const PROMPT_COMMAND_EXAMPLES: Record<string, string> = {
  * @details Maps each known registered tool to a stable `npm run debug:ext:tool` example used by the generated manual. Access complexity is O(1).
  */
 const TOOL_EXAMPLES: Record<string, string> = {
-  "git-path": "npm run debug:ext:tool -- --name git-path --cwd . --format pretty",
-  "get-base-path": "npm run debug:ext:tool -- --name get-base-path --cwd . --format pretty",
   "files-tokens": `npm run debug:ext:tool -- --name files-tokens --params '{"files":["pi-usereq/docs/REQUIREMENTS.md","pi-usereq/docs/WORKFLOW.md"]}' --cwd . --format json`,
   "files-references": `npm run debug:ext:tool -- --name files-references --params '{"files":["src/index.ts","src/core/tool-runner.ts"]}' --cwd . --format pretty`,
   "files-compress": `npm run debug:ext:tool -- --name files-compress --params '{"files":["src/index.ts"],"enableLineNumbers":true}' --cwd . --format json`,
-  "files-find": `npm run debug:ext:tool -- --name files-find --params '{"tag":"FUNCTION|METHOD","pattern":"^run","files":["src/core/tool-runner.ts"],"enableLineNumbers":true}' --cwd . --format pretty`,
+  "files-search": `npm run debug:ext:tool -- --name files-search --params '{"tag":"FUNCTION|METHOD","pattern":"^run","files":["src/core/tool-runner.ts"],"enableLineNumbers":true}' --cwd . --format pretty`,
   references: "npm run debug:ext:tool -- --name references --cwd . --format pretty",
   compress: `npm run debug:ext:tool -- --name compress --params '{"enableLineNumbers":true}' --cwd . --format json`,
-  find: `npm run debug:ext:tool -- --name find --params '{"tag":"FUNCTION","pattern":"^run","enableLineNumbers":true}' --cwd . --format pretty`,
+  search: `npm run debug:ext:tool -- --name search --params '{"tag":"FUNCTION","pattern":"^run","enableLineNumbers":true}' --cwd . --format pretty`,
   tokens: "npm run debug:ext:tool -- --name tokens --cwd . --format json",
   "files-static-check": `npm run debug:ext:tool -- --name files-static-check --params '{"files":["src/index.ts"]}' --cwd . --format pretty`,
   "static-check": "npm run debug:ext:tool -- --name static-check --cwd . --format pretty",
-  "git-check": "npm run debug:ext:tool -- --name git-check --cwd . --format pretty",
-  "docs-check": "npm run debug:ext:tool -- --name docs-check --cwd . --format pretty",
-  "git-wt-name": "npm run debug:ext:tool -- --name git-wt-name --cwd . --format pretty",
-  "git-wt-create": `npm run debug:ext:tool -- --name git-wt-create --params '{"wtName":"useReq-demo-main-20260101010101"}' --cwd . --format pretty`,
-  "git-wt-delete": `npm run debug:ext:tool -- --name git-wt-delete --params '{"wtName":"useReq-demo-main-20260101010101"}' --cwd . --format pretty`,
 };
 
 /**
@@ -244,7 +237,7 @@ export function buildDebugManual(snapshot: RecordingExtensionSnapshot): string {
     "- Inspect offline registrations: `npm run debug:ext:inspect -- --cwd . --format pretty`",
     '- Replay session_start offline: `npm run debug:ext:session -- --cwd . --format pretty`',
     '- Replay a command handler offline: `npm run debug:ext:command -- --name req-analyze --args "Analyze src/index.ts" --cwd . --format pretty`',
-    '- Replay a tool handler offline: `npm run debug:ext:tool -- --name git-path --cwd . --format pretty`',
+    `- Replay a tool handler offline: \`npm run debug:ext:tool -- --name files-tokens --params '{"files":["pi-usereq/docs/REQUIREMENTS.md"]}' --cwd . --format pretty\``, 
     '- Run SDK parity smoke: `npm run debug:ext:sdk -- --extension ./src/index.ts --cwd . --format pretty`',
     "",
     "## Prompt commands",

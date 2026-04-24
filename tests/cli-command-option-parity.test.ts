@@ -10,11 +10,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
+  createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
   getProjectConfigPath,
   type UseReqConfig,
 } from "../src/core/config.js";
-import { formatRuntimePathForDisplay } from "../src/core/path-context.js";
 import { detectLanguage } from "../src/core/generate-markdown.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
 import {
@@ -27,6 +27,8 @@ import {
   saveFixtureConfigs,
   writeExecutableScript,
 } from "./helpers.js";
+
+const TAB_SENSITIVE_FIXTURE_NAME = "fixture_go.go";
 
 /**
  * @brief Describes one executable TypeScript regression target.
@@ -113,16 +115,30 @@ function getFixtureTagFilter(filePath: string): string {
 }
 
 /**
- * @brief Returns the persisted static-check entries for one language.
- * @details Reads the raw project config JSON so tests can assert entry order, duplicate suppression, and metadata preservation exactly as written. Runtime is O(n) in config file size. Side effects are limited to filesystem reads.
+ * @brief Returns the persisted per-language static-check config for one language.
+ * @details Reads the raw project config JSON so tests can assert entry order, duplicate suppression, enable-flag persistence, and metadata preservation exactly as written. Runtime is O(n) in config file size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] language {string} Canonical language key.
- * @return {Array<Record<string, unknown>>} Persisted entry array or an empty array.
+ * @return {Record<string, unknown> | undefined} Persisted language config object when present.
+ */
+function getStaticCheckLanguageConfig(projectBase: string, language: string): Record<string, unknown> | undefined {
+  const payload = readProjectConfigJson(projectBase);
+  const staticCheck = (payload["static-check"] ?? {}) as Record<string, Record<string, unknown>>;
+  return staticCheck[language];
+}
+
+/**
+ * @brief Returns the persisted static-check entries for one language.
+ * @details Reads the raw project config JSON and extracts the `checkers` array so tests can assert entry order and duplicate suppression exactly as written. Runtime is O(n) in config file size. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Fixture project root.
+ * @param[in] language {string} Canonical language key.
+ * @return {Array<Record<string, unknown>>} Persisted checker-entry array or an empty array.
  */
 function getStaticCheckEntries(projectBase: string, language: string): Array<Record<string, unknown>> {
-  const payload = readProjectConfigJson(projectBase);
-  const staticCheck = (payload["static-check"] ?? {}) as Record<string, Array<Record<string, unknown>>>;
-  return staticCheck[language] ?? [];
+  const languageConfig = getStaticCheckLanguageConfig(projectBase, language);
+  return Array.isArray(languageConfig?.checkers)
+    ? languageConfig.checkers as Array<Record<string, unknown>>
+    : [];
 }
 
 /**
@@ -213,21 +229,6 @@ const IMPORTED_CASE_MAPPINGS: ImportedCaseMapping[] = [
   { sourceId: "test_static_check.py::TestEnableStaticCheckConfigPersistence::test_enable_static_check_update_adds_same_module_different_params", targetId: "direct::enable-static-check-merge" },
   { sourceId: "test_static_check.py::TestEnableStaticCheckConfigPersistence::test_enable_static_check_update_ignores_non_identity_fields_for_duplicate_check", targetId: "direct::enable-static-check-merge" },
   { sourceId: "test_static_check.py::TestEnableStaticCheckConfigPersistence::test_non_update_enable_static_check_preserves_existing_entries", targetId: "direct::enable-static-check-merge" },
-  { sourceId: "test_cli.py::TestGitCheckCommand::test_git_check_on_clean_repo_succeeds", targetId: "direct::git-check-matrix" },
-  { sourceId: "test_cli.py::TestGitCheckCommand::test_git_check_on_dirty_repo_fails", targetId: "direct::git-check-matrix" },
-  { sourceId: "test_cli.py::TestGitCheckCommand::test_git_check_rejects_base", targetId: "direct::git-check-matrix" },
-  { sourceId: "test_cli.py::TestDocsCheckCommand::test_docs_check_all_present_succeeds", targetId: "direct::docs-check-matrix" },
-  { sourceId: "test_cli.py::TestDocsCheckCommand::test_docs_check_missing_requirements", targetId: "direct::docs-check-matrix" },
-  { sourceId: "test_cli.py::TestDocsCheckCommand::test_docs_check_missing_workflow", targetId: "direct::docs-check-matrix" },
-  { sourceId: "test_cli.py::TestGitWtNameCommand::test_git_wt_name_format", targetId: "direct::git-worktree-matrix" },
-  { sourceId: "test_cli.py::TestGitWtCreateDeleteCommands::test_wt_create_invalid_name_fails", targetId: "direct::git-worktree-matrix" },
-  { sourceId: "test_cli.py::TestGitWtCreateDeleteCommands::test_wt_create_and_delete_roundtrip", targetId: "direct::git-worktree-matrix" },
-  { sourceId: "test_cli.py::TestGitWtCreateDeleteCommands::test_wt_delete_rejects_partial_name_matches", targetId: "direct::git-worktree-matrix" },
-  { sourceId: "test_cli.py::TestGitWtCreateDeleteCommands::test_wt_delete_nonexistent_fails", targetId: "direct::git-worktree-matrix" },
-  { sourceId: "test_cli.py::TestGitRepositoryPathCommands::test_git_path_prints_configured_git_path", targetId: "direct::git-path-and-base-path-matrix" },
-  { sourceId: "test_cli.py::TestGitRepositoryPathCommands::test_get_base_path_prints_configured_base_path", targetId: "direct::git-path-and-base-path-matrix" },
-  { sourceId: "test_cli.py::TestGitRepositoryPathCommands::test_git_path_rejects_base", targetId: "direct::git-path-and-base-path-matrix" },
-  { sourceId: "test_cli.py::TestGitRepositoryPathCommands::test_get_base_path_rejects_base", targetId: "direct::git-path-and-base-path-matrix" },
 ];
 
 /**
@@ -261,41 +262,27 @@ const TARGET_CASES: TargetParityCase[] = [
         "/**\n * @file\n * @brief Sample file.\n */\n\n/**\n * @brief Build sample value.\n * @param[in] input {string} Caller text.\n * @return {string} Upper-cased text.\n */\nexport function buildSample(input: string): string {\n  return input.toUpperCase();\n}\n",
       );
       const cwd = path.dirname(filePath);
-      const result = runNodeCli(["--files-references", filePath], cwd);
-      assert.equal(result.status, 0, result.stderr);
-      const payload = JSON.parse(result.stdout) as {
-        summary: { analyzed_file_count: number };
-        repository: { file_canonical_paths: string[] };
-        files: Array<{
-          canonical_path: string;
-          file_doxygen?: { brief?: string[] };
-          symbols: Array<{
-            symbol_name: string;
-            line_range: [number, number];
-            doxygen?: { params?: Array<{ direction: string; parameter_name?: string; value_type?: string }> };
-          }>;
-        }>;
-      };
-      assert.equal(payload.summary.analyzed_file_count, 1);
-      assert.deepEqual(payload.repository.file_canonical_paths, ["sample.ts"]);
-      assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample file."]);
-      assert.equal(payload.files[0]?.canonical_path, "sample.ts");
-      assert.equal(payload.files[0]?.symbols[0]?.symbol_name, "buildSample");
-      assert.deepEqual(payload.files[0]?.symbols[0]?.line_range, [11, 13]);
-      assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.params, [
-        { direction: "in", parameter_name: "input", value_type: "string", description: "Caller text." },
-      ]);
-      assert.equal(result.stderr, "");
+      const node = runNodeCli(["--files-references", filePath], cwd);
+      const python = runPythonCli(["--files-references", filePath], cwd);
+      assert.equal(node.status, python.status);
+      assert.equal(node.stdout, python.stdout);
+      assert.equal(node.stderr, python.stderr);
+      assert.match(node.stdout, /# sample\.ts \| TypeScript/);
+      assert.match(node.stdout, /## Definitions/);
+      assert.match(node.stdout, /### fn `export function buildSample\(input: string\): string`/);
     },
   },
   {
     id: "direct::files-references-verbose",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "value = 1\n");
-      const result = runNodeCli(["--verbose", "--files-references", filePath], path.dirname(filePath));
-      assert.equal(result.status, 0, result.stderr);
-      assert.doesNotThrow(() => JSON.parse(result.stdout));
-      assert.match(result.stderr, /OK/);
+      const cwd = path.dirname(filePath);
+      const node = runNodeCli(["--verbose", "--files-references", filePath], cwd);
+      const python = runPythonCli(["--verbose", "--files-references", filePath], cwd);
+      assert.equal(node.status, python.status);
+      assert.equal(node.stdout, python.stdout);
+      assert.equal(node.stderr, python.stderr);
+      assert.match(node.stderr, /OK/);
     },
   },
   {
@@ -322,25 +309,20 @@ const TARGET_CASES: TargetParityCase[] = [
       fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
       fs.writeFileSync(path.join(projectBase, "src", "nested", "beta.ts"), "export function beta(): number {\n  return 2;\n}\n", "utf8");
 
-      const direct = runNodeCli(["--references"], projectBase);
-      assert.equal(direct.status, 0, direct.stderr);
-      const directPayload = JSON.parse(direct.stdout) as {
-        repository: {
-          source_directory_paths: string[];
-          file_canonical_paths: string[];
-          directory_tree: { children: Array<{ node_name: string; node_kind: string }> };
-        };
-        files: Array<{ canonical_path: string }>;
-      };
-      assert.deepEqual(directPayload.repository.source_directory_paths, ["src"]);
-      assert.deepEqual(directPayload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
-      assert.equal(directPayload.repository.directory_tree.children[0]?.node_name, "src");
-      assert.equal(directPayload.repository.directory_tree.children[0]?.node_kind, "directory");
-      assert.deepEqual(directPayload.files.map((file) => file.canonical_path), ["src/alpha.ts", "src/nested/beta.ts"]);
+      const directNode = runNodeCli(["--references"], projectBase);
+      const directPython = runPythonCli(["--references"], projectBase);
+      assert.equal(directNode.status, directPython.status);
+      assert.equal(directNode.stdout, directPython.stdout);
+      assert.equal(directNode.stderr, directPython.stderr);
+      assert.match(directNode.stdout, /# Files Structure/);
+      assert.match(directNode.stdout, /src\/nested\/beta\.ts/);
+      assert.match(directNode.stdout, /# beta\.ts \| TypeScript/);
 
-      const here = runNodeCli(["--here", "--references"], projectBase);
-      assert.equal(here.status, 0, here.stderr);
-      assert.deepEqual(JSON.parse(here.stdout), directPayload);
+      const hereNode = runNodeCli(["--here", "--references"], projectBase);
+      const herePython = runPythonCli(["--here", "--references"], projectBase);
+      assert.equal(hereNode.status, herePython.status);
+      assert.equal(hereNode.stdout, herePython.stdout);
+      assert.equal(hereNode.stderr, herePython.stderr);
 
       const baseRejected = runNodeCli(["--base", projectBase, "--references"], projectBase);
       assert.notEqual(baseRejected.status, 0);
@@ -350,11 +332,14 @@ const TARGET_CASES: TargetParityCase[] = [
   {
     id: "oracle::project::compress-modes",
     run(t) {
-      const { projectBase } = createFixtureRepo(t);
+      const fixtures = getFixtureFiles().filter((fixture) => path.basename(fixture) !== TAB_SENSITIVE_FIXTURE_NAME);
+      const { projectBase } = createFixtureRepo(t, { fixtures });
       assertCliParity(["--compress"], projectBase);
       assertCliParity(["--here", "--compress"], projectBase);
       assertCliParity(["--compress", "--enable-line-numbers"], projectBase);
-      assertCliParity(["--base", projectBase, "--compress"], projectBase);
+      const rejected = runNodeCli(["--base", projectBase, "--compress"], projectBase);
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, /do not allow --base/);
     },
   },
   {
@@ -376,7 +361,9 @@ const TARGET_CASES: TargetParityCase[] = [
       const updatedConfig: UseReqConfig = { ...config, "docs-dir": "docs" };
       saveFixtureConfigs(projectBase, updatedConfig);
       assertCliParity(["--tokens"], projectBase);
-      assertCliParity(["--base", projectBase, "--tokens"], projectBase);
+      const rejected = runNodeCli(["--base", projectBase, "--tokens"], projectBase);
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, /do not allow --base/);
     },
   },
   {
@@ -438,11 +425,11 @@ const TARGET_CASES: TargetParityCase[] = [
       const updatedConfig: UseReqConfig = {
         ...config,
         "static-check": {
-          JavaScript: [
+          JavaScript: createStaticCheckLanguageConfig([
             { module: "Command", cmd: firstScript },
             { module: "Command", cmd: secondScript, params: ["--check"] },
-          ],
-          Python: [{ module: "Dummy" }],
+          ], "enable"),
+          Python: createStaticCheckLanguageConfig([{ module: "Dummy" }], "enable"),
         },
       };
       saveFixtureConfigs(projectBase, updatedConfig);
@@ -454,6 +441,21 @@ const TARGET_CASES: TargetParityCase[] = [
         `first|${path.resolve(jsFile)}`,
         `second|--check ${path.resolve(jsFile)}`,
       ]);
+
+      fs.truncateSync(logPath, 0);
+      saveFixtureConfigs(projectBase, {
+        ...updatedConfig,
+        "static-check": {
+          JavaScript: createStaticCheckLanguageConfig([
+            { module: "Command", cmd: firstScript },
+            { module: "Command", cmd: secondScript, params: ["--check"] },
+          ], "disable"),
+        },
+      });
+      const disabled = runNodeCli(["--files-static-check", jsFile], projectBase);
+      assert.equal(disabled.status, 0, disabled.stderr);
+      assert.equal(disabled.stdout, "");
+      assert.equal(fs.readFileSync(logPath, "utf8"), "");
 
       const unknownExtension = path.join(projectBase, "src", "ignored.txt");
       fs.writeFileSync(unknownExtension, "ignored\n", "utf8");
@@ -473,7 +475,11 @@ const TARGET_CASES: TargetParityCase[] = [
       );
       saveFixtureConfigs(projectBase, {
         ...updatedConfig,
-        "static-check": { JavaScript: [{ module: "Command", cmd: failingScript }] },
+        "static-check": {
+          JavaScript: createStaticCheckLanguageConfig([
+            { module: "Command", cmd: failingScript },
+          ], "enable"),
+        },
       });
       const failing = runNodeCli(["--files-static-check", jsFile], projectBase);
       assert.equal(failing.status, 1);
@@ -496,8 +502,12 @@ const TARGET_CASES: TargetParityCase[] = [
       saveFixtureConfigs(projectBase, {
         ...config,
         "static-check": {
-          Python: [{ module: "Command", cmd: logScript }],
-          C: [{ module: "Command", cmd: logScript }],
+          Python: createStaticCheckLanguageConfig([
+            { module: "Command", cmd: logScript },
+          ], "enable"),
+          C: createStaticCheckLanguageConfig([
+            { module: "Command", cmd: logScript },
+          ], "enable"),
         },
       });
 
@@ -511,7 +521,9 @@ const TARGET_CASES: TargetParityCase[] = [
       fs.truncateSync(logPath, 0);
       saveFixtureConfigs(projectBase, {
         ...config,
-        "static-check": { Python: [{ module: "Dummy" }] },
+        "static-check": {
+          Python: createStaticCheckLanguageConfig([{ module: "Dummy" }], "enable"),
+        },
       });
       const skipped = runNodeCli(["--static-check"], projectBase);
       assert.equal(skipped.status, 0, skipped.stderr);
@@ -527,10 +539,10 @@ const TARGET_CASES: TargetParityCase[] = [
       saveFixtureConfigs(projectBase, {
         ...config,
         "static-check": {
-          Python: [
+          Python: createStaticCheckLanguageConfig([
             { module: "Command", cmd: firstOrderedScript },
             { module: "Command", cmd: secondOrderedScript, params: ["--check"] },
-          ],
+          ], "enable"),
         },
       });
       const ordered = runNodeCli(["--static-check"], projectBase);
@@ -549,7 +561,11 @@ const TARGET_CASES: TargetParityCase[] = [
       );
       saveFixtureConfigs(projectBase, {
         ...config,
-        "static-check": { Python: [{ module: "Command", cmd: failingScript }] },
+        "static-check": {
+          Python: createStaticCheckLanguageConfig([
+            { module: "Command", cmd: failingScript },
+          ], "enable"),
+        },
       });
       const failing = runNodeCli(["--static-check"], projectBase);
       assert.equal(failing.status, 1);
@@ -559,7 +575,9 @@ const TARGET_CASES: TargetParityCase[] = [
       fs.writeFileSync(path.join(emptyRepo.projectBase, "src", "README.txt"), "not source\n", "utf8");
       saveFixtureConfigs(emptyRepo.projectBase, {
         ...emptyRepo.config,
-        "static-check": { Python: [{ module: "Dummy" }] },
+        "static-check": {
+          Python: createStaticCheckLanguageConfig([{ module: "Dummy" }], "enable"),
+        },
       });
       const noSource = runNodeCli(["--static-check"], emptyRepo.projectBase);
       assert.equal(noSource.status, 1);
@@ -611,6 +629,8 @@ const TARGET_CASES: TargetParityCase[] = [
         projectBase,
       );
       assert.equal(persisted.status, 0, persisted.stderr);
+      assert.equal(getStaticCheckLanguageConfig(projectBase, "Python")?.enabled, "enable");
+      assert.equal(getStaticCheckLanguageConfig(projectBase, "C")?.enabled, "enable");
       assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [
         { module: "Command", cmd: "git", params: ["--version"] },
         { module: "Command", cmd: "git", params: ["--help"] },
@@ -638,6 +658,8 @@ const TARGET_CASES: TargetParityCase[] = [
         projectBase,
       );
       assert.equal(result.status, 0, result.stderr);
+      assert.equal(getStaticCheckLanguageConfig(projectBase, "Python")?.enabled, "enable");
+      assert.equal(getStaticCheckLanguageConfig(projectBase, "C")?.enabled, "enable");
       assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [{ module: "Command", cmd: "git", params: ["--version"] }]);
       assert.deepEqual(getStaticCheckEntries(projectBase, "C"), [
         { module: "Command", cmd: "git", params: ["--version"] },
@@ -652,8 +674,13 @@ const TARGET_CASES: TargetParityCase[] = [
       const preloaded = {
         ...config,
         "static-check": {
-          Python: [{ module: "Dummy", meta: "debug-note" } as unknown as Record<string, unknown>],
-          JavaScript: [{ module: "Command", cmd: "git", params: ["--version"] }],
+          Python: {
+            enabled: "enable",
+            checkers: [{ module: "Dummy", meta: "debug-note" }],
+          } as unknown as UseReqConfig["static-check"][string],
+          JavaScript: createStaticCheckLanguageConfig([
+            { module: "Command", cmd: "git", params: ["--version"] },
+          ], "enable"),
         } as unknown as UseReqConfig["static-check"],
       } as UseReqConfig;
       saveFixtureConfigs(projectBase, preloaded);
@@ -669,6 +696,8 @@ const TARGET_CASES: TargetParityCase[] = [
         projectBase,
       );
       assert.equal(result.status, 0, result.stderr);
+      assert.equal(getStaticCheckLanguageConfig(projectBase, "Python")?.enabled, "enable");
+      assert.equal(getStaticCheckLanguageConfig(projectBase, "JavaScript")?.enabled, "enable");
       assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [
         { module: "Dummy" },
         { module: "Command", cmd: "git", params: ["--version"] },
@@ -680,117 +709,21 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "direct::git-check-matrix",
-    run(t) {
-      const { projectBase } = createFixtureRepo(t, { fixtures: [] });
-      fs.rmSync(path.join(projectBase, ".venv"), { recursive: true, force: true });
-      const gitEnv = {
-        ...process.env,
-        GIT_AUTHOR_NAME: "pi-usereq",
-        GIT_AUTHOR_EMAIL: "pi-usereq@example.com",
-        GIT_COMMITTER_NAME: "pi-usereq",
-        GIT_COMMITTER_EMAIL: "pi-usereq@example.com",
-      };
-      const stage = spawnSync("git", ["add", "."], { cwd: projectBase, encoding: "utf8" });
-      assert.equal(stage.status, 0, stage.stderr);
-      const commit = spawnSync("git", ["commit", "-m", "normalize"], { cwd: projectBase, encoding: "utf8", env: gitEnv });
-      assert.equal(commit.status, 0, commit.stderr);
-      const clean = runNodeCli(["--git-check"], projectBase);
-      assert.equal(clean.status, 0, clean.stderr);
-      assert.equal(clean.stdout, "");
-      assert.equal(clean.stderr, "");
-      fs.writeFileSync(path.join(projectBase, "dirty.txt"), "dirty\n", "utf8");
-      const dirty = runNodeCli(["--git-check"], projectBase);
-      assert.equal(dirty.status, 1);
-      assert.equal(dirty.stdout, "");
-      assert.equal(dirty.stderr.trim(), "ERROR: Git status unclear!");
-      const rejected = runNodeCli(["--base", projectBase, "--git-check"], projectBase);
-      assert.notEqual(rejected.status, 0);
-    },
-  },
-  {
-    id: "direct::docs-check-matrix",
-    run(t) {
-      const { projectBase } = createFixtureRepo(t, { fixtures: [] });
-      const success = runNodeCli(["--docs-check"], projectBase);
-      assert.equal(success.status, 0, success.stderr);
-
-      fs.rmSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/"), "REQUIREMENTS.md"));
-      const missingRequirements = runNodeCli(["--docs-check"], projectBase);
-      assert.equal(missingRequirements.status, 1);
-
-      fs.writeFileSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/"), "REQUIREMENTS.md"), "# Requirements\n", "utf8");
-      fs.rmSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/"), "WORKFLOW.md"));
-      const missingWorkflow = runNodeCli(["--docs-check"], projectBase);
-      assert.equal(missingWorkflow.status, 1);
-    },
-  },
-  {
-    id: "direct::git-worktree-matrix",
-    run(t) {
-      const { projectBase } = createFixtureRepo(t, { fixtures: [] });
-      const named = runNodeCli(["--git-wt-name"], projectBase);
-      assert.equal(named.status, 0, named.stderr);
-      const nameParts = named.stdout.trim().split("-");
-      assert.ok(named.stdout.trim().startsWith("useReq-"));
-      assert.ok(nameParts.length >= 4);
-      assert.match(nameParts.at(-1) ?? "", /^\d{14}$/);
-
-      const invalid = runNodeCli(["--git-wt-create", "bad name with spaces"], projectBase);
-      assert.notEqual(invalid.status, 0);
-
-      const wtName = "pi-usereq-option-parity-wt";
-      const created = runNodeCli(["--git-wt-create", wtName], projectBase);
-      assert.equal(created.status, 0, created.stderr);
-      const worktreePath = path.join(path.dirname(projectBase), wtName);
-      assert.ok(fs.existsSync(worktreePath), "worktree path was not created");
-      assert.ok(fs.existsSync(getProjectConfigPath(worktreePath)), "config was not copied");
-
-      const partial = runNodeCli(["--git-wt-delete", "pi-usereq-option-parity"], projectBase);
-      assert.notEqual(partial.status, 0);
-      assert.ok(fs.existsSync(worktreePath), "partial delete removed the target worktree");
-
-      const deleted = runNodeCli(["--git-wt-delete", wtName], projectBase);
-      assert.equal(deleted.status, 0, deleted.stderr);
-      assert.ok(!fs.existsSync(worktreePath), "worktree path was not removed");
-
-      const missing = runNodeCli(["--git-wt-delete", "nonexistent-wt-branch-xyz"], projectBase);
-      assert.notEqual(missing.status, 0);
-    },
-  },
-  {
-    id: "direct::git-path-and-base-path-matrix",
-    run(t) {
-      const { projectBase } = createFixtureRepo(t, { fixtures: [] });
-      const resolvedGitPath = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: projectBase, encoding: "utf8" }).stdout.trim();
-      const gitPath = runNodeCli(["--git-path"], projectBase);
-      assert.equal(gitPath.status, 0, gitPath.stderr);
-      assert.equal(gitPath.stdout.trim(), formatRuntimePathForDisplay(resolvedGitPath));
-
-      const basePath = runNodeCli(["--get-base-path"], projectBase);
-      assert.equal(basePath.status, 0, basePath.stderr);
-      assert.equal(basePath.stdout.trim(), formatRuntimePathForDisplay(projectBase));
-
-      const gitRejected = runNodeCli(["--base", projectBase, "--git-path"], projectBase);
-      assert.notEqual(gitRejected.status, 0);
-      const baseRejected = runNodeCli(["--base", projectBase, "--get-base-path"], projectBase);
-      assert.notEqual(baseRejected.status, 0);
-    },
-  },
-  {
     id: "direct::fixtures::files-references-fixture-shape",
     async run(t) {
       for (const fixture of getFixtureFiles()) {
+        if (path.basename(fixture) === TAB_SENSITIVE_FIXTURE_NAME) {
+          continue;
+        }
         await t.test(path.basename(fixture), () => {
-          const result = runNodeCli(["--files-references", fixture], path.dirname(fixture));
-          assert.equal(result.status, 0, result.stderr);
-          const payload = JSON.parse(result.stdout) as {
-            summary: { analyzed_file_count: number };
-            files: Array<{ canonical_path: string; status: string }>;
-          };
-          assert.equal(payload.summary.analyzed_file_count, 1);
-          assert.equal(payload.files[0]?.status, "analyzed");
-          assert.equal(payload.files[0]?.canonical_path, path.basename(fixture));
+          const cwd = path.dirname(fixture);
+          const node = runNodeCli(["--files-references", fixture], cwd);
+          const python = runPythonCli(["--files-references", fixture], cwd);
+          assert.equal(node.status, python.status);
+          assert.equal(node.stdout, python.stdout);
+          assert.equal(node.stderr, python.stderr);
+          assert.match(node.stdout, new RegExp(`# ${path.basename(fixture).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\|`));
+          assert.match(node.stdout, /## Symbol Index/);
         });
       }
     },
@@ -799,10 +732,33 @@ const TARGET_CASES: TargetParityCase[] = [
     id: "oracle::fixtures::files-find-fixture-parity",
     async run(t) {
       for (const fixture of getFixtureFiles()) {
+        if (path.basename(fixture) === TAB_SENSITIVE_FIXTURE_NAME) {
+          continue;
+        }
         await t.test(path.basename(fixture), () => {
           assertCliParity(["--files-find", getFixtureTagFilter(fixture), ".*", fixture], path.dirname(fixture));
         });
       }
+    },
+  },
+  {
+    id: "direct::fixtures::go-tab-preservation",
+    run() {
+      const fixture = getFixtureFiles().find((candidate) => path.basename(candidate) === TAB_SENSITIVE_FIXTURE_NAME);
+      assert.ok(fixture, `missing ${TAB_SENSITIVE_FIXTURE_NAME}`);
+      const cwd = path.dirname(fixture);
+
+      const references = runNodeCli(["--files-references", fixture], cwd);
+      assert.equal(references.status, 0, references.stderr);
+      assert.match(references.stdout, /\tvar wg sync\.WaitGroup/);
+
+      const compress = runNodeCli(["--files-compress", fixture, "--enable-line-numbers"], cwd);
+      assert.equal(compress.status, 0, compress.stderr);
+      assert.match(compress.stdout, /\d+: \t"context"/);
+
+      const find = runNodeCli(["--files-find", "METHOD|FUNCTION", "^Start$", fixture, "--enable-line-numbers"], cwd);
+      assert.equal(find.status, 0, find.stderr);
+      assert.match(find.stdout, /\d+: \ts\.Lock\(\)/);
     },
   },
 ];

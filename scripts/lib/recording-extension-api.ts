@@ -4,6 +4,7 @@
  * @details Provides a minimal pi-compatible extension API plus command-context UI recorder used by the standalone debug harness. The module captures registered commands, registered tools, event handlers, active-tool state, user-message payloads, and UI side effects without invoking the official pi runtime. Runtime cost is O(n) in the number of recorded registrations and side effects. Side effects are limited to in-memory state mutation.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import {
   PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES,
@@ -259,6 +260,46 @@ function buildBuiltinToolDefinition(name: string): RecordingToolDefinition & { s
 }
 
 /**
+ * @brief Creates one minimal persisted session file for offline command replay.
+ * @details Writes a deterministic session-header-only JSONL file under the requested cwd so prompt-command session switching can exercise `ctx.switchSession(...)` with real session paths during harness replay. Runtime is O(n) in header size. Side effects include filesystem writes.
+ * @param[in] cwd {string} Working directory stored in the session header.
+ * @return {string} Persisted session file path.
+ */
+function createRecordingSessionFile(cwd: string): string {
+  const sessionDir = path.join("/tmp", "pi-usereq-recording-sessions");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const sessionFile = path.join(
+    sessionDir,
+    `session-${Date.now()}-${Math.random().toString(16).slice(2)}.jsonl`,
+  );
+  fs.writeFileSync(sessionFile, `${JSON.stringify({
+    type: "session",
+    version: 3,
+    id: path.basename(sessionFile, ".jsonl"),
+    timestamp: new Date(0).toISOString(),
+    cwd,
+  })}\n`, "utf8");
+  return sessionFile;
+}
+
+/**
+ * @brief Reads the cwd encoded in one persisted session header.
+ * @details Parses only the first JSONL line and falls back to the supplied cwd when the file is unreadable or malformed. Runtime is O(n) in header size. Side effects are limited to filesystem reads.
+ * @param[in] sessionFile {string} Persisted session file path.
+ * @param[in] fallbackCwd {string} Fallback cwd when header parsing fails.
+ * @return {string} Parsed session cwd or the fallback cwd.
+ */
+function readRecordingSessionCwd(sessionFile: string, fallbackCwd: string): string {
+  try {
+    const headerLine = fs.readFileSync(sessionFile, "utf8").split(/\r?\n/)[0] ?? "";
+    const header = JSON.parse(headerLine) as { cwd?: unknown };
+    return typeof header.cwd === "string" && header.cwd !== "" ? header.cwd : fallbackCwd;
+  } catch {
+    return fallbackCwd;
+  }
+}
+
+/**
  * @brief Encodes one fake themed fragment for offline status capture.
  * @details Wraps the requested color and text in stable XML-like markers so offline replay can preserve color intent in serialized status snapshots without terminal escape sequences. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] color {string} Requested theme color token.
@@ -289,9 +330,18 @@ function formatRecordedThemeBackgroundFromForeground(color: string, text: string
 export class RecordingCommandContext {
   /**
    * @brief Stores the working directory exposed to handlers through `ctx.cwd`.
-   * @details The value is immutable after construction and is consumed by extension code that resolves project-local configuration and prompt paths. Access complexity is O(1).
+   * @details The value starts at the requested replay cwd and is updated whenever offline `ctx.switchSession(...)` changes the active session file so extension code can re-read cwd semantics deterministically. Access complexity is O(1).
    */
-  public readonly cwd: string;
+  public cwd: string;
+
+  /**
+   * @brief Exposes the minimal session-manager probes consumed by prompt-command replay.
+   * @details Returns the currently active session cwd and session-file path so extension code can derive session-switch targets without the full runtime session implementation. Access complexity is O(1).
+   */
+  public readonly sessionManager: {
+    getCwd: () => string;
+    getSessionFile: () => string | undefined;
+  };
 
   /**
    * @brief Exposes the recorded UI adapter consumed by extension handlers.
@@ -312,6 +362,7 @@ export class RecordingCommandContext {
 
   private readonly selectQueue: string[];
   private readonly inputQueue: string[];
+  private currentSessionFile: string;
   private readonly notifications: RecordingNotification[] = [];
   private readonly statuses = new Map<string, string>();
   private readonly statusUpdates: RecordingStatusUpdate[] = [];
@@ -334,9 +385,14 @@ export class RecordingCommandContext {
    */
   public constructor(cwd: string, plan?: RecordingUiPlan, recordSessionUserMessage?: (content: JsonValue) => void) {
     this.cwd = cwd;
+    this.currentSessionFile = createRecordingSessionFile(cwd);
     this.selectQueue = [...(plan?.selects ?? [])];
     this.inputQueue = [...(plan?.inputs ?? [])];
     this.recordSessionUserMessage = recordSessionUserMessage ?? (() => undefined);
+    this.sessionManager = {
+      getCwd: () => this.cwd,
+      getSessionFile: () => this.currentSessionFile,
+    };
     this.ui = {
       theme: {
         fg: (color: string, text: string) => formatRecordedThemeForeground(color, text),
@@ -395,6 +451,19 @@ export class RecordingCommandContext {
         },
       });
     }
+    return { cancelled: false };
+  }
+
+  /**
+   * @brief Simulates `ctx.switchSession(...)` for offline replay.
+   * @details Updates the recorded active session file, rereads the session-header cwd, and mirrors the resulting cwd into `process.cwd()` so prompt-command replay can verify documented session-switch semantics deterministically. Runtime is O(n) in header size. Side effects include process-cwd mutation.
+   * @param[in] sessionPath {string} Target session file path.
+   * @return {Promise<{ cancelled: boolean }>} Deterministic non-cancelled result.
+   */
+  public async switchSession(sessionPath: string): Promise<{ cancelled: boolean }> {
+    this.currentSessionFile = path.resolve(sessionPath);
+    this.cwd = readRecordingSessionCwd(this.currentSessionFile, this.cwd);
+    process.chdir(this.cwd);
     return { cancelled: false };
   }
 

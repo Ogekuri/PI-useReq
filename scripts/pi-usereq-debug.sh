@@ -96,7 +96,7 @@ Examples:
   ./scripts/pi-usereq-debug.sh inspect --format pretty
   ./scripts/pi-usereq-debug.sh session --format json
   ./scripts/pi-usereq-debug.sh prompt analyze --args "Inspect prompt rendering"
-  ./scripts/pi-usereq-debug.sh tool files-find --args 'FUNCTION ^run src/index.ts --enable-line-numbers'
+  ./scripts/pi-usereq-debug.sh tool files-search --args 'FUNCTION ^run src/index.ts --enable-line-numbers'
   ./scripts/pi-usereq-debug.sh raw command --name req-analyze --args "Review REQ-004"
 EOF
 }

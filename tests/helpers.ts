@@ -10,18 +10,26 @@ import {
   getDefaultConfig,
   getProjectConfigPath,
   saveConfig,
+  type StaticCheckLanguageConfig,
   type UseReqConfig,
 } from "../src/core/config.js";
 import { normalizeEnabledPiUsereqTools } from "../src/core/pi-usereq-tools.js";
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const TSX_LOADER = require.resolve("tsx", { paths: [ROOT] });
+const TSX_ROOT = fs.existsSync(path.join(ROOT, "node_modules"))
+  ? ROOT
+  : path.join(ROOT, "..", "PI-useReq");
+const TSX_LOADER = require.resolve("tsx", { paths: [TSX_ROOT] });
 const ORACLE_VENV_PYTHON = path.join(ROOT, ".venv-oracle", "bin", "python");
 const PYTHON = fs.existsSync(ORACLE_VENV_PYTHON) ? ORACLE_VENV_PYTHON : "python3";
-const ORACLE_SRC = fs.existsSync(path.join(ROOT, "temp", "usereq", "src"))
-  ? path.join(ROOT, "temp", "usereq", "src")
-  : path.join(ROOT, "..", "PI-useReq", "temp", "usereq", "src");
+const ORACLE_PYTHONPATH_ROOT = fs.existsSync(path.join(ROOT, "temp", "usereq"))
+  ? path.join(ROOT, "temp")
+  : path.join(ROOT, "..", "PI-useReq", "temp");
+const ORACLE_NODE_ROOT = fs.existsSync(path.join(ROOT, "node_modules"))
+  ? ROOT
+  : path.join(ROOT, "..", "PI-useReq");
+const ORACLE_STUBS_ROOT = path.join(ROOT, "tests", "python_oracle_stubs");
 const FIXTURES_DIR = path.join(ROOT, "tests", "fixtures");
 
 export function getFixtureFiles(): string[] {
@@ -61,13 +69,14 @@ export function runNodeCli(args: string[], cwd = ROOT, envOverrides?: NodeJS.Pro
  * @return {import("node:child_process").SpawnSyncReturns<string>} Captured process result.
  */
 export function runPythonCli(args: string[], cwd = ROOT, envOverrides?: NodeJS.ProcessEnv) {
-  assert.ok(fs.existsSync(ORACLE_SRC), `Python oracle source not found at ${ORACLE_SRC}`);
+  assert.ok(fs.existsSync(path.join(ORACLE_PYTHONPATH_ROOT, "usereq")), `Python oracle source not found at ${ORACLE_PYTHONPATH_ROOT}`);
   return spawnSync(PYTHON, ["-m", "usereq.cli", ...args], {
     cwd,
     encoding: "utf8",
     env: {
       ...process.env,
-      PYTHONPATH: ORACLE_SRC,
+      PYTHONPATH: [ORACLE_STUBS_ROOT, ORACLE_PYTHONPATH_ROOT].join(path.delimiter),
+      PI_USEREQ_NODE_ROOT: ORACLE_NODE_ROOT,
       ...envOverrides,
     },
   });
@@ -82,13 +91,14 @@ export function runPythonCli(args: string[], cwd = ROOT, envOverrides?: NodeJS.P
  * @return {import("node:child_process").SpawnSyncReturns<string>} Captured process result.
  */
 export function runPythonInline(code: string, cwd = ROOT, envOverrides?: NodeJS.ProcessEnv) {
-  assert.ok(fs.existsSync(ORACLE_SRC), `Python oracle source not found at ${ORACLE_SRC}`);
+  assert.ok(fs.existsSync(path.join(ORACLE_PYTHONPATH_ROOT, "usereq")), `Python oracle source not found at ${ORACLE_PYTHONPATH_ROOT}`);
   return spawnSync(PYTHON, ["-c", code], {
     cwd,
     encoding: "utf8",
     env: {
       ...process.env,
-      PYTHONPATH: ORACLE_SRC,
+      PYTHONPATH: [ORACLE_STUBS_ROOT, ORACLE_PYTHONPATH_ROOT].join(path.delimiter),
+      PI_USEREQ_NODE_ROOT: ORACLE_NODE_ROOT,
       ...envOverrides,
     },
   });
@@ -117,7 +127,7 @@ function writeOracleReqConfig(projectBase: string, config: UseReqConfig): void {
 
 /**
  * @brief Persists both Node and Python-oracle project configs for parity tests.
- * @details Writes `.pi-usereq/config.json` for the TypeScript CLI and `.req/config.json` for the Python oracle using the same logical payload. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
+ * @details Writes `.pi-usereq.json` for the TypeScript CLI and `.req/config.json` for the Python oracle using the same logical payload. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] config {UseReqConfig} Effective project configuration to persist.
  * @return {void} No return value.
@@ -129,7 +139,7 @@ export function saveFixtureConfigs(projectBase: string, config: UseReqConfig): v
 
 /**
  * @brief Reads the raw persisted TypeScript project config JSON.
- * @details Loads `.pi-usereq/config.json` without normalization so tests can inspect merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Loads `.pi-usereq.json` without normalization so tests can inspect merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Fixture project root.
  * @return {Record<string, unknown>} Parsed raw configuration object.
  */
@@ -154,14 +164,13 @@ export function writeExecutableScript(filePath: string, content: string): string
 export function initFixtureRepo(options: {
   fixtures?: string[];
   docs?: Record<string, string>;
-  staticCheck?: Record<string, Array<{ module: string; cmd?: string; params?: string[] }>>;
+  staticCheck?: Record<string, StaticCheckLanguageConfig>;
 } = {}): { projectBase: string; config: UseReqConfig } {
   const projectBase = createTempDir("pi-usereq-repo-");
   fs.mkdirSync(path.join(projectBase, "src"), { recursive: true });
   fs.mkdirSync(path.join(projectBase, "tests"), { recursive: true });
   fs.mkdirSync(path.join(projectBase, "guidelines"), { recursive: true });
   fs.mkdirSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/")), { recursive: true });
-  fs.mkdirSync(path.join(projectBase, ".pi-usereq"), { recursive: true });
 
   for (const fixture of options.fixtures ?? getFixtureFiles()) {
     const destination = path.join(projectBase, "src", path.basename(fixture));
@@ -181,9 +190,6 @@ export function initFixtureRepo(options: {
   assert.equal(gitInit.status, 0, gitInit.stderr);
   spawnSync("git", ["config", "user.name", "pi-usereq"], { cwd: projectBase, encoding: "utf8" });
   spawnSync("git", ["config", "user.email", "pi-usereq@example.com"], { cwd: projectBase, encoding: "utf8" });
-  spawnSync("git", ["add", "."], { cwd: projectBase, encoding: "utf8" });
-  const commit = spawnSync("git", ["commit", "-m", "init"], { cwd: projectBase, encoding: "utf8" });
-  assert.equal(commit.status, 0, commit.stderr);
   const config: UseReqConfig = {
     ...getDefaultConfig(projectBase),
     "docs-dir": DEFAULT_DOCS_DIR,
@@ -193,6 +199,9 @@ export function initFixtureRepo(options: {
     "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
   };
   saveFixtureConfigs(projectBase, config);
+  spawnSync("git", ["add", "."], { cwd: projectBase, encoding: "utf8" });
+  const commit = spawnSync("git", ["commit", "-m", "init"], { cwd: projectBase, encoding: "utf8" });
+  assert.equal(commit.status, 0, commit.stderr);
 
   const localVenv = path.join(projectBase, ".venv");
   const oracleVenvRoot = path.dirname(path.dirname(ORACLE_VENV_PYTHON));

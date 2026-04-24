@@ -6,10 +6,19 @@ import os from "node:os";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
 import {
+  createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
   getDefaultConfig,
   getProjectConfigPath,
+  loadConfig,
 } from "../src/core/config.js";
+import {
+  DEBUG_PROMPT_NAMES,
+  DEFAULT_DEBUG_LOG_FILE,
+  DEFAULT_DEBUG_LOG_ON_STATUS,
+  DEFAULT_DEBUG_WORKFLOW_EVENTS,
+} from "../src/core/debug-runtime.js";
+import { PROMPT_COMMAND_NAMES } from "../src/core/prompt-command-catalog.js";
 import {
   setJsTiktokenModuleLoaderForTests,
 } from "../src/core/token-counter.js";
@@ -18,10 +27,27 @@ import {
   setPiNotifySpawnForTests,
 } from "../src/core/pi-notify.js";
 import {
+  abortPromptCommandExecution,
+  activatePromptCommandExecution,
+  preparePromptCommandExecution,
+  restorePromptCommandExecution,
+  setPromptCommandPostCreateHookForTests,
+} from "../src/core/prompt-command-runtime.js";
+import {
+  readPersistedPromptCommandSessionContext,
+} from "../src/core/prompt-command-state.js";
+import {
+  comparePiUsereqStartupToolNames,
+  PI_USEREQ_CUSTOM_TOOL_NAMES,
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
   PI_USEREQ_STARTUP_TOOL_NAMES,
 } from "../src/core/pi-usereq-tools.js";
+import {
+  createPiUsereqStatusController,
+  setPiUsereqStatusConfig,
+  setPiUsereqWorkflowState,
+} from "../src/core/extension-status.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
 import { createTempDir, initFixtureRepo } from "./helpers.js";
 
@@ -44,6 +70,7 @@ type RegisteredTool = {
   parameters?: unknown;
   sourceInfo?: Record<string, unknown>;
   execute?: (toolCallId: string, params: any, signal?: AbortSignal, onUpdate?: unknown, ctx?: any) => Promise<any> | any;
+  renderResult?: (result: any, options: { expanded?: boolean; isPartial?: boolean }, theme: FakeThemeAdapter, context: { args?: Record<string, unknown>; lastComponent?: unknown }) => { render: (width: number) => string[] };
 };
 
 /**
@@ -53,6 +80,39 @@ type RegisteredTool = {
  * The alias is compile-time only and introduces no runtime side effects.
  */
 type RegisteredShortcut = { description?: string; handler: (ctx: any) => Promise<void> | void };
+
+/**
+ * @brief Applies targeted `.pi-usereq.json` overrides inside one test project.
+ * @details Loads the persisted config JSON, merges the supplied top-level overrides, and writes the updated payload back with a trailing newline so prompt-command tests can script worktree and notification behavior deterministically. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
+ * @param[in] projectBase {string} Fixture project root.
+ * @param[in] overrides {Record<string, unknown>} Top-level config overrides.
+ * @return {void} No return value.
+ */
+function writeProjectConfigOverrides(projectBase: string, overrides: Record<string, unknown>): void {
+  const configPath = getProjectConfigPath(projectBase);
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  Object.assign(config, overrides);
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  if (fs.existsSync(path.join(projectBase, ".git"))) {
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "pi-usereq",
+      GIT_AUTHOR_EMAIL: "pi-usereq@example.com",
+      GIT_COMMITTER_NAME: "pi-usereq",
+      GIT_COMMITTER_EMAIL: "pi-usereq@example.com",
+    };
+    assert.equal(spawnSync("git", ["add", ".pi-usereq.json", ".req/config.json"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "config override"], {
+      cwd: projectBase,
+      encoding: "utf8",
+      env: gitEnv,
+    });
+    assert.equal(commit.status, 0, commit.stderr);
+  }
+}
 
 /**
  * @brief Represents the fake pi runtime returned by `createFakePi`.
@@ -83,6 +143,9 @@ interface FakeSessionManager {
   appendMessage: (message: unknown) => string;
   getBranch: () => FakeSessionEntry[];
   getEntries: () => FakeSessionEntry[];
+  getCwd: () => string;
+  getSessionDir: () => string | undefined;
+  getSessionFile: () => string | undefined;
 }
 
 /**
@@ -154,9 +217,48 @@ function extractSessionMessageText(message: unknown): string {
  * @details Stores appended custom entries and setup messages in deterministic insertion order, returns stable synthetic entry identifiers, and exposes branch reads used by `session_start` handlers. Runtime is O(1) per mutation plus O(n) per snapshot copy. Side effects are limited to in-memory state mutation.
  * @return {FakeSessionManager} Fake session manager.
  */
-function createFakeSessionManager(): FakeSessionManager {
+function createFakeSessionFile(cwd: string): string {
+  const sessionDir = path.join(os.tmpdir(), "pi-usereq-test-sessions");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const sessionFile = path.join(sessionDir, `session-${Date.now()}-${Math.random().toString(16).slice(2)}.jsonl`);
+  fs.writeFileSync(sessionFile, `${JSON.stringify({
+    type: "session",
+    version: 3,
+    id: path.basename(sessionFile, ".jsonl"),
+    timestamp: new Date(0).toISOString(),
+    cwd,
+  })}\n`, "utf8");
+  return sessionFile;
+}
+
+/**
+ * @brief Reads the stored cwd header from one fake or persisted session file.
+ * @details Parses the first JSONL line and returns its `cwd` field when available so fake `ctx.switchSession(...)` calls can mirror pi session-path semantics without a live runtime. Runtime is O(n) in header size. Side effects are limited to filesystem reads.
+ * @param[in] sessionFile {string} Session file path.
+ * @param[in] fallbackCwd {string} Fallback cwd when the file cannot be parsed.
+ * @return {string} Parsed session cwd or the fallback value.
+ */
+function readFakeSessionFileCwd(sessionFile: string, fallbackCwd: string): string {
+  try {
+    const headerLine = fs.readFileSync(sessionFile, "utf8").split(/\r?\n/)[0] ?? "";
+    const header = JSON.parse(headerLine) as { cwd?: unknown };
+    return typeof header.cwd === "string" && header.cwd !== "" ? header.cwd : fallbackCwd;
+  } catch {
+    return fallbackCwd;
+  }
+}
+
+/**
+ * @brief Creates a fake session manager for session-aware tests.
+ * @details Stores appended custom entries and setup messages in deterministic insertion order, returns stable synthetic entry identifiers, and exposes persisted session-file metadata used by prompt-command session switching. Runtime is O(1) per mutation plus O(n) per snapshot copy. Side effects include in-memory state mutation and one fake session-file write.
+ * @param[in] cwd {string} Initial session cwd.
+ * @return {FakeSessionManager} Fake session manager.
+ */
+function createFakeSessionManager(cwd: string): FakeSessionManager {
   const entries: FakeSessionEntry[] = [];
   let nextEntryId = 0;
+  let currentCwd = cwd;
+  const sessionFile = createFakeSessionFile(cwd);
   const buildEntryId = (): string => `entry-${nextEntryId++}`;
   return {
     appendCustomEntry(customType: string, data?: unknown): string {
@@ -174,6 +276,16 @@ function createFakeSessionManager(): FakeSessionManager {
     },
     getEntries(): FakeSessionEntry[] {
       return entries.map((entry) => ({ ...entry }));
+    },
+    getCwd(): string {
+      return currentCwd;
+    },
+    getSessionDir(): string {
+      return path.dirname(sessionFile);
+    },
+    getSessionFile(): string {
+      currentCwd = readFakeSessionFileCwd(sessionFile, currentCwd);
+      return sessionFile;
     },
   };
 }
@@ -296,9 +408,7 @@ function formatFakeThemeBackgroundFromForeground(color: string, text: string): s
 
 /**
  * @brief Builds the expected fake context-gauge payload for assertions.
- * @details Resolves the documented icon thresholds for `0-100%` and emits the
- * blinking red overflow icon for percent values above `100`. Runtime is O(1).
- * No external state is mutated.
+ * @details Resolves the documented icon thresholds for `0-90%`, emits the blinking warning full icon for percent values above `90` through `100`, and emits the blinking red overflow icon for percent values above `100`. Runtime is O(1). No external state is mutated.
  * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-gauge facts.
  * @return {string} Encoded context-gauge string.
  */
@@ -322,19 +432,17 @@ function buildExpectedFakeContextBar(options: {
   if (percent <= 90) {
     return formatFakeThemeForeground("warning", "▕▆▏");
   }
-  return formatFakeThemeForeground("warning", "▕█▏");
+  return formatFakeThemeForeground("warning", "\u001b[5m▕█▏\u001b[25m");
 }
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, separators, icon-based context gauge,
- * consolidated elapsed field, and sound field emitted by the extension using
- * deterministic fake theme markers. Runtime is O(1). No external state is
- * mutated.
- * @param[in] options {{ basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts.
+ * @details Reconstructs the field order, workflow-state highlighting, separators, icon-based context gauge, consolidated elapsed field, and sound field emitted by the extension using deterministic fake theme markers. Runtime is O(1). No external state is mutated.
+ * @param[in] options {{ workflowState?: string; basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts where `basePath` carries the rendered `current-path` value.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
+  workflowState?: string;
   basePath: string;
   docsDir?: string;
   testsDir?: string;
@@ -346,12 +454,17 @@ function buildExpectedFakeStatusText(options: {
 }): string {
   const buildField = (fieldName: string, value: string): string =>
     `${formatFakeThemeForeground("accent", `${fieldName}:`)}${formatFakeThemeForeground("warning", value)}`;
+  const workflowStateText = options.workflowState ?? "idle";
+  const workflowStateValue = workflowStateText === "error"
+    ? formatFakeThemeForeground("error", "\u001b[5merror\u001b[25m")
+    : formatFakeThemeForeground("warning", workflowStateText);
   const contextBar = buildExpectedFakeContextBar({
     filledCells: options.contextFilledCells,
     percent: options.contextPercent,
   });
   return [
-    buildField("base", options.basePath),
+    `${formatFakeThemeForeground("accent", "status:")}${workflowStateValue}`,
+    buildField("current-path", options.basePath),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
     buildField("elapsed", options.et),
     buildField("sound", options.sound ?? "none"),
@@ -396,8 +509,8 @@ function buildExpectedNotifyBasePath(cwd: string): string {
  * @return {string} `~`-relative or absolute config-path display string.
  */
 function buildExpectedShowConfigPath(cwd: string): string {
-  return buildExpectedNotifyBasePath(path.dirname(path.dirname(getProjectConfigPath(cwd)))) === buildExpectedNotifyBasePath(cwd)
-    ? `${buildExpectedNotifyBasePath(cwd)}/.pi-usereq/config.json`
+  return buildExpectedNotifyBasePath(path.dirname(getProjectConfigPath(cwd))) === buildExpectedNotifyBasePath(cwd)
+    ? `${buildExpectedNotifyBasePath(cwd)}/.pi-usereq.json`
     : getProjectConfigPath(cwd).split(path.sep).join("/");
 }
 
@@ -430,7 +543,13 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
   const selects = [...plan.selects];
   const inputs = [...(plan.inputs ?? [])];
   const getContextUsage = options.getContextUsage ?? (() => undefined);
-  const sessionManager = options.sessionManager ?? createFakeSessionManager();
+  const baseSessionManager = options.sessionManager ?? createFakeSessionManager(cwd);
+  let currentSessionCwd = typeof baseSessionManager.getCwd === "function"
+    ? baseSessionManager.getCwd()
+    : cwd;
+  let currentSessionFile = typeof baseSessionManager.getSessionFile === "function"
+    ? baseSessionManager.getSessionFile()
+    : createFakeSessionFile(currentSessionCwd);
   const theme = options.theme ?? {
     fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
     bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
@@ -445,12 +564,42 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
     waitForIdleCalls: 0,
     newSessions: [] as Array<{ messages: string[] }>,
   };
-  return {
+  const sessionManager: FakeSessionManager = {
+    appendCustomEntry(customType: string, data?: unknown): string {
+      return baseSessionManager.appendCustomEntry(customType, data);
+    },
+    appendMessage(message: unknown): string {
+      return baseSessionManager.appendMessage(message);
+    },
+    getBranch(): FakeSessionEntry[] {
+      return baseSessionManager.getBranch();
+    },
+    getEntries(): FakeSessionEntry[] {
+      return baseSessionManager.getEntries();
+    },
+    getCwd(): string {
+      return currentSessionCwd;
+    },
+    getSessionDir(): string | undefined {
+      return typeof currentSessionFile === "string" ? path.dirname(currentSessionFile) : undefined;
+    },
+    getSessionFile(): string | undefined {
+      return currentSessionFile;
+    },
+  };
+  const fakeCtx: any = {
     cwd,
     __state: state,
     sessionManager,
     async waitForIdle() {
       state.waitForIdleCalls += 1;
+    },
+    async switchSession(sessionPath: string) {
+      currentSessionFile = sessionPath;
+      currentSessionCwd = readFakeSessionFileCwd(sessionPath, currentSessionCwd);
+      fakeCtx.cwd = currentSessionCwd;
+      process.chdir(currentSessionCwd);
+      return { cancelled: false };
     },
     async newSession(newSessionOptions?: {
       parentSession?: string;
@@ -472,6 +621,15 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
         },
         getEntries(): FakeSessionEntry[] {
           return sessionManager.getEntries();
+        },
+        getCwd(): string {
+          return sessionManager.getCwd();
+        },
+        getSessionDir(): string | undefined {
+          return sessionManager.getSessionDir();
+        },
+        getSessionFile(): string | undefined {
+          return sessionManager.getSessionFile();
         },
       };
       if (newSessionOptions?.setup) {
@@ -529,6 +687,8 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
         });
         if (response === undefined) {
           bridge.cancel();
+        } else if (response === "Save and close" && !bridge.choices.some((choice) => choice.label === response)) {
+          bridge.cancel();
         } else {
           assert.ok(bridge.selectByLabel(response), `unsupported custom selection ${response}`);
         }
@@ -549,6 +709,7 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
       },
     },
   };
+  return fakeCtx;
 }
 
 /**
@@ -604,25 +765,19 @@ test("extension registers prompt and config commands while exposing tool capabil
   ]) {
     assert.ok(commandNames.includes(name), `missing command ${name}`);
   }
+  assert.equal(pi.commands.get("req-analyze")?.description, "Produce an analysis report");
 
   for (const name of [
-    "git-path",
-    "get-base-path",
     "files-tokens",
     "files-references",
     "files-compress",
-    "files-find",
+    "files-search",
     "references",
     "compress",
-    "find",
+    "search",
     "tokens",
     "files-static-check",
     "static-check",
-    "git-check",
-    "docs-check",
-    "git-wt-name",
-    "git-wt-create",
-    "git-wt-delete",
     "pi-usereq-show-config",
     "test-static-check",
   ]) {
@@ -631,23 +786,16 @@ test("extension registers prompt and config commands while exposing tool capabil
 
   const toolNames = pi.tools.map((tool: RegisteredTool) => tool.name).sort();
   for (const name of [
-    "git-path",
-    "get-base-path",
     "files-tokens",
     "files-references",
     "files-compress",
-    "files-find",
+    "files-search",
     "references",
     "compress",
-    "find",
+    "search",
     "tokens",
     "files-static-check",
     "static-check",
-    "git-check",
-    "docs-check",
-    "git-wt-name",
-    "git-wt-create",
-    "git-wt-delete",
   ]) {
     assert.ok(toolNames.includes(name), `missing tool ${name}`);
   }
@@ -662,13 +810,13 @@ test("token tools register agent-oriented descriptions and schema details", () =
   assert.ok(filesTokens, "missing files-tokens tool");
   assert.ok(tokens, "missing tokens tool");
 
-  assert.match(filesTokens.description ?? "", /token-optimized JSON payload/);
-  assert.ok(filesTokens.promptGuidelines?.some((line) => line.includes("Output contract:")));
-  assert.match(String((filesTokens.parameters as { description?: string } | undefined)?.description ?? ""), /token metrics/);
+  assert.match(filesTokens.description ?? "", /monolithic token pack summary/);
+  assert.ok(filesTokens.promptGuidelines?.some((line) => line.includes("monolithic pack-summary text")));
+  assert.match(String((filesTokens.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic pack-summary text/);
 
   assert.match(tokens.description ?? "", /canonical docs/);
-  assert.ok(tokens.promptGuidelines?.some((line) => line.includes("registration metadata")));
-  assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /token-optimized JSON shape/);
+  assert.ok(tokens.promptGuidelines?.some((line) => line.includes("monolithic pack-summary text")));
+  assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic pack-summary text/);
 });
 
 test("reference tools register agent-oriented descriptions and schema details", () => {
@@ -680,36 +828,36 @@ test("reference tools register agent-oriented descriptions and schema details", 
   assert.ok(filesReferences, "missing files-references tool");
   assert.ok(references, "missing references tool");
 
-  assert.match(filesReferences.description ?? "", /summary, repository, files, and execution sections/);
-  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Numeric contract:")));
-  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
-  assert.match(String((filesReferences.parameters as { description?: string } | undefined)?.description ?? ""), /structured Doxygen fields/);
+  assert.match(filesReferences.description ?? "", /monolithic references markdown report/);
+  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
+  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+  assert.match(String((filesReferences.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 
   assert.match(references.description ?? "", /configured project source directories/);
-  assert.ok(references.promptGuidelines?.some((line) => line.includes("source_directory_paths")));
+  assert.ok(references.promptGuidelines?.some((line) => line.includes("file-structure markdown block")));
   assert.ok(references.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
-  assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /directory tree/);
+  assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
-test("find tools register agent-oriented descriptions and schema details", () => {
+test("search tools register agent-oriented descriptions and schema details", () => {
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  const filesFind = pi.tools.find((tool: RegisteredTool) => tool.name === "files-find");
-  const find = pi.tools.find((tool: RegisteredTool) => tool.name === "find");
-  assert.ok(filesFind, "missing files-find tool");
-  assert.ok(find, "missing find tool");
+  const filesSearch = pi.tools.find((tool: RegisteredTool) => tool.name === "files-search");
+  const search = pi.tools.find((tool: RegisteredTool) => tool.name === "search");
+  assert.ok(filesSearch, "missing files-search tool");
+  assert.ok(search, "missing search tool");
 
-  assert.match(filesFind.description ?? "", /token-optimized JSON payload/);
-  assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Regex rule:")));
-  assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
-  assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Python]:")));
-  assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /Static supported-tag matrices are documented in tool registration metadata/);
+  assert.match(filesSearch.description ?? "", /monolithic construct-search markdown report/);
+  assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Regex rule:")));
+  assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
+  assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Supported tags [Python]:")));
+  assert.match(String((filesSearch.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 
-  assert.match(find.description ?? "", /configured project source directories/);
-  assert.ok(find.promptGuidelines?.some((line) => line.includes("source_directory_paths")));
-  assert.ok(find.promptGuidelines?.some((line) => line.includes("Tag rule:")));
-  assert.match(String((find.parameters as { description?: string } | undefined)?.description ?? ""), /Regex matches construct names only/);
+  assert.match(search.description ?? "", /configured project source directories/);
+  assert.ok(search.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
+  assert.ok(search.promptGuidelines?.some((line) => line.includes("Tag rule:")));
+  assert.match(String((search.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
 test("compression tools register agent-oriented descriptions and schema details", () => {
@@ -721,18 +869,69 @@ test("compression tools register agent-oriented descriptions and schema details"
   assert.ok(filesCompress, "missing files-compress tool");
   assert.ok(compress, "missing compress tool");
 
-  assert.match(filesCompress.description ?? "", /summary, repository, files, and execution sections/);
+  assert.match(filesCompress.description ?? "", /monolithic compression markdown report/);
   assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
-  assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
-  assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+  assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+  assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 
   assert.match(compress.description ?? "", /configured project source directories/);
-  assert.ok(compress.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
-  assert.ok(compress.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
-  assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+  assert.ok(compress.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
+  assert.ok(compress.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+  assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
-test("files-tokens returns token-optimized structured source facts", async () => {
+test("agent tools define custom renderResult with compact and expanded structured views", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const toolNames = [
+      "files-tokens",
+      "files-references",
+      "files-compress",
+      "files-search",
+      "references",
+      "compress",
+      "search",
+      "tokens",
+      "files-static-check",
+      "static-check",
+    ];
+    for (const toolName of toolNames) {
+      const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === toolName);
+      assert.ok(tool, `missing tool ${toolName}`);
+      assert.equal(typeof tool?.renderResult, "function", `missing renderResult for ${toolName}`);
+    }
+
+    fs.writeFileSync(path.join(projectBase, "src", "render_result_target.ts"), "export function alpha(): number {\n  return 1;\n}\n", "utf8");
+    const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "files-search");
+    assert.ok(tool?.renderResult, "missing renderResult for files-search");
+    const params = {
+      tag: "FUNCTION",
+      pattern: "^alpha$",
+      files: ["src/render_result_target.ts"],
+      enableLineNumbers: true,
+    };
+    const result = await executeRegisteredTool(pi, "files-search", projectBase, params);
+    const theme: FakeThemeAdapter = {
+      fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
+      bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
+      bold: (text: string) => `<bold>${text}</bold>`,
+    };
+    const compact = tool.renderResult(result, { expanded: false, isPartial: false }, theme, { args: params }).render(120).join("\n");
+    const expanded = tool.renderResult(result, { expanded: true, isPartial: false }, theme, { args: params }).render(120).join("\n");
+    assert.match(compact, /files-search/);
+    assert.match(compact, /tag="FUNCTION"/);
+    assert.match(compact, /pattern="\^alpha\$"/);
+    assert.match(compact, /files=\["src\/render_result_target\.ts"\]/);
+    assert.doesNotMatch(compact, /### FUNCTION/);
+    assert.match(expanded, /### FUNCTION: `alpha`/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("files-tokens returns monolithic token summary text with execution diagnostics", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
     docs: {
@@ -748,45 +947,20 @@ test("files-tokens returns token-optimized structured source facts", async () =>
       files: [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`, `${DEFAULT_DOCS_DIR}/MISSING.md`],
     }) as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        summary: {
-          counted_file_count: number;
-          skipped_file_count: number;
-        };
-        files: Array<{
-          canonical_path: string;
-          status: string;
-          start_line_number: number;
-          end_line_number: number;
-          line_count: number;
-          byte_count: number;
-          primary_heading_text?: string;
-          error_message?: string;
-        }>;
-        execution: {
-          stderr: string;
-        };
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.summary.counted_file_count, 1);
-    assert.equal(payload.summary.skipped_file_count, 1);
-    assert.equal(payload.files[0]?.canonical_path, `${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`);
-    assert.equal(payload.files[0]?.start_line_number, 1);
-    assert.equal(payload.files[0]?.end_line_number, payload.files[0]?.line_count);
-    assert.ok((payload.files[0]?.byte_count ?? 0) > 0);
-    assert.equal(payload.files[0]?.primary_heading_text, "Requirements");
-    assert.equal(payload.files[1]?.canonical_path, `${DEFAULT_DOCS_DIR}/MISSING.md`);
-    assert.equal(payload.files[1]?.error_message, "not found");
-    assert.match(payload.execution.stderr, new RegExp(`skipped: ${DEFAULT_DOCS_DIR.replace("/", "\\/")}/MISSING\\.md: not found`));
+    const content = result.content?.[0]?.text ?? "";
+    assert.match(content, /Pack Summary/);
+    assert.match(content, /REQUIREMENTS\.md/);
+    assert.equal(result.details?.execution.code, 0);
+    assert.ok(result.details?.execution.stderr_lines?.some((line) => /MISSING\.md/.test(line)));
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("files-tokens defers js-tiktoken loading until execution and returns structured dependency failures", async () => {
+test("files-tokens defers js-tiktoken loading until execution and returns monolithic dependency failures", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const missingModuleError = new Error("Cannot find module 'js-tiktoken'");
   setJsTiktokenModuleLoaderForTests(() => {
@@ -798,35 +972,20 @@ test("files-tokens defers js-tiktoken loading until execution and returns struct
     const result = await executeRegisteredTool(pi, "files-tokens", projectBase, {
       files: [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`],
     }) as {
-      details?: {
-        summary: {
-          counted_file_count: number;
-          skipped_file_count: number;
-          processable_file_count: number;
-        };
-        files: unknown[];
-        execution: {
-          code: number;
-          stderr: string;
-        };
-      };
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.equal(payload.summary.processable_file_count, 0);
-    assert.equal(payload.summary.counted_file_count, 0);
-    assert.equal(payload.summary.skipped_file_count, 0);
-    assert.deepEqual(payload.files, []);
-    assert.equal(payload.execution.code, 1);
-    assert.match(payload.execution.stderr, /js-tiktoken/);
-    assert.match(payload.execution.stderr, /npm ci/);
+    assert.equal(result.details?.execution.code, 1);
+    assert.match(result.content?.[0]?.text ?? "", /js-tiktoken/);
+    assert.ok(result.details?.execution.stderr_lines?.some((line) => /npm ci/.test(line)));
   } finally {
     setJsTiktokenModuleLoaderForTests(undefined);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("files-references returns structured repository, symbol, and Doxygen facts", async () => {
+test("files-references returns monolithic references markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
   fs.writeFileSync(samplePath, `/**
@@ -851,66 +1010,22 @@ export function buildSample(input: string): string {
       files: ["src/sample.ts", "src/missing.ts"],
     }) as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        summary: {
-          analyzed_file_count: number;
-          skipped_file_count: number;
-        };
-        repository: {
-          file_canonical_paths: string[];
-        };
-        files: Array<{
-          canonical_path: string;
-          status: string;
-          symbol_count: number;
-          doxygen_field_count: number;
-          file_doxygen?: { brief?: string[] };
-          symbols: Array<{
-            symbol_name: string;
-            qualified_name: string;
-            symbol_kind: string;
-            line_range: [number, number];
-            doxygen?: {
-              brief?: string[];
-              params?: Array<{ direction: string; parameter_name?: string; value_type?: string; description?: string }>;
-              returns?: string[];
-              satisfies_requirement_ids?: string[];
-            };
-          }>;
-        }>;
-        execution: {
-          stderr: string;
-        };
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.summary.analyzed_file_count, 1);
-    assert.equal(payload.summary.skipped_file_count, 1);
-    assert.deepEqual(payload.repository.file_canonical_paths, ["src/sample.ts"]);
-    assert.deepEqual(payload.files.map((file) => file.status), ["analyzed", "skipped"]);
-    assert.equal(payload.files[0]?.canonical_path, "src/sample.ts");
-    assert.equal(payload.files[0]?.symbol_count, 1);
-    assert.ok((payload.files[0]?.doxygen_field_count ?? 0) >= 2);
-    assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample source file."]);
-    assert.equal(payload.files[0]?.symbols[0]?.symbol_name, "buildSample");
-    assert.equal(payload.files[0]?.symbols[0]?.qualified_name, "buildSample");
-    assert.equal(payload.files[0]?.symbols[0]?.symbol_kind, "FUNCTION");
-    assert.deepEqual(payload.files[0]?.symbols[0]?.line_range, [12, 14]);
-    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.brief, ["Builds the sample value."]);
-    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.params, [
-      { direction: "in", parameter_name: "input", value_type: "string", description: "Caller-supplied value." },
-    ]);
-    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.returns, ["{string} Upper-cased result."]);
-    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.satisfies_requirement_ids, ["REQ-011"]);
-    assert.match(payload.execution.stderr, /skipped: src\/missing\.ts: not found/);
+    const content = result.content?.[0]?.text ?? "";
+    assert.match(content, /# sample\.ts \| TypeScript/);
+    assert.match(content, /## Definitions/);
+    assert.match(content, /buildSample/);
+    assert.match(content, /Caller-supplied value\./);
+    assert.equal(result.details?.execution.code, 0);
+    assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("references returns a structured repository tree for configured source directories", async () => {
+test("references returns monolithic project references markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
   fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
@@ -920,49 +1035,23 @@ test("references returns a structured repository tree for configured source dire
     piUsereqExtension(pi);
     const result = await executeRegisteredTool(pi, "references", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        summary: {
-          analyzed_file_count: number;
-          total_symbol_count: number;
-        };
-        repository: {
-          source_directory_paths: string[];
-          file_canonical_paths: string[];
-          directory_tree: {
-            node_name: string;
-            children: Array<{ node_name: string; node_kind: string; children: Array<{ relative_path: string; node_kind: string }> }>;
-          };
-        };
-        files: Array<{
-          canonical_path: string;
-          line_range: [number, number];
-          symbols: Array<{ symbol_name: string; line_range: [number, number] }>;
-        }>;
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.summary.analyzed_file_count, 2);
-    assert.equal(payload.summary.total_symbol_count, 1);
-    assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
-    assert.deepEqual(payload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
-    assert.equal(payload.repository.directory_tree.node_name, ".");
-    assert.equal(payload.repository.directory_tree.children[0]?.node_name, "src");
-    assert.equal(payload.repository.directory_tree.children[0]?.node_kind, "directory");
-    assert.ok(payload.repository.directory_tree.children[0]?.children.some((child) => child.relative_path === "src/alpha.ts"));
-    assert.ok(payload.repository.directory_tree.children[0]?.children.some((child) => child.relative_path === "src/nested"));
-    assert.deepEqual(payload.files.map((file) => file.canonical_path), ["src/alpha.ts", "src/nested/beta.ts"]);
-    assert.deepEqual(payload.files[0]?.line_range, [1, 1]);
-    assert.equal(payload.files[0]?.symbols.length, 0);
-    assert.equal(payload.files[1]?.symbols[0]?.symbol_name, "beta");
-    assert.deepEqual(payload.files[1]?.symbols[0]?.line_range, [1, 3]);
+    const content = result.content?.[0]?.text ?? "";
+    assert.match(content, /# Files Structure/);
+    assert.match(content, /src\/alpha\.ts/);
+    assert.match(content, /src\/nested\/beta\.ts/);
+    assert.match(content, /# alpha\.ts \| TypeScript/);
+    assert.match(content, /# beta\.ts \| TypeScript/);
+    assert.equal(result.details?.execution.code, 0);
+    assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("files-compress returns structured line, symbol, and Doxygen facts", async () => {
+test("files-compress returns monolithic compression markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
   fs.writeFileSync(samplePath, `/**
@@ -988,68 +1077,21 @@ export function buildSample(input: string): string {
       enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        summary: {
-          compressed_file_count: number;
-          skipped_file_count: number;
-          total_symbol_count: number;
-        };
-        repository: {
-          file_canonical_paths: string[];
-        };
-        files: Array<{
-          canonical_path: string;
-          status: string;
-          line_number_mode: string;
-          source_line_count: number;
-          compressed_line_count: number;
-          file_doxygen?: { brief?: string[] };
-          symbols: Array<{
-            symbol_name: string;
-            symbol_kind: string;
-            line_range: [number, number];
-            doxygen?: { brief?: string[] };
-          }>;
-          compressed_lines: Array<{ source_line_number: number; display_text: string; text: string }>;
-          compressed_source_text?: string;
-          error_reason?: string;
-        }>;
-        execution: {
-          code: number;
-          stderr: string;
-        };
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.summary.compressed_file_count, 1);
-    assert.equal(payload.summary.skipped_file_count, 1);
-    assert.equal(payload.summary.total_symbol_count, 1);
-    assert.ok(payload.repository.file_canonical_paths.includes("src/sample.ts"));
-    assert.equal(payload.files[0]?.canonical_path, "src/sample.ts");
-    assert.equal(payload.files[0]?.status, "compressed");
-    assert.equal(payload.files[0]?.line_number_mode, "enabled");
-    assert.ok((payload.files[0]?.source_line_count ?? 0) > 0);
-    assert.ok((payload.files[0]?.compressed_line_count ?? 0) > 0);
-    assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample source file."]);
-    assert.equal(payload.files[0]?.symbols[0]?.symbol_name, "buildSample");
-    assert.equal(payload.files[0]?.symbols[0]?.symbol_kind, "FUNCTION");
-    assert.deepEqual(payload.files[0]?.symbols[0]?.line_range, [11, 14]);
-    assert.deepEqual(payload.files[0]?.symbols[0]?.doxygen?.brief, ["Builds the sample value."]);
-    assert.equal(payload.files[0]?.compressed_lines[0]?.source_line_number, 11);
-    assert.match(payload.files[0]?.compressed_lines[0]?.display_text ?? "", /^11: export function buildSample/);
-    assert.match(payload.files[0]?.compressed_source_text ?? "", /^11: export function buildSample/m);
-    assert.equal(payload.files[1]?.status, "skipped");
-    assert.equal(payload.files[1]?.error_reason, "not_found");
-    assert.equal(payload.execution.code, 0);
-    assert.match(payload.execution.stderr, /skipped: src\/missing\.ts: not_found/);
+    const content = result.content?.[0]?.text ?? "";
+    assert.match(content, /@@@ src\/sample\.ts \| typescript/);
+    assert.match(content, /> Lines: 11-14/);
+    assert.match(content, /^11: export function buildSample/m);
+    assert.equal(result.details?.execution.code, 0);
+    assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("compress returns a structured repository-scoped compression payload", async () => {
+test("compress returns monolithic repository-scoped compression markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(
     path.join(projectBase, "src", "alpha.ts"),
@@ -1069,45 +1111,21 @@ test("compress returns a structured repository-scoped compression payload", asyn
       enableLineNumbers: false,
     }) as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        summary: {
-          compressed_file_count: number;
-          total_compressed_line_count: number;
-        };
-        repository: {
-          source_directory_paths: string[];
-          file_canonical_paths: string[];
-        };
-        files: Array<{
-          canonical_path: string;
-          line_number_mode: string;
-          compressed_source_text?: string;
-          compressed_lines: Array<{ display_text: string }>;
-        }>;
-        execution: {
-          code: number;
-          stderr: string;
-        };
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.summary.compressed_file_count, 2);
-    assert.ok((payload.summary.total_compressed_line_count ?? 0) >= 2);
-    assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
-    assert.deepEqual(payload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
-    assert.equal(payload.files[0]?.line_number_mode, "disabled");
-    assert.doesNotMatch(payload.files[1]?.compressed_source_text ?? "", /^\d+:/m);
-    assert.match(payload.files[1]?.compressed_lines[0]?.display_text ?? "", /^export function buildBeta/);
-    assert.equal(payload.execution.code, 0);
-    assert.equal(payload.execution.stderr, "");
+    const content = result.content?.[0]?.text ?? "";
+    assert.match(content, /@@@ src\/alpha\.ts \| typescript/);
+    assert.match(content, /@@@ src\/nested\/beta\.ts \| typescript/);
+    assert.match(content, /^export function buildBeta/m);
+    assert.equal(result.details?.execution.code, 0);
+    assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("files-find returns structured match, code-line, and Doxygen facts", async () => {
+test("files-search returns monolithic search markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
   fs.writeFileSync(samplePath, `/**
@@ -1128,86 +1146,29 @@ export function buildSample(input: string): string {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "files-find", projectBase, {
+    const result = await executeRegisteredTool(pi, "files-search", projectBase, {
       tag: "FUNCTION",
       pattern: "^buildSample$",
       files: ["src/sample.ts", "src/missing.ts"],
       enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        summary: {
-          search_status: string;
-          matched_file_count: number;
-          skipped_file_count: number;
-          total_match_count: number;
-        };
-        repository: {
-          file_canonical_paths: string[];
-        };
-        files: Array<{
-          canonical_path: string;
-          status: string;
-          match_count: number;
-          supported_tags: string[];
-          file_doxygen?: { brief?: string[] };
-          matches: Array<{
-            symbol_name: string;
-            qualified_name: string;
-            symbol_kind: string;
-            line_range: [number, number];
-            code_line_count: number;
-            code_lines: Array<{ source_line_number: number; display_text: string; text: string }>;
-            stripped_source_text?: string;
-            doxygen?: {
-              brief?: string[];
-              params?: Array<{ direction: string; parameter_name?: string; value_type?: string; description?: string }>;
-              returns?: string[];
-              satisfies_requirement_ids?: string[];
-            };
-          }>;
-        }>;
-        execution: {
-          code: number;
-          stderr: string;
-        };
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.summary.search_status, "matched");
-    assert.equal(payload.summary.matched_file_count, 1);
-    assert.equal(payload.summary.skipped_file_count, 1);
-    assert.equal(payload.summary.total_match_count, 1);
-    assert.deepEqual(payload.repository.file_canonical_paths, ["src/sample.ts", "src/missing.ts"]);
-    assert.deepEqual(payload.files.map((file) => file.status), ["matched", "skipped"]);
-    assert.equal(payload.files[0]?.canonical_path, "src/sample.ts");
-    assert.equal(payload.files[0]?.match_count, 1);
-    assert.ok(payload.files[0]?.supported_tags.includes("FUNCTION"));
-    assert.deepEqual(payload.files[0]?.file_doxygen?.brief, ["Sample source file."]);
-    assert.equal(payload.files[0]?.matches[0]?.symbol_name, "buildSample");
-    assert.equal(payload.files[0]?.matches[0]?.qualified_name, "buildSample");
-    assert.equal(payload.files[0]?.matches[0]?.symbol_kind, "FUNCTION");
-    assert.deepEqual(payload.files[0]?.matches[0]?.line_range, [12, 14]);
-    assert.ok((payload.files[0]?.matches[0]?.code_line_count ?? 0) > 0);
-    assert.equal(payload.files[0]?.matches[0]?.code_lines[0]?.source_line_number, 12);
-    assert.match(payload.files[0]?.matches[0]?.code_lines[0]?.display_text ?? "", /^12: export function buildSample/);
-    assert.match(payload.files[0]?.matches[0]?.stripped_source_text ?? "", /^12: export function buildSample/m);
-    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.brief, ["Builds the sample value."]);
-    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.params, [
-      { direction: "in", parameter_name: "input", value_type: "string", description: "Caller-supplied value." },
-    ]);
-    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.returns, ["{string} Upper-cased result."]);
-    assert.deepEqual(payload.files[0]?.matches[0]?.doxygen?.satisfies_requirement_ids, ["REQ-089"]);
-    assert.equal(payload.execution.code, 0);
-    assert.match(payload.execution.stderr, /skipped: src\/missing\.ts: not_found/);
+    const content = result.content?.[0]?.text ?? "";
+    assert.match(content, /### FUNCTION: `buildSample`/);
+    assert.match(content, /> Signature: `export function buildSample\(input: string\): string`/);
+    assert.match(content, /> Lines: 12-14/);
+    assert.match(content, /^12: export function buildSample/m);
+    assert.equal(result.details?.execution.code, 0);
+    assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("find returns a structured repository-scoped construct-search payload", async () => {
+test("search returns monolithic repository-scoped construct-search markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(
     path.join(projectBase, "src", "alpha.ts"),
@@ -1230,63 +1191,120 @@ export function buildAlpha(): number {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "find", projectBase, {
+    const result = await executeRegisteredTool(pi, "search", projectBase, {
       tag: "FUNCTION",
       pattern: "^build",
       enableLineNumbers: false,
     }) as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        summary: {
-          search_status: string;
-          matched_file_count: number;
-          no_match_file_count: number;
-          total_match_count: number;
-        };
-        repository: {
-          source_directory_paths: string[];
-          file_canonical_paths: string[];
-        };
-        files: Array<{
-          canonical_path: string;
-          status: string;
-          matches: Array<{
-            symbol_name: string;
-            code_lines: Array<{ display_text: string }>;
-            stripped_source_text?: string;
-          }>;
-        }>;
-        execution: {
-          code: number;
-          stderr: string;
-        };
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
-    const payload = result.details!;
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(payload)));
-    assert.equal(payload.summary.search_status, "matched");
-    assert.equal(payload.summary.matched_file_count, 1);
-    assert.equal(payload.summary.no_match_file_count, 1);
-    assert.equal(payload.summary.total_match_count, 1);
-    assert.deepEqual(payload.repository.source_directory_paths, ["src"]);
-    assert.deepEqual(payload.repository.file_canonical_paths, ["src/alpha.ts", "src/nested/beta.ts"]);
-    assert.deepEqual(payload.files.map((file) => file.status), ["matched", "no_match"]);
-    assert.equal(payload.files[0]?.matches[0]?.symbol_name, "buildAlpha");
-    assert.match(payload.files[0]?.matches[0]?.code_lines[0]?.display_text ?? "", /^export function buildAlpha/);
-    assert.doesNotMatch(payload.files[0]?.matches[0]?.stripped_source_text ?? "", /^\d+:/m);
-    assert.equal(payload.execution.code, 0);
-    assert.match(payload.execution.stderr, /info: no_match: src\/nested\/beta\.ts/);
+    const content = result.content?.[0]?.text ?? "";
+    assert.match(content, /### FUNCTION: `buildAlpha`/);
+    assert.match(content, /export function buildAlpha/);
+    assert.doesNotMatch(content, /helperBeta/);
+    assert.equal(result.details?.execution.code, 0);
+    assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("path, static-check, git, docs, and worktree tools return structured JSON payloads", async () => {
+test("source-extraction agent tools preserve leading tabs in emitted content", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const samplePath = path.join(projectBase, "src", "sample.go");
+  fs.writeFileSync(samplePath, `package main
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+)
+
+type Runner interface {
+	Run(ctx context.Context) error
+}
+
+type Server struct{}
+
+func (s *Server) Start(ctx context.Context) error {
+	var buffer bytes.Buffer
+	fmt.Println("start", buffer.Len())
+	return nil
+}
+`, "utf8");
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+
+    const filesReferencesResult = await executeRegisteredTool(pi, "files-references", projectBase, {
+      files: ["src/sample.go"],
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number } };
+    };
+    assert.match(filesReferencesResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
+    assert.equal(filesReferencesResult.details?.execution.code, 0);
+
+    const referencesResult = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number } };
+    };
+    assert.match(referencesResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
+    assert.equal(referencesResult.details?.execution.code, 0);
+
+    const filesCompressResult = await executeRegisteredTool(pi, "files-compress", projectBase, {
+      files: ["src/sample.go"],
+      enableLineNumbers: true,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number } };
+    };
+    assert.match(filesCompressResult.content?.[0]?.text ?? "", /\d+: \t"context"/);
+    assert.equal(filesCompressResult.details?.execution.code, 0);
+
+    const compressResult = await executeRegisteredTool(pi, "compress", projectBase, {
+      enableLineNumbers: true,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number } };
+    };
+    assert.match(compressResult.content?.[0]?.text ?? "", /\d+: \t"context"/);
+    assert.equal(compressResult.details?.execution.code, 0);
+
+    const filesSearchResult = await executeRegisteredTool(pi, "files-search", projectBase, {
+      tag: "METHOD|FUNCTION",
+      pattern: "^Start$",
+      files: ["src/sample.go"],
+      enableLineNumbers: true,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number } };
+    };
+    assert.match(filesSearchResult.content?.[0]?.text ?? "", /\d+: \tfmt\.Println\("start", buffer\.Len\(\)\)/);
+    assert.equal(filesSearchResult.details?.execution.code, 0);
+
+    const searchResult = await executeRegisteredTool(pi, "search", projectBase, {
+      tag: "METHOD|FUNCTION",
+      pattern: "^Start$",
+      enableLineNumbers: true,
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number } };
+    };
+    assert.match(searchResult.content?.[0]?.text ?? "", /\d+: \tfmt\.Println\("start", buffer\.Len\(\)\)/);
+    assert.equal(searchResult.details?.execution.code, 0);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("static-check tools return monolithic text payloads with minimal execution details", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
     staticCheck: {
-      TypeScript: [{ module: "Dummy" }],
+      TypeScript: createStaticCheckLanguageConfig([{ module: "Dummy" }], "enable"),
     },
   });
   fs.writeFileSync(path.join(projectBase, "src", "check.ts"), "export const VALUE = 1;\n", "utf8");
@@ -1298,97 +1316,46 @@ test("path, static-check, git, docs, and worktree tools return structured JSON p
     const pi = createFakePi();
     piUsereqExtension(pi);
 
-    const gitPathResult = await executeRegisteredTool(pi, "git-path", projectBase) as {
-      content?: Array<{ text?: string }>;
-      details?: {
-        result: { path_value: string; path_present: boolean };
-        execution: { code: number };
-      };
-    };
-    assert.deepEqual(JSON.parse(gitPathResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(gitPathResult.details)));
-    assert.equal(gitPathResult.details?.result.path_value, projectBase);
-    assert.equal(gitPathResult.details?.result.path_present, true);
-    assert.equal(gitPathResult.details?.execution.code, 0);
-
-    const basePathResult = await executeRegisteredTool(pi, "get-base-path", projectBase) as {
-      details?: {
-        result: { path_value: string };
-        execution: { code: number };
-      };
-    };
-    assert.equal(basePathResult.details?.result.path_value, projectBase);
-    assert.equal(basePathResult.details?.execution.code, 0);
-
-    const gitCheckResult = await executeRegisteredTool(pi, "git-check", projectBase) as {
-      details?: { result: { git_path_present: boolean; status: string }; execution: { code: number } };
-    };
-    assert.equal(gitCheckResult.details?.result.git_path_present, true);
-    assert.equal(gitCheckResult.details?.result.status, "clean");
-    assert.equal(gitCheckResult.details?.execution.code, 0);
-
-    const docsCheckResult = await executeRegisteredTool(pi, "docs-check", projectBase) as {
-      details?: {
-        summary: { missing_file_count: number; present_file_count: number };
-        files: Array<{ file_name: string; status: string; prompt_command: string }>;
-        execution: { code: number };
-      };
-    };
-    assert.equal(docsCheckResult.details?.summary.missing_file_count, 0);
-    assert.equal(docsCheckResult.details?.summary.present_file_count, 3);
-    assert.deepEqual(docsCheckResult.details?.files.map((file) => file.file_name), ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"]);
-    assert.ok(docsCheckResult.details?.files.every((file) => file.status === "present"));
-    assert.equal(docsCheckResult.details?.execution.code, 0);
-
     const filesStaticCheckResult = await executeRegisteredTool(pi, "files-static-check", projectBase, {
       files: ["src/check.ts", "src/missing.ts"],
     }) as {
-      details?: {
-        summary: { selected_file_count: number; skipped_file_count: number; total_configured_checker_count: number };
-        files: Array<{ canonical_path: string; language_name?: string; status: string; configured_checker_modules: string[] }>;
-        execution: { code: number };
-      };
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
-    assert.equal(filesStaticCheckResult.details?.summary.selected_file_count, 1);
-    assert.equal(filesStaticCheckResult.details?.summary.skipped_file_count, 1);
-    assert.equal(filesStaticCheckResult.details?.summary.total_configured_checker_count, 1);
-    assert.equal(filesStaticCheckResult.details?.files[0]?.canonical_path, "src/check.ts");
-    assert.equal(filesStaticCheckResult.details?.files[0]?.language_name, "TypeScript");
-    assert.deepEqual(filesStaticCheckResult.details?.files[0]?.configured_checker_modules, ["Dummy"]);
-    assert.equal(filesStaticCheckResult.details?.files[1]?.status, "skipped");
+    assert.match(filesStaticCheckResult.content?.[0]?.text ?? "", /src\/missing\.ts/);
     assert.equal(filesStaticCheckResult.details?.execution.code, 0);
+    assert.ok(filesStaticCheckResult.details?.execution.stderr_lines?.some((line) => /src\/missing\.ts/.test(line)));
 
     const staticCheckResult = await executeRegisteredTool(pi, "static-check", projectBase) as {
-      details?: {
-        summary: { selected_file_count: number };
-        files: Array<{ canonical_path: string; status: string }>;
-        execution: { code: number };
-      };
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
-    assert.equal(staticCheckResult.details?.summary.selected_file_count, 1);
-    assert.equal(staticCheckResult.details?.files[0]?.canonical_path, "src/check.ts");
-    assert.equal(staticCheckResult.details?.files[0]?.status, "selected");
+    assert.equal(staticCheckResult.content?.[0]?.text ?? "", "");
     assert.equal(staticCheckResult.details?.execution.code, 0);
+    assert.deepEqual(staticCheckResult.details?.execution.stderr_lines, undefined);
 
-    const gitWtNameResult = await executeRegisteredTool(pi, "git-wt-name", projectBase) as {
-      details?: { result: { worktree_name?: string }; execution: { code: number } };
+    fs.writeFileSync(
+      getProjectConfigPath(projectBase),
+      `${JSON.stringify({
+        ...getDefaultConfig(projectBase),
+        "docs-dir": DEFAULT_DOCS_DIR,
+        "tests-dir": "tests",
+        "src-dir": ["src"],
+        "static-check": {
+          TypeScript: createStaticCheckLanguageConfig([{ module: "Dummy" }], "disable"),
+        },
+      }, null, 2)}\n`,
+      "utf8",
+    );
+    const disabledFilesStaticCheckResult = await executeRegisteredTool(pi, "files-static-check", projectBase, {
+      files: ["src/check.ts"],
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
-    const wtName = gitWtNameResult.details?.result.worktree_name ?? "";
-    assert.match(wtName, /^useReq-/);
-    assert.equal(gitWtNameResult.details?.execution.code, 0);
-
-    const gitWtCreateResult = await executeRegisteredTool(pi, "git-wt-create", projectBase, { wtName }) as {
-      details?: { result: { worktree_name: string; worktree_path: string }; execution: { code: number } };
-    };
-    assert.equal(gitWtCreateResult.details?.result.worktree_name, wtName);
-    assert.match(gitWtCreateResult.details?.result.worktree_path ?? "", new RegExp(`${wtName}$`));
-    assert.equal(gitWtCreateResult.details?.execution.code, 0);
-
-    const gitWtDeleteResult = await executeRegisteredTool(pi, "git-wt-delete", projectBase, { wtName }) as {
-      details?: { result: { worktree_name: string; worktree_path: string }; execution: { code: number } };
-    };
-    assert.equal(gitWtDeleteResult.details?.result.worktree_name, wtName);
-    assert.match(gitWtDeleteResult.details?.result.worktree_path ?? "", new RegExp(`${wtName}$`));
-    assert.equal(gitWtDeleteResult.details?.execution.code, 0);
+    assert.equal(disabledFilesStaticCheckResult.content?.[0]?.text ?? "", "");
+    assert.equal(disabledFilesStaticCheckResult.details?.execution.code, 0);
+    assert.deepEqual(disabledFilesStaticCheckResult.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -1407,6 +1374,57 @@ test("configuration menu saves updated docs-dir in project config", async () => 
   assert.equal(config["docs-dir"], "docs/custom");
 });
 
+test("configuration menu persists trailing-slash-free relative directory values", async () => {
+  const cwd = createTempDir("pi-usereq-menu-path-contracts-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "docs-dir",
+      "tests-dir",
+      "src-dir",
+      "add-src-dir-entry",
+      "Save and close",
+      "Save and close",
+    ],
+    inputs: ["docs/custom/", "tests/custom/", "src/custom/"],
+  });
+
+  await command!.handler("", ctx);
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(config["docs-dir"], "docs/custom");
+  assert.equal(config["tests-dir"], "tests/custom");
+  assert.deepEqual(config["src-dir"], ["src", "src/custom"]);
+});
+
+test("configuration menu forces worktree rows off and dim when auto git commit is disabled", async () => {
+  const cwd = createTempDir("pi-usereq-menu-worktree-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["Auto git commit", "Git worktree", "Worktree prefix", "Save and close"],
+    inputs: ["custom-prefix-"],
+  });
+
+  await command!.handler("", ctx);
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const defaultConfig = getDefaultConfig(cwd);
+  const renderedLockedMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
+  assert.equal(config.AUTO_GIT_COMMIT, "disable");
+  assert.equal(config.GIT_WORKTREE_ENABLED, "disable");
+  assert.equal(config.GIT_WORKTREE_PREFIX, defaultConfig.GIT_WORKTREE_PREFIX);
+  assert.match(renderedLockedMenu, /<dim>Git worktree/);
+  assert.match(renderedLockedMenu, /<dim>Worktree prefix/);
+});
+
 test("configuration menu omits prompt-delivery controls and persisted config omits removed runtime fields", async () => {
   const cwd = createTempDir("pi-usereq-menu-current-session-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
@@ -1419,11 +1437,8 @@ test("configuration menu omits prompt-delivery controls and persisted config omi
   await command!.handler("", ctx);
 
   const menuItems = ctx.__state.selectCalls[0]?.items ?? [];
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(menuItems.some((item) => item.includes("reset-context")), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(config, "reset-context"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(config, "base-path"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(config, "git-path"), false);
+  assert.equal(fs.existsSync(getProjectConfigPath(cwd)), false);
 });
 
 test("configuration menus expose show-config ordering and omit overview or notification-reference rows", async () => {
@@ -1435,26 +1450,33 @@ test("configuration menus expose show-config ordering and omit overview or notif
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
-  const ctx = createFakeCtx(cwd, { selects: ["show-config", "notifications", "Save and close", "Save and close"] });
+  const ctx = createFakeCtx(cwd, { selects: ["notifications", "Save and close", "Save and close"] });
 
   await command!.handler("", ctx);
 
   const renderedMenu = (ctx.__state.customRenderLines[0] ?? []).join("\n");
+  const renderedNotificationsMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
   assert.deepEqual(ctx.__state.selectCalls[0]?.items ?? [], [
     "Document directory",
     "Source-code directories",
     "Unit tests directory",
+    "Auto git commit",
+    "Git worktree",
+    "Worktree prefix",
     "Language static code checkers",
     "Enable tools",
     "Notifications",
+    "Debug",
     "Show configuration",
     "Reset defaults",
-    "Save and close",
   ]);
   assert.ok(renderedMenu.includes(buildExpectedShowConfigPath(cwd)));
   assert.ok(renderedMenu.includes("notification:off • sound:none • pushover:off"));
+  assert.ok(renderedMenu.includes("disable"));
   assert.doesNotMatch(renderedMenu, /beep:/);
-  assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
+  assert.match(renderedNotificationsMenu, /<dim>Enable pushover/);
+  assert.match(renderedNotificationsMenu, /<dim>off<\/dim>/);
+  assert.deepEqual(ctx.__state.selectCalls[1]?.items ?? [], [
     "Enable notification",
     "Notification events",
     "Notify command",
@@ -1472,8 +1494,348 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "Pushover User Key/Delivery Group Key",
     "Pushover Token/API Token Key",
     "Reset defaults",
-    "Save and close",
   ]);
+});
+
+test("show configuration saves pending config, closes the menu, and writes the persisted project config file text into the editor", async () => {
+  const cwd = createTempDir("pi-usereq-menu-show-config-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["docs-dir", "show-config"],
+    inputs: ["docs/custom"],
+  });
+
+  await command!.handler("", ctx);
+
+  const persistedText = fs.readFileSync(getProjectConfigPath(cwd), "utf8");
+  assert.equal(ctx.__state.editorText, persistedText);
+  assert.match(ctx.__state.editorText, /"docs-dir": "docs\/custom"/);
+  assert.equal(
+    ctx.__state.selectCalls.filter((call) => call.title === "pi-usereq").length,
+    2,
+  );
+});
+
+test("descendant configuration menus end with Reset defaults only", async () => {
+  const cwd = createTempDir("pi-usereq-menu-terminal-rows-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "notifications",
+      "Enable sound",
+      "Save and close",
+      "Pushover priority",
+      "Save and close",
+      "Save and close",
+      "Enable tools",
+      "Enable tools",
+      "Save and close",
+      "Save and close",
+      "Debug",
+      "Save and close",
+      "Language static code checkers",
+      "Add static code checker",
+      "Save and close",
+      "Remove static code checker",
+      "Save and close",
+      "Save and close",
+      "Source-code directories",
+      "Remove source-code directory",
+      "Save and close",
+      "Save and close",
+      "Save and close",
+    ],
+  });
+
+  await command!.handler("", ctx);
+
+  const getTerminalRows = (title: string, marker?: string): string[] => {
+    const call = ctx.__state.selectCalls.find((entry) => entry.title === title && (marker === undefined || entry.items.includes(marker)));
+    assert.ok(call, `missing menu ${title}`);
+    return call.items.slice(-1);
+  };
+
+  assert.deepEqual(getTerminalRows("Enable sound", "high"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("Pushover priority", "High"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("Enable tools", "static-check"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("Debug", "Log on status"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("static-check language", "Python"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("Remove static code checker"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("Remove source-code directory", "src"), ["Reset defaults"]);
+});
+
+test("debug menu dims locked rows and persists debug settings with focus-preserving re-renders", async () => {
+  const cwd = createTempDir("pi-usereq-menu-debug-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: [
+      "Debug",
+      "Debug",
+      "Log file",
+      "Log on status",
+      "any",
+      "Status changes",
+      "Workflow events",
+      "files-tokens",
+      "req-analyze",
+      "Save and close",
+      "Save and close",
+    ],
+    inputs: ["logs/debug-output.json"],
+  });
+
+  await command!.handler("", ctx);
+
+  const renderedInitialDebugMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
+  const persistedConfig = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const debugCalls = ctx.__state.selectCalls.filter((call) => call.title === "Debug");
+  assert.match(renderedInitialDebugMenu, /<dim>Log file/);
+  assert.match(renderedInitialDebugMenu, /<dim>Log on status/);
+  assert.match(renderedInitialDebugMenu, /<dim>Status changes/);
+  assert.match(renderedInitialDebugMenu, /<dim>Workflow events/);
+  assert.match(renderedInitialDebugMenu, /<dim>compress/);
+  assert.equal(persistedConfig.DEBUG_ENABLED, "enable");
+  assert.equal(persistedConfig.DEBUG_LOG_FILE, "logs/debug-output.json");
+  assert.equal(persistedConfig.DEBUG_STATUS_CHANGES, "enable");
+  assert.equal(persistedConfig.DEBUG_WORKFLOW_EVENTS, "enable");
+  assert.equal(persistedConfig.DEBUG_LOG_ON_STATUS, "any");
+  assert.deepEqual(persistedConfig.DEBUG_ENABLED_TOOLS, ["files-tokens"]);
+  assert.deepEqual(persistedConfig.DEBUG_ENABLED_PROMPTS, ["req-analyze"]);
+  assert.equal(debugCalls[1]?.selectedChoiceId, "debug-enabled");
+  assert.equal(debugCalls[2]?.selectedChoiceId, "debug-log-file");
+  assert.equal(debugCalls[3]?.selectedChoiceId, "debug-log-on-status");
+  assert.equal(debugCalls[4]?.selectedChoiceId, "debug-status-changes");
+  assert.equal(debugCalls[5]?.selectedChoiceId, "debug-workflow-events");
+  assert.equal(debugCalls[6]?.selectedChoiceId, "debug-tool:files-tokens");
+  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-prompt:req-analyze");
+
+  const resetCtx = createFakeCtx(cwd, {
+    selects: ["Debug", "Reset defaults", "Approve reset", "Save and close"],
+  });
+  await command!.handler("", resetCtx);
+  const resetConfig = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(resetConfig.DEBUG_ENABLED, "disable");
+  assert.equal(resetConfig.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
+  assert.equal(resetConfig.DEBUG_STATUS_CHANGES, "disable");
+  assert.equal(resetConfig.DEBUG_WORKFLOW_EVENTS, DEFAULT_DEBUG_WORKFLOW_EVENTS);
+  assert.equal(resetConfig.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
+  assert.deepEqual(resetConfig.DEBUG_ENABLED_TOOLS, []);
+  assert.deepEqual(resetConfig.DEBUG_ENABLED_PROMPTS, []);
+});
+
+test("debug menu rows derive from canonical tool and prompt inventories", async () => {
+  const cwd = createTempDir("pi-usereq-menu-debug-inventory-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["Debug", "Save and close"]
+  });
+
+  await command!.handler("", ctx);
+
+  assert.deepEqual(ctx.__state.selectCalls[1]?.items ?? [], [
+    "Debug",
+    "Log file",
+    "Log on status",
+    "Status changes",
+    "Workflow events",
+    ...[
+      ...PI_USEREQ_CUSTOM_TOOL_NAMES,
+      ...PI_USEREQ_EMBEDDED_TOOL_NAMES,
+    ].sort(comparePiUsereqStartupToolNames),
+    ...DEBUG_PROMPT_NAMES,
+    "Reset defaults",
+  ]);
+  assert.deepEqual(
+    DEBUG_PROMPT_NAMES,
+    PROMPT_COMMAND_NAMES.map((promptName) => `req-${promptName}`),
+  );
+});
+
+test("tool debug logging honors global enablement and workflow-status filters", async () => {
+  const idleBase = createTempDir("pi-usereq-tool-debug-idle-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(idleBase)), { recursive: true });
+  fs.writeFileSync(
+    getProjectConfigPath(idleBase),
+    `${JSON.stringify({
+      ...getDefaultConfig(idleBase),
+      DEBUG_ENABLED: "enable",
+      DEBUG_LOG_FILE: "tool-debug.json",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_TOOLS: ["bash"],
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  const idlePi = createFakePi();
+  piUsereqExtension(idlePi);
+  const idleCtx = createFakeCtx(idleBase);
+  await idlePi.emit("session_start", { reason: "startup" }, idleCtx);
+  await idlePi.emit("tool_result", {
+    toolName: "bash",
+    input: { command: "echo idle" },
+    content: [{ type: "text", text: "idle" }],
+    details: { stdout: "idle" },
+    isError: false,
+  }, idleCtx);
+  const idleLog = JSON.parse(fs.readFileSync(path.join(idleBase, "tool-debug.json"), "utf8"));
+  assert.equal(idleLog.length, 1);
+  assert.equal(idleLog[0].category, "tool");
+  assert.equal(idleLog[0].name, "bash");
+  assert.equal(idleLog[0].workflow_state, "idle");
+  assert.deepEqual(idleLog[0].input, { command: "echo idle" });
+  assert.deepEqual(idleLog[0].result, {
+    content: [{ type: "text", text: "idle" }],
+    details: { stdout: "idle" },
+  });
+  assert.equal(idleLog[0].is_error, false);
+
+  const runningFixture = initFixtureRepo();
+  writeProjectConfigOverrides(runningFixture.projectBase, {
+    GIT_WORKTREE_ENABLED: "disable",
+    DEBUG_ENABLED: "enable",
+    DEBUG_LOG_FILE: "tool-debug.json",
+    DEBUG_LOG_ON_STATUS: "running",
+    DEBUG_ENABLED_TOOLS: ["files-tokens"],
+  });
+  const runningPi = createFakePi();
+  piUsereqExtension(runningPi);
+  const runningCtx = createFakeCtx(runningFixture.projectBase);
+  await runningPi.emit("session_start", { reason: "startup" }, runningCtx);
+  await runningPi.emit("tool_result", {
+    toolName: "files-tokens",
+    input: { files: ["src/fixture_python.py"] },
+    content: [{ type: "text", text: "idle" }],
+    details: { summary: { counted_file_count: 1 } },
+    isError: false,
+  }, runningCtx);
+  assert.equal(fs.existsSync(path.join(runningFixture.projectBase, "tool-debug.json")), false);
+  const runningCommand = runningPi.commands.get("req-implement");
+  assert.ok(runningCommand);
+  await runningCommand!.handler("debug tools", runningCtx);
+  await runningPi.emit("tool_result", {
+    toolName: "files-tokens",
+    input: { files: ["src/fixture_python.py"] },
+    content: [{ type: "text", text: "running" }],
+    details: { summary: { counted_file_count: 1 } },
+    isError: false,
+  }, runningCtx);
+  const runningLog = JSON.parse(fs.readFileSync(path.join(runningFixture.projectBase, "tool-debug.json"), "utf8"));
+  assert.equal(runningLog.length, 1);
+  assert.equal(runningLog[0].workflow_state, "running");
+  assert.equal(runningLog[0].name, "files-tokens");
+
+  const disabledBase = createTempDir("pi-usereq-tool-debug-disabled-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(disabledBase)), { recursive: true });
+  fs.writeFileSync(
+    getProjectConfigPath(disabledBase),
+    `${JSON.stringify({
+      ...getDefaultConfig(disabledBase),
+      DEBUG_ENABLED: "disable",
+      DEBUG_LOG_FILE: "tool-debug.json",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_TOOLS: ["bash"],
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  const disabledPi = createFakePi();
+  piUsereqExtension(disabledPi);
+  const disabledCtx = createFakeCtx(disabledBase);
+  await disabledPi.emit("session_start", { reason: "startup" }, disabledCtx);
+  await disabledPi.emit("tool_result", {
+    toolName: "bash",
+    input: { command: "echo disabled" },
+    content: [{ type: "text", text: "disabled" }],
+    details: { stdout: "disabled" },
+    isError: false,
+  }, disabledCtx);
+  assert.equal(fs.existsSync(path.join(disabledBase, "tool-debug.json")), false);
+});
+
+test("prompt debug logging captures failing and successful prompt orchestration entries", async () => {
+  const failingFixture = initFixtureRepo();
+  fs.rmSync(path.join(failingFixture.projectBase, DEFAULT_DOCS_DIR, "WORKFLOW.md"), { force: true });
+  assert.equal(spawnSync("git", ["add", "-A"], { cwd: failingFixture.projectBase, encoding: "utf8" }).status, 0);
+  assert.equal(
+    spawnSync("git", ["commit", "-m", "remove workflow"], { cwd: failingFixture.projectBase, encoding: "utf8" }).status,
+    0,
+  );
+  writeProjectConfigOverrides(failingFixture.projectBase, {
+    DEBUG_ENABLED: "enable",
+    DEBUG_LOG_FILE: "prompt-debug.json",
+    DEBUG_STATUS_CHANGES: "enable",
+    DEBUG_WORKFLOW_EVENTS: "enable",
+    DEBUG_LOG_ON_STATUS: "any",
+    DEBUG_ENABLED_PROMPTS: ["req-change"],
+  });
+  const failingPi = createFakePi();
+  piUsereqExtension(failingPi);
+  const failingCtx = createFakeCtx(failingFixture.projectBase);
+  await failingPi.emit("session_start", { reason: "startup" }, failingCtx);
+  const failingCommand = failingPi.commands.get("req-change");
+  assert.ok(failingCommand);
+  await assert.rejects(async () => {
+    await failingCommand!.handler("debug prompt", failingCtx);
+  }, /Git status unclear|WORKFLOW\.md/);
+  const failingLog = JSON.parse(fs.readFileSync(path.join(failingFixture.projectBase, "prompt-debug.json"), "utf8"));
+  assert.ok(failingLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "error"));
+
+  const successFixture = initFixtureRepo();
+  writeProjectConfigOverrides(successFixture.projectBase, {
+    DEBUG_ENABLED: "enable",
+    DEBUG_LOG_FILE: "prompt-debug.json",
+    DEBUG_STATUS_CHANGES: "enable",
+    DEBUG_WORKFLOW_EVENTS: "enable",
+    DEBUG_LOG_ON_STATUS: "any",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  const successPi = createFakePi();
+  piUsereqExtension(successPi);
+  const successCtx = createFakeCtx(successFixture.projectBase);
+  await successPi.emit("session_start", { reason: "startup" }, successCtx);
+  const successCommand = successPi.commands.get("req-implement");
+  assert.ok(successCommand);
+  await successCommand!.handler("debug prompt", successCtx);
+  const promptText = String(successPi.sentUserMessages.at(-1)?.content ?? "");
+  const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+  assert.ok(worktreeMatch, promptText);
+  const executionBasePath = worktreeMatch?.[2] ?? "";
+  await successPi.emit("before_agent_start", {}, successCtx);
+  await successPi.emit("agent_start", {}, successCtx);
+  fs.writeFileSync(path.join(executionBasePath, "src", "debug.ts"), "export const debug = true;\n", "utf8");
+  assert.equal(spawnSync("git", ["add", "src/debug.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+  const worktreeCommit = spawnSync("git", ["commit", "-m", "debug prompt"], {
+    cwd: executionBasePath,
+    encoding: "utf8",
+  });
+  assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+  await successPi.emit("agent_end", {
+    messages: [{ role: "assistant", stopReason: "end_turn" }],
+  }, successCtx);
+  const successLog = JSON.parse(fs.readFileSync(path.join(successFixture.projectBase, "prompt-debug.json"), "utf8"));
+  assert.ok(successLog.some((entry: any) => entry.action === "required_docs_check" && entry.result?.success === true));
+  assert.ok(successLog.some((entry: any) => entry.action === "worktree_create" && entry.result?.success === true));
+  assert.ok(successLog.some((entry: any) => entry.action === "workflow_activation" && entry.result?.success === true));
+  assert.ok(successLog.some((entry: any) => entry.action === "workflow_closure" && entry.result?.should_finalize_matched_success === true));
+  assert.ok(successLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
+  assert.ok(successLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
+  assert.ok(successLog.some((entry: any) => entry.action === "worktree_delete" && entry.result?.success === true));
+  assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "merging"));
+  assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "idle"));
 });
 
 test("notifications menu preserves focus on toggled and edited rows", async () => {
@@ -1509,7 +1871,6 @@ test("notifications menu preserves focus on toggled and edited rows", async () =
     "Prompt interrupted",
     "Prompt failed",
     "Reset defaults",
-    "Save and close",
   ]);
   assert.equal(notificationEventCalls[0]?.selectedChoiceId, "notify-on-completed");
   assert.equal(notificationEventCalls[1]?.selectedChoiceId, "notify-on-failed");
@@ -1530,6 +1891,7 @@ test("notifications reset defaults preserves non-notification settings", async (
       "Enable sound",
       "high",
       "Reset defaults",
+      "Approve reset",
       "Save and close",
       "Save and close",
     ],
@@ -1559,6 +1921,7 @@ test("top-level reset defaults restores all configuration values", async () => {
       "Enable notification",
       "Save and close",
       "Reset defaults",
+      "Approve reset",
       "Save and close",
     ],
     inputs: ["docs/custom"],
@@ -1605,23 +1968,1926 @@ test("configuration menus reuse CLI settings theme semantics", async () => {
   assert.match(renderedMenu, /<accent>pi-usereq\/docs<\/accent>/);
   assert.match(renderedMenu, /<muted>tests<\/muted>/);
   assert.match(renderedMenu, /<dim>/);
-  assert.deepEqual([...usedColors].sort(), ["accent", "dim", "muted", "warning"]);
+  assert.deepEqual([...usedColors].sort(), ["accent", "dim", "muted"]);
 });
 
 test("prompt commands use the current session by default", async () => {
-  const cwd = createTempDir("pi-usereq-prompt-current-");
-  const pi = createFakePi();
-  piUsereqExtension(pi);
-  const command = pi.commands.get("req-analyze");
-  assert.ok(command);
-  const ctx = createFakeCtx(cwd);
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const command = pi.commands.get("req-analyze");
+    assert.ok(command);
+    const ctx = createFakeCtx(projectBase);
 
-  await command!.handler("Inspect src/index.ts for prompt coverage", ctx);
+    await command!.handler("Inspect src/index.ts for prompt coverage", ctx);
 
-  assert.equal(ctx.__state.waitForIdleCalls, 0);
-  assert.equal(ctx.__state.newSessions.length, 0);
-  assert.equal(pi.sentUserMessages.length, 1);
-  assert.match(String(pi.sentUserMessages[0]?.content), /Inspect src\/index\.ts for prompt coverage/);
+    assert.equal(ctx.__state.waitForIdleCalls, 0);
+    assert.equal(ctx.__state.newSessions.length, 0);
+    assert.equal(pi.sentUserMessages.length, 1);
+    assert.match(String(pi.sentUserMessages[0]?.content), /Inspect src\/index\.ts for prompt coverage/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("prompt commands skip worktree creation when auto git commit is disabled", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      AUTO_GIT_COMMIT: "disable",
+      GIT_WORKTREE_ENABLED: "enable",
+    });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const command = pi.commands.get("req-change");
+    assert.ok(command);
+    const ctx = createFakeCtx(projectBase);
+
+    await command!.handler("Adjust docs", ctx);
+
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const expectedBasePath = buildExpectedFakeBasePath(projectBase).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.doesNotMatch(promptText, /created worktree/);
+    assert.match(
+      promptText,
+      new RegExp(`worktree orchestration is disabled and context-path remains \`${expectedBasePath}\``),
+    );
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("prompt commands capture checking before handoff and running at prompt injection", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  let checkingStatus = "";
+  let handoffStatus = "";
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const originalSendUserMessage = pi.sendUserMessage.bind(pi);
+    pi.sendUserMessage = (content: unknown, options?: unknown) => {
+      handoffStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
+      originalSendUserMessage(content, options);
+    };
+    setPromptCommandPostCreateHookForTests(() => {
+      checkingStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
+    });
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.equal(
+      checkingStatus,
+      buildExpectedFakeStatusText({
+        workflowState: "checking",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+    assert.equal(
+      handoffStatus,
+      buildExpectedFakeStatusText({
+        workflowState: "checking",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "running",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+  } finally {
+    setPromptCommandPostCreateHookForTests(undefined);
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("prompt commands reject non-idle workflow state before starting a new orchestration", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "running",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+
+    await assert.rejects(
+      pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx),
+      /expected idle/,
+    );
+    assert.equal(pi.sentUserMessages.length, 1);
+    assert.ok(ctx.__state.notifications.some((entry) => /expected idle/.test(entry.message)));
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "running",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "idle",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+      }),
+    );
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("prompt commands abort when git validation fails", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    fs.writeFileSync(path.join(projectBase, "DIRTY.txt"), "dirty\n", "utf8");
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await assert.rejects(
+      pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx),
+      /ERROR: Git status unclear!/,
+    );
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.ok(ctx.__state.notifications.some((entry) => /ERROR: Git status unclear!/.test(entry.message)));
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("prompt commands enforce the documented required-doc matrix", async () => {
+  const { projectBase } = initFixtureRepo({
+    fixtures: [],
+    docs: {
+      "REQUIREMENTS.md": "# Requirements\n",
+    },
+  });
+  const previousCwd = process.cwd();
+  try {
+    const worktreeParentPath = path.dirname(projectBase);
+    const initialEntries = new Set(fs.readdirSync(worktreeParentPath));
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+
+    await assert.rejects(
+      pi.commands.get("req-change")!.handler("Adjust docs", ctx),
+      /WORKFLOW\.md/,
+    );
+    const createdWorktreeEntries = fs.readdirSync(worktreeParentPath)
+      .filter((entry) => !initialEntries.has(entry))
+      .filter((entry) => /^PI-useReq-/.test(entry));
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.deepEqual(createdWorktreeEntries, []);
+    assert.ok(ctx.__state.notifications.some((entry) => /WORKFLOW\.md/.test(entry.message)));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-enabled prompt commands merge successful runs, restore base-path, and delete the worktree", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    const recordedStatuses: string[] = [];
+    const originalSetStatus = ctx.ui.setStatus.bind(ctx.ui);
+    ctx.ui.setStatus = (key: string, value?: string) => {
+      if (key === "pi-usereq" && value !== undefined) {
+        recordedStatuses.push(value);
+      }
+      originalSetStatus(key, value);
+    };
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.match(worktreeName, /^PI-useReq-/);
+    assert.ok(fs.existsSync(executionBasePath));
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(ctx.cwd, executionBasePath);
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
+
+    await pi.emit("before_agent_start", {}, ctx);
+    assert.equal(process.cwd(), executionBasePath);
+    const filesTokensTool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "files-tokens");
+    assert.ok(filesTokensTool?.execute, "missing files-tokens execute handler");
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "tool-relative.ts"), "export const TOOL_RELATIVE = 1;\n", "utf8");
+    const toolResult = await filesTokensTool.execute!("tool-call-id", { files: ["src/tool-relative.ts"] }, undefined, undefined, ctx) as {
+      content?: Array<{ type?: string; text?: string }>;
+    };
+    assert.match(toolResult.content?.[0]?.text ?? "", /tool-relative\.ts/);
+    await pi.emit("agent_start", {}, ctx);
+    fs.writeFileSync(path.join(executionBasePath, "src", "orchestrated.ts"), "export const ORCHESTRATED = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/orchestrated.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(commit.status, 0, commit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "orchestrated.ts")));
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><warning>idle<\/warning>/);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies prompt-command bootstrap ignores stale deleted-worktree session metadata on later commands.
+ * @details Simulates the `/tmp/debug.json` follow-up failure mode: one successful worktree-backed `req-change` run restores `base-path` and deletes its worktree, then a later `req-change` invocation receives a stale command context whose `cwd` and session getters still point at the removed execution worktree. The test proves command bootstrap MUST discard deleted-worktree cwd/session residue, prepare a fresh worktree with a new identifier, and complete the second successful run without reusing the removed execution path.
+ * @return {Promise<void>} Promise resolved after two successful prompt-command runs complete.
+ * @throws {AssertionError} Throws when the second command aborts with the canonical git-status preflight error or reuses the deleted worktree context.
+ * @satisfies REQ-200, REQ-206, REQ-208, REQ-219, REQ-257
+ */
+test("prompt-command bootstrap ignores stale deleted-worktree session metadata on later commands", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const firstPromptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const firstWorktreeMatch = firstPromptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(firstWorktreeMatch, firstPromptText);
+    const firstWorktreeName = firstWorktreeMatch?.[1] ?? "";
+    const firstExecutionBasePath = firstWorktreeMatch?.[2] ?? "";
+    const firstExecutionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(firstExecutionSessionFile, "");
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(firstExecutionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(firstExecutionBasePath, "src", "bootstrap-first.ts"), "export const BOOTSTRAP_FIRST = 1;\n", "utf8");
+    assert.equal(
+      spawnSync("git", ["add", "src/bootstrap-first.ts"], {
+        cwd: firstExecutionBasePath,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    const firstCommit = spawnSync("git", ["commit", "-m", "bootstrap first"], {
+      cwd: firstExecutionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(firstCommit.status, 0, firstCommit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(fs.existsSync(firstExecutionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${firstWorktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+
+    ctx.cwd = firstExecutionBasePath;
+    ctx.sessionManager.getCwd = () => firstExecutionBasePath;
+    ctx.sessionManager.getSessionFile = () => firstExecutionSessionFile;
+    ctx.sessionManager.getSessionDir = () => path.dirname(firstExecutionSessionFile);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs again", ctx);
+    const secondPromptText = String(pi.sentUserMessages[1]?.content ?? "");
+    const secondWorktreeMatch = secondPromptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(secondWorktreeMatch, secondPromptText);
+    const secondWorktreeName = secondWorktreeMatch?.[1] ?? "";
+    const secondExecutionBasePath = secondWorktreeMatch?.[2] ?? "";
+
+    assert.notEqual(secondWorktreeName, firstWorktreeName);
+    assert.notEqual(secondExecutionBasePath, firstExecutionBasePath);
+    assert.equal(process.cwd(), secondExecutionBasePath);
+    assert.equal(ctx.cwd, secondExecutionBasePath);
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(secondExecutionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(secondExecutionBasePath, "src", "bootstrap-second.ts"), "export const BOOTSTRAP_SECOND = 1;\n", "utf8");
+    assert.equal(
+      spawnSync("git", ["add", "src/bootstrap-second.ts"], {
+        cwd: secondExecutionBasePath,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    const secondCommit = spawnSync("git", ["commit", "-m", "bootstrap second"], {
+      cwd: secondExecutionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(secondCommit.status, 0, secondCommit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(fs.existsSync(secondExecutionBasePath), false);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "bootstrap-first.ts")));
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "bootstrap-second.ts")));
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${secondWorktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed finalization transitions through merging, error, and idle when merge fails", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    const recordedStatuses: string[] = [];
+    const originalSetStatus = ctx.ui.setStatus.bind(ctx.ui);
+    ctx.ui.setStatus = (key: string, value?: string) => {
+      if (key === "pi-usereq" && value !== undefined) {
+        recordedStatuses.push(value);
+      }
+      originalSetStatus(key, value);
+    };
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    fs.writeFileSync(path.join(projectBase, "divergent.txt"), "root\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "divergent.txt"], { cwd: projectBase, encoding: "utf8" }).status, 0);
+    const rootCommit = spawnSync("git", ["commit", "-m", "root change"], { cwd: projectBase, encoding: "utf8" });
+    assert.equal(rootCommit.status, 0, rootCommit.stderr);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "merge-failed.ts"), "export const MERGE_FAILED = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/merge-failed.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), true);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "merge-failed.ts")), false);
+    assert.ok(fs.existsSync(path.join(projectBase, "divergent.txt")));
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><error>\u001b\[5merror\u001b\[25m<\/error>/.test(status)));
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><warning>idle<\/warning>/);
+    assert.ok(ctx.__state.notifications.some((entry) => /Fast-forward merge failed/.test(entry.message)));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-enabled prompt commands honor overridden worktree prefixes", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_PREFIX: "custom-prefix-" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    assert.match(worktreeMatch?.[1] ?? "", /^custom-prefix-/);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed prompt failures skip merge, restore base-path, and retain worktree", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    await pi.emit("before_agent_start", {}, ctx);
+    assert.equal(process.cwd(), executionBasePath);
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "failed.ts"), "export const FAILED = 1;\n", "utf8");
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, ctx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), true);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "failed.ts")), false);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(ctx.__state.notifications.some((entry) => entry.level === "error"
+      && /Prompt closure retained worktree .* after failed outcome\./.test(entry.message)));
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "idle",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed prompt commands use replacement-session callbacks for prompt dispatch and restore base-path after merge", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const originalSessionFile = ctx.sessionManager.getSessionFile();
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    let activeSessionCtx: any = ctx;
+    ctx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const result = await originalSwitchSession(sessionPath);
+      const replacementCwd = readFakeSessionFileCwd(sessionPath, projectBase);
+      const replacementCtx = {
+        ...ctx,
+        cwd: replacementCwd,
+        sessionManager: {
+          ...ctx.sessionManager,
+          getCwd: () => replacementCwd,
+          getSessionFile: () => sessionPath,
+        },
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          pi.sentUserMessages.push({ content, options: sendOptions });
+        },
+      };
+      activeSessionCtx = replacementCtx;
+      if (options?.withSession) {
+        process.chdir(replacementCwd);
+        await options.withSession(replacementCtx);
+        ctx.cwd = projectBase;
+        ctx.sessionManager.getSessionFile = () => originalSessionFile;
+        ctx.sessionManager.getCwd = () => projectBase;
+        return result;
+      }
+      ctx.cwd = projectBase;
+      ctx.sessionManager.getSessionFile = () => originalSessionFile;
+      ctx.sessionManager.getCwd = () => projectBase;
+      process.chdir(projectBase);
+      return result;
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 1);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.equal(activeSessionCtx.cwd, executionBasePath);
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(fs.existsSync(executionBasePath), true);
+
+    await pi.emit("before_agent_start", {}, activeSessionCtx);
+    await pi.emit("agent_start", {}, activeSessionCtx);
+
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "with-session.ts"), "export const WITH_SESSION = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/with-session.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "with session"], {
+      cwd: executionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, activeSessionCtx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(activeSessionCtx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "with-session.ts")), true);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies worktree-backed prompt orchestration against the pi runtime session-switch contract.
+ * @details Simulates the current pi runtime behavior discovered in `/tmp/pi-mono`: `ctx.switchSession(...)` exposes the replacement session through `withSession(...)` and replacement-session contexts while the host process cwd stays anchored to the original project directory until the extension updates it explicitly. The test proves prompt delivery and prompt-end closure must synchronize `process.cwd()` with the active worktree session during execution and restore `base-path` plus remove the worktree after successful merge even when the pi host leaves cwd unchanged. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after prompt delivery, merge handling, and restored-base assertions complete.
+ * @throws {AssertionError} Throws when prompt activation or prompt-end closure fails to synchronize `process.cwd()` with the expected session path.
+ * @satisfies REQ-068, REQ-208, REQ-257, REQ-271, REQ-272
+ */
+test("worktree-backed prompt commands restore base-path when switchSession does not change process cwd", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(projectBase);
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    let activeSessionCtx: any = ctx;
+    ctx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const replacementCwd = readFakeSessionFileCwd(sessionPath, projectBase);
+      const replacementCtx = {
+        ...ctx,
+        cwd: replacementCwd,
+        sessionManager: {
+          ...ctx.sessionManager,
+          getCwd: () => replacementCwd,
+          getSessionFile: () => sessionPath,
+        },
+        switchSession: ctx.switchSession,
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          pi.sentUserMessages.push({ content, options: sendOptions });
+        },
+      };
+      activeSessionCtx = replacementCtx;
+      await options?.withSession?.(replacementCtx);
+      return { cancelled: false };
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 1);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.equal(activeSessionCtx.cwd, executionBasePath);
+    assert.equal(activeSessionCtx.sessionManager.getCwd(), executionBasePath);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(process.cwd(), executionBasePath);
+
+    await pi.emit("before_agent_start", {}, activeSessionCtx);
+    await pi.emit("agent_start", {}, activeSessionCtx);
+
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "runtime-anchor.ts"), "export const RUNTIME_ANCHOR = 1;\n", "utf8");
+    assert.equal(
+      spawnSync("git", ["add", "src/runtime-anchor.ts"], {
+        cwd: executionBasePath,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "runtime anchor"], {
+      cwd: executionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, activeSessionCtx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(activeSessionCtx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "runtime-anchor.ts")), true);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies restored base-path closure tolerates stale `ctx.cwd` mutations after a successful session switch.
+ * @details Simulates the real pi runtime behavior observed in `/tmp/debug.json`, where restoring the original session succeeds but the old replacement-session context becomes stale immediately afterward, so mutating its `cwd` mirror throws the documented stale-extension-context error. The test proves `restorePromptCommandExecution(...)` MUST ignore that late stale mutation failure once session-target verification already succeeded, leaving prompt finalization free to continue merge and cleanup.
+ * @return {Promise<void>} Promise resolved after restored-base assertions and cleanup complete.
+ * @throws {AssertionError} Throws when the stale post-restore `cwd` mutation still aborts restoration.
+ * @satisfies REQ-208, REQ-257, REQ-276, REQ-280, REQ-282
+ */
+ test("restorePromptCommandExecution ignores stale ctx.cwd mutations after a verified restore switch", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  let executionPlan: ReturnType<typeof preparePromptCommandExecution> | undefined;
+  try {
+    const config = loadConfig(projectBase);
+    const ctx = createFakeCtx(projectBase);
+    executionPlan = preparePromptCommandExecution(
+      "change",
+      "Adjust docs",
+      projectBase,
+      config,
+      ctx.sessionManager.getSessionFile(),
+      ctx.sessionManager.getSessionDir?.(),
+      ctx.sessionManager.getBranch?.(),
+    );
+    const activeContext = await activatePromptCommandExecution(executionPlan, ctx);
+    assert.ok(activeContext);
+    let activeContextCwd = activeContext?.cwd;
+    let staleAfterSwitch = false;
+    Object.defineProperty(activeContext!, "cwd", {
+      configurable: true,
+      get() {
+        return activeContextCwd;
+      },
+      set(value: string) {
+        if (staleAfterSwitch) {
+          throw new Error("This extension ctx is stale after session replacement or reload.");
+        }
+        activeContextCwd = value;
+      },
+    });
+    activeContext!.switchSession = async (sessionPath: string) => {
+      activeContextCwd = projectBase;
+      activeContext!.sessionManager.getSessionFile = () => sessionPath;
+      activeContext!.sessionManager.getSessionDir = () => path.dirname(sessionPath);
+      activeContext!.sessionManager.getCwd = () => projectBase;
+      process.chdir(projectBase);
+      staleAfterSwitch = true;
+      return { cancelled: false };
+    };
+
+    const restoredContext = await restorePromptCommandExecution(executionPlan, activeContext, {
+      config,
+      workflowState: "merging",
+    });
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(restoredContext, activeContext);
+    assert.equal(fs.existsSync(executionPlan.worktreePath ?? ""), true);
+  } finally {
+    if (executionPlan) {
+      await abortPromptCommandExecution(executionPlan);
+    }
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies restored base-path closure tolerates getter-only `ctx.cwd` mirrors after a successful session switch.
+ * @details Simulates the real pi replacement-session context shape observed during `/tmp/debug.json` triage, where `cwd` is exposed through a getter-only property. The test proves `restorePromptCommandExecution(...)` MUST treat a non-writable `cwd` mirror as advisory-only after session-target verification succeeds, instead of aborting prompt finalization with a TypeError before merge. 
+ * @return {Promise<void>} Promise resolved after restored-base assertions and cleanup complete.
+ * @throws {AssertionError} Throws when a getter-only `cwd` property still aborts restoration.
+ * @satisfies REQ-208, REQ-257, REQ-276, REQ-282
+ */
+ test("restorePromptCommandExecution ignores getter-only ctx.cwd mirrors after a verified restore switch", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  let executionPlan: ReturnType<typeof preparePromptCommandExecution> | undefined;
+  try {
+    const config = loadConfig(projectBase);
+    const ctx = createFakeCtx(projectBase);
+    executionPlan = preparePromptCommandExecution(
+      "change",
+      "Adjust docs",
+      projectBase,
+      config,
+      ctx.sessionManager.getSessionFile(),
+      ctx.sessionManager.getSessionDir?.(),
+      ctx.sessionManager.getBranch?.(),
+    );
+    const activeContext = await activatePromptCommandExecution(executionPlan, ctx);
+    assert.ok(activeContext);
+    let activeContextCwd = activeContext?.cwd;
+    Object.defineProperty(activeContext!, "cwd", {
+      configurable: true,
+      get() {
+        return activeContextCwd;
+      },
+    });
+    activeContext!.switchSession = async (sessionPath: string) => {
+      activeContextCwd = projectBase;
+      activeContext!.sessionManager.getSessionFile = () => sessionPath;
+      activeContext!.sessionManager.getSessionDir = () => path.dirname(sessionPath);
+      activeContext!.sessionManager.getCwd = () => projectBase;
+      process.chdir(projectBase);
+      return { cancelled: false };
+    };
+
+    const restoredContext = await restorePromptCommandExecution(executionPlan, activeContext, {
+      config,
+      workflowState: "merging",
+    });
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(restoredContext, activeContext);
+    assert.equal(fs.existsSync(executionPlan.worktreePath ?? ""), true);
+  } finally {
+    if (executionPlan) {
+      await abortPromptCommandExecution(executionPlan);
+    }
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies worktree-backed closure succeeds when lifecycle event contexts omit `switchSession()`.
+ * @details Simulates the documented pi extension contract where lifecycle hooks receive `ExtensionContext` rather than `ExtensionCommandContext`, so `agent_end` contexts expose the active execution-session file and cwd but omit session-replacement methods. The test proves closure must reuse the persisted command-capable replacement-session context captured during activation to restore `base-path`, merge the successful worktree branch, and delete the worktree plus branch. Runtime is dominated by temporary git worktree setup, commit creation, and prompt finalization. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after closure assertions complete.
+ * @throws {AssertionError} Throws when closure fails to restore `base-path`, merge the worktree, or remove worktree resources.
+ * @satisfies REQ-208, REQ-209, REQ-257, REQ-272, REQ-276, TST-089
+ */
+test("worktree-backed closure succeeds when agent_end lifecycle contexts omit switchSession", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const commandCtx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, commandCtx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", commandCtx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = commandCtx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+
+    const eventCtx = createFakeCtx(executionBasePath);
+    eventCtx.sessionManager.getSessionFile = () => executionSessionFile;
+    eventCtx.sessionManager.getSessionDir = () => path.dirname(executionSessionFile);
+    eventCtx.sessionManager.getCwd = () => executionBasePath;
+    eventCtx.cwd = executionBasePath;
+    delete eventCtx.switchSession;
+
+    await pi.emit("before_agent_start", {}, eventCtx);
+    await pi.emit("agent_start", {}, eventCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "closure-context.ts"), "export const CLOSURE_CONTEXT = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/closure-context.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "closure context"], {
+      cwd: executionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, eventCtx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(commandCtx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "closure-context.ts")));
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies switch-triggered `session_shutdown` preserves prompt-command state for same-runtime workflow closure.
+ * @details Simulates the real pi runtime ordering captured in `/tmp/debug.json`, where `ctx.switchSession(...)` can trigger `session_shutdown` before the initiating command handler resumes. The test proves the initiating runtime must preserve its in-memory workflow state plus pending prompt request across that shutdown so activation remains in `checking`, the handler transitions to `running`, and later `agent_end` restores `base-path`, merges the successful worktree branch, and deletes the worktree plus branch.
+ * @return {Promise<void>} Promise resolved after session-shutdown preservation and closure assertions complete.
+ * @throws {AssertionError} Throws when switch-triggered shutdown clears prompt state, logs the wrong workflow state, or prevents merge and cleanup.
+ * @satisfies REQ-221, REQ-227, REQ-278, TST-090
+ */
+test("switch-triggered session_shutdown preserves prompt state for same-runtime workflow closure", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
+      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_STATUS_CHANGES: "enable",
+      DEBUG_WORKFLOW_EVENTS: "enable",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_PROMPTS: ["req-change"],
+    });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    ctx.switchSession = async (sessionPath: string) => {
+      await pi.emit("session_shutdown", {
+        reason: "resume",
+        targetSessionFile: sessionPath,
+      }, ctx);
+      return originalSwitchSession(sessionPath);
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    const activationLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    const shutdownEntry = activationLog.find((entry: any) => entry.action === "workflow_session_shutdown");
+    assert.equal(shutdownEntry?.workflow_state, "checking");
+    assert.equal(shutdownEntry?.result?.preserve_prompt_command_state, true);
+    assert.equal(shutdownEntry?.result?.pending_prompt_request, true);
+    assert.equal(shutdownEntry?.result?.active_prompt_request, false);
+    assert.ok(activationLog.some((entry: any) => entry.action === "workflow_activation" && entry.workflow_state === "checking"));
+    assert.ok(
+      activationLog.some(
+        (entry: any) => entry.action === "workflow_state"
+          && entry.input?.from_state === "checking"
+          && entry.result?.workflow_state === "running",
+      ),
+    );
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "shutdown-preserve.ts"), "export const SHUTDOWN_PRESERVE = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/shutdown-preserve.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "shutdown preserve"], {
+      cwd: executionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "shutdown-preserve.ts")));
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies replacement-session runtimes resynchronize persisted prompt state after switch-triggered rebinding.
+ * @details Simulates the real pi ordering where the new execution-session extension instance receives `session_start` before the initiating command handler finishes the post-switch `running` transition. The test proves later lifecycle hooks on the replacement-session runtime must re-read persisted prompt-command state so `agent_end` still recognizes a matched successful run, restores `base-path`, merges the worktree branch, and deletes the worktree plus branch.
+ * @return {Promise<void>} Promise resolved after rebound-session closure assertions complete.
+ * @throws {AssertionError} Throws when the replacement-session runtime misses the persisted `running` state and skips merge plus cleanup.
+ * @satisfies REQ-227, REQ-279, TST-091
+ */
+test("replacement-session runtime resynchronizes persisted running state before prompt closure", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
+      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_STATUS_CHANGES: "enable",
+      DEBUG_WORKFLOW_EVENTS: "enable",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_PROMPTS: ["req-change"],
+    });
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(projectBase);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+
+    const originalSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+    const originalSwitchSession = firstCtx.switchSession.bind(firstCtx);
+    let reboundPi: FakePi | undefined;
+    let reboundCtx: any;
+    firstCtx.switchSession = async (sessionPath: string) => {
+      const executionSessionCwd = readFakeSessionFileCwd(sessionPath, firstCtx.cwd);
+      await firstPi.emit("session_shutdown", {
+        reason: "resume",
+        targetSessionFile: sessionPath,
+      }, firstCtx);
+      if (!reboundPi) {
+        reboundPi = createFakePi();
+        piUsereqExtension(reboundPi);
+        reboundCtx = createFakeCtx(executionSessionCwd);
+        reboundCtx.sessionManager.getSessionFile = () => sessionPath;
+        reboundCtx.sessionManager.getSessionDir = () => path.dirname(sessionPath);
+        reboundCtx.sessionManager.getCwd = () => executionSessionCwd;
+        reboundCtx.cwd = executionSessionCwd;
+        await reboundPi.emit("session_start", {
+          reason: "resume",
+          previousSessionFile: originalSessionFile,
+        }, reboundCtx);
+      }
+      return originalSwitchSession(sessionPath);
+    };
+
+    await firstPi.commands.get("req-change")!.handler("Adjust docs", firstCtx);
+    assert.ok(reboundPi);
+    assert.ok(reboundCtx);
+    const promptText = String(firstPi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    await reboundPi!.emit("before_agent_start", {}, reboundCtx);
+    await reboundPi!.emit("agent_start", {}, reboundCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "rebound-running.ts"), "export const REBOUND_RUNNING = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/rebound-running.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const reboundCommit = spawnSync("git", ["commit", "-m", "rebound running"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(reboundCommit.status, 0, reboundCommit.stderr);
+
+    await reboundPi!.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, reboundCtx);
+
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    assert.ok(
+      debugLog.some(
+        (entry: any) => entry.action === "workflow_closure"
+          && entry.result?.should_finalize_matched_success === true,
+      ),
+    );
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(reboundCtx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "rebound-running.ts")), true);
+    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `running` is persisted before async replacement-session prompt delivery completes.
+ * @details Simulates the real pi runtime behavior visible in `/tmp/debug.json`, where replacement-session `sendUserMessage(...)` does not resolve until the prompt run has already reached `agent_end`. The test proves `req-<prompt>` must transition and persist `running` immediately after prompt handoff begins, so a rebound execution-session runtime can still finalize the matched successful closure while the initiating command handler remains blocked on prompt-delivery completion.
+ * @return {Promise<void>} Promise resolved after delayed prompt delivery, rebound closure, and cleanup assertions complete.
+ * @throws {AssertionError} Throws when `running` is delayed until after `agent_end`, causing closure to skip merge or cleanup.
+ * @satisfies REQ-227, REQ-279, REQ-281, TST-093
+ */
+test("replacement-session prompt delivery persists running before async sendUserMessage resolves", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
+      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_STATUS_CHANGES: "enable",
+      DEBUG_WORKFLOW_EVENTS: "enable",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_PROMPTS: ["req-change"],
+    });
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(projectBase);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+
+    const originalSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+    const originalSwitchSession = firstCtx.switchSession.bind(firstCtx);
+    let reboundPi: FakePi | undefined;
+    let reboundCtx: any;
+    let resolvePromptDelivery: (() => void) | undefined;
+    let handoffStatus = "";
+    firstCtx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const executionSessionCwd = readFakeSessionFileCwd(sessionPath, firstCtx.cwd);
+      await firstPi.emit("session_shutdown", {
+        reason: "resume",
+        targetSessionFile: sessionPath,
+      }, firstCtx);
+      if (!reboundPi) {
+        reboundPi = createFakePi();
+        piUsereqExtension(reboundPi);
+        reboundCtx = createFakeCtx(executionSessionCwd);
+        reboundCtx.sessionManager.getSessionFile = () => sessionPath;
+        reboundCtx.sessionManager.getSessionDir = () => path.dirname(sessionPath);
+        reboundCtx.sessionManager.getCwd = () => executionSessionCwd;
+        reboundCtx.cwd = executionSessionCwd;
+        await reboundPi.emit("session_start", {
+          reason: "resume",
+          previousSessionFile: originalSessionFile,
+        }, reboundCtx);
+      }
+      const switchResult = await originalSwitchSession(sessionPath);
+      const replacementCtx = {
+        ...firstCtx,
+        cwd: executionSessionCwd,
+        sessionManager: {
+          ...firstCtx.sessionManager,
+          getCwd: () => executionSessionCwd,
+          getSessionFile: () => sessionPath,
+          getSessionDir: () => path.dirname(sessionPath),
+        },
+        switchSession: firstCtx.switchSession,
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          handoffStatus = firstCtx.__state.statuses.get("pi-usereq") ?? "";
+          firstPi.sentUserMessages.push({ content, options: sendOptions });
+          await new Promise<void>((resolve) => {
+            resolvePromptDelivery = resolve;
+          });
+        },
+      };
+      await options?.withSession?.(replacementCtx);
+      return switchResult;
+    };
+
+    const handlerPromise = firstPi.commands.get("req-change")!.handler("Adjust docs", firstCtx);
+    for (let attempt = 0; attempt < 20 && resolvePromptDelivery === undefined; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.ok(resolvePromptDelivery);
+    assert.ok(reboundPi);
+    assert.ok(reboundCtx);
+    const promptText = String(firstPi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    assert.equal(
+      handoffStatus,
+      buildExpectedFakeStatusText({
+        workflowState: "checking",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+    assert.equal(
+      firstCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "running",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+
+    await reboundPi!.emit("before_agent_start", {}, reboundCtx);
+    await reboundPi!.emit("agent_start", {}, reboundCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "delayed-running.ts"), "export const DELAYED_RUNNING = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/delayed-running.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const reboundCommit = spawnSync("git", ["commit", "-m", "delayed running"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(reboundCommit.status, 0, reboundCommit.stderr);
+
+    await reboundPi!.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, reboundCtx);
+
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    assert.ok(
+      debugLog.some(
+        (entry: any) => entry.action === "workflow_closure"
+          && entry.result?.should_finalize_matched_success === true,
+      ),
+    );
+
+    resolvePromptDelivery!();
+    await handlerPromise;
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(reboundCtx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "delayed-running.ts")), true);
+    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies late stale replacement-session prompt-delivery rejections do not abort successful worktree closure.
+ * @details Simulates the real pi runtime behavior observed in `/tmp/debug.json`, where the replacement-session `sendUserMessage(...)` promise rejects with the stale-extension-context error only after prompt-end restoration switches back to the original session. The test proves the initiating `req-<prompt>` handler MUST ignore that late stale rejection once workflow ownership has already advanced beyond `running`, allowing the rebound execution-session runtime to restore `base-path`, merge from `base-path`, and delete the worktree plus branch.
+ * @return {Promise<void>} Promise resolved after stale delivery rejection, matched-success closure, and cleanup assertions complete.
+ * @throws {AssertionError} Throws when the late stale rejection bubbles out of the command handler or prevents merge plus cleanup.
+ * @satisfies REQ-208, REQ-276, REQ-278, REQ-279, REQ-280, REQ-281, REQ-282
+ */
+ test("late stale replacement-session prompt-delivery rejections do not interrupt worktree closure", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
+      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_STATUS_CHANGES: "enable",
+      DEBUG_WORKFLOW_EVENTS: "enable",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_PROMPTS: ["req-change"],
+    });
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(projectBase);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+
+    const originalSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+    const originalSwitchSession = firstCtx.switchSession.bind(firstCtx);
+    let reboundPi: FakePi | undefined;
+    let reboundCtx: any;
+    let rejectPromptDelivery: ((error: unknown) => void) | undefined;
+    firstCtx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const replacementCwd = readFakeSessionFileCwd(sessionPath, firstCtx.cwd);
+      await firstPi.emit("session_shutdown", {
+        reason: "resume",
+        targetSessionFile: sessionPath,
+      }, firstCtx);
+      if (!reboundPi) {
+        reboundPi = createFakePi();
+        piUsereqExtension(reboundPi);
+        reboundCtx = createFakeCtx(replacementCwd);
+        reboundCtx.sessionManager.getSessionFile = () => sessionPath;
+        reboundCtx.sessionManager.getSessionDir = () => path.dirname(sessionPath);
+        reboundCtx.sessionManager.getCwd = () => replacementCwd;
+        reboundCtx.cwd = replacementCwd;
+        await reboundPi.emit("session_start", {
+          reason: "resume",
+          previousSessionFile: originalSessionFile,
+        }, reboundCtx);
+      }
+      const switchResult = await originalSwitchSession(sessionPath);
+      const replacementCtx = {
+        ...firstCtx,
+        cwd: replacementCwd,
+        sessionManager: {
+          ...firstCtx.sessionManager,
+          getCwd: () => replacementCwd,
+          getSessionFile: () => sessionPath,
+          getSessionDir: () => path.dirname(sessionPath),
+        },
+        switchSession: firstCtx.switchSession,
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          firstPi.sentUserMessages.push({ content, options: sendOptions });
+          await new Promise<void>((_resolve, reject) => {
+            rejectPromptDelivery = reject;
+          });
+        },
+      };
+      if (path.resolve(sessionPath) === path.resolve(originalSessionFile)) {
+        rejectPromptDelivery?.(
+          new Error("This extension ctx is stale after session replacement or reload."),
+        );
+        rejectPromptDelivery = undefined;
+      }
+      await options?.withSession?.(replacementCtx);
+      return switchResult;
+    };
+
+    const handlerPromise = firstPi.commands.get("req-change")!.handler("Adjust docs", firstCtx);
+    const handlerOutcomePromise = handlerPromise.then(
+      () => ({ error: undefined as unknown }),
+      (error) => ({ error }),
+    );
+    for (let attempt = 0; attempt < 20 && rejectPromptDelivery === undefined; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.ok(rejectPromptDelivery);
+    assert.ok(reboundPi);
+    assert.ok(reboundCtx);
+    const promptText = String(firstPi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+
+    await reboundPi!.emit("before_agent_start", {}, reboundCtx);
+    await reboundPi!.emit("agent_start", {}, reboundCtx);
+
+    const persistedContext = readPersistedPromptCommandSessionContext(executionSessionFile);
+    assert.ok(persistedContext);
+    reboundCtx.switchSession = async (sessionPath: string) => {
+      assert.equal(path.resolve(sessionPath), path.resolve(originalSessionFile));
+      const pendingPromptDeliveryRejection = rejectPromptDelivery;
+      rejectPromptDelivery = undefined;
+      queueMicrotask(() => {
+        pendingPromptDeliveryRejection?.(
+          new Error("This extension ctx is stale after session replacement or reload."),
+        );
+      });
+      reboundCtx.cwd = projectBase;
+      reboundCtx.sessionManager.getSessionFile = () => originalSessionFile;
+      reboundCtx.sessionManager.getSessionDir = () => path.dirname(originalSessionFile);
+      reboundCtx.sessionManager.getCwd = () => projectBase;
+      process.chdir(projectBase);
+      return { cancelled: false };
+    };
+
+    await Promise.race([
+      reboundPi!.emit("agent_end", {
+        messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+      }, reboundCtx),
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(new Error("agent_end timed out")), 1_000);
+      }),
+    ]);
+    assert.equal(rejectPromptDelivery, undefined);
+    const handlerOutcome = await Promise.race([
+      handlerOutcomePromise,
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(new Error("handler timed out")), 1_000);
+      }),
+    ]);
+    assert.equal(handlerOutcome.error, undefined);
+
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
+    assert.ok(debugLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(reboundCtx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed prompt execution survives switch-triggered extension rebinding", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(projectBase);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+
+    await firstPi.commands.get("req-change")!.handler("Adjust docs", firstCtx);
+    const promptText = String(firstPi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+
+    const reboundPi = createFakePi();
+    piUsereqExtension(reboundPi);
+    const reboundCtx = createFakeCtx(executionBasePath);
+    reboundCtx.sessionManager.getSessionFile = () => executionSessionFile;
+    reboundCtx.sessionManager.getSessionDir = () => path.dirname(executionSessionFile);
+    reboundCtx.sessionManager.getCwd = () => executionBasePath;
+    reboundCtx.cwd = executionBasePath;
+    await reboundPi.emit("session_start", {
+      reason: "resume",
+      previousSessionFile: firstCtx.sessionManager.getSessionFile(),
+    }, reboundCtx);
+
+    await reboundPi.emit("before_agent_start", {}, reboundCtx);
+    await reboundPi.emit("agent_start", {}, reboundCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "rebound.ts"), "export const REBOUND = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/rebound.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const reboundCommit = spawnSync("git", ["commit", "-m", "rebound"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(reboundCommit.status, 0, reboundCommit.stderr);
+
+    await reboundPi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, reboundCtx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(reboundCtx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "rebound.ts")), true);
+    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Reproduces the defect where `ctx.switchSession(sessionPath)` ignores a `withSession` option and leaves the handler-scoped ctx frozen on the pre-switch session.
+ * @details Simulates the real pi SDK contract observed in `@mariozechner/pi-coding-agent`, where `ctx.switchSession(sessionPath)` accepts a single argument, never invokes caller-supplied callbacks, and never mutates `ctx.cwd` or `ctx.sessionManager`. The test proves that worktree-backed `req-<prompt>` activation must succeed against that contract by relying on the persisted session-file header and `process.cwd()` instead of the stale handler-scoped `ctx` probes. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after prompt delivery, activation, and assertions complete.
+ * @throws {AssertionError} Throws when prompt activation aborts even though the persisted execution-session file and the host `process.cwd()` both match the worktree path.
+ * @satisfies REQ-068, REQ-208, REQ-257, REQ-271, REQ-272
+ */
+test("worktree-backed prompt commands activate when ctx.switchSession only accepts a single argument and leaves handler ctx stale", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(projectBase);
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const frozenSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    const frozenSessionCwd = ctx.sessionManager.getCwd();
+    ctx.switchSession = async (sessionPath: string, ..._ignored: unknown[]) => {
+      // Mirror the real pi SDK: accept only sessionPath, never mutate ctx.cwd or ctx.sessionManager.
+      void sessionPath;
+      return { cancelled: false };
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 1);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(ctx.sessionManager.getSessionFile(), frozenSessionFile);
+    assert.equal(ctx.sessionManager.getCwd(), frozenSessionCwd);
+    assert.equal(
+      ctx.__state.notifications.some((entry) => /Prompt execution activation expected/.test(entry.message)),
+      false,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed prompt commands tolerate stale ctx.sessionManager probes after switchSession returns non-cancelled", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const originalSessionFile = ctx.sessionManager.getSessionFile();
+    const originalSessionCwd = ctx.sessionManager.getCwd();
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    ctx.switchSession = async (sessionPath: string) => {
+      // Mirror the real pi SDK: session switching runs internally but ctx.sessionManager stays frozen.
+      const result = await originalSwitchSession(sessionPath);
+      ctx.sessionManager.getSessionFile = () => originalSessionFile;
+      ctx.sessionManager.getCwd = () => originalSessionCwd;
+      return result;
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 1);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(ctx.sessionManager.getSessionFile(), originalSessionFile);
+    assert.equal(ctx.sessionManager.getCwd(), originalSessionCwd);
+    assert.equal(
+      ctx.__state.notifications.some((entry) => /Prompt execution activation expected/.test(entry.message)),
+      false,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed prompt commands tolerate a pending-persistence execution-session file when process.cwd() is aligned with worktree-path", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    ctx.switchSession = async (sessionPath: string) => {
+      const result = await originalSwitchSession(sessionPath);
+      // Simulate pi's lazy session-file persistence: ctx.switchSession returns non-cancelled and realigns process.cwd(), but pi defers writing the session file until the first assistant flush.
+      if (typeof sessionPath === "string" && fs.existsSync(sessionPath)) {
+        fs.rmSync(sessionPath, { force: true });
+      }
+      return result;
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 1);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(
+      ctx.__state.notifications.some((entry) => /Prompt execution activation expected session/.test(entry.message)),
+      false,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed prompt commands abort before prompt dispatch when the persisted execution-session header cwd diverges from worktree-path", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    ctx.switchSession = async (sessionPath: string) => {
+      const result = await originalSwitchSession(sessionPath);
+      // Simulate pi runtimes that persist a tampered header cwd, forcing the on-disk cwd verification to fail.
+      if (typeof sessionPath === "string" && fs.existsSync(sessionPath)) {
+        const tamperedHeader = `${JSON.stringify({ type: "session", cwd: projectBase })}\n`;
+        fs.writeFileSync(sessionPath, tamperedHeader, "utf8");
+      }
+      return result;
+    };
+
+    await assert.rejects(
+      pi.commands.get("req-change")!.handler("Adjust docs", ctx),
+      /Prompt execution activation expected session/,
+    );
+
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.ok(ctx.__state.notifications.some((entry) => /Prompt execution activation expected session/.test(entry.message)));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed successful merge stops before merge when fork-session verification cannot reattach", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionSessionFile = ctx.sessionManager.getSessionFile();
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "restore-failed.ts"), "export const RESTORE_FAILED = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/restore-failed.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    // Simulate a pi runtime that rewrites the execution-session header with a divergent cwd at prompt-end so closure verification must abort before merge.
+    assert.equal(typeof executionSessionFile, "string");
+    if (typeof executionSessionFile === "string" && fs.existsSync(executionSessionFile)) {
+      const tamperedHeader = `${JSON.stringify({ type: "session", cwd: projectBase })}\n`;
+      fs.writeFileSync(executionSessionFile, tamperedHeader, "utf8");
+    }
+    // Make ctx.sessionManager report a stale session file path so base-path restoration performs an explicit switch attempt after finalization verification fails.
+    ctx.sessionManager.getSessionFile = () => path.join(projectBase, "stale-execution-session.jsonl");
+    ctx.switchSession = async (_sessionPath: string) => ({ cancelled: false });
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), true);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "restore-failed.ts")), false);
+    assert.ok(ctx.__state.notifications.some((entry) => /Prompt execution finalization expected session/.test(entry.message)));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies successful closure merges from `base-path` even when end-of-session timing already moved the persisted replacement context off the worktree session.
+ * @details Simulates real pi session-end timing such as automatic compaction or other CLI housekeeping that can advance the live replacement-session context back to the original base session before the `agent_end` lifecycle hook executes. The persisted command-capable context is forced to report the original base session and to reject any attempt to reattach the execution session. The test proves prompt-end closure must restore `base-path` and merge directly from `base-path` using persisted execution artifacts instead of failing on a best-effort reactivation of the worktree session.
+ * @return {Promise<void>} Promise resolved after closure assertions complete.
+ * @throws {AssertionError} Throws when closure attempts an execution-session reattach or skips the merge plus cleanup.
+ * @satisfies REQ-208, REQ-209, REQ-282, TST-094
+ */
+test("worktree-backed closure merges from base-path when end-of-session timing already moved the persisted context", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
+      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_STATUS_CHANGES: "enable",
+      DEBUG_WORKFLOW_EVENTS: "enable",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_PROMPTS: ["req-change"],
+    });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const commandCtx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, commandCtx);
+
+    const originalSessionFile = commandCtx.sessionManager.getSessionFile() ?? "";
+    await pi.commands.get("req-change")!.handler("Adjust docs", commandCtx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = commandCtx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+
+    await pi.emit("before_agent_start", {}, commandCtx);
+    await pi.emit("agent_start", {}, commandCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "base-merge.ts"), "export const BASE_MERGE = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/base-merge.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "base merge"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    const persistedContext = readPersistedPromptCommandSessionContext(executionSessionFile) as any;
+    assert.ok(persistedContext);
+    persistedContext.cwd = projectBase;
+    persistedContext.sessionManager.getSessionFile = () => originalSessionFile;
+    persistedContext.sessionManager.getSessionDir = () => path.dirname(originalSessionFile);
+    persistedContext.sessionManager.getCwd = () => projectBase;
+    persistedContext.switchSession = async (sessionPath: string) => {
+      if (path.resolve(sessionPath) !== path.resolve(originalSessionFile)) {
+        throw new Error(`Unexpected execution-session reattach: ${sessionPath}`);
+      }
+      process.chdir(projectBase);
+      return { cancelled: false };
+    };
+
+    const eventCtx = createFakeCtx(projectBase);
+    eventCtx.sessionManager.getSessionFile = () => originalSessionFile;
+    eventCtx.sessionManager.getSessionDir = () => path.dirname(originalSessionFile);
+    eventCtx.sessionManager.getCwd = () => projectBase;
+    eventCtx.cwd = projectBase;
+    delete eventCtx.switchSession;
+    process.chdir(projectBase);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, eventCtx);
+
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
+    assert.ok(debugLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(eventCtx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "base-merge.ts")));
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(eventCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies matched successful closure ignores stale session-switch errors after restored base-path verification.
+ * @details Simulates the real pi runtime behavior observed in `/tmp/debug.json`, where switching the persisted command-capable replacement-session context back to the original session completes the base-path reattachment but still surfaces the stale-extension-context error from the invalidated execution-session closure. The test proves prompt-end closure MUST treat that stale switch error as ignorable after the restored base session verifies successfully, then continue the fast-forward merge plus worktree deletion.
+ * @return {Promise<void>} Promise resolved after restored-base verification, merge, and cleanup assertions complete.
+ * @throws {AssertionError} Throws when the stale restore-switch error prevents merge plus cleanup.
+ * @satisfies REQ-208, REQ-276, REQ-280, REQ-282
+ */
+ test("worktree-backed closure ignores stale restore-switch errors after base-path verification", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
+      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_STATUS_CHANGES: "enable",
+      DEBUG_WORKFLOW_EVENTS: "enable",
+      DEBUG_LOG_ON_STATUS: "any",
+      DEBUG_ENABLED_PROMPTS: ["req-change"],
+    });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const commandCtx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, commandCtx);
+
+    const originalSessionFile = commandCtx.sessionManager.getSessionFile() ?? "";
+    await pi.commands.get("req-change")!.handler("Adjust docs", commandCtx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = commandCtx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+
+    await pi.emit("before_agent_start", {}, commandCtx);
+    await pi.emit("agent_start", {}, commandCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "stale-restore.ts"), "export const STALE_RESTORE = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/stale-restore.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "stale restore"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    const persistedContext = readPersistedPromptCommandSessionContext(executionSessionFile) as any;
+    assert.ok(persistedContext);
+    persistedContext.cwd = projectBase;
+    persistedContext.sessionManager.getSessionFile = () => originalSessionFile;
+    persistedContext.sessionManager.getSessionDir = () => path.dirname(originalSessionFile);
+    persistedContext.sessionManager.getCwd = () => projectBase;
+    persistedContext.switchSession = async (sessionPath: string) => {
+      assert.equal(path.resolve(sessionPath), path.resolve(originalSessionFile));
+      process.chdir(projectBase);
+      persistedContext.cwd = projectBase;
+      throw new Error("This extension ctx is stale after session replacement or reload.");
+    };
+
+    const eventCtx = createFakeCtx(projectBase);
+    eventCtx.sessionManager.getSessionFile = () => originalSessionFile;
+    eventCtx.sessionManager.getSessionDir = () => path.dirname(originalSessionFile);
+    eventCtx.sessionManager.getCwd = () => projectBase;
+    eventCtx.cwd = projectBase;
+    delete eventCtx.switchSession;
+    process.chdir(projectBase);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, eventCtx);
+
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
+    assert.ok(debugLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(eventCtx.cwd, projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "stale-restore.ts")), true);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(eventCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("worktree-backed prompt commands abort before prompt dispatch when post-create verification fails", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  const originalExistsSync = fs.existsSync;
+  let failedWorktreeName = "";
+  let failedWorktreePath = "";
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    setPromptCommandPostCreateHookForTests(({ worktreeDir, worktreeRootPath, worktreePath }) => {
+      failedWorktreeName = worktreeDir;
+      failedWorktreePath = worktreePath;
+      fs.existsSync = ((candidatePath: Parameters<typeof fs.existsSync>[0]) => {
+        const normalizedPath = typeof candidatePath === "string" ? candidatePath : String(candidatePath);
+        if (normalizedPath === worktreePath || normalizedPath === worktreeRootPath) {
+          return false;
+        }
+        return originalExistsSync(candidatePath);
+      }) as typeof fs.existsSync;
+    });
+
+    await assert.rejects(
+      pi.commands.get("req-change")!.handler("Adjust docs", ctx),
+      /ERROR: Worktree verification failed/,
+    );
+
+    assert.equal(pi.sentUserMessages.length, 0);
+    fs.existsSync = originalExistsSync;
+    assert.equal(fs.existsSync(failedWorktreePath), false);
+    assert.notEqual(failedWorktreeName, "");
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${failedWorktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(ctx.__state.notifications.some((entry) => /Worktree verification failed/.test(entry.message)));
+  } finally {
+    fs.existsSync = originalExistsSync;
+    setPromptCommandPostCreateHookForTests(undefined);
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("prompt commands remain functional when custom tool registrations are removed from the runtime inventory", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    pi.tools.splice(0, pi.tools.length);
+    const ctx = createFakeCtx(projectBase);
+
+    await pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 1);
+    assert.match(String(pi.sentUserMessages[0]?.content ?? ""), /Inspect src\/index\.ts/);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
 });
 
 test("session_start applies configured pi-usereq startup tools", async () => {
@@ -1634,7 +3900,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
       "tests-dir": "tests",
       "src-dir": ["src", "foobar"],
       "static-check": {},
-      "enabled-tools": ["git-path", "static-check"],
+      "enabled-tools": ["files-tokens", "static-check"],
     }, null, 2)}\n`,
     "utf8",
   );
@@ -1645,7 +3911,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   await pi.emit("session_start", { reason: "startup" }, ctx);
 
   const activeTools = new Set(pi.getActiveTools());
-  assert.deepEqual([...activeTools].sort(), ["git-path", "static-check"]);
+  assert.deepEqual([...activeTools].sort(), ["files-tokens", "static-check"]);
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
@@ -1682,6 +3948,33 @@ test("session_start renders the 0-percent context icon when context usage is emp
       et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );
+});
+
+/**
+ * @brief Verifies stale replacement contexts do not break workflow-state rendering.
+ * @details Simulates the guarded pi runtime error thrown when an extension context is accessed after session replacement or reload. The test proves workflow-state updates must preserve internal state while suppressing stale-context render failures instead of surfacing extension errors.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when stale-context rendering escapes or leaves the stale context cached for later renders.
+ * @satisfies REQ-280, TST-092
+ */
+test("stale replacement contexts do not break workflow-state rendering", () => {
+  const cwd = createTempDir("pi-usereq-stale-render-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const controller = createPiUsereqStatusController();
+  setPiUsereqStatusConfig(controller, getDefaultConfig());
+  const staleCtx = createFakeCtx(cwd);
+  Object.defineProperty(staleCtx, "ui", {
+    configurable: true,
+    get() {
+      throw new Error("This extension instance is stale after session replacement or reload. Use the provided replacement-session context instead.");
+    },
+  });
+
+  assert.doesNotThrow(() => {
+    setPiUsereqWorkflowState(controller, "running", staleCtx);
+  });
+  assert.equal(controller.state.workflowState, "running");
+  assert.equal(controller.latestContext, undefined);
 });
 
 test("extension registers wrappers for all pi-usereq status hooks", () => {
@@ -1924,6 +4217,71 @@ test("agent timing status updates et while preserving accumulated completed runt
   }
 });
 
+test("elapsed counters persist across new-session rebinding and reset on reload", async () => {
+  const cwd = createTempDir("pi-usereq-timing-rebind-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const originalDateNow = Date.now;
+  let nowMs = 0;
+  Date.now = () => nowMs;
+
+  try {
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(cwd);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+    await firstPi.emit("agent_start", {}, firstCtx);
+    nowMs = 61_000;
+    await firstPi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, firstCtx);
+    await firstPi.emit("session_shutdown", {}, firstCtx);
+
+    const newPi = createFakePi();
+    piUsereqExtension(newPi);
+    const newCtx = createFakeCtx(cwd);
+    await newPi.emit("session_start", {
+      reason: "new",
+      previousSessionFile: "/tmp/previous-session.jsonl",
+    }, newCtx);
+    assert.equal(
+      newCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 1:01 ⌛︎1:01",
+      }),
+    );
+    await newPi.emit("session_shutdown", {}, newCtx);
+
+    const reloadPi = createFakePi();
+    piUsereqExtension(reloadPi);
+    const reloadCtx = createFakeCtx(cwd);
+    await reloadPi.emit("session_start", { reason: "reload" }, reloadCtx);
+    assert.equal(
+      reloadCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+  } finally {
+    Date.now = originalDateNow;
+  }
+});
+
 test("session_start enables default custom tools and default embedded tools only", async () => {
   const cwd = createTempDir("pi-usereq-default-tools-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
@@ -1936,14 +4294,67 @@ test("session_start enables default custom tools and default embedded tools only
   for (const toolName of PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES) {
     assert.ok(activeTools.has(toolName), `missing default active tool ${toolName}`);
   }
+  assert.equal(activeTools.has("search"), true);
+  assert.equal(activeTools.has("files-search"), true);
   assert.equal(activeTools.has("find"), false);
   assert.equal(activeTools.has("grep"), false);
   assert.equal(activeTools.has("ls"), false);
 });
 
-test("default configuration applies the documented notify, sound, and pushover defaults", () => {
+test("default configuration applies the documented static-check, debug, notify, sound, and pushover defaults", () => {
   const config = getDefaultConfig(createTempDir("pi-usereq-default-notify-"));
 
+  assert.equal(config.AUTO_GIT_COMMIT, "enable");
+  assert.deepEqual(Object.keys(config["static-check"]).length, 20);
+  assert.deepEqual(config["static-check"].C, createStaticCheckLanguageConfig([
+    {
+      module: "Command",
+      cmd: "cppcheck",
+      params: [
+        "--error-exitcode=1",
+        "--enable=warning,style,performance,portability",
+        "--std=c11",
+      ],
+    },
+    {
+      module: "Command",
+      cmd: "clang-format",
+      params: ["--dry-run", "--Werror"],
+    },
+  ], "enable"));
+  assert.deepEqual(config["static-check"]["C++"], createStaticCheckLanguageConfig([
+    {
+      module: "Command",
+      cmd: "cppcheck",
+      params: [
+        "--error-exitcode=1",
+        "--enable=warning,style,performance,portability",
+        "--std=c++20",
+      ],
+    },
+    {
+      module: "Command",
+      cmd: "clang-format",
+      params: ["--dry-run", "--Werror"],
+    },
+  ], "enable"));
+  assert.deepEqual(config["static-check"].Python, createStaticCheckLanguageConfig([
+    { module: "Command", cmd: "pyright", params: ["--outputjson"] },
+    { module: "Command", cmd: "ruff", params: ["check"] },
+  ], "enable"));
+  assert.deepEqual(config["static-check"].JavaScript, createStaticCheckLanguageConfig([
+    { module: "Command", cmd: "node", params: ["--check"] },
+  ], "enable"));
+  assert.deepEqual(config["static-check"].TypeScript, createStaticCheckLanguageConfig([
+    { module: "Command", cmd: "npx", params: ["eslint"] },
+  ], "enable"));
+  assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([], "disable"));
+  assert.equal(config.DEBUG_ENABLED, "disable");
+  assert.equal(config.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
+  assert.equal(config.DEBUG_WORKFLOW_EVENTS, DEFAULT_DEBUG_WORKFLOW_EVENTS);
+  assert.equal(config.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
+  assert.deepEqual(config.DEBUG_ENABLED_TOOLS, []);
+  assert.deepEqual(config.DEBUG_ENABLED_PROMPTS, []);
   assert.equal(config["notify-enabled"], false);
   assert.equal(config["notify-on-completed"], true);
   assert.equal(config["notify-on-interrupted"], false);
@@ -1960,22 +4371,40 @@ test("default configuration applies the documented notify, sound, and pushover d
   assert.equal(config["notify-pushover-text"], "%%RESULT%%\n%%ARGS%%");
 });
 
-test("configuration menu can enable embedded builtin tools", async () => {
+test("configuration menu orders tool toggles and can enable embedded builtin tools", async () => {
   const cwd = createTempDir("pi-usereq-menu-embedded-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["Enable tools", "Enable tools", "grep", "Save and close", "Save and close"],
+  });
 
-  await command!.handler(
-    "",
-    createFakeCtx(cwd, {
-      selects: ["Enable tools", "Enable tools", "grep", "Save and close", "Save and close"],
-    }),
-  );
+  await command!.handler("", ctx);
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
+    "compress",
+    "references",
+    "search",
+    "static-check",
+    "tokens",
+    "files-compress",
+    "files-references",
+    "files-search",
+    "files-static-check",
+    "files-tokens",
+    "bash",
+    "edit",
+    "read",
+    "write",
+    "find",
+    "grep",
+    "ls",
+    "Reset defaults",
+  ]);
   assert.ok(config["enabled-tools"].includes("grep"));
   assert.ok(pi.getActiveTools().includes("grep"));
 });
@@ -2076,6 +4505,8 @@ test("configuration menu can persist pushover settings", async () => {
   const ctx = createFakeCtx(cwd, {
     selects: [
       "notifications",
+      "Pushover User Key/Delivery Group Key",
+      "Pushover Token/API Token Key",
       "Enable pushover",
       "Pushover events",
       "Prompt failed",
@@ -2084,16 +4515,14 @@ test("configuration menu can persist pushover settings", async () => {
       "High",
       "Pushover title",
       "Pushover text",
-      "Pushover User Key/Delivery Group Key",
-      "Pushover Token/API Token Key",
       "Save and close",
       "Save and close",
     ],
     inputs: [
-      "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "%%RESULT%%\n%%ARGS%%",
       "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "ah6bf5u2sj63mcvou6qamiabeoubbe",
+      "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "%%RESULT%%\\n%%ARGS%%",
     ],
   });
 
@@ -2123,16 +4552,40 @@ test("configuration menu can persist pushover settings", async () => {
   );
 });
 
-test("prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates", async () => {
-  const cwd = createTempDir("pi-usereq-pushover-run-");
+test("notifications menu escapes pushover text and locks pushover enablement until credentials exist", async () => {
+  const cwd = createTempDir("pi-usereq-menu-pushover-display-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-  const configPath = getProjectConfigPath(cwd);
-  const writeConfig = (overrides: Record<string, unknown>) => {
-    const config = {
+  fs.writeFileSync(
+    getProjectConfigPath(cwd),
+    `${JSON.stringify({
       ...getDefaultConfig(cwd),
+      "notify-pushover-text": "first line\nsecond line",
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["notifications", "Pushover text", "Save and close", "Save and close"],
+  });
+
+  await command!.handler("", ctx);
+
+  const renderedNotificationsMenu = (ctx.__state.customRenderLines[2] ?? []).join("\n");
+  assert.match(renderedNotificationsMenu, /first line\\nsecond line/);
+  assert.match(renderedNotificationsMenu, /<dim>Enable pushover/);
+  assert.match(renderedNotificationsMenu, /<dim>off<\/dim>/);
+});
+
+test("prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates", async () => {
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  const writeConfig = (overrides: Record<string, unknown>) => {
+    writeProjectConfigOverrides(cwd, {
+      GIT_WORKTREE_ENABLED: "disable",
       ...overrides,
-    };
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    });
   };
   const pi = createFakePi();
   piUsereqExtension(pi);
@@ -2308,12 +4761,12 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
   } finally {
     setPiNotifyHttpsRequestForTests(undefined);
     Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
 
 test("pushover global enable controls status and suppresses delivery when disabled", async () => {
-  const cwd = createTempDir("pi-usereq-pushover-disabled-");
-  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
@@ -2333,6 +4786,7 @@ test("pushover global enable controls status and suppresses delivery when disabl
   });
 
   await command!.handler("", ctx);
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.equal(config["notify-pushover-enabled"], false);
@@ -2390,19 +4844,17 @@ test("pushover global enable controls status and suppresses delivery when disabl
     assert.deepEqual(recordedRequests, []);
   } finally {
     setPiNotifyHttpsRequestForTests(undefined);
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
 
 test("command notify routes through PI_NOTIFY_CMD placeholders and per-event toggles", async () => {
-  const cwd = createTempDir("pi-usereq-command-notify-");
-  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-  const configPath = getProjectConfigPath(cwd);
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
   const writeConfig = (overrides: Record<string, unknown>) => {
-    const config = {
-      ...getDefaultConfig(cwd),
+    writeProjectConfigOverrides(cwd, {
+      GIT_WORKTREE_ENABLED: "disable",
       ...overrides,
-    };
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    });
   };
   const pi = createFakePi();
   piUsereqExtension(pi);
@@ -2502,19 +4954,17 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
   } finally {
     setPiNotifySpawnForTests(undefined);
     Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
 
 test("sound routing honors the selected sound state and per-event toggles", async () => {
-  const cwd = createTempDir("pi-usereq-sound-routing-");
-  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-  const configPath = getProjectConfigPath(cwd);
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
   const writeConfig = (overrides: Record<string, unknown>) => {
-    const config = {
-      ...getDefaultConfig(cwd),
+    writeProjectConfigOverrides(cwd, {
+      GIT_WORKTREE_ENABLED: "disable",
       ...overrides,
-    };
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    });
   };
   const pi = createFakePi();
   piUsereqExtension(pi);
@@ -2585,6 +5035,7 @@ test("sound routing honors the selected sound state and per-event toggles", asyn
     assert.equal(recordedCommands.length, 1);
   } finally {
     setPiNotifySpawnForTests(undefined);
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
 
@@ -2624,28 +5075,6 @@ test("sound toggle shortcut cycles persisted pi-notify sound levels", async () =
   }
 });
 
-test("git-path tool derives the repository root at runtime", async () => {
-  const { projectBase } = initFixtureRepo();
-  try {
-    const configPath = getProjectConfigPath(projectBase);
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    config["git-path"] = "/tmp/wrong-git-root";
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-
-    const pi = createFakePi();
-    piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "git-path", projectBase) as {
-      content?: Array<{ text?: string }>;
-      details?: { result: { path_value: string } };
-    };
-
-    assert.deepEqual(JSON.parse(result.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(result.details)));
-    assert.equal(result.details?.result.path_value, projectBase);
-  } finally {
-    fs.rmSync(projectBase, { recursive: true, force: true });
-  }
-});
-
 test("static-check exposes the supported programming languages", () => {
   const supported = getSupportedStaticCheckLanguageSupport();
   assert.equal(supported.length, 20);
@@ -2670,8 +5099,15 @@ test("configuration menu omits removed static-check raw-spec and reference actio
   await command!.handler("", ctx);
 
   const renderedStaticCheckMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
+  const staticCheckItems = ctx.__state.selectCalls[1]?.items ?? [];
   assert.match(renderedStaticCheckMenu, /Add static code checker/);
   assert.match(renderedStaticCheckMenu, /Remove static code checker/);
+  assert.deepEqual(staticCheckItems.slice(0, 2), ["Add static code checker", "Remove static code checker"]);
+  assert.deepEqual(
+    staticCheckItems.slice(2, 22),
+    getSupportedStaticCheckLanguageSupport().map((entry) => entry.language),
+  );
+  assert.deepEqual(staticCheckItems.slice(-1), ["Reset defaults"]);
   assert.doesNotMatch(renderedStaticCheckMenu, /Add entry from LANG=MODULE\[,CMD\[,PARAM\.\.\.\]\]/);
   assert.doesNotMatch(renderedStaticCheckMenu, /Show supported languages/);
 });
@@ -2696,6 +5132,29 @@ test("configuration menu hides removed static-check modules from user-facing act
   assert.doesNotMatch(renderedStaticCheckMenu, /Dummy/);
 });
 
+test("configuration menu can toggle per-language static-check enablement", async () => {
+  const cwd = createTempDir("pi-usereq-menu-sc-toggle-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+
+  await command!.handler(
+    "",
+    createFakeCtx(cwd, {
+      selects: ["static-check", "Python", "Save and close", "Save and close"],
+    }),
+  );
+
+  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  assert.equal(config["static-check"].Python.enabled, "disable");
+  assert.deepEqual(config["static-check"].Python.checkers, [
+    { module: "Command", cmd: "pyright", params: ["--outputjson"] },
+    { module: "Command", cmd: "ruff", params: ["check"] },
+  ]);
+});
+
 test("configuration menu can add guided static-check entries for explicit supported languages", async () => {
   const cwd = createTempDir("pi-usereq-menu-sc-guided-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
@@ -2710,7 +5169,7 @@ test("configuration menu can add guided static-check entries for explicit suppor
       selects: [
         "static-check",
         "Add static code checker",
-        "Python",
+        "Ruby",
         "Save and close",
         "Save and close",
       ],
@@ -2719,5 +5178,7 @@ test("configuration menu can add guided static-check entries for explicit suppor
   );
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.deepEqual(config["static-check"].Python, [{ module: "Command", cmd: "true" }]);
+  assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([
+    { module: "Command", cmd: "true" },
+  ], "enable"));
 });

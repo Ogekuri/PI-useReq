@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief Finds named language constructs in explicit source-file lists and renders compact excerpts.
+ * @brief Searches named language constructs in explicit source-file lists and renders compact excerpts.
  * @details Combines source analysis, tag filtering, regex name matching, optional Doxygen extraction, and comment-stripped code rendering. Runtime is O(F + S + M) where F is file count, S is analyzed source size, and M is candidate element count. Side effects are limited to filesystem reads and optional stderr logging.
  */
 
@@ -240,7 +240,7 @@ export function formatConstruct(element: SourceElement, sourceLines: string[], i
 }
 
 /**
- * @brief Finds named constructs across explicit files and renders markdown excerpts.
+ * @brief Searches named constructs across explicit files and renders markdown excerpts.
  * @details Validates files, infers languages, skips unsupported tag/language combinations, analyzes source elements, filters matches by tag and regex, and emits one markdown section per file containing matches. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] filePaths {string[]} Explicit file paths to search.
  * @param[in] tagFilter {string} Pipe-delimited requested construct tags.
@@ -250,7 +250,7 @@ export function formatConstruct(element: SourceElement, sourceLines: string[], i
  * @return {string} Concatenated markdown output grouped by file.
  * @throws {Error} Throws when no valid tags are provided or when no constructs match the request.
  */
-export function findConstructsInFiles(
+export function searchConstructsInFiles(
   filePaths: string[],
   tagFilter: string,
   pattern: string,

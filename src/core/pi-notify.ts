@@ -196,14 +196,125 @@ export function normalizePiNotifyCommand(value: unknown, fallback: string): stri
 
 /**
  * @brief Normalizes one persisted template string.
- * @details Accepts any non-empty string so Pushover title and text templates can be user-configured verbatim and falls back to the supplied default when the payload is empty or invalid. Runtime is O(n) in template length. No external state is mutated.
+ * @details Accepts any non-empty string so Pushover title and text templates can be user-configured verbatim, preserves internal and edge control characters, and falls back to the supplied default when the payload is empty or invalid. Runtime is O(n) in template length. No external state is mutated.
  * @param[in] value {unknown} Raw persisted template payload.
  * @param[in] fallback {string} Canonical fallback template.
  * @return {string} Canonical non-empty template string.
- * @satisfies REQ-185
+ * @satisfies REQ-185, REQ-235
  */
 export function normalizePiNotifyTemplateValue(value: unknown, fallback: string): string {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+/**
+ * @brief Formats control characters for single-line menu rendering.
+ * @details Rewrites supported control bytes into escaped display sequences so configuration rows can render `Pushover text` inside a one-line settings list without executing the embedded control effects. Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] value {string} Raw template text.
+ * @return {string} Escaped single-line display text.
+ * @satisfies REQ-235
+ */
+export function formatPiNotifyControlSequenceText(value: string): string {
+  let result = "";
+  for (const character of value) {
+    switch (character) {
+      case "\\":
+        result += "\\\\";
+        break;
+      case "\n":
+        result += "\\n";
+        break;
+      case "\r":
+        result += "\\r";
+        break;
+      case "\t":
+        result += "\\t";
+        break;
+      case "\0":
+        result += "\\0";
+        break;
+      case "\b":
+        result += "\\b";
+        break;
+      case "\f":
+        result += "\\f";
+        break;
+      case "\v":
+        result += "\\v";
+        break;
+      default:
+        result += character;
+        break;
+    }
+  }
+  return result;
+}
+
+/**
+ * @brief Decodes supported escaped control sequences from one menu input string.
+ * @details Converts the documented `\n`, `\r`, `\t`, `\\`, `\0`, `\b`, `\f`, and `\v` escape sequences into their raw byte forms while preserving unknown escapes verbatim so user-entered text is not lossy. Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] value {string} Escaped menu input text.
+ * @return {string} Decoded raw template text.
+ * @satisfies REQ-235
+ */
+export function parsePiNotifyControlSequenceText(value: string): string {
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character !== "\\") {
+      result += character;
+      continue;
+    }
+    const nextCharacter = value[index + 1];
+    if (nextCharacter === undefined) {
+      result += "\\";
+      break;
+    }
+    switch (nextCharacter) {
+      case "\\":
+        result += "\\";
+        break;
+      case "n":
+        result += "\n";
+        break;
+      case "r":
+        result += "\r";
+        break;
+      case "t":
+        result += "\t";
+        break;
+      case "0":
+        result += "\0";
+        break;
+      case "b":
+        result += "\b";
+        break;
+      case "f":
+        result += "\f";
+        break;
+      case "v":
+        result += "\v";
+        break;
+      default:
+        result += `\\${nextCharacter}`;
+        break;
+    }
+    index += 1;
+  }
+  return result;
+}
+
+/**
+ * @brief Tests whether both persisted Pushover credentials are non-empty.
+ * @details Performs exact empty-string checks against the normalized user and token fields so UI locking, config persistence, and prompt-end delivery can share one readiness rule. Runtime is O(1). No external state is mutated.
+ * @param[in] config {Pick<UseReqConfig, "notify-pushover-user-key" | "notify-pushover-api-token">} Effective Pushover credential subset.
+ * @return {boolean} `true` when both Pushover credential fields are non-empty.
+ * @satisfies REQ-168, REQ-234
+ */
+export function hasPiNotifyPushoverCredentials(
+  config: Pick<UseReqConfig, "notify-pushover-user-key" | "notify-pushover-api-token">,
+): boolean {
+  return config["notify-pushover-user-key"] !== ""
+    && config["notify-pushover-api-token"] !== "";
 }
 
 /**
@@ -635,8 +746,7 @@ function shouldRunPiNotifyPushover(
       config["notify-pushover-on-interrupted"],
       config["notify-pushover-on-failed"],
     )
-    && config["notify-pushover-user-key"] !== ""
-    && config["notify-pushover-api-token"] !== "";
+    && hasPiNotifyPushoverCredentials(config);
 }
 
 /**

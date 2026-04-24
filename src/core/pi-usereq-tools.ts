@@ -9,23 +9,16 @@
  * @details The tuple is the single source of truth for custom tool-name validation, default enablement, and active-tool filtering. Membership checks become O(1) when projected through `PI_USEREQ_CUSTOM_TOOL_SET`.
  */
 export const PI_USEREQ_CUSTOM_TOOL_NAMES = [
-  "git-path",
-  "get-base-path",
   "files-tokens",
   "files-references",
   "files-compress",
-  "files-find",
+  "files-search",
   "references",
   "compress",
-  "find",
+  "search",
   "tokens",
   "files-static-check",
   "static-check",
-  "git-check",
-  "docs-check",
-  "git-wt-name",
-  "git-wt-create",
-  "git-wt-delete",
 ] as const;
 
 /**
@@ -33,7 +26,7 @@ export const PI_USEREQ_CUSTOM_TOOL_NAMES = [
  * @details The tuple is constrained to embedded tools that remain independently addressable alongside the extension-owned tool inventory. Membership checks become O(1) when projected through `PI_USEREQ_EMBEDDED_TOOL_SET`.
  * @satisfies REQ-063
  */
-export const PI_USEREQ_EMBEDDED_TOOL_NAMES = ["read", "bash", "edit", "write", "grep", "ls"] as const;
+export const PI_USEREQ_EMBEDDED_TOOL_NAMES = ["read", "bash", "edit", "write", "find", "grep", "ls"] as const;
 
 /**
  * @brief Enumerates embedded pi CLI tools enabled by default.
@@ -53,28 +46,31 @@ export const PI_USEREQ_STARTUP_TOOL_NAMES = [
 
 /**
  * @brief Enumerates the default enabled-tool configuration.
- * @details Enables every extension-owned tool except `find` plus the supported embedded read/write shell quartet while leaving discovery helpers `find`, `grep`, and `ls` disabled until explicitly configured. Access complexity is O(1).
+ * @details Enables the documented analysis and static-check custom tools plus the supported embedded read/write shell quartet, while leaving embedded discovery helpers disabled until explicitly configured. Access complexity is O(1).
  * @satisfies REQ-064
  */
 export const PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES = [
-  "git-path",
-  "get-base-path",
   "files-tokens",
   "files-references",
   "files-compress",
-  "files-find",
+  "files-search",
   "references",
   "compress",
+  "search",
   "tokens",
   "files-static-check",
   "static-check",
-  "git-check",
-  "docs-check",
-  "git-wt-name",
-  "git-wt-create",
-  "git-wt-delete",
   ...PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES,
 ] as const;
+
+/**
+ * @brief Provides O(1) membership checks for default-enabled configurable tools.
+ * @details Materializes the canonical default-enabled tuple as a `Set<string>` so menu-ordering and config helpers can partition default-enabled and default-disabled tool names without repeated linear scans. Construction occurs once at module load.
+ * @satisfies REQ-064
+ */
+export const PI_USEREQ_DEFAULT_ENABLED_TOOL_SET = new Set<string>(
+  PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
+);
 
 /**
  * @brief Represents one valid extension-owned configurable tool identifier.
@@ -137,4 +133,46 @@ export function normalizeEnabledPiUsereqTools(value: unknown): PiUsereqStartupTo
   const configured = value.filter((item): item is string => typeof item === "string");
   const enabled = configured.filter((name): name is PiUsereqStartupToolName => PI_USEREQ_STARTUP_TOOL_SET.has(name));
   return [...new Set(enabled)];
+}
+
+/**
+ * @brief Builds the menu-order partition key for one configurable tool name.
+ * @details Encodes the documented `Enable tools` ordering by grouping custom tools before embedded tools, placing non-`files-*` custom tools before `files-*` custom tools, and moving default-disabled names to the tail of each resolved partition. Runtime is O(1). No external state is mutated.
+ * @param[in] name {PiUsereqStartupToolName} Canonical configurable tool name.
+ * @return {[number, number, number, string]} Stable tuple `{group, subgroup, default_state, name}` used for lexicographic ordering.
+ * @satisfies REQ-007, REQ-231, REQ-232
+ */
+function buildPiUsereqStartupToolSortKey(
+  name: PiUsereqStartupToolName,
+): [number, number, number, string] {
+  const isCustomTool = PI_USEREQ_CUSTOM_TOOL_SET.has(name);
+  const groupRank = isCustomTool ? 0 : 1;
+  const subgroupRank = isCustomTool && name.startsWith("files-") ? 1 : 0;
+  const defaultStateRank = PI_USEREQ_DEFAULT_ENABLED_TOOL_SET.has(name) ? 0 : 1;
+  return [groupRank, subgroupRank, defaultStateRank, name];
+}
+
+/**
+ * @brief Compares two configurable tool names using the documented menu order.
+ * @details Applies the partition key emitted by `buildPiUsereqStartupToolSortKey(...)` and falls back to lexical comparison inside the final key slot so the `Enable tools` submenu stays deterministic across runtimes. Runtime is O(1). No external state is mutated.
+ * @param[in] left {PiUsereqStartupToolName} Left configurable tool name.
+ * @param[in] right {PiUsereqStartupToolName} Right configurable tool name.
+ * @return {number} Negative when `left` sorts before `right`; positive when after; `0` when equal.
+ * @satisfies REQ-007, REQ-231, REQ-232
+ */
+export function comparePiUsereqStartupToolNames(
+  left: PiUsereqStartupToolName,
+  right: PiUsereqStartupToolName,
+): number {
+  const leftKey = buildPiUsereqStartupToolSortKey(left);
+  const rightKey = buildPiUsereqStartupToolSortKey(right);
+  for (let index = 0; index < leftKey.length; index += 1) {
+    if (leftKey[index] < rightKey[index]) {
+      return -1;
+    }
+    if (leftKey[index] > rightKey[index]) {
+      return 1;
+    }
+  }
+  return 0;
 }

@@ -9,13 +9,15 @@ import { Container, SettingsList, Text, type Component, type SettingItem, type S
 
 /**
  * @brief Describes one selectable pi-usereq settings-menu choice.
- * @details Stores the stable action identifier, left-column label, right-column current value, optional value-tone override, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the stable action identifier, left-column label, optional label and value tone overrides, optional disabled state, right-column current value, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqSettingsMenuChoice {
   id: string;
   label: string;
+  labelTone?: "default" | "dim";
   value: string;
   valueTone?: "default" | "dim";
+  disabled?: boolean;
   description: string;
 }
 
@@ -160,7 +162,7 @@ function createImmediateSelectionComponent(choiceId: string, done: (value?: stri
 
 /**
  * @brief Builds `SettingsList` items from one menu-choice vector.
- * @details Copies labels, current values, value-tone overrides, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier. Runtime is O(n) in choice count. No external state is mutated.
+ * @details Copies labels, current values, label-tone overrides, value-tone overrides, disabled-state semantics, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier only for enabled rows. Runtime is O(n) in choice count. No external state is mutated.
  * @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
  * @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
  * @param[in] done {(value?: string) => void} Outer custom-UI completion callback.
@@ -173,18 +175,22 @@ function buildSettingItems(
 ): SettingItem[] {
   return choices.map((choice) => ({
     id: choice.id,
-    label: choice.label,
+    label: choice.labelTone === "dim"
+      ? theme.fg("dim", choice.label)
+      : choice.label,
     description: choice.description,
     currentValue: choice.valueTone === "dim"
       ? theme.fg("dim", choice.value)
       : choice.value,
-    submenu: () => createImmediateSelectionComponent(choice.id, done),
+    submenu: choice.disabled
+      ? undefined
+      : () => createImmediateSelectionComponent(choice.id, done),
   }));
 }
 
 /**
  * @brief Renders one shared pi-usereq settings menu and resolves the selected action.
- * @details Uses `ctx.ui.custom(...)` plus `SettingsList` so every configuration menu shares pi.dev styling, right-aligned current values, circular scrolling, and bottom-line descriptions. The returned custom component also exposes an offline bridge for deterministic tests and debug harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
+ * @details Uses `ctx.ui.custom(...)` plus `SettingsList` so every configuration menu shares pi.dev styling, right-aligned current values, circular scrolling, bottom-line descriptions, and optional disabled rows. The returned custom component also exposes an offline bridge for deterministic tests and debug harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] title {string} Menu title displayed in the heading and offline bridge.
  * @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
@@ -242,7 +248,7 @@ export async function showPiUsereqSettingsMenu(
           const choice = choices.find(
             (candidate) => candidate.label === label || candidate.id === label,
           );
-          if (!choice) {
+          if (!choice || choice.disabled) {
             return false;
           }
           done(choice.id);

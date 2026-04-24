@@ -241,8 +241,29 @@ function formatCompressedSourceText(entries: CompressedLineEntry[]): string {
 }
 
 /**
+ * @brief Normalizes one retained source line while preserving requested indentation semantics.
+ * @details Preserves the full leading whitespace prefix for indentation-significant languages and for any other line whose leading indentation contains at least one tab, while trimming leading whitespace for space-only indentation in other languages. Runtime is O(n) in line length. No external state is mutated.
+ * @param[in] line {string} Candidate source line after comment removal.
+ * @param[in] preserveIndent {boolean} Whether the language requires full indentation preservation.
+ * @return {string} Normalized retained line, or an empty string when no content remains.
+ */
+function normalizeRetainedLineIndentation(line: string, preserveIndent: boolean): string {
+  const content = line.trim();
+  if (!content) {
+    return "";
+  }
+
+  const leading = line.slice(0, line.length - line.trimStart().length);
+  if (preserveIndent || leading.includes("\t")) {
+    return `${leading}${content}`;
+  }
+
+  return content;
+}
+
+/**
  * @brief Compresses in-memory source text into the structured compression model.
- * @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, retains leading indentation for indentation-significant languages, and emits both structured line entries and a rendered text excerpt. Runtime is O(n) in source length. No external state is mutated.
+ * @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, retains full leading indentation for indentation-significant languages, preserves leading-tab indentation for other languages, and emits both structured line entries and a rendered text excerpt. Runtime is O(n) in source length. No external state is mutated.
  * @param[in] source {string} Raw source text.
  * @param[in] language {string} Canonical compression language identifier.
  * @param[in] includeLineNumbers {boolean} When `true`, prefix rendered text lines with original source line numbers.
@@ -375,20 +396,10 @@ export function compressSourceDetailed(source: string, language: string, include
       line = removeInlineComment(line, spec.singleComment, stringDelimiters);
     }
 
-    if (preserveIndent) {
-      const leading = line.slice(0, line.length - line.trimStart().length);
-      const content = line.trim();
-      if (!content) {
-        index += 1;
-        continue;
-      }
-      line = `${leading}${content}`;
-    } else {
-      line = line.trim();
-      if (!line) {
-        index += 1;
-        continue;
-      }
+    line = normalizeRetainedLineIndentation(line, preserveIndent);
+    if (!line) {
+      index += 1;
+      continue;
     }
 
     line = line.replace(/[ \t]+$/g, "");

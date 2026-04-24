@@ -702,7 +702,7 @@ export class SourceAnalyzer {
 
   /**
    * @brief Derives single-line signatures for non-comment elements.
-   * @details Uses the first extracted line, trims structural suffixes such as trailing `{`, `:`, or `;`, and stores the result as `element.signature`. Runtime is O(n). Side effect: mutates `element.signature`.
+   * @details Uses the first extracted line, preserves leading tabs when present, trims structural suffixes such as trailing `{`, `:`, or `;`, and stores the result as `element.signature`. Runtime is O(n). Side effect: mutates `element.signature`.
    * @param[in,out] elements {SourceElement[]} Elements to enrich.
    * @return {void} No return value.
    */
@@ -710,7 +710,7 @@ export class SourceAnalyzer {
     const skipTypes = new Set([ElementType.COMMENT_SINGLE, ElementType.COMMENT_MULTI, ElementType.IMPORT, ElementType.DECORATOR]);
     for (const element of elements) {
       if (skipTypes.has(element.elementType)) continue;
-      let signature = (element.extract.split("\n")[0] ?? "").trim();
+      let signature = normalizeSourceLineForExtraction(element.extract.split("\n")[0] ?? "");
       for (const suffix of [" {", "{", ":", ";"]) {
         if (signature.endsWith(suffix) && !signature.endsWith("::")) {
           signature = signature.slice(0, -suffix.length).trimEnd();
@@ -1456,8 +1456,28 @@ export function collectFileLevelDoxygenFields(elements: SourceElement[]): Record
 }
 
 /**
+ * @brief Normalizes one source-derived line for markdown extraction output.
+ * @details Preserves the full leading whitespace prefix when the line indentation contains at least one tab and otherwise trims leading whitespace while always trimming trailing whitespace. Runtime is O(n) in line length. No external state is mutated.
+ * @param[in] line {string} Source-derived line candidate.
+ * @return {string} Normalized line for markdown output.
+ */
+function normalizeSourceLineForExtraction(line: string): string {
+  const content = line.trim();
+  if (!content) {
+    return "";
+  }
+
+  const leading = line.slice(0, line.length - line.trimStart().length);
+  if (leading.includes("\t")) {
+    return `${leading}${content}`;
+  }
+
+  return content;
+}
+
+/**
  * @brief Renders analyzed source elements as the repository reference-markdown format.
- * @details Builds file metadata, imports, top-level definitions, child elements, comments, and a symbol index while incorporating Doxygen fields and optional legacy annotations. Runtime is O(n log n) in element count. No side effects occur.
+ * @details Builds file metadata, imports, top-level definitions, child elements, comments, and a symbol index while incorporating Doxygen fields, optional legacy annotations, and preserved leading tabs in source-derived lines. Runtime is O(n log n) in element count. No side effects occur.
  * @param[in] elements {SourceElement[]} Enriched source elements.
  * @param[in] filePath {string} Display file path.
  * @param[in] language {string} Canonical analyzer language identifier.
@@ -1500,14 +1520,14 @@ export function formatMarkdown(
   if (imports.length > 0) {
     out.push("## Imports");
     out.push("```");
-    imports.forEach((imp) => out.push((imp.extract.split("\n")[0] ?? "").trim()));
+    imports.forEach((imp) => out.push(normalizeSourceLineForExtraction(imp.extract.split("\n")[0] ?? "")));
     out.push("```");
     out.push("");
   }
 
   const decoratorMap: Record<number, string> = {};
   elements.filter((element) => element.elementType === ElementType.DECORATOR).forEach((element) => {
-    decoratorMap[element.lineStart] = (element.extract.split("\n")[0] ?? "").trim();
+    decoratorMap[element.lineStart] = normalizeSourceLineForExtraction(element.extract.split("\n")[0] ?? "");
   });
 
   const definitions = elements.filter((element) => !skipTypes.has(element.elementType)).sort((a, b) => a.lineStart - b.lineStart);
@@ -1554,7 +1574,7 @@ export function formatMarkdown(
 
       const isInline = inlineTypes.has(element.elementType) || element.lineStart === element.lineEnd;
       if (isInline) {
-        const firstLine = (element.extract.split("\n")[0] ?? "").trim();
+        const firstLine = normalizeSourceLineForExtraction(element.extract.split("\n")[0] ?? "");
         let line = `- ${kind} \`${firstLine}\`${visibility} (L${element.lineStart})`;
         if (includeLegacyAnnotations && docText) line += ` — ${docText}`;
         out.push(line);
@@ -1563,7 +1583,7 @@ export function formatMarkdown(
       }
 
       if (element.elementType === ElementType.IMPL) {
-        signature = ((element.extract.split("\n")[0] ?? "").trim()).replace(/\s*\{$/, "");
+        signature = normalizeSourceLineForExtraction(element.extract.split("\n")[0] ?? "").replace(/\s*\{$/, "");
       }
       out.push(`### ${kind} \`${signature}\`${inherit}${visibility}${decorator} (${location})`);
       if (doxygenMarkdown.length > 0) {

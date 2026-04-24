@@ -97,14 +97,9 @@ function takeBooleanFlag(tokens: string[], flag: string): { tokens: string[]; pr
 export function buildToolParamsFromArgsText(toolName: string, argsText: string): Record<string, unknown> {
   const tokens = shellSplit(argsText);
   switch (toolName) {
-    case "git-path":
-    case "get-base-path":
     case "references":
     case "tokens":
     case "static-check":
-    case "git-check":
-    case "docs-check":
-    case "git-wt-name":
       if (tokens.length !== 0) {
         throw new ReqError(`Error: tool ${toolName} does not accept --args values.`, 1);
       }
@@ -117,10 +112,10 @@ export function buildToolParamsFromArgsText(toolName: string, argsText: string):
       const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
       return present ? { files: remaining, enableLineNumbers: true } : { files: remaining };
     }
-    case "files-find": {
+    case "files-search": {
       const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
       if (remaining.length < 3) {
-        throw new ReqError("Error: tool files-find requires <tag> <pattern> <file...> in --args text.", 1);
+        throw new ReqError("Error: tool files-search requires <tag> <pattern> <file...> in --args text.", 1);
       }
       const [tag, pattern, ...files] = remaining;
       return present ? { tag, pattern, files, enableLineNumbers: true } : { tag, pattern, files };
@@ -132,20 +127,14 @@ export function buildToolParamsFromArgsText(toolName: string, argsText: string):
       }
       return present ? { enableLineNumbers: true } : {};
     }
-    case "find": {
+    case "search": {
       const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
       if (remaining.length !== 2) {
-        throw new ReqError("Error: tool find requires <tag> <pattern> in --args text.", 1);
+        throw new ReqError("Error: tool search requires <tag> <pattern> in --args text.", 1);
       }
       const [tag, pattern] = remaining;
       return present ? { tag, pattern, enableLineNumbers: true } : { tag, pattern };
     }
-    case "git-wt-create":
-    case "git-wt-delete":
-      if (tokens.length !== 1) {
-        throw new ReqError(`Error: tool ${toolName} requires exactly one wtName value in --args text.`, 1);
-      }
-      return { wtName: tokens[0] };
     default:
       throw new ReqError(`Error: unsupported --args conversion for tool ${toolName}. Use --params with JSON.`, 1);
   }

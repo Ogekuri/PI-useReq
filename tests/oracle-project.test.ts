@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { getProjectConfigPath } from "../src/core/config.js";
+import { createStaticCheckLanguageConfig } from "../src/core/config.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
-import { initFixtureRepo, runNodeCli, runPythonCli } from "./helpers.js";
+import { getFixtureFiles, initFixtureRepo, runNodeCli, runPythonCli } from "./helpers.js";
+
+const TAB_SENSITIVE_FIXTURE_NAME = "fixture_go.go";
 
 /**
  * @brief Compares one project-scoped Node CLI execution against the Python oracle.
@@ -21,13 +23,19 @@ function compareCli(args: string[], cwd: string): void {
   assert.equal(node.stderr, python.stderr, `stderr mismatch for ${args.join(" ")}`);
 }
 
-test("project-scan commands match the Python oracle on a git-backed fixture repository", async (t) => {
+test("project-scan commands match the Python oracle on a git-backed repository without preserved leading tabs", async (t) => {
+  const fixtures = getFixtureFiles().filter((fixture) => path.basename(fixture) !== TAB_SENSITIVE_FIXTURE_NAME);
   const { projectBase } = initFixtureRepo({
+    fixtures,
     staticCheck: {
-      Python: [{ module: "Command", cmd: "false" }],
+      Python: createStaticCheckLanguageConfig([{ module: "Command", cmd: "false" }], "enable"),
     },
   });
+  t.after(() => {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  });
 
+  await t.test("references", () => compareCli(["--references"], projectBase));
   await t.test("compress", () => compareCli(["--compress"], projectBase));
   await t.test("compress with line numbers", () => compareCli(["--compress", "--enable-line-numbers"], projectBase));
   await t.test("find", () => {
@@ -35,34 +43,25 @@ test("project-scan commands match the Python oracle on a git-backed fixture repo
     compareCli(["--find", tagFilter, ".*"], projectBase);
   });
   await t.test("tokens", () => compareCli(["--tokens"], projectBase));
-  await t.test("git-check", () => compareCli(["--git-check"], projectBase));
-  await t.test("docs-check", () => compareCli(["--docs-check"], projectBase));
-  await t.test("git-path", () => compareCli(["--git-path"], projectBase));
-  await t.test("get-base-path", () => compareCli(["--get-base-path"], projectBase));
-  await t.test("git-wt-name", () => {
-    let matched = false;
-    for (let attempt = 0; attempt < 3 && !matched; attempt += 1) {
-      const python = runPythonCli(["--git-wt-name"], projectBase);
-      const node = runNodeCli(["--git-wt-name"], projectBase);
-      if (python.stdout === node.stdout && python.status === node.status && python.stderr === node.stderr) {
-        matched = true;
-      }
-    }
-    assert.ok(matched, "git-wt-name did not match Python oracle within 3 attempts");
-  });
 });
 
-test("git worktree create/delete wrappers produce expected worktree side effects", () => {
-  const { projectBase } = initFixtureRepo();
-  const wtName = "pi-usereq-test-wt";
+test("project-scan source extraction preserves leading tabs for Go sources", (t) => {
+  const goFixture = getFixtureFiles().find((fixture) => path.basename(fixture) === TAB_SENSITIVE_FIXTURE_NAME);
+  assert.ok(goFixture, `missing ${TAB_SENSITIVE_FIXTURE_NAME}`);
+  const { projectBase } = initFixtureRepo({ fixtures: [goFixture] });
+  t.after(() => {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  });
 
-  const createResult = runNodeCli(["--git-wt-create", wtName], projectBase);
-  assert.equal(createResult.status, 0, createResult.stderr);
-  const worktreePath = path.join(path.dirname(projectBase), wtName);
-  assert.ok(fs.existsSync(worktreePath), "worktree path was not created");
-  assert.ok(fs.existsSync(getProjectConfigPath(worktreePath)), "project config was not copied into worktree");
+  const references = runNodeCli(["--references"], projectBase);
+  assert.equal(references.status, 0, references.stderr);
+  assert.match(references.stdout, /\tvar wg sync\.WaitGroup/);
 
-  const deleteResult = runNodeCli(["--git-wt-delete", wtName], projectBase);
-  assert.equal(deleteResult.status, 0, deleteResult.stderr);
-  assert.ok(!fs.existsSync(worktreePath), "worktree path was not removed");
+  const compress = runNodeCli(["--compress", "--enable-line-numbers"], projectBase);
+  assert.equal(compress.status, 0, compress.stderr);
+  assert.match(compress.stdout, /\d+: \t"context"/);
+
+  const find = runNodeCli(["--find", "METHOD|FUNCTION", "^Start$", "--enable-line-numbers"], projectBase);
+  assert.equal(find.status, 0, find.stderr);
+  assert.match(find.stdout, /\d+: \ts\.Lock\(\)/);
 });

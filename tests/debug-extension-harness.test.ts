@@ -18,7 +18,7 @@ import { initFixtureRepo } from "./helpers.js";
 
 /**
  * @brief Persists a targeted enabled-tool list into a fixture project config.
- * @details Loads `.pi-usereq/config.json`, replaces the `enabled-tools` array with the supplied values, and writes the updated JSON back to disk with a trailing newline. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
+ * @details Loads `.pi-usereq.json`, replaces the `enabled-tools` array with the supplied values, and writes the updated JSON back to disk with a trailing newline. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] enabledTools {string[]} Enabled-tool names to persist.
  * @return {void} No return value.
@@ -44,7 +44,7 @@ function buildOfflineFixture(): OfflineContractSnapshot {
     commands: [
       {
         name: "req-analyze",
-        description: "Run pi-usereq prompt analyze",
+        description: "Produce an analysis report",
         source: "extension",
         sourceInfo: {
           path: "/repo/src/index.ts",
@@ -57,8 +57,8 @@ function buildOfflineFixture(): OfflineContractSnapshot {
     ],
     tools: [
       {
-        name: "git-path",
-        description: "Return the runtime-derived git root path for the current working directory.",
+        name: "tokens",
+        description: "Return the structured canonical-document token payload.",
         promptGuidelines: [],
         hasParameters: false,
         sourceInfo: {
@@ -71,7 +71,7 @@ function buildOfflineFixture(): OfflineContractSnapshot {
       },
     ],
     eventHandlers: ["session_start"],
-    activeTools: ["git-path"],
+    activeTools: ["tokens"],
     sentUserMessages: [],
   };
 }
@@ -89,7 +89,7 @@ function buildSdkFixture(overrides?: Partial<SdkContractSnapshot>): SdkContractS
     commands: [
       {
         name: "req-analyze",
-        description: "Run pi-usereq prompt analyze",
+        description: "Produce an analysis report",
         sourceInfo: {
           path: "src/index.ts",
           source: "extension",
@@ -101,8 +101,8 @@ function buildSdkFixture(overrides?: Partial<SdkContractSnapshot>): SdkContractS
     ],
     tools: [
       {
-        name: "git-path",
-        description: "Return the runtime-derived git root path for the current working directory.",
+        name: "tokens",
+        description: "Return the structured canonical-document token payload.",
         hasParameters: false,
         sourceInfo: {
           path: "src/index.ts",
@@ -113,7 +113,7 @@ function buildSdkFixture(overrides?: Partial<SdkContractSnapshot>): SdkContractS
         },
       },
     ],
-    activeTools: ["git-path"],
+    activeTools: ["tokens"],
     runtimeShape: "extensionsResult.runtime.pi",
     ...overrides,
   };
@@ -140,7 +140,7 @@ test("inspectExtension records commands, tools, events, and manual examples", as
     const report = await inspectExtension(projectBase);
 
     assert.ok(report.commands.some((command) => command.name === "req-analyze"));
-    assert.ok(report.tools.some((tool) => tool.name === "git-path"));
+    assert.ok(report.tools.some((tool) => tool.name === "tokens"));
     assert.deepEqual(report.eventHandlers, [...PI_USEREQ_STATUS_HOOK_NAMES]);
 
     for (const command of report.commands.filter((entry) => entry.name.startsWith("req-"))) {
@@ -156,21 +156,21 @@ test("inspectExtension records commands, tools, events, and manual examples", as
   }
 });
 
-test("inspectExtension surfaces agent-oriented find tool descriptions and schema details", async () => {
+test("inspectExtension surfaces agent-oriented search tool descriptions and schema details", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     const report = await inspectExtension(projectBase);
-    const filesFind = report.tools.find((tool) => tool.name === "files-find");
-    const find = report.tools.find((tool) => tool.name === "find");
+    const filesSearch = report.tools.find((tool) => tool.name === "files-search");
+    const search = report.tools.find((tool) => tool.name === "search");
 
-    assert.ok(filesFind, "missing files-find tool");
-    assert.ok(find, "missing find tool");
-    assert.match(filesFind.description ?? "", /token-optimized JSON payload/);
-    assert.ok(filesFind.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
-    assert.match(String((filesFind.parameters as { description?: string } | undefined)?.description ?? ""), /Static supported-tag matrices are documented in tool registration metadata/);
-    assert.match(find.description ?? "", /configured project source directories/);
-    assert.ok(find.promptGuidelines?.some((line) => line.includes("Regex rule:")));
-    assert.match(String((find.parameters as { description?: string } | undefined)?.description ?? ""), /Regex matches construct names only/);
+    assert.ok(filesSearch, "missing files-search tool");
+    assert.ok(search, "missing search tool");
+    assert.match(filesSearch.description ?? "", /monolithic construct-search markdown report/);
+    assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
+    assert.match(String((filesSearch.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
+    assert.match(search.description ?? "", /configured project source directories/);
+    assert.ok(search.promptGuidelines?.some((line) => line.includes("Regex rule:")));
+    assert.match(String((search.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -185,52 +185,34 @@ test("inspectExtension surfaces agent-oriented compression tool descriptions and
 
     assert.ok(filesCompress, "missing files-compress tool");
     assert.ok(compress, "missing compress tool");
-    assert.match(filesCompress.description ?? "", /summary, repository, files, and execution sections/);
+    assert.match(filesCompress.description ?? "", /monolithic compression markdown report/);
     assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
-    assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+    assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
     assert.match(compress.description ?? "", /configured project source directories/);
-    assert.ok(compress.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
-    assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /structured compressed lines/);
+    assert.ok(compress.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+    assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("inspectExtension surfaces structured utility tool descriptions and schema details", async () => {
+test("inspectExtension surfaces static-check tool descriptions and schema details", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     const report = await inspectExtension(projectBase);
-    const gitPath = report.tools.find((tool) => tool.name === "git-path");
     const filesStaticCheck = report.tools.find((tool) => tool.name === "files-static-check");
-    const gitCheck = report.tools.find((tool) => tool.name === "git-check");
-    const docsCheck = report.tools.find((tool) => tool.name === "docs-check");
-    const gitWtCreate = report.tools.find((tool) => tool.name === "git-wt-create");
+    const staticCheck = report.tools.find((tool) => tool.name === "static-check");
 
-    assert.ok(gitPath, "missing git-path tool");
     assert.ok(filesStaticCheck, "missing files-static-check tool");
-    assert.ok(gitCheck, "missing git-check tool");
-    assert.ok(docsCheck, "missing docs-check tool");
-    assert.ok(gitWtCreate, "missing git-wt-create tool");
+    assert.ok(staticCheck, "missing static-check tool");
 
-    assert.match(gitPath.description ?? "", /token-optimized JSON payload/);
-    assert.ok(gitPath.promptGuidelines?.some((line) => line.includes("Output contract:")));
-    assert.match(String((gitPath.parameters as { description?: string } | undefined)?.description ?? ""), /path_value/);
-
-    assert.match(filesStaticCheck.description ?? "", /selection status/);
+    assert.match(filesStaticCheck.description ?? "", /monolithic static-check report/);
     assert.ok(filesStaticCheck.promptGuidelines?.some((line) => line.includes("Failure contract:")));
-    assert.match(String((filesStaticCheck.parameters as { description?: string } | undefined)?.description ?? ""), /configured checker modules/);
+    assert.match(String((filesStaticCheck.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic text/);
 
-    assert.match(gitCheck.description ?? "", /token-optimized JSON payload/);
-    assert.ok(gitCheck.promptGuidelines?.some((line) => line.includes("Behavior contract:")));
-    assert.match(String((gitCheck.parameters as { description?: string } | undefined)?.description ?? ""), /aggregate repository status fields/);
-
-    assert.match(docsCheck.description ?? "", /remediation prompt commands/);
-    assert.ok(docsCheck.promptGuidelines?.some((line) => line.includes("Specialization trigger:")));
-    assert.match(String((docsCheck.parameters as { description?: string } | undefined)?.description ?? ""), /prompt_command remediation/);
-
-    assert.match(gitWtCreate.description ?? "", /derived path/);
-    assert.ok(gitWtCreate.promptGuidelines?.some((line) => line.includes("Specialization trigger:")));
-    assert.match(String((gitWtCreate.parameters as { description?: string } | undefined)?.description ?? ""), /worktree_path/);
+    assert.match(staticCheck.description ?? "", /configured source and test directories/);
+    assert.ok(staticCheck.promptGuidelines?.some((line) => line.includes("Selection contract:")));
+    assert.match(String((staticCheck.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic text/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -239,20 +221,22 @@ test("inspectExtension surfaces structured utility tool descriptions and schema 
 test("replaySessionStart captures active tools, statuses, and cwd semantics", async () => {
   const { projectBase } = initFixtureRepo();
   try {
-    writeEnabledTools(projectBase, ["git-path", "static-check"]);
+    writeEnabledTools(projectBase, ["files-tokens", "static-check"]);
     const report = await replaySessionStart(projectBase);
     const status = report.ui.statuses["pi-usereq"] ?? "";
 
-    assert.deepEqual([...report.activeTools].sort(), ["git-path", "static-check"]);
+    assert.deepEqual([...report.activeTools].sort(), ["files-tokens", "static-check"]);
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
     const normalizedBasePath = projectBase.split(path.sep).join("/");
-    assert.match(status, new RegExp(`<accent>base:</accent><warning>${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</warning>`));
+    assert.match(status, /<accent>status:<\/accent><warning>idle<\/warning>/);
+    assert.match(status, new RegExp(`<accent>current-path:</accent><warning>${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</warning>`));
     assert.match(status, /<accent>context:<\/accent><warning>▕_▏<\/warning>/);
     assert.match(status, /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
     assert.doesNotMatch(status, /<accent>beep:<\/accent>/);
     assert.doesNotMatch(status, /<accent>pushover:<\/accent>/);
+    assert.doesNotMatch(status, /<accent>base:<\/accent>/);
     assert.doesNotMatch(status, /<accent>docs:<\/accent>/);
     assert.doesNotMatch(status, /<accent>src:<\/accent>/);
     assert.doesNotMatch(status, /<accent>tests:<\/accent>/);
@@ -267,6 +251,26 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
 test("replayCommand captures prompt command payloads", async () => {
   const { projectBase } = initFixtureRepo();
   try {
+    const configPath = getProjectConfigPath(projectBase);
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    config.GIT_WORKTREE_ENABLED = "disable";
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    assert.equal(spawnSync("git", ["add", ".pi-usereq.json", ".req/config.json"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "config override"], {
+      cwd: projectBase,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "pi-usereq",
+        GIT_AUTHOR_EMAIL: "pi-usereq@example.com",
+        GIT_COMMITTER_NAME: "pi-usereq",
+        GIT_COMMITTER_EMAIL: "pi-usereq@example.com",
+      },
+    });
+    assert.equal(commit.status, 0, commit.stderr);
     const report = await replayCommand("req-analyze", "Inspect src/index.ts for prompt coverage", projectBase);
 
     assert.equal(report.effectiveCtxCwd, projectBase);
@@ -287,7 +291,7 @@ test("replayCommand captures interactive UI side effects", async () => {
       projectBase,
       undefined,
       {
-        selects: ["Enable tools", "Disable all configurable tools", "Save and close", "Save and close"],
+        selects: ["Enable tools", "Disable all configurable tools"],
         inputs: [],
       },
     );
@@ -304,27 +308,24 @@ test("replayCommand captures interactive UI side effects", async () => {
 test("replayTool captures tool results and cwd semantics", async () => {
   const { projectBase } = initFixtureRepo();
   try {
-    const report = await replayTool("git-path", {}, projectBase);
+    const report = await replayTool("tokens", {}, projectBase);
     const toolResult = report.toolResult as {
       content?: Array<{ type: string; text?: string }>;
-      details?: {
-        result: { path_value: string; path_present: boolean };
-        execution: { code: number };
-      };
+      details?: { execution: { code: number; stderr_lines?: string[] } };
     };
 
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
-    assert.deepEqual(JSON.parse(toolResult.content?.[0]?.text ?? "{}"), JSON.parse(JSON.stringify(toolResult.details)));
-    assert.equal(toolResult.details?.result.path_value, projectBase);
-    assert.equal(toolResult.details?.result.path_present, true);
+    assert.match(toolResult.content?.[0]?.text ?? "", /Pack Summary/);
+    assert.match(toolResult.content?.[0]?.text ?? "", /REQUIREMENTS\.md/);
     assert.equal(toolResult.details?.execution.code, 0);
+    assert.deepEqual(toolResult.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
-test("pi-usereq-debug tool forwards --params unchanged for files-find", () => {
+test("pi-usereq-debug tool forwards --params unchanged for files-search", () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     fs.writeFileSync(path.join(projectBase, "src", "find_target.py"), "def foo():\n    return 1\n", "utf8");
@@ -335,7 +336,7 @@ test("pi-usereq-debug tool forwards --params unchanged for files-find", () => {
       enableLineNumbers: true,
     };
     const result = runPiUsereqDebug(
-      ["tool", "files-find", "--params", JSON.stringify(expectedParams), "--format", "json"],
+      ["tool", "files-search", "--params", JSON.stringify(expectedParams), "--format", "json"],
       projectBase,
     );
 
@@ -360,7 +361,7 @@ test("pi-usereq-debug tool converts --args text into forwarded params JSON", () 
     const result = runPiUsereqDebug(
       [
         "tool",
-        "files-find",
+        "files-search",
         "--args",
         "FUNCTION ^foo$ src/find_target.py --enable-line-numbers",
         "--format",
@@ -412,7 +413,7 @@ test("buildParityReport returns ok for aligned inventories and reports mismatch 
       ],
       tools: [
         {
-          name: "git-path",
+          name: "tokens",
           description: "Different tool",
           hasParameters: true,
           sourceInfo: {

@@ -8,8 +8,9 @@
  * @brief Declares the extension version string.
  * @details The value is exported for external inspection and packaging metadata alignment. Access complexity is O(1).
  */
-export const VERSION = "0.7.0"
+export const VERSION = "0.9.0";
 
+import fs from "node:fs";
 import path from "node:path";
 import type {
   AgentEndEvent,
@@ -18,47 +19,26 @@ import type {
   ExtensionContext,
   ToolInfo,
 } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import {
-  buildTokenToolPayload,
-  TOKEN_COUNTER_ENCODING,
-  type TokenToolPayload,
-} from "./core/token-counter.js";
-import {
-  buildDocsCheckToolPayload,
-  buildGitCheckToolPayload,
-  buildPathQueryToolPayload,
-  buildStaticCheckToolPayload,
-  buildStructuredToolExecuteResult,
-  buildToolExecutionSection,
-  buildWorktreeMutationToolPayload,
-  buildWorktreeNameToolPayload,
+  buildMonolithicToolExecuteResult,
   normalizeToolFailure,
 } from "./core/agent-tool-json.js";
+import type { FindToolScope } from "./core/find-payload.js";
 import {
-  buildReferenceToolExecutionStderr,
-  buildReferenceToolPayload,
-  type ReferenceToolPayload,
-} from "./core/reference-payload.js";
-import {
-  buildCompressToolExecutionStderr,
-  buildCompressToolPayload,
-  type CompressToolPayload,
-} from "./core/compress-payload.js";
-import {
-  buildFindToolExecutionStderr,
-  buildFindToolPayload,
-  type FindToolPayload,
-  type FindToolScope,
-} from "./core/find-payload.js";
-import {
+  DEFAULT_GIT_WORKTREE_PREFIX,
   DEFAULT_SRC_DIRS,
+  createStaticCheckLanguageConfig,
   getDefaultConfig,
+  getDefaultStaticCheckConfig,
   getProjectConfigPath,
   loadConfig,
   normalizeConfigPaths,
+  resolveEffectiveGitWorktreeEnabled,
   saveConfig,
   type StaticCheckEntry,
+  type StaticCheckLanguageConfig,
   type UseReqConfig,
 } from "./core/config.js";
 import {
@@ -69,76 +49,107 @@ import {
   DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
   DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
   cyclePiNotifySoundLevel,
+  formatPiNotifyControlSequenceText,
   formatPiNotifyPushoverStatus,
   formatPiNotifyStatus,
+  hasPiNotifyPushoverCredentials,
   normalizePiNotifyCommand,
   normalizePiNotifyPushoverCredential,
   normalizePiNotifyPushoverPriority,
   normalizePiNotifyTemplateValue,
+  parsePiNotifyControlSequenceText,
   runPiNotifyEffects,
   type PiNotifyEventRequest,
   type PiNotifyPushoverPriority,
   type PiNotifySoundLevel,
 } from "./core/pi-notify.js";
-import { formatRuntimePathForDisplay } from "./core/path-context.js";
-import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
+import {
+  bootstrapRuntimePathState,
+  formatRuntimePathForDisplay,
+  getRuntimeBasePath,
+  getRuntimeContextPath,
+  setRuntimeGitPath,
+} from "./core/path-context.js";
 import { showPiUsereqSettingsMenu, type PiUsereqSettingsMenuChoice } from "./core/settings-menu.js";
 import {
+  comparePiUsereqStartupToolNames,
+  PI_USEREQ_CUSTOM_TOOL_NAMES,
+  PI_USEREQ_EMBEDDED_TOOL_NAMES,
   PI_USEREQ_STARTUP_TOOL_SET,
   isPiUsereqEmbeddedToolName,
   normalizeEnabledPiUsereqTools,
+  type PiUsereqStartupToolName,
 } from "./core/pi-usereq-tools.js";
 import { renderPrompt } from "./core/prompts.js";
-import { ensureBundledResourcesAccessible } from "./core/resources.js";
+import {
+  abortPromptCommandExecution,
+  activatePromptCommandExecution,
+  classifyPromptCommandOutcome,
+  finalizePromptCommandExecution,
+  getPromptCommandErrorContext,
+  preparePromptCommandExecution,
+  restorePromptCommandExecution,
+  type PromptCommandExecutionPlan,
+} from "./core/prompt-command-runtime.js";
+import {
+  DEBUG_PROMPT_NAMES,
+  DEBUG_WORKFLOW_STATES,
+  DEFAULT_DEBUG_LOG_FILE,
+  DEFAULT_DEBUG_LOG_ON_STATUS,
+  DEFAULT_DEBUG_STATUS_CHANGES,
+  DEFAULT_DEBUG_WORKFLOW_EVENTS,
+  logDebugPromptEvent,
+  logDebugPromptWorkflowEvent,
+  logDebugToolExecution,
+  normalizeDebugEnabledPrompts,
+  normalizeDebugEnabledTools,
+  normalizeDebugLogFile,
+  normalizeDebugLogOnStatus,
+  normalizeDebugStatusChanges,
+  normalizeDebugWorkflowEvents,
+  shouldLogDebugPromptWorkflowState,
+  type DebugLogOnStatus,
+  type DebugWorkflowState,
+} from "./core/debug-runtime.js";
+import { PROMPT_COMMAND_NAMES } from "./core/prompt-command-catalog.js";
+import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
+import {
+  readPersistedPromptCommandRuntimeState,
+  writePersistedPromptCommandRuntimeState,
+} from "./core/prompt-command-state.js";
+import { ensureBundledResourcesAccessible, readBundledPromptDescription } from "./core/resources.js";
+import { ReqError } from "./core/errors.js";
 import {
   PI_USEREQ_STATUS_HOOK_NAMES,
   createPiUsereqStatusController,
   disposePiUsereqStatusController,
+  isStaleExtensionContextError,
   renderPiUsereqStatus,
   setPiUsereqStatusConfig,
+  setPiUsereqWorkflowState,
+  shouldPreservePromptCommandStateOnShutdown,
   updateExtensionStatus,
   type PiUsereqStatusController,
   type PiUsereqStatusHookName,
 } from "./core/extension-status.js";
 import {
-  collectSourceFiles,
+  runCompress,
+  runFilesCompress,
+  runFilesReferences,
+  runFilesSearch,
   runFilesStaticCheck,
-  runGetBasePath,
-  runGitCheck,
-  runGitPath,
-  runGitWtCreate,
-  runGitWtDelete,
-  runGitWtName,
+  runFilesTokens,
   runProjectStaticCheck,
+  runReferences,
+  runSearch,
+  runTokens,
+  type ToolResult,
 } from "./core/tool-runner.js";
 import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
   getSupportedStaticCheckLanguageSupport,
 } from "./core/static-check.js";
 import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
-
-/**
- * @brief Lists bundled prompt commands exposed by the extension.
- * @details Each entry maps to a `req-<name>` command that renders a bundled prompt and sends it to the active session. Access complexity is O(1).
- */
-const PROMPT_NAMES = [
-  "analyze",
-  "change",
-  "check",
-  "cover",
-  "create",
-  "fix",
-  "flowchart",
-  "implement",
-  "new",
-  "readme",
-  "recreate",
-  "refactor",
-  "references",
-  "renumber",
-  "workflow",
-  "write",
-] as const;
 
 /**
  * @brief Describes the optional shortcut-registration surface used by pi-usereq.
@@ -164,7 +175,68 @@ interface PiShortcutRegistrar {
  * @return {string} Absolute project base path.
  */
 function getProjectBase(cwd: string): string {
-  return path.resolve(cwd);
+  const runtimeBasePath = getRuntimeBasePath(cwd);
+  if (fs.existsSync(runtimeBasePath)) {
+    return runtimeBasePath;
+  }
+  bootstrapRuntimePathState(cwd, {
+    gitPath: resolveRuntimeGitPath(cwd),
+  });
+  return getRuntimeBasePath(cwd);
+}
+
+/**
+ * @brief Resolves a safe process working directory for extension-load paths.
+ * @details Returns `process.cwd()` when available and falls back to absolute `PWD`, `HOME`, or `/` when the current shell directory has been deleted. Runtime is O(1). No external state is mutated.
+ * @return {string} Absolute fallback-safe process working directory.
+ */
+function getProcessCwdSafe(): string {
+  try {
+    return process.cwd();
+  } catch {
+    const fallbackCwd = process.env.PWD ?? process.env.HOME ?? path.sep;
+    return path.isAbsolute(fallbackCwd)
+      ? fallbackCwd
+      : path.resolve(path.sep, fallbackCwd);
+  }
+}
+
+/**
+ * @brief Resolves the live working directory used for bootstrap-sensitive flows.
+ * @details Prefers the supplied cwd when it still exists. Otherwise reuses the tracked runtime context path when it remains live, then the tracked runtime base path, and finally a process-safe cwd so deleted worktree paths retained by stale contexts cannot poison later prompt preflight or lifecycle bootstrap. Runtime is O(1) plus bounded filesystem probes. No external state is mutated.
+ * @param[in] cwd {string} Candidate context cwd.
+ * @return {string} Existing absolute cwd used for bootstrap work.
+ */
+function resolveLiveBootstrapCwd(cwd: string): string {
+  const normalizedCwd = path.resolve(cwd);
+  if (fs.existsSync(normalizedCwd)) {
+    return normalizedCwd;
+  }
+  const processCwd = getProcessCwdSafe();
+  const runtimeContextPath = getRuntimeContextPath(processCwd);
+  if (fs.existsSync(runtimeContextPath)) {
+    return runtimeContextPath;
+  }
+  const runtimeBasePath = getRuntimeBasePath(processCwd);
+  return fs.existsSync(runtimeBasePath) ? runtimeBasePath : processCwd;
+}
+
+/**
+ * @brief Best-effort synchronizes one context `cwd` mirror with bootstrap reality.
+ * @details Applies the resolved live cwd to the supplied context when writable and ignores stale or read-only mirrors so command bootstrap can continue using authoritative filesystem probes. Runtime is O(1). Side effects are limited to optional `ctx.cwd` mutation.
+ * @param[in,out] ctx {{ cwd?: string }} Mutable context-like object.
+ * @param[in] cwd {string} Resolved live cwd.
+ * @return {void} No return value.
+ */
+function syncContextCwdMirror(ctx: { cwd?: string }, cwd: string): void {
+  if (ctx.cwd === cwd) {
+    return;
+  }
+  try {
+    Reflect.set(ctx, "cwd", cwd);
+  } catch {
+    // Ignore stale or read-only context mirrors.
+  }
 }
 
 /**
@@ -194,188 +266,153 @@ function saveProjectConfig(cwd: string, config: UseReqConfig): void {
 
 /**
  * @brief Formats the current project config path for top-level menu display.
- * @details Resolves `<base-path>/.pi-usereq/config.json` from the cwd-derived project base, reuses the shared runtime-path formatter, and rewrites a leading POSIX `$HOME` token to `~` for the `Show configuration` row only. Runtime is O(p) in path length. No external state is mutated.
+ * @details Resolves `<base-path>/.pi-usereq.json` from the cwd-derived project base, reuses the shared runtime-path formatter, and rewrites a leading POSIX `$HOME` token to `~` for the `Show configuration` row only. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] cwd {string} Current working directory.
  * @return {string} `~`-relative or absolute config path display value.
  * @satisfies REQ-162
  */
 function formatProjectConfigPathForMenu(cwd: string): string {
-  const displayPath = formatRuntimePathForDisplay(getProjectConfigPath(getProjectBase(cwd)));
-  if (displayPath === "$HOME") {
-    return "~";
-  }
-  return displayPath.startsWith("$HOME/") ? `~/${displayPath.slice("$HOME/".length)}` : displayPath;
+  return formatRuntimePathForDisplay(
+    getProjectConfigPath(getProjectBase(cwd)),
+  );
 }
 
 /**
- * @brief Collects the project-scoped static-check selection used by the agent tool.
- * @details Resolves configured source plus test directories, reuses the same fixture-root exclusions as `runProjectStaticCheck`, and returns canonical relative file paths for structured payload emission. Runtime is O(F) plus project file-discovery cost. Side effects are limited to filesystem reads and git subprocesses delegated through `collectSourceFiles`.
- * @param[in] projectBase {string} Resolved project base path.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {{ selectionDirectoryPaths: string[]; excludedDirectoryPaths: string[]; selectedPaths: string[] }} Structured static-check selection facts.
+ * @brief Builds the standardized terminal rows appended to every configuration menu.
+ * @details Returns the canonical `Reset defaults` row so all configuration menus and descendant selector menus share the same terminal ordering contract without rendering `Save and close`. Runtime is O(1). No external state is mutated.
+ * @param[in] options {{ resetDefaultsDescription: string; resetDefaultsValue?: string | undefined }} Menu-specific terminal-row metadata.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered terminal menu rows.
+ * @satisfies REQ-193
  */
-function collectProjectStaticCheckSelection(
-  projectBase: string,
-  config: UseReqConfig,
-): {
-  selectionDirectoryPaths: string[];
-  excludedDirectoryPaths: string[];
-  selectedPaths: string[];
-} {
-  const selectionDirectoryPaths = [...config["src-dir"], config["tests-dir"]];
-  const testsDirRel = makeRelativeIfContainsProject(config["tests-dir"], projectBase)
-    .split(path.sep)
-    .join("/")
-    .replace(/^\.?\/?/, "")
-    .replace(/\/+$/, "");
-  const excludedDirectoryPaths = [...new Set([
-    "tests/fixtures",
-    testsDirRel ? `${testsDirRel}/fixtures` : "fixtures",
-  ])];
-  const selectedPaths = collectSourceFiles(selectionDirectoryPaths, projectBase)
-    .filter((filePath) => {
-      const relativePath = path.relative(projectBase, filePath).split(path.sep).join("/");
-      return !excludedDirectoryPaths.some((excludedDirectoryPath) => {
-        return relativePath === excludedDirectoryPath || relativePath.startsWith(`${excludedDirectoryPath}/`);
-      });
-    })
-    .map((filePath) => path.relative(projectBase, filePath).split(path.sep).join("/"));
-  return {
-    selectionDirectoryPaths,
-    excludedDirectoryPaths,
-    selectedPaths,
-  };
-}
-
-/**
- * @brief Builds execution diagnostics for one token-tool payload.
- * @details Serializes skipped-input and read-error observations into stable stderr lines while leaving successful counted files silent. Runtime is O(n) in issue count. No side effects occur.
- * @param[in] payload {TokenToolPayload} Structured token payload.
- * @return {string} Newline-delimited execution diagnostics.
- */
-function buildTokenToolExecutionStderr(payload: TokenToolPayload): string {
-  const skippedLines = payload.files
-    .filter((entry) => entry.status === "skipped" && entry.error_message)
-    .map((entry) => `skipped: ${entry.canonical_path}: ${entry.error_message!}`);
-  const errorLines = payload.files
-    .filter((entry) => entry.status === "error" && entry.error_message)
-    .map((entry) => `error: ${entry.canonical_path}: ${entry.error_message!}`);
-  return [...skippedLines, ...errorLines].join("\n");
-}
-
-/**
- * @brief Builds the agent-oriented execute result returned by token-count tools.
- * @details Mirrors the structured token payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
- * @param[in] payload {TokenToolPayload} Structured token payload.
- * @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Token-tool execute result.
- * @satisfies REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075, REQ-099, REQ-102
- */
-function buildTokenToolExecuteResult(
-  payload: TokenToolPayload,
-): {
-  content: Array<{ type: "text"; text: string }>;
-  details: TokenToolPayload & { execution: { code: number; stderr: string } };
-} {
-  const details = {
-    summary: payload.summary,
-    files: payload.files,
-    execution: {
-      code: payload.summary.counted_file_count > 0 ? 0 : 1,
-      stderr: buildTokenToolExecutionStderr(payload),
+function buildTerminalSettingsMenuChoices(options: {
+  resetDefaultsDescription: string;
+  resetDefaultsValue?: string;
+}): PiUsereqSettingsMenuChoice[] {
+  return [
+    {
+      id: "reset-defaults",
+      label: "Reset defaults",
+      value: options.resetDefaultsValue ?? "",
+      description: options.resetDefaultsDescription,
     },
-  };
-  return buildStructuredToolExecuteResult(details);
+  ];
 }
 
 /**
- * @brief Builds the fallback execute result returned when token counting fails before payload construction.
- * @details Normalizes one thrown `ReqError` into the stable token-tool response shape so missing runtime dependencies or other pre-count failures do not abort extension tool execution. Runtime is O(1). No external state is mutated.
- * @param[in] error {unknown} Thrown token-tool failure.
- * @return {{ content: Array<{ type: "text"; text: string }>; details: TokenToolPayload & { execution: { code: number; stderr: string } } }} Structured token-tool failure result.
+ * @brief Describes one pending reset value change shown in confirmation menus.
+ * @details Stores the row label plus its previous and next values so reset-confirmation submenus can expose machine-readable and human-verifiable change previews. The interface is compile-time only and introduces no runtime cost.
  */
-function buildFailedTokenToolExecuteResult(
-  error: unknown,
-): {
-  content: Array<{ type: "text"; text: string }>;
-  details: TokenToolPayload & { execution: { code: number; stderr: string } };
-} {
-  const result = normalizeToolFailure(error);
-  const details = {
-    summary: {
-      processable_file_count: 0,
-      counted_file_count: 0,
-      error_file_count: 0,
-      skipped_file_count: 0,
-      total_token_count: 0,
-      total_character_count: 0,
-      total_byte_count: 0,
-      total_line_count: 0,
-      average_token_count_per_counted_file: 0,
-      average_character_count_per_counted_file: 0,
-      average_byte_count_per_counted_file: 0,
-      average_line_count_per_counted_file: 0,
-    },
-    files: [],
-    execution: {
-      code: result.code,
-      stderr: result.stderr,
-    },
-  };
-  return buildStructuredToolExecuteResult(details);
+interface ResetConfirmationChange {
+  label: string;
+  previousValue: string;
+  nextValue: string;
 }
 
 /**
- * @brief Builds the agent-oriented execute result returned by references tools.
- * @details Mirrors the structured references payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
- * @param[in] payload {ReferenceToolPayload} Structured references payload.
- * @return {{ content: Array<{ type: "text"; text: string }>; details: ReferenceToolPayload & { execution: { code: number; stderr: string } } }} References-tool execute result.
- * @satisfies REQ-076, REQ-077, REQ-078, REQ-079, REQ-099, REQ-102
+ * @brief Formats one reset-confirmation value pair for menu display.
+ * @details Serializes the previous and next values into a deterministic `previous -> next` preview string used by confirmation submenus. Runtime is O(n) in combined value length. No external state is mutated.
+ * @param[in] previousValue {string} Current persisted value.
+ * @param[in] nextValue {string} Candidate default value.
+ * @return {string} Rendered preview string.
  */
-function buildReferenceToolExecuteResult(
-  payload: ReferenceToolPayload,
-): {
-  content: Array<{ type: "text"; text: string }>;
-  details: ReferenceToolPayload & { execution: { code: number; stderr: string } };
-} {
-  const details = {
-    summary: payload.summary,
-    repository: payload.repository,
-    files: payload.files,
-    execution: {
-      code: payload.summary.analyzed_file_count > 0 ? 0 : 1,
-      stderr: buildReferenceToolExecutionStderr(payload),
-    },
-  };
-  return buildStructuredToolExecuteResult(details);
+function formatResetConfirmationValue(previousValue: string, nextValue: string): string {
+  return `${previousValue} -> ${nextValue}`;
 }
 
 /**
- * @brief Builds the agent-oriented execute result returned by compression tools.
- * @details Mirrors the structured compression payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
- * @param[in] payload {CompressToolPayload} Structured compression payload.
- * @return {{ content: Array<{ type: "text"; text: string }>; details: CompressToolPayload & { execution: { code: number; stderr: string } } }} Compression-tool execute result.
- * @satisfies REQ-081, REQ-082, REQ-083, REQ-084, REQ-085, REQ-087, REQ-088, REQ-099, REQ-102
+ * @brief Builds the shared settings-menu choices for one reset-confirmation submenu.
+ * @details Renders each pending changed value as a disabled preview row, appends explicit approve and abort actions, and falls back to one disabled no-op row when no values would change. Runtime is O(n) in changed-value count. No external state is mutated.
+ * @param[in] changes {ResetConfirmationChange[]} Changed-value preview rows.
+ * @param[in] approveDescription {string} Description for the approve action.
+ * @param[in] abortDescription {string} Description for the abort action.
+ * @return {PiUsereqSettingsMenuChoice[]} Reset-confirmation submenu choices.
  */
-function buildCompressionToolExecuteResult(
-  payload: CompressToolPayload,
-): {
-  content: Array<{ type: "text"; text: string }>;
-  details: CompressToolPayload & { execution: { code: number; stderr: string } };
-} {
-  const details = {
-    summary: payload.summary,
-    repository: payload.repository,
-    files: payload.files,
-    execution: {
-      code: payload.summary.compressed_file_count > 0 ? 0 : 1,
-      stderr: buildCompressToolExecutionStderr(payload),
+function buildResetConfirmationChoices(
+  changes: ResetConfirmationChange[],
+  approveDescription: string,
+  abortDescription: string,
+): PiUsereqSettingsMenuChoice[] {
+  const previewRows = changes.length > 0
+    ? changes.map((change, index) => ({
+      id: `reset-preview:${index}`,
+      label: change.label,
+      value: formatResetConfirmationValue(change.previousValue, change.nextValue),
+      description: `Reset ${change.label} from ${change.previousValue} to ${change.nextValue}.`,
+      disabled: true,
+      labelTone: "dim" as const,
+      valueTone: "dim" as const,
+    }))
+    : [{
+      id: "reset-preview:none",
+      label: "No value changes",
+      value: "unchanged",
+      description: "Approving the reset leaves the current values unchanged.",
+      disabled: true,
+      labelTone: "dim" as const,
+      valueTone: "dim" as const,
+    }];
+  return [
+    ...previewRows,
+    {
+      id: "reset-approve",
+      label: "Approve reset",
+      value: `${changes.length} changes`,
+      description: approveDescription,
     },
-  };
-  return buildStructuredToolExecuteResult(details);
+    {
+      id: "reset-abort",
+      label: "Abort reset",
+      value: "keep current",
+      description: abortDescription,
+    },
+  ];
 }
 
 /**
- * @brief Maps find-payload language identifiers to stable registration labels.
+ * @brief Opens one explicit reset-confirmation submenu.
+ * @details Uses the shared settings-menu renderer to show every changed value before reset application and returns `true` only when the user selects the explicit approval action. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] title {string} Confirmation submenu title.
+ * @param[in] changes {ResetConfirmationChange[]} Changed-value preview rows.
+ * @param[in] approveDescription {string} Description for the approve action.
+ * @param[in] abortDescription {string} Description for the abort action.
+ * @return {Promise<boolean>} `true` when the reset is explicitly approved.
+ */
+async function confirmResetChanges(
+  ctx: ExtensionCommandContext,
+  title: string,
+  changes: ResetConfirmationChange[],
+  approveDescription: string,
+  abortDescription: string,
+): Promise<boolean> {
+  const choice = await showPiUsereqSettingsMenu(
+    ctx,
+    title,
+    buildResetConfirmationChoices(changes, approveDescription, abortDescription),
+  );
+  return choice === "reset-approve";
+}
+
+/**
+ * @brief Writes the already-persisted project configuration file text into the editor.
+ * @details Reads the current `.pi-usereq.json` file content from disk after the caller has saved any pending configuration changes and forwards that exact persisted text into the editor. Runtime is O(n) in serialized config size. Side effects include filesystem reads and editor-text mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] cwd {string} Current working directory.
+ * @param[in] _config {UseReqConfig} Unused effective project configuration retained for stable call-site shape.
+ * @return {void} No return value.
+ * @satisfies REQ-031
+ */
+function writePersistedProjectConfigToEditor(
+  ctx: ExtensionCommandContext,
+  cwd: string,
+  _config: UseReqConfig,
+): void {
+  const projectBase = getProjectBase(cwd);
+  ctx.ui.setEditorText(fs.readFileSync(getProjectConfigPath(projectBase), "utf8"));
+}
+
+/**
+ * @brief Maps search-tool language identifiers to stable registration labels.
  * @details Preserves the canonical capitalization used by tool descriptions so supported-tag guidance remains deterministic across inspection snapshots. Access complexity is O(1).
  */
 const FIND_TOOL_LANGUAGE_LABELS: Record<string, string> = {
@@ -402,7 +439,7 @@ const FIND_TOOL_LANGUAGE_LABELS: Record<string, string> = {
 };
 
 /**
- * @brief Defines the stable language order used by find-tool supported-tag guidance.
+ * @brief Defines the stable language order used by search-tool supported-tag guidance.
  * @details Keeps registration descriptions aligned with the repository-supported language matrix and preserves deterministic inspection snapshots. Access complexity is O(1).
  */
 const FIND_TOOL_LANGUAGE_ORDER = [
@@ -429,103 +466,445 @@ const FIND_TOOL_LANGUAGE_ORDER = [
 ] as const;
 
 /**
- * @brief Builds the supported-tag guidance lines embedded in find-tool registrations.
+ * @brief Builds the supported-tag guidance lines embedded in search-tool registrations.
  * @details Emits one deterministic line per supported language containing its canonical registration label and sorted tag list so downstream agents can specialize requests without invoking the tool first. Runtime is O(l * t log t). No side effects occur.
  * @return {string[]} Supported-tag guidance lines.
  */
-function buildFindToolSupportedTagGuidelines(): string[] {
+function buildSearchToolSupportedTagGuidelines(): string[] {
   return FIND_TOOL_LANGUAGE_ORDER
     .filter((language) => language in LANGUAGE_TAGS)
     .map((language) => `Supported tags [${FIND_TOOL_LANGUAGE_LABELS[language]}]: ${[...LANGUAGE_TAGS[language]!].sort().join(", ")}`);
 }
 
 /**
- * @brief Builds the schema description for one find-tool registration.
- * @details Specializes the input-scope sentence for explicit-file or configured-directory searches while keeping the JSON output contract stable and fully machine-readable. Runtime is O(1). No side effects occur.
- * @param[in] scope {FindToolScope} Find-tool scope.
+ * @brief Builds the schema description for one search-tool registration.
+ * @details Specializes the explicit-file and configured-directory input contracts while documenting the monolithic markdown output channel and minimal execution details shape. Runtime is O(1). No side effects occur.
+ * @param[in] scope {FindToolScope} Search-tool scope.
  * @return {string} Parameter-schema description.
  */
-function buildFindToolSchemaDescription(scope: FindToolScope): string {
+function buildSearchToolSchemaDescription(scope: FindToolScope): string {
   const inputContract = scope === "explicit-files"
     ? "Input contract: tag + pattern + files[] + optional enableLineNumbers."
     : "Input contract: tag + pattern + optional enableLineNumbers. Scope is the configured src-dir list resolved from the current project configuration.";
-  return `${inputContract} Output contract: JSON object with summary, repository, files, and execution. Static supported-tag matrices are documented in tool registration metadata instead of runtime responses. File entries expose structured statuses, file_doxygen, and match records with typed line ranges, stripped code lines, and structured Doxygen fields. Regex matches construct names only.`;
+  return `${inputContract} Output contract: monolithic markdown in content[0].text plus details.execution diagnostics. Regex matches construct names only.`;
 }
 
 /**
- * @brief Builds the prompt-guideline set for one find-tool registration.
- * @details Encodes scope selection, output schema, regex semantics, line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
- * @param[in] scope {FindToolScope} Find-tool scope.
+ * @brief Builds the prompt-guideline set for one search-tool registration.
+ * @details Encodes scope selection, monolithic markdown output semantics, regex semantics, line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
+ * @param[in] scope {FindToolScope} Search-tool scope.
  * @return {string[]} Prompt-guideline strings.
  */
-function buildFindToolPromptGuidelines(scope: FindToolScope): string[] {
+function buildSearchToolPromptGuidelines(scope: FindToolScope): string[] {
   const scopeLine = scope === "explicit-files"
     ? "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute."
     : "Scope: resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.";
-  const outputLine = scope === "explicit-files"
-    ? "Output contract: summary + repository + files + execution. Repository exposes requested file scope only when it adds dynamic search context; supported tags remain documented in registration metadata. File entries expose status, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields."
-    : "Output contract: summary + repository + files + execution. Repository exposes source_directory_paths and file_canonical_paths when project-scope search context varies; supported tags remain documented in registration metadata. File entries expose status, line ranges, file_doxygen, and matches; match entries expose symbol_kind, signature_text, line ranges, code_lines, stripped_source_text, and structured Doxygen fields.";
   return [
     scopeLine,
-    outputLine,
+    "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
     "Regex rule: pattern is applied to construct names only with JavaScript RegExp search semantics; it never matches construct bodies; use ^...$ for exact-name matching.",
-    "Tag rule: tag is pipe-separated and case-insensitive; unsupported tags are ignored; if no valid tag remains, the response search_status becomes invalid_tag_filter.",
-    "Line-number behavior: enableLineNumbers changes only display_text and stripped_source_text rendering; numeric source_line_number and line_range facts remain dedicated fields.",
-    "Failure contract: invalid tag filters, invalid regex patterns, unsupported extensions, unsupported tag-language combinations, no-match files, and analysis failures are surfaced as structured statuses plus optional execution.stderr diagnostics.",
-    ...buildFindToolSupportedTagGuidelines(),
+    "Tag rule: tag is pipe-separated and case-insensitive; unsupported tags are ignored.",
+    "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
+    "Failure contract: invalid tag filters, invalid regex patterns, unsupported extensions, unsupported tag-language combinations, no-match files, and analysis failures surface through details.execution diagnostics.",
+    ...buildSearchToolSupportedTagGuidelines(),
   ];
 }
 
 /**
- * @brief Builds the agent-oriented execute result returned by find tools.
- * @details Mirrors the structured find payload into both the text `content` channel and the machine-readable `details` channel while isolating execution metadata under `execution`. Runtime is O(n) in payload size. No side effects occur.
- * @param[in] payload {FindToolPayload} Structured find payload.
- * @return {{ content: Array<{ type: "text"; text: string }>; details: FindToolPayload & { execution: { code: number; stderr: string } } }} Find-tool execute result.
- * @satisfies REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-097, REQ-098, REQ-099, REQ-102
+ * @brief Describes the monolithic tool-result surface consumed by tool-row renderers.
+ * @details Narrows execute-result data to the primary text content block plus the minimal `details.execution` metadata returned by monolithic tool wrappers. The alias is compile-time only and introduces no runtime cost.
  */
-function buildFindToolExecuteResult(
-  payload: FindToolPayload,
-): {
-  content: Array<{ type: "text"; text: string }>;
-  details: FindToolPayload & { execution: { code: number; stderr: string } };
-} {
-  const stderr = buildFindToolExecutionStderr(payload);
-  const details = {
-    summary: payload.summary,
-    repository: payload.repository,
-    files: payload.files,
-    execution: {
-      code: payload.summary.search_status === "matched" ? 0 : 1,
-      stderr,
-    },
+type MonolithicToolRenderResult = {
+  content?: Array<{ type?: string; text?: string }>;
+  details?: {
+    execution?: {
+      code?: number;
+      stderr_lines?: string[];
+      stderr?: string;
+    };
   };
-  return buildStructuredToolExecuteResult(details);
+};
+
+/**
+ * @brief Extracts the primary monolithic text block from one tool result.
+ * @details Returns the first text content block when present and falls back to an empty string when the tool emitted no LLM-facing content. Runtime is O(1). No external state is mutated.
+ * @param[in] result {MonolithicToolRenderResult} Tool result wrapper.
+ * @return {string} Primary monolithic content text.
+ */
+function getMonolithicToolText(result: MonolithicToolRenderResult): string {
+  const firstBlock = result.content?.find((entry) => entry?.type === "text" && typeof entry.text === "string");
+  return typeof firstBlock?.text === "string" ? firstBlock.text : "";
 }
 
 /**
- * @brief Delivers one rendered prompt into the active session.
- * @details Writes the rendered prompt directly through `pi.sendUserMessage(...)` without creating replacement sessions or pre-reset flows. Runtime is O(n) in prompt length. Side effects are limited to user-message delivery.
- * @param[in] pi {ExtensionAPI} Active extension API instance.
- * @param[in] content {string} Rendered prompt markdown.
- * @return {Promise<void>} Promise resolved after the prompt is queued for delivery.
- * @satisfies REQ-004, REQ-067, REQ-068
+ * @brief Reads the first residual execution error string from one monolithic tool result.
+ * @details Prefers the first `stderr_lines` entry when present and otherwise falls back to the first line of `stderr`. Runtime is O(1) plus first-line split cost. No external state is mutated.
+ * @param[in] result {MonolithicToolRenderResult} Tool result wrapper.
+ * @return {string | undefined} First residual execution error string.
  */
-async function deliverPromptCommand(pi: ExtensionAPI, content: string): Promise<void> {
+function getMonolithicToolErrorText(result: MonolithicToolRenderResult): string | undefined {
+  const stderrLines = result.details?.execution?.stderr_lines;
+  if (Array.isArray(stderrLines) && stderrLines.length > 0 && typeof stderrLines[0] === "string") {
+    return stderrLines[0];
+  }
+  const stderrText = result.details?.execution?.stderr;
+  if (typeof stderrText !== "string" || stderrText === "") {
+    return undefined;
+  }
+  return stderrText.split(/\r?\n/)[0] || undefined;
+}
+
+/**
+ * @brief Formats one scalar or structural tool argument for compact render summaries.
+ * @details Truncates long strings, compresses arrays into short previews, and renders plain object arguments as key indexes so collapsed tool rows stay compact while still exposing the essential invocation shape. Runtime is O(n) in preview size. No external state is mutated.
+ * @param[in] value {unknown} Candidate tool argument value.
+ * @return {string | undefined} Compact preview string or `undefined` when the value carries no useful summary.
+ */
+function formatCompactToolArgumentValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const compactText = value.length > 28 ? `${value.slice(0, 25)}...` : value;
+    return JSON.stringify(compactText);
+  }
+  if (typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return undefined;
+    }
+    const renderedItems = value
+      .slice(0, 2)
+      .map((item) => formatCompactToolArgumentValue(item))
+      .filter((item): item is string => typeof item === "string");
+    if (renderedItems.length === 0) {
+      return `[${value.length}]`;
+    }
+    return value.length <= 2
+      ? `[${renderedItems.join(", ")}]`
+      : `[${renderedItems.join(", ")}, ...+${value.length - 2}]`;
+  }
+  if (typeof value === "object") {
+    const keys = Object.keys(value as Record<string, unknown>);
+    if (keys.length === 0) {
+      return undefined;
+    }
+    return keys.length <= 2
+      ? `{${keys.join(",")}}`
+      : `{${keys.slice(0, 2).join(",")},...+${keys.length - 2}}`;
+  }
+  return undefined;
+}
+
+/**
+ * @brief Builds the compact invocation summary appended to collapsed tool rows.
+ * @details Renders only caller-supplied parameters that have stable, non-empty compact previews and joins them in insertion order so agents can infer how the tool was used without expanding the full result. Runtime is O(n) in argument count and preview size. No external state is mutated.
+ * @param[in] args {Record<string, unknown> | undefined} Current tool call arguments.
+ * @return {string} Compact invocation summary prefixed with one separating space, or the empty string when no useful preview exists.
+ */
+function buildCompactToolInvocationText(args: Record<string, unknown> | undefined): string {
+  if (!args) {
+    return "";
+  }
+  const entries = Object.entries(args)
+    .map(([key, value]) => {
+      const renderedValue = formatCompactToolArgumentValue(value);
+      return renderedValue === undefined ? undefined : `${key}=${renderedValue}`;
+    })
+    .filter((entry): entry is string => typeof entry === "string");
+  return entries.length === 0 ? "" : ` ${entries.join(" · ")}`;
+}
+
+/**
+ * @brief Builds the compact default text for one monolithic tool result row.
+ * @details Prefers the tool name, compact invocation preview, and success marker for collapsed rows, and falls back to residual execution diagnostics when the tool failed before completing successfully. Runtime is O(n) in compact argument-preview size. No external state is mutated.
+ * @param[in] toolName {string} Registered tool name.
+ * @param[in] result {MonolithicToolRenderResult} Tool result wrapper.
+ * @param[in] args {Record<string, unknown> | undefined} Current tool call arguments.
+ * @return {string} Compact single-line summary.
+ */
+function summarizeStructuredToolResult(
+  toolName: string,
+  result: MonolithicToolRenderResult,
+  args?: Record<string, unknown>,
+): string {
+  const success = result.details?.execution?.code === undefined
+    ? true
+    : result.details.execution.code === 0;
+  const prefix = success ? "✓" : "✗";
+  const invocationText = buildCompactToolInvocationText(args);
+  const errorText = getMonolithicToolErrorText(result);
+  if (!success && errorText) {
+    return `${prefix} ${toolName}${invocationText}: ${errorText}`;
+  }
+  return `${prefix} ${toolName}${invocationText}`;
+}
+
+/**
+ * @brief Builds a custom `renderResult` implementation for one monolithic tool.
+ * @details Reuses a mutable `Text` component when possible, keeps the default collapsed row compact with essential invocation parameters plus result status, and reveals the full monolithic content only when the tool row is expanded. Runtime is O(n) in expanded content length and compact argument-preview size. No external state is mutated.
+ * @param[in] toolName {string} Registered tool name.
+ * @return {(result: MonolithicToolRenderResult, options: { expanded?: boolean; isPartial?: boolean }, _theme: unknown, context: { args?: Record<string, unknown>; lastComponent?: unknown }) => Text} Custom result renderer.
+ * @satisfies REQ-210
+ */
+function buildStructuredToolRenderResult(toolName: string) {
+  return (
+    result: MonolithicToolRenderResult,
+    options: { expanded?: boolean; isPartial?: boolean },
+    _theme: unknown,
+    context: { args?: Record<string, unknown>; lastComponent?: unknown },
+  ): Text => {
+    const textComponent = context.lastComponent instanceof Text
+      ? context.lastComponent
+      : new Text("", 0, 0);
+    if (options.isPartial) {
+      textComponent.setText(`… ${toolName}`);
+      return textComponent;
+    }
+    const compactText = summarizeStructuredToolResult(toolName, result, context.args);
+    const fullText = getMonolithicToolText(result);
+    textComponent.setText(options.expanded && fullText !== "" ? fullText : compactText);
+    return textComponent;
+  };
+}
+
+/**
+ * @brief Executes one CLI-style runner for a monolithic agent tool.
+ * @details Reuses the standalone tool-runner contract, normalizes thrown failures into `ToolResult`, and wraps the selected stdout or stderr text into the monolithic content channel. Runtime is dominated by the delegated runner. Side effects depend on the selected tool.
+ * @param[in] operation {() => ToolResult} Runner callback.
+ * @return {ReturnType<typeof buildMonolithicToolExecuteResult>} Monolithic tool execute result.
+ */
+function executeMonolithicTool(operation: () => ToolResult): ReturnType<typeof buildMonolithicToolExecuteResult> {
+  try {
+    return buildMonolithicToolExecuteResult(operation());
+  } catch (error) {
+    return buildMonolithicToolExecuteResult(normalizeToolFailure(error));
+  }
+}
+
+/**
+ * @brief Starts delivery of one rendered prompt into the current active session.
+ * @details Prefers the replacement-session `sendUserMessage(...)` helper exposed by `withSession(...)` callbacks after session replacement so post-switch prompt delivery never reuses stale pre-switch session-bound extension objects. Returns the underlying delivery promise without awaiting it so callers can record the `running` workflow transition as soon as prompt handoff is accepted instead of waiting for the full agent turn to complete on runtimes whose async replacement-session helpers resolve only after `agent_end`. When pi later invalidates that replacement-session context during successful prompt-end restoration, the helper suppresses the documented stale-extension-context rejection because the prompt was already accepted and late rethrow would surface a false orchestration failure. Falls back to `pi.sendUserMessage(...)` only for non-replacement flows or runtimes that do not expose replacement-session helpers. Runtime is O(n) in prompt length. Side effects are limited to user-message delivery.
+ * @param[in] pi {ExtensionAPI} Handler-scoped extension API instance retained as the fallback dispatcher.
+ * @param[in] content {string} Rendered prompt markdown.
+ * @param[in] context {unknown} Optional replacement-session helper context.
+ * @return {Promise<void>} Promise representing eventual prompt-delivery completion.
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-227, REQ-281
+ */
+function deliverPromptCommand(
+  pi: ExtensionAPI,
+  content: string,
+  context?: unknown,
+): Promise<void> {
+  const replacementContext = context as {
+    sendUserMessage?: (message: string) => Promise<void> | void;
+  } | undefined;
+  if (typeof replacementContext?.sendUserMessage === "function") {
+    return Promise.resolve(replacementContext.sendUserMessage(content)).catch((error) => {
+      if (isStaleExtensionContextError(error)) {
+        return;
+      }
+      throw error;
+    });
+  }
   pi.sendUserMessage(content);
+  return Promise.resolve();
+}
+
+/**
+ * @brief Detects prompt-delivery failures that can be ignored after prompt ownership has moved past the command handler.
+ * @details Matches the documented stale-extension-context runtime error once prompt ownership has already moved beyond command-side preflight. The helper treats the failure as ignorable when the persisted prompt runtime state shows the same execution session as the active prompt run or when the persisted workflow state has already advanced beyond `checking|running`, because rethrowing at that point would incorrectly re-enter command-side abort logic after the prompt was already accepted. Runtime is O(n) in error-message length plus path length. No external state is mutated.
+ * @param[in] error {unknown} Candidate prompt-delivery failure.
+ * @param[in] workflowState {import("./core/extension-status.js").PiUsereqWorkflowState} Current shared prompt workflow state.
+ * @param[in] executionPlan {PromptCommandExecutionPlan | undefined} Prepared execution plan for the current prompt command.
+ * @return {boolean} `true` when the failure is a late stale-context delivery rejection that MUST be ignored.
+ * @satisfies REQ-208, REQ-280, REQ-281, REQ-282
+ */
+function shouldIgnoreLatePromptDeliveryFailure(
+  error: unknown,
+  workflowState: import("./core/extension-status.js").PiUsereqWorkflowState,
+  executionPlan?: PromptCommandExecutionPlan,
+): boolean {
+  const persistedRuntimeState = readPersistedPromptCommandRuntimeState();
+  const effectiveWorkflowState = persistedRuntimeState.workflowState || workflowState;
+  const activeExecutionSessionFile = persistedRuntimeState.activePromptRequest?.executionSessionFile;
+  const promptRunAlreadyActive = executionPlan !== undefined
+    && typeof activeExecutionSessionFile === "string"
+    && path.resolve(activeExecutionSessionFile) === path.resolve(executionPlan.executionSessionFile);
+  return isStaleExtensionContextError(error)
+    && (
+      promptRunAlreadyActive
+      || (effectiveWorkflowState !== "checking" && effectiveWorkflowState !== "running")
+    );
+}
+
+/**
+ * @brief Appends one workflow-state debug entry for a bundled prompt when selected.
+ * @details Reuses the shared debug logger so `req-*` command handlers and prompt-end orchestration can record deterministic workflow transitions without duplicating JSON payload shaping. Runtime is O(n) in serialized payload size only when logging is enabled and O(1) otherwise. Side effects include debug-log file writes for matching enabled prompts.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
+ * @param[in] previousState {string} Prior workflow state.
+ * @param[in] nextState {import("./core/debug-runtime.js").DebugWorkflowState} Next workflow state.
+ * @return {void} No return value.
+ * @satisfies REQ-245, REQ-246, REQ-247
+ */
+function logPromptWorkflowStateChange(
+  projectBase: string,
+  config: UseReqConfig,
+  promptName: import("./core/prompt-command-catalog.js").PromptCommandName,
+  previousState: string,
+  nextState: import("./core/debug-runtime.js").DebugWorkflowState,
+): void {
+  if (!shouldLogDebugPromptWorkflowState(config, nextState, promptName)) {
+    return;
+  }
+  logDebugPromptEvent(
+    projectBase,
+    config,
+    nextState,
+    promptName,
+    "workflow_state",
+    { from_state: previousState, to_state: nextState },
+    { success: true, workflow_state: nextState },
+  );
+}
+
+/**
+ * @brief Appends one dedicated prompt workflow debug entry when selected.
+ * @details Reuses the shared workflow-event logger so prompt activation, restoration, closure, and session-shutdown paths can emit higher-granularity orchestration diagnostics without duplicating JSON payload shaping. Runtime is O(n) in serialized payload size only when logging is enabled and O(1) otherwise. Side effects include debug-log file writes for matching enabled prompts.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state.
+ * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
+ * @param[in] action {string} Workflow debug action identifier.
+ * @param[in] input {unknown} Optional workflow debug input payload.
+ * @param[in] result {unknown} Optional workflow debug result payload.
+ * @param[in] isError {boolean} Workflow debug error flag.
+ * @return {void} No return value.
+ * @satisfies REQ-245, REQ-246, REQ-247, REQ-277
+ */
+function logPromptWorkflowEvent(
+  projectBase: string,
+  config: UseReqConfig,
+  workflowState: DebugWorkflowState,
+  promptName: import("./core/prompt-command-catalog.js").PromptCommandName,
+  action: string,
+  input?: unknown,
+  result?: unknown,
+  isError = false,
+): void {
+  logDebugPromptWorkflowEvent(
+    projectBase,
+    config,
+    workflowState,
+    promptName,
+    action,
+    input,
+    result,
+    isError,
+  );
+}
+
+/**
+ * @brief Transitions one prompt workflow state and logs the transition immediately after the state update.
+ * @details Captures the previous workflow state, applies the new state through the shared status helper, and appends the gated `workflow_state` debug entry only after the transition has completed. Runtime is O(1). Side effects include status mutation, status-bar rendering, and optional debug-log writes.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @param[in] ctx {ExtensionContext | ExtensionCommandContext} Active extension context.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
+ * @param[in] nextState {DebugWorkflowState} Next workflow state.
+ * @return {void} No return value.
+ */
+function transitionPromptWorkflowState(
+  statusController: PiUsereqStatusController,
+  ctx: ExtensionContext | ExtensionCommandContext,
+  projectBase: string,
+  config: UseReqConfig,
+  promptName: import("./core/prompt-command-catalog.js").PromptCommandName,
+  nextState: DebugWorkflowState,
+): void {
+  const previousState = statusController.state.workflowState;
+  setPiUsereqWorkflowState(statusController, nextState, ctx);
+  if (previousState !== nextState) {
+    logPromptWorkflowStateChange(projectBase, config, promptName, previousState, nextState);
+  }
+}
+
+/**
+ * @brief Resolves the runtime slash-command description for one bundled prompt.
+ * @details Reads the bundled prompt front matter, extracts its normalized `description` field, and falls back to the historical generated label when the prompt metadata omits a description. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads.
+ * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
+ * @return {string} Runtime command description.
+ */
+function resolvePromptCommandDescription(
+  promptName: import("./core/prompt-command-catalog.js").PromptCommandName,
+): string {
+  return readBundledPromptDescription(promptName) || `Run pi-usereq prompt ${promptName}`;
+}
+
+/**
+ * @brief Resolves the original project base used for debug-log file writes.
+ * @details Prefers the active or pending prompt execution plan so tool-result logging during worktree-backed prompt runs persists into the original repository path instead of transient worktree directories. Runtime is O(1). No external state is mutated.
+ * @param[in] cwd {string} Current extension working directory.
+ * @param[in] statusController {PiUsereqStatusController} Mutable status controller.
+ * @return {string} Absolute original project base path for debug logging.
+ */
+function resolveDebugProjectBase(cwd: string, statusController: PiUsereqStatusController): string {
+  return statusController.state.activePromptRequest?.basePath
+    ?? statusController.state.pendingPromptRequest?.basePath
+    ?? getProjectBase(resolveLiveBootstrapCwd(cwd));
+}
+
+/**
+ * @brief Delivers one best-effort UI notification without failing on stale replacement contexts.
+ * @details Attempts to use the supplied extension context for UI notification delivery and suppresses the documented stale-extension-context runtime error raised after session replacement, because prompt-orchestration closure can outlive the context that initiated the switch. Runtime is O(n) in message length. Side effects are limited to user notification delivery when the context is still active.
+ * @param[in] ctx {ExtensionContext | ExtensionCommandContext | undefined} Candidate UI context.
+ * @param[in] message {string} Notification message.
+ * @param[in] level {"info" | "error"} Notification severity.
+ * @return {boolean} `true` when the notification was delivered and `false` when the context was already stale.
+ * @satisfies REQ-280
+ */
+function notifyContextSafely(
+  ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
+  message: string,
+  level: "info" | "error",
+): boolean {
+  if (ctx === undefined) {
+    return false;
+  }
+  try {
+    ctx.ui.notify(message, level);
+    return true;
+  } catch (error) {
+    if (isStaleExtensionContextError(error)) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 /**
  * @brief Returns the configurable active-tool inventory visible to the extension.
- * @details Filters runtime tools against the canonical configurable-tool set, thereby combining extension-owned tools with supported embedded pi CLI tools. Output order is sorted by tool name. Runtime is O(t log t). No external state is mutated.
+ * @details Filters runtime tools against the canonical configurable-tool set, keeps only builtin-backed embedded tools, and orders the result by the documented custom/files/embedded/default-disabled grouping. Runtime is O(t log t). No external state is mutated.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {ToolInfo[]} Sorted configurable tool descriptors.
- * @satisfies REQ-007, REQ-063
+ * @satisfies REQ-007, REQ-063, REQ-231, REQ-232
  */
 function getPiUsereqStartupTools(pi: ExtensionAPI): ToolInfo[] {
   return pi.getAllTools()
     .filter((tool) => PI_USEREQ_STARTUP_TOOL_SET.has(tool.name))
     .filter((tool) => !isPiUsereqEmbeddedToolName(tool.name) || tool.sourceInfo?.source === "builtin")
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort((left, right) => comparePiUsereqStartupToolNames(
+      left.name as PiUsereqStartupToolName,
+      right.name as PiUsereqStartupToolName,
+    ));
 }
 
 /**
@@ -569,22 +948,14 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
 
 /**
  * @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
- * @details Applies session-start-specific resource validation, project-config
- * refresh, and startup-tool enablement before forwarding the originating hook
- * name and payload into the shared `updateExtensionStatus(...)` pipeline.
- * On `agent_end`, also dispatches configured command-notify, sound, and
- * prompt-specific Pushover effects when the current run originates from a
- * bundled prompt command. Runtime is dominated by configuration loading during
- * `session_start`; all other hooks are O(1). Side effects include resource
- * checks, active-tool mutation, status updates, live-ticker disposal on
- * shutdown, optional child-process spawning, and outbound HTTPS requests.
+ * @details Applies session-start-specific resource validation, project-config refresh, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, restores the original session-backed `base-path` for every matched worktree-backed completion by reusing persisted replacement-session command contexts when event contexts omit `switchSession()`, merges and deletes the worktree only for matched successful completions, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful `agent_end` handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -593,23 +964,65 @@ async function handleExtensionStatusEvent(
   event: unknown,
   ctx: ExtensionContext,
 ): Promise<void> {
-  const notifyRequest: PiNotifyEventRequest | undefined = hookName === "agent_end"
-    && statusController.state.activePromptRequest !== undefined
-    && statusController.state.runStartTimeMs !== undefined
-    ? {
-        promptName: statusController.state.activePromptRequest.promptName,
-        promptArgs: statusController.state.activePromptRequest.promptArgs,
-        basePath: path.resolve(ctx.cwd),
-        completionTimeMs: Math.max(0, Date.now() - statusController.state.runStartTimeMs),
-      }
+  const pendingPromptRequest = statusController.state.pendingPromptRequest;
+  const activePromptRequest = statusController.state.activePromptRequest;
+  const shutdownPromptRequest = hookName === "session_shutdown"
+    ? activePromptRequest ?? pendingPromptRequest
     : undefined;
+  const preservePromptCommandStateOnShutdown = hookName === "session_shutdown"
+    ? shouldPreservePromptCommandStateOnShutdown(statusController.state)
+    : false;
   if (hookName === "session_start") {
     ensureBundledResourcesAccessible();
-    const config = loadProjectConfig(ctx.cwd);
+    const startupCwd = resolveLiveBootstrapCwd(ctx.cwd);
+    syncContextCwdMirror(ctx, startupCwd);
+    bootstrapRuntimePathState(startupCwd, {
+      gitPath: resolveRuntimeGitPath(startupCwd),
+    });
+    const config = loadProjectConfig(startupCwd);
     applyConfiguredPiUsereqTools(pi, config);
     setPiUsereqStatusConfig(statusController, config);
   }
+  if (hookName === "before_agent_start") {
+    const requestForActivation = activePromptRequest ?? pendingPromptRequest;
+    if (requestForActivation !== undefined) {
+      await activatePromptCommandExecution(requestForActivation, ctx);
+    }
+  }
+  const notifyRequest: PiNotifyEventRequest | undefined = hookName === "agent_end"
+    && activePromptRequest !== undefined
+    && statusController.state.runStartTimeMs !== undefined
+    ? {
+        promptName: activePromptRequest.promptName,
+        promptArgs: activePromptRequest.promptArgs,
+        basePath: activePromptRequest.basePath,
+        completionTimeMs: Math.max(0, Date.now() - statusController.state.runStartTimeMs),
+      }
+    : undefined;
   updateExtensionStatus(statusController, hookName, event, ctx);
+  if (hookName === "tool_result" && statusController.config) {
+    const toolEvent = event as {
+      toolName?: string;
+      input?: unknown;
+      content?: unknown;
+      details?: unknown;
+      isError?: boolean;
+    };
+    if (typeof toolEvent.toolName === "string") {
+      logDebugToolExecution(
+        resolveDebugProjectBase(ctx.cwd, statusController),
+        statusController.config,
+        statusController.state.workflowState,
+        toolEvent.toolName,
+        toolEvent.input,
+        {
+          content: toolEvent.content,
+          details: toolEvent.details,
+        },
+        toolEvent.isError === true,
+      );
+    }
+  }
   if (hookName === "agent_end") {
     if (statusController.config) {
       runPiNotifyEffects(
@@ -618,9 +1031,190 @@ async function handleExtensionStatusEvent(
         notifyRequest,
       );
     }
-    statusController.state.activePromptRequest = undefined;
+    if (activePromptRequest !== undefined) {
+      const debugConfig = statusController.config;
+      let promptContext = ctx;
+      const outcome = classifyPromptCommandOutcome(
+        event as { messages: AgentEndEvent["messages"] },
+      );
+      const closureFailureMessage = outcome !== "completed"
+        && activePromptRequest.worktreeDir !== undefined
+        ? `ERROR: Prompt closure retained worktree ${activePromptRequest.worktreeDir} after ${outcome} outcome.`
+        : undefined;
+      const shouldFinalizeMatchedSuccess = outcome === "completed"
+        && statusController.state.workflowState === "running"
+        && activePromptRequest.worktreeDir !== undefined;
+      if (debugConfig) {
+        logPromptWorkflowEvent(
+          activePromptRequest.basePath,
+          debugConfig,
+          statusController.state.workflowState,
+          activePromptRequest.promptName,
+          "workflow_closure",
+          {
+            hook: "agent_end",
+            outcome,
+          },
+          {
+            should_finalize_matched_success: shouldFinalizeMatchedSuccess,
+            worktree_dir: activePromptRequest.worktreeDir,
+            event_context_has_switch_session: typeof (ctx as ExtensionCommandContext).switchSession === "function",
+          },
+        );
+      }
+      if (shouldFinalizeMatchedSuccess) {
+        if (debugConfig) {
+          transitionPromptWorkflowState(
+            statusController,
+            promptContext,
+            activePromptRequest.basePath,
+            debugConfig,
+            activePromptRequest.promptName,
+            "merging",
+          );
+        } else {
+          setPiUsereqWorkflowState(statusController, "merging", promptContext);
+        }
+        let finalization:
+          | {
+            mergeAttempted: boolean;
+            mergeSucceeded: boolean;
+            cleanupSucceeded: boolean;
+            errorMessage?: string;
+            activeContext?: unknown;
+          }
+          | undefined;
+        try {
+          finalization = await finalizePromptCommandExecution(
+            activePromptRequest,
+            promptContext,
+            debugConfig
+              ? { config: debugConfig, workflowState: statusController.state.workflowState }
+              : undefined,
+          );
+          promptContext = (finalization.activeContext ?? promptContext) as typeof ctx;
+        } catch (error) {
+          promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
+          let errorMessage = error instanceof Error ? error.message : String(error);
+          let cleanupSucceeded = false;
+          try {
+            promptContext = (await restorePromptCommandExecution(
+              activePromptRequest,
+              promptContext,
+              debugConfig
+                ? { config: debugConfig, workflowState: statusController.state.workflowState }
+                : undefined,
+            ) ?? promptContext) as typeof ctx;
+            cleanupSucceeded = true;
+          } catch (restoreError) {
+            promptContext = (getPromptCommandErrorContext(restoreError) ?? promptContext) as typeof ctx;
+            errorMessage = restoreError instanceof Error ? restoreError.message : String(restoreError);
+          }
+          finalization = {
+            mergeAttempted: false,
+            mergeSucceeded: false,
+            cleanupSucceeded,
+            errorMessage,
+          };
+        }
+        if (
+          finalization.errorMessage
+          && (!finalization.cleanupSucceeded || !finalization.mergeSucceeded)
+        ) {
+          if (debugConfig) {
+            transitionPromptWorkflowState(
+              statusController,
+              promptContext,
+              activePromptRequest.basePath,
+              debugConfig,
+              activePromptRequest.promptName,
+              "error",
+            );
+          } else {
+            setPiUsereqWorkflowState(statusController, "error", promptContext);
+          }
+          notifyContextSafely(promptContext, finalization.errorMessage, "error");
+        }
+      } else {
+        try {
+          promptContext = (await restorePromptCommandExecution(
+            activePromptRequest,
+            promptContext,
+            debugConfig
+              ? { config: debugConfig, workflowState: statusController.state.workflowState }
+              : undefined,
+          ) ?? promptContext) as typeof ctx;
+          if (closureFailureMessage !== undefined) {
+            notifyContextSafely(promptContext, closureFailureMessage, "error");
+          }
+        } catch (error) {
+          promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
+          if (debugConfig) {
+            transitionPromptWorkflowState(
+              statusController,
+              promptContext,
+              activePromptRequest.basePath,
+              debugConfig,
+              activePromptRequest.promptName,
+              "error",
+            );
+          } else {
+            setPiUsereqWorkflowState(statusController, "error", promptContext);
+          }
+          notifyContextSafely(promptContext, error instanceof Error ? error.message : String(error), "error");
+        }
+      }
+      statusController.state.pendingPromptRequest = undefined;
+      statusController.state.activePromptRequest = undefined;
+      if (debugConfig) {
+        transitionPromptWorkflowState(
+          statusController,
+          promptContext,
+          activePromptRequest.basePath,
+          debugConfig,
+          activePromptRequest.promptName,
+          "idle",
+        );
+      } else {
+        setPiUsereqWorkflowState(statusController, "idle", promptContext);
+      }
+    }
   }
   if (hookName === "session_shutdown") {
+    if (shutdownPromptRequest !== undefined && statusController.config) {
+      logPromptWorkflowEvent(
+        shutdownPromptRequest.basePath,
+        statusController.config,
+        preservePromptCommandStateOnShutdown
+          ? statusController.state.workflowState
+          : "idle",
+        shutdownPromptRequest.promptName,
+        "workflow_session_shutdown",
+        {
+          reason: (event as { reason?: unknown }).reason,
+          target_session_file: (event as { targetSessionFile?: unknown }).targetSessionFile,
+        },
+        {
+          preserve_prompt_command_state: preservePromptCommandStateOnShutdown,
+          pending_prompt_request: pendingPromptRequest !== undefined,
+          active_prompt_request: activePromptRequest !== undefined,
+        },
+      );
+    }
+    if (!preservePromptCommandStateOnShutdown) {
+      if (shutdownPromptRequest !== undefined && statusController.config) {
+        transitionPromptWorkflowState(
+          statusController,
+          ctx,
+          shutdownPromptRequest.basePath,
+          statusController.config,
+          shutdownPromptRequest.promptName,
+          "idle",
+        );
+      } else {
+        setPiUsereqWorkflowState(statusController, "idle", ctx);
+      }
+    }
     disposePiUsereqStatusController(statusController);
   }
 }
@@ -629,8 +1223,11 @@ async function handleExtensionStatusEvent(
  * @brief Registers shared wrappers for every supported pi lifecycle hook.
  * @details Installs one generic wrapper per intercepted hook so every resource,
  * session, agent, model, tool, bash, and input event is routed through the
- * same extension-status update pipeline. Runtime is O(h) in registered hook
- * count. Side effects include hook registration.
+ * same extension-status update pipeline. The wrapper suppresses the documented
+ * stale-extension-context error because pi can continue delivering late
+ * lifecycle callbacks against contexts invalidated by session replacement after
+ * prompt orchestration has already completed successfully. Runtime is O(h) in
+ * registered hook count. Side effects include hook registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -646,7 +1243,13 @@ function registerExtensionStatusHooks(
   ) => void;
   for (const hookName of PI_USEREQ_STATUS_HOOK_NAMES) {
     registerHook(hookName, async (event, ctx) => {
-      await handleExtensionStatusEvent(pi, statusController, hookName, event, ctx);
+      try {
+        await handleExtensionStatusEvent(pi, statusController, hookName, event, ctx);
+      } catch (error) {
+        if (!isStaleExtensionContextError(error)) {
+          throw error;
+        }
+      }
     });
   }
 }
@@ -662,6 +1265,316 @@ function registerExtensionStatusHooks(
 function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void {
   config["enabled-tools"] = normalizeEnabledPiUsereqTools(enabledTools);
   applyConfiguredPiUsereqTools(pi, config);
+}
+
+/**
+ * @brief Returns the canonical debug-tool toggle order.
+ * @details Reuses the documented configurable-tool ordering so debug toggles list extension-owned tools before embedded tools and remain deterministic across sessions. Runtime is O(t log t). No external state is mutated.
+ * @return {PiUsereqStartupToolName[]} Ordered debug-tool toggle names.
+ * @satisfies REQ-242
+ */
+function getDebugToolToggleNames(): PiUsereqStartupToolName[] {
+  return [...PI_USEREQ_CUSTOM_TOOL_NAMES, ...PI_USEREQ_EMBEDDED_TOOL_NAMES].sort(comparePiUsereqStartupToolNames);
+}
+
+/**
+ * @brief Restores the debug configuration subtree to its documented defaults.
+ * @details Resets global debug enablement, log path, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config`.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {void} No return value.
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277
+ */
+function resetDebugConfigToDefaults(config: UseReqConfig): void {
+  config.DEBUG_ENABLED = "disable";
+  config.DEBUG_LOG_FILE = DEFAULT_DEBUG_LOG_FILE;
+  config.DEBUG_STATUS_CHANGES = DEFAULT_DEBUG_STATUS_CHANGES;
+  config.DEBUG_WORKFLOW_EVENTS = DEFAULT_DEBUG_WORKFLOW_EVENTS;
+  config.DEBUG_LOG_ON_STATUS = DEFAULT_DEBUG_LOG_ON_STATUS;
+  config.DEBUG_ENABLED_TOOLS = [];
+  config.DEBUG_ENABLED_PROMPTS = [];
+}
+
+/**
+ * @brief Formats the top-level Debug summary value.
+ * @details Emits the current global debug mode plus compact selected-tool and selected-prompt counts for right-aligned menu display. Runtime is O(n) in configured selector count. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Compact debug summary string.
+ */
+function formatDebugMenuSummary(config: UseReqConfig): string {
+  const toolCount = normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS).length;
+  const promptCount = normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS).length;
+  return config.DEBUG_ENABLED === "enable"
+    ? `enable • ${toolCount} tools • ${promptCount} prompts`
+    : "disable";
+}
+
+/**
+ * @brief Builds one debug-menu row with optional disabled styling.
+ * @details Applies dim styling and disables selection whenever global debug is off for all rows except the global `Debug` toggle row. Runtime is O(1). No external state is mutated.
+ * @param[in] choice {PiUsereqSettingsMenuChoice} Base debug-menu row.
+ * @param[in] debugEnabled {boolean} Whether global debug is enabled.
+ * @return {PiUsereqSettingsMenuChoice} Styled debug-menu row.
+ * @satisfies REQ-241
+ */
+function buildDebugMenuChoice(
+  choice: PiUsereqSettingsMenuChoice,
+  debugEnabled: boolean,
+): PiUsereqSettingsMenuChoice {
+  if (debugEnabled || choice.id === "debug-enabled") {
+    return choice;
+  }
+  return {
+    ...choice,
+    disabled: true,
+    labelTone: "dim",
+    valueTone: "dim",
+  };
+}
+
+/**
+ * @brief Opens the workflow-state filter selector used by the Debug submenu.
+ * @details Exposes `any` plus each canonical workflow state through the shared settings-menu renderer and returns the selected normalized filter or `undefined` when the user cancels the submenu. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] currentValue {DebugLogOnStatus} Current persisted workflow-state filter.
+ * @return {Promise<DebugLogOnStatus | undefined>} Selected workflow-state filter or `undefined` when cancelled.
+ */
+async function selectDebugLogOnStatus(
+  ctx: ExtensionCommandContext,
+  currentValue: DebugLogOnStatus,
+): Promise<DebugLogOnStatus | undefined> {
+  const choice = await showPiUsereqSettingsMenu(ctx, "Log on status", [
+    {
+      id: "any",
+      label: "any",
+      value: currentValue === "any" ? "selected" : "",
+      description: "Write matching debug entries regardless of the current workflow state.",
+    },
+    ...DEBUG_WORKFLOW_STATES.map((workflowState) => ({
+      id: workflowState,
+      label: workflowState,
+      value: currentValue === workflowState ? "selected" : "",
+      description: `Write matching debug entries only while workflow state is ${workflowState}.`,
+    })),
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: DEFAULT_DEBUG_LOG_ON_STATUS,
+      resetDefaultsDescription: "Restore the documented default workflow-state filter.",
+    }),
+  ], { initialSelectedId: currentValue });
+  if (!choice) {
+    return undefined;
+  }
+  if (choice === "reset-defaults") {
+    return DEFAULT_DEBUG_LOG_ON_STATUS;
+  }
+  return normalizeDebugLogOnStatus(choice);
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for debug logging configuration.
+ * @details Serializes global debug controls plus workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists and dimming locked rows while debug is disabled. Runtime is O(t + p). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered debug-menu choices.
+ * @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277
+ */
+function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  const debugEnabled = config.DEBUG_ENABLED === "enable";
+  const enabledTools = new Set(normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS));
+  const enabledPrompts = new Set(normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS));
+  return [
+    {
+      id: "debug-enabled",
+      label: "Debug",
+      value: config.DEBUG_ENABLED,
+      description: "Enable or disable all debug logging behavior and unlock the remaining Debug rows.",
+    },
+    buildDebugMenuChoice(
+      {
+        id: "debug-log-file",
+        label: "Log file",
+        value: config.DEBUG_LOG_FILE,
+        description: "Edit the JSON debug log file path. Relative paths resolve against the original project base.",
+      },
+      debugEnabled,
+    ),
+    buildDebugMenuChoice(
+      {
+        id: "debug-log-on-status",
+        label: "Log on status",
+        value: config.DEBUG_LOG_ON_STATUS,
+        description: "Select whether matching debug entries are written for one explicit workflow state or for any workflow state.",
+      },
+      debugEnabled,
+    ),
+    buildDebugMenuChoice(
+      {
+        id: "debug-status-changes",
+        label: "Status changes",
+        value: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES),
+        description: "Enable or disable `workflow_state` debug entries for prompt-orchestration transitions.",
+      },
+      debugEnabled,
+    ),
+    buildDebugMenuChoice(
+      {
+        id: "debug-workflow-events",
+        label: "Workflow events",
+        value: normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS),
+        description: "Enable or disable dedicated workflow debug entries for activation, restoration, closure, and session-shutdown diagnostics.",
+      },
+      debugEnabled,
+    ),
+    ...getDebugToolToggleNames().map((toolName) => buildDebugMenuChoice(
+      {
+        id: `debug-tool:${toolName}`,
+        label: toolName,
+        value: enabledTools.has(toolName) ? "enable" : "disable",
+        description: PI_USEREQ_CUSTOM_TOOL_NAMES.includes(toolName as never)
+          ? `Toggle debug logging for custom tool ${toolName}.`
+          : `Toggle debug logging for embedded tool ${toolName}.`,
+      },
+      debugEnabled,
+    )),
+    ...DEBUG_PROMPT_NAMES.map((promptName) => buildDebugMenuChoice(
+      {
+        id: `debug-prompt:${promptName}`,
+        label: promptName,
+        value: enabledPrompts.has(promptName) ? "enable" : "disable",
+        description: `Toggle prompt-orchestration debug logging for /${promptName}.`,
+      },
+      debugEnabled,
+    )),
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: DEFAULT_DEBUG_LOG_ON_STATUS,
+      resetDefaultsDescription: "Restore the documented default Debug configuration.",
+    }),
+  ];
+}
+
+/**
+ * @brief Runs the interactive Debug submenu.
+ * @details Lets the user toggle global debug enablement, edit debug file and workflow filters, toggle dedicated workflow-event logging, mutate per-tool and per-prompt debug selectors, and restore subtree defaults while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {Promise<void>} Promise resolved when the submenu closes.
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277
+ */
+async function configureDebugMenu(
+  ctx: ExtensionCommandContext,
+  config: UseReqConfig,
+  onConfigChange: () => void,
+): Promise<void> {
+  let focusedChoiceId: string | undefined;
+  while (true) {
+    const choice = await showPiUsereqSettingsMenu(ctx, "Debug", buildDebugMenuChoices(config), {
+      initialSelectedId: focusedChoiceId,
+    });
+    if (!choice) {
+      return;
+    }
+    focusedChoiceId = choice;
+
+    if (choice === "debug-enabled") {
+      config.DEBUG_ENABLED = config.DEBUG_ENABLED === "enable" ? "disable" : "enable";
+      onConfigChange();
+      ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
+      continue;
+    }
+    if (choice === "reset-defaults") {
+      const resetPreview: ResetConfirmationChange[] = [
+        { label: "Debug", previousValue: config.DEBUG_ENABLED, nextValue: "disable" },
+        { label: "Log file", previousValue: config.DEBUG_LOG_FILE, nextValue: DEFAULT_DEBUG_LOG_FILE },
+        { label: "Status changes", previousValue: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES), nextValue: DEFAULT_DEBUG_STATUS_CHANGES },
+        { label: "Workflow events", previousValue: normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS), nextValue: DEFAULT_DEBUG_WORKFLOW_EVENTS },
+        { label: "Log on status", previousValue: config.DEBUG_LOG_ON_STATUS, nextValue: DEFAULT_DEBUG_LOG_ON_STATUS },
+        { label: "Enabled debug tools", previousValue: String(normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS).length), nextValue: "0" },
+        { label: "Enabled debug prompts", previousValue: String(normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS).length), nextValue: "0" },
+      ].filter((change) => change.previousValue !== change.nextValue);
+      const approved = await confirmResetChanges(
+        ctx,
+        "Confirm Debug reset",
+        resetPreview,
+        "Approve restoring the documented default Debug configuration.",
+        "Abort the Debug reset and keep the current values.",
+      );
+      if (!approved) {
+        ctx.ui.notify("Aborted Debug reset", "info");
+        continue;
+      }
+      resetDebugConfigToDefaults(config);
+      onConfigChange();
+      ctx.ui.notify("Restored default Debug configuration", "info");
+      continue;
+    }
+    if (config.DEBUG_ENABLED !== "enable") {
+      ctx.ui.notify("Debug rows are locked while Debug is disabled", "info");
+      continue;
+    }
+    if (choice === "debug-log-file") {
+      const value = await ctx.ui.input("Log file", config.DEBUG_LOG_FILE);
+      if (value !== undefined) {
+        config.DEBUG_LOG_FILE = normalizeDebugLogFile(value);
+        onConfigChange();
+        ctx.ui.notify(`Debug log file set to ${config.DEBUG_LOG_FILE}`, "info");
+      }
+      continue;
+    }
+    if (choice === "debug-status-changes") {
+      config.DEBUG_STATUS_CHANGES = normalizeDebugStatusChanges(
+        config.DEBUG_STATUS_CHANGES === "enable" ? "disable" : "enable",
+      );
+      onConfigChange();
+      ctx.ui.notify(`Debug status-change logging ${config.DEBUG_STATUS_CHANGES}`, "info");
+      continue;
+    }
+    if (choice === "debug-workflow-events") {
+      config.DEBUG_WORKFLOW_EVENTS = normalizeDebugWorkflowEvents(
+        config.DEBUG_WORKFLOW_EVENTS === "enable" ? "disable" : "enable",
+      );
+      onConfigChange();
+      ctx.ui.notify(`Debug workflow-event logging ${config.DEBUG_WORKFLOW_EVENTS}`, "info");
+      continue;
+    }
+    if (choice === "debug-log-on-status") {
+      const selectedStatus = await selectDebugLogOnStatus(ctx, config.DEBUG_LOG_ON_STATUS);
+      if (selectedStatus !== undefined) {
+        config.DEBUG_LOG_ON_STATUS = selectedStatus;
+        onConfigChange();
+        ctx.ui.notify(`Debug workflow filter set to ${config.DEBUG_LOG_ON_STATUS}`, "info");
+      }
+      continue;
+    }
+    if (choice.startsWith("debug-tool:")) {
+      const toolName = choice.slice("debug-tool:".length);
+      const enabledTools = new Set(normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS));
+      if (enabledTools.has(toolName as PiUsereqStartupToolName)) {
+        enabledTools.delete(toolName as PiUsereqStartupToolName);
+      } else {
+        enabledTools.add(toolName as PiUsereqStartupToolName);
+      }
+      config.DEBUG_ENABLED_TOOLS = getDebugToolToggleNames().filter((name) => enabledTools.has(name));
+      onConfigChange();
+      ctx.ui.notify(
+        `${enabledTools.has(toolName as PiUsereqStartupToolName) ? "Enabled" : "Disabled"} debug logging for ${toolName}`,
+        "info",
+      );
+      continue;
+    }
+    if (choice.startsWith("debug-prompt:")) {
+      const promptName = choice.slice("debug-prompt:".length);
+      const enabledPrompts = new Set(normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS));
+      if (enabledPrompts.has(promptName as (typeof DEBUG_PROMPT_NAMES)[number])) {
+        enabledPrompts.delete(promptName as (typeof DEBUG_PROMPT_NAMES)[number]);
+      } else {
+        enabledPrompts.add(promptName as (typeof DEBUG_PROMPT_NAMES)[number]);
+      }
+      config.DEBUG_ENABLED_PROMPTS = DEBUG_PROMPT_NAMES.filter((name) => enabledPrompts.has(name));
+      onConfigChange();
+      ctx.ui.notify(
+        `${enabledPrompts.has(promptName as (typeof DEBUG_PROMPT_NAMES)[number]) ? "Enabled" : "Disabled"} debug logging for ${promptName}`,
+        "info",
+      );
+    }
+  }
 }
 
 /**
@@ -898,18 +1811,9 @@ function buildPiNotifyEventMenuChoices(
       value: config[eventMenu.keys[row.eventId]] ? "on" : "off",
       description: `${eventMenu.systemLabel}: ${row.description}`,
     })),
-    {
-      id: "reset-defaults",
-      label: "Reset defaults",
-      value: "",
-      description: `Restore the documented default ${eventMenu.systemLabel.toLowerCase()} event toggles.`,
-    },
-    {
-      id: "save-and-close",
-      label: "Save and close",
-      value: "",
-      description: "Return to the notifications menu.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsDescription: `Restore the documented default ${eventMenu.systemLabel.toLowerCase()} event toggles.`,
+    }),
   ];
 }
 
@@ -961,6 +1865,7 @@ async function configurePiNotifyEventMenu(
   ctx: ExtensionCommandContext,
   config: UseReqConfig,
   eventMenu: PiNotifyEventMenuDefinition,
+  onConfigChange: () => void,
 ): Promise<void> {
   let focusedChoiceId: string | undefined;
   while (true) {
@@ -970,12 +1875,32 @@ async function configurePiNotifyEventMenu(
       buildPiNotifyEventMenuChoices(config, eventMenu),
       { initialSelectedId: focusedChoiceId },
     );
-    if (!choice || choice === "save-and-close") {
+    if (!choice) {
       return;
     }
     focusedChoiceId = choice;
     if (choice === "reset-defaults") {
+      const defaults = getDefaultConfig("");
+      const resetPreview = PI_NOTIFY_EVENT_ROW_DEFINITIONS
+        .map((row) => ({
+          label: row.label,
+          previousValue: config[eventMenu.keys[row.eventId]] ? "on" : "off",
+          nextValue: defaults[eventMenu.keys[row.eventId]] ? "on" : "off",
+        }))
+        .filter((change) => change.previousValue !== change.nextValue);
+      const approved = await confirmResetChanges(
+        ctx,
+        `Confirm ${eventMenu.systemLabel} event reset`,
+        resetPreview,
+        `Approve restoring default ${eventMenu.systemLabel.toLowerCase()} event toggles.`,
+        `Abort the ${eventMenu.systemLabel.toLowerCase()} event reset and keep the current values.`,
+      );
+      if (!approved) {
+        ctx.ui.notify(`Aborted ${eventMenu.systemLabel.toLowerCase()} event reset`, "info");
+        continue;
+      }
       resetPiNotifyEventMenuToDefaults(config, eventMenu);
+      onConfigChange();
       ctx.ui.notify(
         `Restored default ${eventMenu.systemLabel.toLowerCase()} events`,
         "info",
@@ -986,6 +1911,7 @@ async function configurePiNotifyEventMenu(
       config,
       choice as PiNotifyEventBooleanConfigKey,
     );
+    onConfigChange();
     const eventLabel = resolvePiNotifyEventLabel(
       choice as PiNotifyEventBooleanConfigKey,
       eventMenu,
@@ -999,18 +1925,24 @@ async function configurePiNotifyEventMenu(
 
 /**
  * @brief Builds the direct Pushover rows rendered inside `Notifications`.
- * @details Serializes the global enable flag, shared-event submenu launcher, priority, title, text, and credential rows into right-valued menu items appended after the sound-command rows. Runtime is O(1). No external state is mutated.
+ * @details Serializes the global enable flag, shared-event submenu launcher, priority, title, text, and credential rows into right-valued menu items appended after the sound-command rows, dims and disables the enable row until both credentials are populated, and escapes control characters for the single-line `Pushover text` value. Runtime is O(n) in the rendered text-template length. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered direct Pushover rows.
- * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-198
+ * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-198, REQ-234, REQ-235
  */
 function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  const pushoverCredentialsReady = hasPiNotifyPushoverCredentials(config);
   return [
     {
       id: "notify-pushover-enabled",
       label: "Enable pushover",
-      value: formatPiNotifyPushoverStatus(config),
-      description: "Enable or disable all Pushover delivery globally.",
+      labelTone: pushoverCredentialsReady ? undefined : "dim",
+      value: pushoverCredentialsReady ? formatPiNotifyPushoverStatus(config) : "off",
+      valueTone: pushoverCredentialsReady ? undefined : "dim",
+      disabled: !pushoverCredentialsReady,
+      description: pushoverCredentialsReady
+        ? "Enable or disable all Pushover delivery globally."
+        : "Populate both Pushover credential fields to unlock global Pushover enablement.",
     },
     buildPiNotifyEventLauncherChoice(
       config,
@@ -1031,7 +1963,7 @@ function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuCh
     {
       id: "notify-pushover-text",
       label: "Pushover text",
-      value: config["notify-pushover-text"],
+      value: formatPiNotifyControlSequenceText(config["notify-pushover-text"]),
       description: "Edit the text template used for outbound Pushover messages.",
     },
     {
@@ -1051,16 +1983,16 @@ function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuCh
 
 /**
  * @brief Opens the shared settings-menu selector for Pushover priority.
- * @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the notification menus and returns the chosen priority or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the notification menus and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] currentPriority {PiNotifyPushoverPriority} Persisted priority value.
- * @return {Promise<PiNotifyPushoverPriority | undefined>} Selected priority or `undefined` when cancelled.
+ * @return {Promise<PiNotifyPushoverPriority | "reset-defaults" | undefined>} Selected priority, reset action, or `undefined` when cancelled.
  * @satisfies REQ-172, REQ-192
  */
 async function selectPiNotifyPushoverPriority(
   ctx: ExtensionCommandContext,
   currentPriority: PiNotifyPushoverPriority,
-): Promise<PiNotifyPushoverPriority | undefined> {
+): Promise<PiNotifyPushoverPriority | "reset-defaults" | undefined> {
   const choice = await showPiUsereqSettingsMenu(ctx, "Pushover priority", [
     {
       id: "0",
@@ -1074,19 +2006,26 @@ async function selectPiNotifyPushoverPriority(
       value: currentPriority === 1 ? "selected" : "",
       description: "Send outbound Pushover messages with high priority `1`.",
     },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: formatPiNotifyPushoverPriority(getDefaultConfig("")["notify-pushover-priority"]),
+      resetDefaultsDescription: "Restore the documented default Pushover priority.",
+    }),
   ], { initialSelectedId: String(currentPriority) });
   if (!choice) {
     return undefined;
+  }
+  if (choice === "reset-defaults") {
+    return "reset-defaults";
   }
   return normalizePiNotifyPushoverPriority(choice);
 }
 
 /**
  * @brief Builds the shared settings-menu choices for notification configuration.
- * @details Serializes command-notify, sound, and Pushover blocks with dedicated shared-event submenu launchers so the settings-menu renderer can expose one unified but modular configuration surface. Runtime is O(1) plus command-length formatting. No external state is mutated.
+ * @details Serializes command-notify, sound, and Pushover blocks with dedicated shared-event submenu launchers so the settings-menu renderer can expose one unified but modular configuration surface, including locked Pushover enablement and escaped single-line rendering for `Pushover text`. Runtime is O(n) in the longest rendered command or text field. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
- * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193, REQ-198
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193, REQ-198, REQ-234, REQ-235
  */
 function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
@@ -1141,33 +2080,24 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       description: "Edit the shell command used when the selected sound command is `high`.",
     },
     ...buildPiNotifyPushoverRows(config),
-    {
-      id: "reset-defaults",
-      label: "Reset defaults",
-      value: "",
-      description: "Restore the documented notification defaults for command-notify, sound, and Pushover settings.",
-    },
-    {
-      id: "save-and-close",
-      label: "Save and close",
-      value: "",
-      description: "Return to the parent configuration menu.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsDescription: "Restore the documented notification defaults for command-notify, sound, and Pushover settings.",
+    }),
   ];
 }
 
 /**
  * @brief Opens the shared settings-menu selector for the active sound level.
- * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the notification menu and returns the chosen sound level or `undefined` on cancel. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the notification menu and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] currentLevel {PiNotifySoundLevel} Currently selected sound level.
- * @return {Promise<PiNotifySoundLevel | undefined>} Selected sound level or `undefined` when cancelled.
+ * @return {Promise<PiNotifySoundLevel | "reset-defaults" | undefined>} Selected sound level, reset action, or `undefined` when cancelled.
  * @satisfies REQ-131, REQ-179, REQ-192
  */
 async function selectPiNotifySoundLevel(
   ctx: ExtensionCommandContext,
   currentLevel: PiNotifySoundLevel,
-): Promise<PiNotifySoundLevel | undefined> {
+): Promise<PiNotifySoundLevel | "reset-defaults" | undefined> {
   const choice = await showPiUsereqSettingsMenu(ctx, "Enable sound", [
     {
       id: "none",
@@ -1193,21 +2123,32 @@ async function selectPiNotifySoundLevel(
       value: currentLevel === "high" ? "selected" : "",
       description: "Use the high-volume sound command when sound delivery is enabled for the current event.",
     },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: getDefaultConfig("")["notify-sound"],
+      resetDefaultsDescription: "Restore the documented default sound level.",
+    }),
   ], { initialSelectedId: currentLevel });
-  return choice ? choice as PiNotifySoundLevel : undefined;
+  if (!choice) {
+    return undefined;
+  }
+  if (choice === "reset-defaults") {
+    return "reset-defaults";
+  }
+  return choice as PiNotifySoundLevel;
 }
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, delegates completed/interrupted/failed toggles to dedicated event submenus, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, delegates completed/interrupted/failed toggles to dedicated event submenus, keeps `Enable pushover` locked until both credentials are populated, decodes escaped control-sequence input for `Pushover text`, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196, REQ-198
+ * @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196, REQ-198, REQ-234, REQ-235
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
   config: UseReqConfig,
+  onConfigChange: () => void,
 ): Promise<boolean> {
   const originalShortcut = config["notify-sound-toggle-shortcut"];
   let focusedChoiceId: string | undefined;
@@ -1218,12 +2159,18 @@ async function configurePiNotifyMenu(
       buildPiNotifyMenuChoices(config),
       { initialSelectedId: focusedChoiceId },
     );
-    if (!choice || choice === "save-and-close") {
+    if (!choice) {
       return config["notify-sound-toggle-shortcut"] !== originalShortcut;
     }
     focusedChoiceId = choice;
     if (choice === "notify-enabled" || choice === "notify-pushover-enabled") {
+      if (choice === "notify-pushover-enabled" && !hasPiNotifyPushoverCredentials(config)) {
+        config["notify-pushover-enabled"] = false;
+        ctx.ui.notify("Populate both Pushover credential fields before enabling Pushover", "info");
+        continue;
+      }
       const enabled = togglePiNotifyFlag(config, choice as PiNotifyBooleanConfigKey);
+      onConfigChange();
       const labelMap: Record<string, string> = {
         "notify-enabled": "Notification",
         "notify-pushover-enabled": "Pushover",
@@ -1236,6 +2183,7 @@ async function configurePiNotifyMenu(
         ctx,
         config,
         PI_NOTIFY_EVENT_MENU_DEFINITIONS.notification,
+        onConfigChange,
       );
       continue;
     }
@@ -1244,6 +2192,7 @@ async function configurePiNotifyMenu(
         ctx,
         config,
         PI_NOTIFY_EVENT_MENU_DEFINITIONS.sound,
+        onConfigChange,
       );
       continue;
     }
@@ -1252,6 +2201,7 @@ async function configurePiNotifyMenu(
         ctx,
         config,
         PI_NOTIFY_EVENT_MENU_DEFINITIONS.pushover,
+        onConfigChange,
       );
       continue;
     }
@@ -1259,14 +2209,33 @@ async function configurePiNotifyMenu(
       const value = await ctx.ui.input("Notify command", config.PI_NOTIFY_CMD);
       if (value !== undefined) {
         config.PI_NOTIFY_CMD = normalizePiNotifyCommand(value, DEFAULT_PI_NOTIFY_CMD);
+        onConfigChange();
         ctx.ui.notify("Updated notify command", "info");
       }
       continue;
     }
     if (choice === "selected-sound-command") {
       const nextLevel = await selectPiNotifySoundLevel(ctx, config["notify-sound"]);
-      if (nextLevel !== undefined) {
+      if (nextLevel === "reset-defaults") {
+        const defaultSoundLevel = getDefaultConfig("")["notify-sound"];
+        const approved = await confirmResetChanges(
+          ctx,
+          "Confirm sound reset",
+          [{ label: "Enable sound", previousValue: config["notify-sound"], nextValue: defaultSoundLevel }]
+            .filter((change) => change.previousValue !== change.nextValue),
+          "Approve restoring the documented default sound level.",
+          "Abort the sound reset and keep the current value.",
+        );
+        if (!approved) {
+          ctx.ui.notify("Aborted sound reset", "info");
+        } else {
+          config["notify-sound"] = defaultSoundLevel;
+          onConfigChange();
+          ctx.ui.notify("Restored default sound level", "info");
+        }
+      } else if (nextLevel !== undefined) {
         config["notify-sound"] = nextLevel;
+        onConfigChange();
         ctx.ui.notify(`Enable sound set to ${nextLevel}`, "info");
       }
       continue;
@@ -1278,6 +2247,7 @@ async function configurePiNotifyMenu(
       );
       if (value?.trim()) {
         config["notify-sound-toggle-shortcut"] = value.trim();
+        onConfigChange();
         ctx.ui.notify(
           `Sound toggle hotkey bind set to ${config["notify-sound-toggle-shortcut"]}`,
           "info",
@@ -1292,6 +2262,7 @@ async function configurePiNotifyMenu(
           value,
           DEFAULT_PI_NOTIFY_SOUND_LOW_CMD,
         );
+        onConfigChange();
         ctx.ui.notify("Updated sound command (low vol.)", "info");
       }
       continue;
@@ -1303,6 +2274,7 @@ async function configurePiNotifyMenu(
           value,
           DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
         );
+        onConfigChange();
         ctx.ui.notify("Updated sound command (mid vol.)", "info");
       }
       continue;
@@ -1314,14 +2286,36 @@ async function configurePiNotifyMenu(
           value,
           DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
         );
+        onConfigChange();
         ctx.ui.notify("Updated sound command (high vol.)", "info");
       }
       continue;
     }
     if (choice === "notify-pushover-priority") {
       const nextPriority = await selectPiNotifyPushoverPriority(ctx, config["notify-pushover-priority"]);
-      if (nextPriority !== undefined) {
+      if (nextPriority === "reset-defaults") {
+        const defaultPriority = getDefaultConfig("")["notify-pushover-priority"];
+        const approved = await confirmResetChanges(
+          ctx,
+          "Confirm Pushover priority reset",
+          [{
+            label: "Pushover priority",
+            previousValue: formatPiNotifyPushoverPriority(config["notify-pushover-priority"]),
+            nextValue: formatPiNotifyPushoverPriority(defaultPriority),
+          }].filter((change) => change.previousValue !== change.nextValue),
+          "Approve restoring the documented default Pushover priority.",
+          "Abort the Pushover priority reset and keep the current value.",
+        );
+        if (!approved) {
+          ctx.ui.notify("Aborted Pushover priority reset", "info");
+        } else {
+          config["notify-pushover-priority"] = defaultPriority;
+          onConfigChange();
+          ctx.ui.notify("Restored default Pushover priority", "info");
+        }
+      } else if (nextPriority !== undefined) {
         config["notify-pushover-priority"] = nextPriority;
+        onConfigChange();
         ctx.ui.notify(`Pushover priority set to ${formatPiNotifyPushoverPriority(nextPriority)}`, "info");
       }
       continue;
@@ -1333,17 +2327,22 @@ async function configurePiNotifyMenu(
           value,
           DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
         );
+        onConfigChange();
         ctx.ui.notify("Updated Pushover title", "info");
       }
       continue;
     }
     if (choice === "notify-pushover-text") {
-      const value = await ctx.ui.input("Pushover text", config["notify-pushover-text"]);
+      const value = await ctx.ui.input(
+        "Pushover text",
+        formatPiNotifyControlSequenceText(config["notify-pushover-text"]),
+      );
       if (value !== undefined) {
         config["notify-pushover-text"] = normalizePiNotifyTemplateValue(
-          value,
+          parsePiNotifyControlSequenceText(value),
           DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
         );
+        onConfigChange();
         ctx.ui.notify("Updated Pushover text", "info");
       }
       continue;
@@ -1355,6 +2354,10 @@ async function configurePiNotifyMenu(
       );
       if (value !== undefined) {
         config["notify-pushover-user-key"] = normalizePiNotifyPushoverCredential(value);
+        if (!hasPiNotifyPushoverCredentials(config)) {
+          config["notify-pushover-enabled"] = false;
+        }
+        onConfigChange();
         ctx.ui.notify("Updated Pushover user key", "info");
       }
       continue;
@@ -1366,12 +2369,44 @@ async function configurePiNotifyMenu(
       );
       if (value !== undefined) {
         config["notify-pushover-api-token"] = normalizePiNotifyPushoverCredential(value);
+        if (!hasPiNotifyPushoverCredentials(config)) {
+          config["notify-pushover-enabled"] = false;
+        }
+        onConfigChange();
         ctx.ui.notify("Updated Pushover API token", "info");
       }
       continue;
     }
     if (choice === "reset-defaults") {
+      const defaults = getDefaultConfig("");
+      const resetPreview: ResetConfirmationChange[] = [
+        { label: "Enable notification", previousValue: formatPiNotifyStatus(config), nextValue: formatPiNotifyStatus(defaults) },
+        { label: "Enable sound", previousValue: config["notify-sound"], nextValue: defaults["notify-sound"] },
+        { label: "Sound toggle hotkey bind", previousValue: config["notify-sound-toggle-shortcut"], nextValue: defaults["notify-sound-toggle-shortcut"] },
+        { label: "Notify command", previousValue: config.PI_NOTIFY_CMD, nextValue: defaults.PI_NOTIFY_CMD },
+        { label: "Sound command (low vol.)", previousValue: config.PI_NOTIFY_SOUND_LOW_CMD, nextValue: defaults.PI_NOTIFY_SOUND_LOW_CMD },
+        { label: "Sound command (mid vol.)", previousValue: config.PI_NOTIFY_SOUND_MID_CMD, nextValue: defaults.PI_NOTIFY_SOUND_MID_CMD },
+        { label: "Sound command (high vol.)", previousValue: config.PI_NOTIFY_SOUND_HIGH_CMD, nextValue: defaults.PI_NOTIFY_SOUND_HIGH_CMD },
+        { label: "Enable pushover", previousValue: formatPiNotifyPushoverStatus(config), nextValue: formatPiNotifyPushoverStatus(defaults) },
+        { label: "Pushover priority", previousValue: formatPiNotifyPushoverPriority(config["notify-pushover-priority"]), nextValue: formatPiNotifyPushoverPriority(defaults["notify-pushover-priority"]) },
+        { label: "Pushover title", previousValue: config["notify-pushover-title"], nextValue: defaults["notify-pushover-title"] },
+        { label: "Pushover text", previousValue: formatPiNotifyControlSequenceText(config["notify-pushover-text"]), nextValue: formatPiNotifyControlSequenceText(defaults["notify-pushover-text"]) },
+        { label: "Pushover User Key/Delivery Group Key", previousValue: config["notify-pushover-user-key"] || "(empty)", nextValue: defaults["notify-pushover-user-key"] || "(empty)" },
+        { label: "Pushover Token/API Token Key", previousValue: config["notify-pushover-api-token"] || "(empty)", nextValue: defaults["notify-pushover-api-token"] || "(empty)" },
+      ].filter((change) => change.previousValue !== change.nextValue);
+      const approved = await confirmResetChanges(
+        ctx,
+        "Confirm Notifications reset",
+        resetPreview,
+        "Approve restoring the documented notification defaults.",
+        "Abort the notification reset and keep the current values.",
+      );
+      if (!approved) {
+        ctx.ui.notify("Aborted notification reset", "info");
+        continue;
+      }
       resetPiNotifyConfigToDefaults(config);
+      onConfigChange();
       ctx.ui.notify("Restored notification defaults", "info");
       continue;
     }
@@ -1399,7 +2434,7 @@ function registerPiNotifyShortcut(
   if (typeof shortcutRegistrar.registerShortcut !== "function") {
     return;
   }
-  const config = loadProjectConfig(process.cwd());
+  const config = loadProjectConfig(getProcessCwdSafe());
   shortcutRegistrar.registerShortcut(config["notify-sound-toggle-shortcut"], {
     description: "Cycle pi-usereq notification sound level",
     handler: async (ctx) => {
@@ -1415,29 +2450,127 @@ function registerPiNotifyShortcut(
 
 /**
  * @brief Registers bundled prompt commands with the extension.
- * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler ensures resources exist, records the prompt metadata needed for successful completion notifications, renders the prompt, and sends it into the current active session. Runtime is O(p) for registration; handler cost depends on prompt rendering plus prompt dispatch. Side effects include command registration, status-controller mutation, and user-message delivery during execution.
+ * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state, transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, user-message delivery during execution, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-169
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281
  */
 function registerPromptCommands(
   pi: ExtensionAPI,
   statusController: PiUsereqStatusController,
 ): void {
-  PROMPT_NAMES.forEach((promptName) => {
+  PROMPT_COMMAND_NAMES.forEach((promptName) => {
     pi.registerCommand(`req-${promptName}`, {
-      description: `Run pi-usereq prompt ${promptName}`,
+      description: resolvePromptCommandDescription(promptName),
       handler: async (args, ctx) => {
-        ensureBundledResourcesAccessible();
-        const projectBase = getProjectBase(ctx.cwd);
-        const config = loadProjectConfig(ctx.cwd);
-        statusController.state.pendingPromptRequest = {
+        if (statusController.state.workflowState !== "idle") {
+          const message = `ERROR: Prompt workflow state is ${statusController.state.workflowState}, expected idle.`;
+          ctx.ui.notify(message, "error");
+          throw new ReqError(message, 1);
+        }
+        const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
+        syncContextCwdMirror(ctx, commandCwd);
+        bootstrapRuntimePathState(commandCwd, {
+          gitPath: resolveRuntimeGitPath(commandCwd),
+        });
+        const projectBase = getProjectBase(commandCwd);
+        const config = loadProjectConfig(commandCwd);
+        transitionPromptWorkflowState(
+          statusController,
+          ctx,
+          projectBase,
+          config,
           promptName,
-          promptArgs: args,
-        };
-        const content = renderPrompt(promptName, args, projectBase, config);
-        await deliverPromptCommand(pi, content);
+          "checking",
+        );
+        ensureBundledResourcesAccessible();
+        let executionPlan: PromptCommandExecutionPlan | undefined;
+        let promptContext = ctx;
+        try {
+          executionPlan = preparePromptCommandExecution(
+            promptName,
+            args,
+            projectBase,
+            config,
+            ctx.sessionManager.getSessionFile(),
+            ctx.sessionManager.getSessionDir?.(),
+            ctx.sessionManager.getBranch?.(),
+            {
+              config,
+              workflowState: statusController.state.workflowState,
+            },
+          );
+          const content = renderPrompt(
+            promptName,
+            args,
+            projectBase,
+            config,
+            executionPlan,
+          );
+          statusController.state.pendingPromptRequest = executionPlan;
+          writePersistedPromptCommandRuntimeState({
+            workflowState: statusController.state.workflowState,
+            pendingPromptRequest: statusController.state.pendingPromptRequest,
+            activePromptRequest: statusController.state.activePromptRequest,
+          });
+          promptContext = (await activatePromptCommandExecution(executionPlan, ctx) ?? ctx) as typeof ctx;
+          logPromptWorkflowEvent(
+            projectBase,
+            config,
+            statusController.state.workflowState,
+            promptName,
+            "workflow_activation",
+            {
+              execution_session_file: executionPlan.executionSessionFile,
+              context_path: executionPlan.contextPath,
+            },
+            {
+              success: true,
+              context_path: promptContext.cwd ?? executionPlan.contextPath,
+              prompt_context_has_switch_session: typeof promptContext.switchSession === "function",
+            },
+          );
+          renderPiUsereqStatus(statusController, promptContext);
+          const promptDelivery = deliverPromptCommand(pi, content, promptContext);
+          transitionPromptWorkflowState(
+            statusController,
+            promptContext,
+            projectBase,
+            config,
+            promptName,
+            "running",
+          );
+          await promptDelivery;
+        } catch (error) {
+          if (shouldIgnoreLatePromptDeliveryFailure(error, statusController.state.workflowState, executionPlan)) {
+            return;
+          }
+          promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
+          statusController.state.pendingPromptRequest = undefined;
+          statusController.state.activePromptRequest = undefined;
+          transitionPromptWorkflowState(
+            statusController,
+            promptContext,
+            projectBase,
+            config,
+            promptName,
+            "error",
+          );
+          if (executionPlan !== undefined) {
+            const abortResult = await abortPromptCommandExecution(executionPlan, promptContext, {
+              config,
+              workflowState: statusController.state.workflowState,
+            });
+            promptContext = (abortResult.activeContext ?? promptContext) as typeof ctx;
+            if (!abortResult.cleanupSucceeded && abortResult.errorMessage) {
+              notifyContextSafely(promptContext, abortResult.errorMessage, "error");
+            }
+          }
+          const message = error instanceof Error ? error.message : String(error);
+          notifyContextSafely(promptContext, message, "error");
+          throw error;
+        }
       },
     });
   });
@@ -1449,76 +2582,9 @@ function registerPromptCommands(
  * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-045, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102
+ * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102
  */
 function registerAgentTools(pi: ExtensionAPI): void {
-  const gitPathSchema = Type.Object(
-    {},
-    {
-      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes path_value and path_present for the cwd-derived runtime git root.",
-    },
-  );
-  pi.registerTool({
-    name: "git-path",
-    label: "git-path",
-    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the resolved `git-path` value through direct-access fields without request echoes.",
-    promptSnippet: "Return the structured runtime git-root payload for the current project.",
-    promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: result + execution. Result exposes path_value and path_present.",
-      "Behavior contract: git-path is derived at runtime from the current working directory and repository ancestry rules.",
-      "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
-    ],
-    parameters: gitPathSchema,
-    async execute() {
-      ensureBundledResourcesAccessible();
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const result = runGitPath(projectBase, config);
-      const payload = buildPathQueryToolPayload(
-        "git-path",
-        process.cwd(),
-        projectBase,
-        result.stdout.trimEnd(),
-        buildToolExecutionSection(result),
-      );
-      return buildStructuredToolExecuteResult(payload);
-    },
-  });
-
-  const basePathSchema = Type.Object(
-    {},
-    {
-      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes path_value and path_present for the cwd-derived runtime base path.",
-    },
-  );
-  pi.registerTool({
-    name: "get-base-path",
-    label: "get-base-path",
-    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the resolved `base-path` value through direct-access fields without request echoes.",
-    promptSnippet: "Return the structured runtime project-base payload.",
-    promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: result + execution. Result exposes path_value and path_present.",
-      "Behavior contract: base-path equals the current working directory used by the extension command or tool.",
-      "Failure contract: configuration-loading failures surface through execution.code and execution.stderr_lines.",
-    ],
-    parameters: basePathSchema,
-    async execute() {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const result = runGetBasePath(projectBase, config);
-      const payload = buildPathQueryToolPayload(
-        "get-base-path",
-        process.cwd(),
-        projectBase,
-        result.stdout.trimEnd(),
-        buildToolExecutionSection(result),
-      );
-      return buildStructuredToolExecuteResult(payload);
-    },
-  });
-
   const filesReferencesSchema = Type.Object(
     {
       files: Type.Array(
@@ -1527,7 +2593,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       ),
     },
     {
-      description: "Input contract: files[]. Output contract: JSON object with summary, repository, files, and execution. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts. Missing or unsupported inputs become skipped entries. The tool fails when no source file can be analyzed.",
+      description: "Input contract: files[]. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics. Missing or unsupported inputs surface through execution diagnostics. The tool fails when no source file can be analyzed.",
     },
   );
   const multiFileSchema = Type.Object(
@@ -1538,7 +2604,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       ),
     },
     {
-      description: "Input contract: files[]. Output contract: JSON object with summary, files, and execution. File entries expose canonical paths, detected language, configured checker modules, selection status, and error facts.",
+      description: "Input contract: files[]. Output contract: monolithic text in content[0].text plus details.execution diagnostics.",
     },
   );
   const filesTokensSchema = Type.Object(
@@ -1549,58 +2615,43 @@ function registerAgentTools(pi: ExtensionAPI): void {
       ),
     },
     {
-      description: "Input contract: files[]. Output contract: JSON object with summary, files, and execution. File entries expose direct-access facts, token metrics, and optional heading or Doxygen metadata. Missing or non-file inputs become skipped entries. The tool fails when no processable files remain.",
+      description: "Input contract: files[]. Output contract: monolithic pack-summary text in content[0].text plus details.execution diagnostics. The tool fails when no processable files remain.",
     },
   );
 
   pi.registerTool({
     name: "files-tokens",
     label: "files-tokens",
-    description: "Scope: explicit files. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose direct-access path facts, status, size metrics, and optional heading or Doxygen metadata.",
-    promptSnippet: "Return the structured token-analysis payload for caller-selected files.",
+    description: "Scope: explicit files. Return the monolithic token pack summary in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic token summary for caller-selected files.",
     promptGuidelines: [
       "Scope: explicit files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
-      "Output contract: summary + files + execution. File entries expose canonical paths, absolute paths, existence, file status, line range, line count, byte count, character count, token count, shares, and optional primary-heading or Doxygen file metadata.",
-      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; static request metadata and derived guidance are omitted from runtime responses.",
-      "Behavior contract: missing or non-file inputs become skipped entries; read failures become error entries; the tool fails only when no processable files remain.",
+      "Output contract: monolithic pack-summary text in content[0].text; details.execution preserves only exit code and residual diagnostics.",
+      "Behavior contract: missing or non-file inputs surface through details.execution diagnostics; the tool fails when no processable files remain.",
     ],
+    renderResult: buildStructuredToolRenderResult("files-tokens"),
     parameters: filesTokensSchema,
     async execute(_toolCallId, params) {
-      try {
-        const payload = buildTokenToolPayload({
-          toolName: "files-tokens",
-          scope: "explicit-files",
-          baseDir: process.cwd(),
-          requestedPaths: params.files,
-          encodingName: TOKEN_COUNTER_ENCODING,
-        });
-        return buildTokenToolExecuteResult(payload);
-      } catch (error) {
-        return buildFailedTokenToolExecuteResult(error);
-      }
+      return executeMonolithicTool(() => runFilesTokens(params.files));
     },
   });
 
   pi.registerTool({
     name: "files-references",
     label: "files-references",
-    description: "Scope: explicit source files. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and structured status facts.",
-    promptSnippet: "Return the structured references payload for caller-selected source files.",
+    description: "Scope: explicit source files. Return the monolithic references markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic references markdown report for caller-selected source files.",
     promptGuidelines: [
       "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
-      "Output contract: summary + repository + files + execution. File entries expose canonical paths, absolute paths, file status, line counts, line ranges, imports, symbols, child relationships, standalone comments, and structured Doxygen metadata.",
-      "Numeric contract: line counts, line ranges, symbol counts, import counts, comment counts, and Doxygen counts remain in dedicated numeric fields; text is limited to residual comment or signature content that cannot be split safely.",
-      "Behavior contract: missing inputs, non-file inputs, and unsupported extensions become structured skipped entries; analysis failures become structured error entries; the tool fails only when no source file can be analyzed.",
+      "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
+      "Formatting contract: content matches the Python reference renderer used by `generate_markdown.py`.",
+      "Behavior contract: missing inputs, non-file inputs, unsupported extensions, and analysis failures surface through details.execution diagnostics.",
     ],
+    renderResult: buildStructuredToolRenderResult("files-references"),
     parameters: filesReferencesSchema,
     async execute(_toolCallId, params) {
-      const payload = buildReferenceToolPayload({
-        toolName: "files-references",
-        scope: "explicit-files",
-        baseDir: process.cwd(),
-        requestedPaths: params.files,
-      });
-      return buildReferenceToolExecuteResult(payload);
+      const contextPath = getRuntimeContextPath(process.cwd());
+      return executeMonolithicTool(() => runFilesReferences(params.files, contextPath));
     },
   });
 
@@ -1610,38 +2661,37 @@ function registerAgentTools(pi: ExtensionAPI): void {
         Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
         { description: "Explicit source-file list preserved in caller order" },
       ),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `compressed_source_text` and `compressed_lines[].display_text` include original source line-number prefixes" })),
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
     },
     {
-      description: "Input contract: files[] plus optional enableLineNumbers. Output contract: JSON object with summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. Missing, unsupported, or invalid inputs become structured skipped entries. The tool fails when no file is compressed.",
+      description: "Input contract: files[] plus optional enableLineNumbers. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics. The tool fails when no file is compressed.",
     },
   );
 
   pi.registerTool({
     name: "files-compress",
     label: "files-compress",
-    description: "Scope: explicit files. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
-    promptSnippet: "Return the structured compression payload for caller-selected source files.",
+    description: "Scope: explicit files. Return the monolithic compression markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic compression markdown report for caller-selected source files.",
     promptGuidelines: [
       "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
-      "Output contract: summary + repository + files + execution. File entries expose canonical paths, absolute paths, line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
-      "Line-number behavior: enableLineNumbers changes only rendered display strings; numeric source_line_number facts remain dedicated fields on compressed_lines for direct access.",
-      "Behavior contract: missing inputs, non-file inputs, and unsupported extensions become structured skipped entries; compression failures become structured error entries; symbol-analysis failures retain compressed output with symbol_analysis_status=error; the tool fails only when no file is compressed.",
+      "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
+      "Formatting contract: output uses `@@@ <path> | <language>` headers, `> Lines:` metadata, and fenced code blocks matching `compress_files.py`.",
+      "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
     ],
+    renderResult: buildStructuredToolRenderResult("files-compress"),
     parameters: filesCompressSchema,
     async execute(_toolCallId, params) {
-      const payload = buildCompressToolPayload({
-        toolName: "files-compress",
-        scope: "explicit-files",
-        baseDir: process.cwd(),
-        requestedPaths: params.files,
-        includeLineNumbers: params.enableLineNumbers ?? false,
-      });
-      return buildCompressionToolExecuteResult(payload);
+      const contextPath = getRuntimeContextPath(process.cwd());
+      return executeMonolithicTool(() => runFilesCompress(
+        params.files,
+        contextPath,
+        params.enableLineNumbers ?? false,
+      ));
     },
   });
 
-  const filesFindSchema = Type.Object(
+  const filesSearchSchema = Type.Object(
     {
       tag: Type.String({ description: "Pipe-separated construct-tag filter applied case-insensitively; unsupported tags are ignored" }),
       pattern: Type.String({ description: "JavaScript RegExp applied to construct names only; use ^...$ for exact-name matching" }),
@@ -1649,434 +2699,198 @@ function registerAgentTools(pi: ExtensionAPI): void {
         Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
         { description: "Explicit source-file list preserved in caller order" },
       ),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `code_lines[].display_text` and `stripped_source_text` include original source line-number prefixes" })),
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
     },
     {
-      description: buildFindToolSchemaDescription("explicit-files"),
+      description: buildSearchToolSchemaDescription("explicit-files"),
     },
   );
 
   pi.registerTool({
-    name: "files-find",
-    label: "files-find",
-    description: "Scope: explicit source files. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
-    promptSnippet: "Return the structured construct-search payload for caller-selected source files.",
-    promptGuidelines: buildFindToolPromptGuidelines("explicit-files"),
-    parameters: filesFindSchema,
+    name: "files-search",
+    label: "files-search",
+    description: "Scope: explicit source files. Return the monolithic construct-search markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic construct-search markdown report for caller-selected source files.",
+    promptGuidelines: buildSearchToolPromptGuidelines("explicit-files"),
+    renderResult: buildStructuredToolRenderResult("files-search"),
+    parameters: filesSearchSchema,
     async execute(_toolCallId, params) {
-      const payload = buildFindToolPayload({
-        toolName: "files-find",
-        scope: "explicit-files",
-        baseDir: process.cwd(),
-        tagFilter: params.tag,
-        pattern: params.pattern,
-        requestedPaths: params.files,
-        includeLineNumbers: params.enableLineNumbers ?? false,
-      });
-      return buildFindToolExecuteResult(payload);
+      return executeMonolithicTool(() => runFilesSearch(
+        [params.tag, params.pattern, ...params.files],
+        params.enableLineNumbers ?? false,
+      ));
     },
   });
 
   const referencesSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with summary, repository, files, and execution. Repository exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, and status facts. The tool fails when no configured source file can be analyzed.",
+      description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics.",
     },
   );
   const tokensSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Scope is the configured docs-dir plus canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md. Output contract: same token-optimized JSON shape as files-tokens. Missing canonical docs become skipped entries. The tool fails when no processable canonical docs remain.",
+      description: "Input contract: no params. Scope is the configured docs-dir plus canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md. Output contract: monolithic pack-summary text in content[0].text plus details.execution diagnostics.",
     },
   );
 
   pi.registerTool({
     name: "references",
     label: "references",
-    description: "Scope: configured project source directories. Return a token-optimized JSON payload with summary, repository, files, and execution sections. The repository section exposes the structured directory tree; file entries expose canonical paths, numeric line ranges, imports, symbols, structured Doxygen fields, standalone comments, and status facts.",
-    promptSnippet: "Return the structured project references payload from the configured source directories.",
+    description: "Scope: configured project source directories. Return the monolithic references markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic project references markdown report from the configured source directories.",
     promptGuidelines: [
       "Scope: no params; resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
-      "Output contract: summary + repository + files + execution. Repository exposes source_directory_paths, file_canonical_paths, and directory_tree; file entries expose canonical paths, line counts, line ranges, imports, symbols, hierarchy, standalone comments, and structured Doxygen metadata.",
-      "Configuration contract: output changes with cwd-derived project config, src-dir values, and repository source discovery; the tool does not accept explicit file overrides.",
-      "Behavior contract: configured source files are analyzed in deterministic order, analysis failures become structured error entries, and the tool fails when no configured source file can be analyzed.",
+      "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
+      "Formatting contract: content prepends the file-structure markdown block before the per-file markdown produced by `generate_markdown.py`.",
+      "Configuration contract: output changes with cwd-derived project config and src-dir values; the tool does not accept explicit file overrides.",
     ],
+    renderResult: buildStructuredToolRenderResult("references"),
     parameters: referencesSchema,
     async execute() {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const payload = buildReferenceToolPayload({
-        toolName: "references",
-        scope: "configured-source-directories",
-        baseDir: projectBase,
-        requestedPaths: collectSourceFiles(config["src-dir"], projectBase),
-        sourceDirectoryPaths: config["src-dir"],
-      });
-      return buildReferenceToolExecuteResult(payload);
+      const contextPath = getRuntimeContextPath(process.cwd());
+      const projectBase = getProjectBase(contextPath);
+      const config = loadProjectConfig(projectBase);
+      return executeMonolithicTool(() => runReferences(contextPath, config));
     },
   });
 
   const compressSchema = Type.Object(
     {
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `compressed_source_text` and `compressed_lines[].display_text` include original source line-number prefixes" })),
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
     },
     {
-      description: "Input contract: optional enableLineNumbers boolean. Scope is the configured src-dir list resolved from the current project configuration. Output contract: JSON object with summary, repository, files, and execution. File entries expose path identifiers, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts. The tool fails when no configured source file is compressed.",
+      description: "Input contract: optional enableLineNumbers boolean. Scope is the configured src-dir list resolved from the current project configuration. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics.",
     },
   );
 
   pi.registerTool({
     name: "compress",
     label: "compress",
-    description: "Scope: configured project source directories. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose canonical paths, source and compressed line metrics, structured compressed lines, symbols, structured Doxygen fields, and stable status facts.",
-    promptSnippet: "Return the structured project compression payload from the configured source directories.",
+    description: "Scope: configured project source directories. Return the monolithic compression markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic project compression markdown report from the configured source directories.",
     promptGuidelines: [
       "Scope: resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
-      "Output contract: summary + repository + files + execution. Repository exposes source_directory_paths and file_canonical_paths; file entries expose line_number_mode, source line counts, source line ranges, compressed line counts, removed line counts, compressed_lines, compressed_source_text, symbols, and file_doxygen.",
-      "Configuration contract: output changes with cwd-derived project config, src-dir values, and repository source discovery; the tool does not accept explicit file overrides.",
-      "Behavior contract: configured source files are processed in deterministic order, compression failures become structured error entries, symbol-analysis failures retain compressed output with symbol_analysis_status=error, and the tool fails only when no configured source file is compressed.",
+      "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
+      "Formatting contract: output uses `@@@ <path> | <language>` headers, `> Lines:` metadata, and fenced code blocks matching `compress_files.py`.",
+      "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
     ],
+    renderResult: buildStructuredToolRenderResult("compress"),
     parameters: compressSchema,
     async execute(_toolCallId, params) {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const sourceFiles = collectSourceFiles(config["src-dir"], projectBase);
-      const payload = buildCompressToolPayload({
-        toolName: "compress",
-        scope: "configured-source-directories",
-        baseDir: projectBase,
-        requestedPaths: sourceFiles,
-        includeLineNumbers: params.enableLineNumbers ?? false,
-        sourceDirectoryPaths: config["src-dir"],
-      });
-      return buildCompressionToolExecuteResult(payload);
+      const contextPath = getRuntimeContextPath(process.cwd());
+      const projectBase = getProjectBase(contextPath);
+      const config = loadProjectConfig(projectBase);
+      return executeMonolithicTool(() => runCompress(
+        contextPath,
+        config,
+        params.enableLineNumbers ?? false,
+      ));
     },
   });
 
-  const findSchema = Type.Object(
+  const searchSchema = Type.Object(
     {
       tag: Type.String({ description: "Pipe-separated construct-tag filter applied case-insensitively; unsupported tags are ignored" }),
       pattern: Type.String({ description: "JavaScript RegExp applied to construct names only; use ^...$ for exact-name matching" }),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, `code_lines[].display_text` and `stripped_source_text` include original source line-number prefixes" })),
+      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
     },
     {
-      description: buildFindToolSchemaDescription("configured-source-directories"),
+      description: buildSearchToolSchemaDescription("configured-source-directories"),
     },
   );
 
   pi.registerTool({
-    name: "find",
-    label: "find",
-    description: "Scope: configured project source directories. Return a token-optimized JSON payload with summary, repository, files, and execution sections. File entries expose structured statuses and match records with typed location, symbol, stripped-code, and Doxygen facts.",
-    promptSnippet: "Return the structured construct-search payload from the configured source directories.",
-    promptGuidelines: buildFindToolPromptGuidelines("configured-source-directories"),
-    parameters: findSchema,
+    name: "search",
+    label: "search",
+    description: "Scope: configured project source directories. Return the monolithic construct-search markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic construct-search markdown report from the configured source directories.",
+    promptGuidelines: buildSearchToolPromptGuidelines("configured-source-directories"),
+    renderResult: buildStructuredToolRenderResult("search"),
+    parameters: searchSchema,
     async execute(_toolCallId, params) {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const sourceFiles = collectSourceFiles(config["src-dir"], projectBase);
-      const payload = buildFindToolPayload({
-        toolName: "find",
-        scope: "configured-source-directories",
-        baseDir: projectBase,
-        tagFilter: params.tag,
-        pattern: params.pattern,
-        requestedPaths: sourceFiles,
-        includeLineNumbers: params.enableLineNumbers ?? false,
-        sourceDirectoryPaths: config["src-dir"],
-      });
-      return buildFindToolExecuteResult(payload);
+      const contextPath = getRuntimeContextPath(process.cwd());
+      const projectBase = getProjectBase(contextPath);
+      const config = loadProjectConfig(projectBase);
+      return executeMonolithicTool(() => runSearch(
+        contextPath,
+        params.tag,
+        params.pattern,
+        config,
+        params.enableLineNumbers ?? false,
+      ));
     },
   });
 
   pi.registerTool({
     name: "tokens",
     label: "tokens",
-    description: "Scope: canonical docs from the configured docs-dir. Return the same token-optimized JSON contract as files-tokens, omitting canonical-doc request echoes from runtime responses.",
-    promptSnippet: "Return the structured token-analysis payload for canonical documentation files.",
+    description: "Scope: canonical docs from the configured docs-dir. Return the monolithic token pack summary in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic token summary for canonical documentation files.",
     promptGuidelines: [
       "Scope: no params; resolve docs-dir from project config; target canonical docs REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
-      "Output contract: summary + files + execution. Static docs-dir and canonical-doc selection facts remain documented in registration metadata; file entries expose direct-access path facts, line ranges, sizes, token metrics, and optional metadata.",
-      "Numeric contract: counts, sizes, shares, and line ranges remain in dedicated numeric fields; derived guidance is omitted from runtime responses to reduce token cost.",
-      "Behavior contract: missing canonical docs become skipped entries; read failures become error entries; the tool fails only when no processable canonical docs remain.",
+      "Output contract: monolithic pack-summary text in content[0].text; details.execution preserves only exit code and residual diagnostics.",
+      "Behavior contract: missing canonical docs surface through details.execution diagnostics; the tool fails when no processable canonical docs remain.",
     ],
+    renderResult: buildStructuredToolRenderResult("tokens"),
     parameters: tokensSchema,
     async execute() {
-      try {
-        const projectBase = getProjectBase(process.cwd());
-        const config = loadProjectConfig(process.cwd());
-        const docsDir = config["docs-dir"].replace(/[/\\]+$/, "");
-        const canonicalDocNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"];
-        const payload = buildTokenToolPayload({
-          toolName: "tokens",
-          scope: "canonical-docs",
-          baseDir: projectBase,
-          requestedPaths: canonicalDocNames.map((name) => path.join(docsDir, name)),
-          docsDir,
-          canonicalDocNames,
-          encodingName: TOKEN_COUNTER_ENCODING,
-        });
-        return buildTokenToolExecuteResult(payload);
-      } catch (error) {
-        return buildFailedTokenToolExecuteResult(error);
-      }
+      const contextPath = getRuntimeContextPath(process.cwd());
+      const projectBase = getProjectBase(contextPath);
+      const config = loadProjectConfig(projectBase);
+      return executeMonolithicTool(() => runTokens(contextPath, config));
     },
   });
 
   pi.registerTool({
     name: "files-static-check",
     label: "files-static-check",
-    description: "Scope: explicit files. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose canonical paths, detected language, configured checker modules, selection status, and stable error facts.",
-    promptSnippet: "Return the structured explicit-file static-check payload for the current project configuration.",
+    description: "Scope: explicit files. Return the monolithic static-check report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic explicit-file static-check report for the current project configuration.",
     promptGuidelines: [
       "Input contract: files[]. Scope is explicit caller-selected files resolved from the current working directory.",
-      "Output contract: summary + files + execution. File entries expose canonical_path, language_name, configured_checker_modules, status, and error_message.",
+      "Output contract: monolithic text in content[0].text; details.execution preserves only exit code and residual diagnostics.",
       "Configuration contract: checker selection is derived from the cwd-resolved static-check configuration and file extensions only.",
-      "Failure contract: execution.code mirrors aggregated checker failures; execution.stdout_lines and execution.stderr_lines preserve residual checker diagnostics.",
+      "Failure contract: execution diagnostics preserve failing checker output and skipped-input warnings.",
     ],
+    renderResult: buildStructuredToolRenderResult("files-static-check"),
     parameters: multiFileSchema,
     async execute(_toolCallId, params) {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const staticCheckConfig = config["static-check"] ?? {};
-      const result = runFilesStaticCheck(params.files, projectBase, config);
-      const payload = buildStaticCheckToolPayload(
-        "files-static-check",
-        "explicit-files",
-        projectBase,
-        params.files,
-        [],
-        [],
-        staticCheckConfig,
-        buildToolExecutionSection(result),
-      );
-      return buildStructuredToolExecuteResult(payload);
+      const contextPath = getRuntimeContextPath(process.cwd());
+      const projectBase = getProjectBase(contextPath);
+      const config = loadProjectConfig(projectBase);
+      return executeMonolithicTool(() => runFilesStaticCheck(params.files, projectBase, config));
     },
   });
 
   const staticCheckSchema = Type.Object(
     {},
     {
-      description: "Input contract: no params. Scope is the configured src-dir plus tests-dir selection after fixture exclusion. Output contract: JSON object with summary, files, and execution.",
+      description: "Input contract: no params. Scope is the configured src-dir plus tests-dir selection after fixture exclusion. Output contract: monolithic text in content[0].text plus details.execution diagnostics.",
     },
   );
   pi.registerTool({
     name: "static-check",
     label: "static-check",
-    description: "Scope: configured source and test directories. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose selected-path facts, checker coverage, selection status, and residual diagnostics metadata.",
-    promptSnippet: "Return the structured project static-check payload for the current configuration.",
+    description: "Scope: configured source and test directories. Return the monolithic static-check report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic project static-check report for the current configuration.",
     promptGuidelines: [
       "Input contract: no params. Scope is src-dir plus tests-dir from the cwd-derived project configuration.",
-      "Output contract: summary + files + execution. Selection-directory rules remain documented in registration metadata; file entries expose configured_checker_modules and status.",
+      "Output contract: monolithic text in content[0].text; details.execution preserves only exit code and residual diagnostics.",
       "Selection contract: tests/fixtures and <tests-dir>/fixtures are excluded before checker dispatch.",
-      "Failure contract: execution.code mirrors aggregated checker failures or selection failures; execution.stderr_lines preserve residual diagnostics.",
+      "Failure contract: execution diagnostics preserve failing checker output and skipped-selection warnings.",
     ],
+    renderResult: buildStructuredToolRenderResult("static-check"),
     parameters: staticCheckSchema,
     async execute() {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const staticCheckConfig = config["static-check"] ?? {};
-      const selectionDirectoryPaths = [...config["src-dir"], config["tests-dir"]];
-      const testsDirRel = makeRelativeIfContainsProject(config["tests-dir"], projectBase)
-        .split(path.sep)
-        .join("/")
-        .replace(/^\.?\/?/, "")
-        .replace(/\/+$/, "");
-      const excludedDirectoryPaths = [...new Set([
-        "tests/fixtures",
-        testsDirRel ? `${testsDirRel}/fixtures` : "fixtures",
-      ])];
-      let selectedPaths: string[] = [];
-      let execution;
-      try {
-        selectedPaths = collectProjectStaticCheckSelection(projectBase, config).selectedPaths;
-        execution = buildToolExecutionSection(runProjectStaticCheck(projectBase, config));
-      } catch (error) {
-        execution = buildToolExecutionSection(normalizeToolFailure(error));
-      }
-      const payload = buildStaticCheckToolPayload(
-        "static-check",
-        "configured-source-and-test-directories",
-        projectBase,
-        selectedPaths,
-        selectionDirectoryPaths,
-        excludedDirectoryPaths,
-        staticCheckConfig,
-        execution,
-      );
-      return buildStructuredToolExecuteResult(payload);
+      const contextPath = getRuntimeContextPath(process.cwd());
+      const projectBase = getProjectBase(contextPath);
+      const config = loadProjectConfig(projectBase);
+      return executeMonolithicTool(() => runProjectStaticCheck(contextPath, config));
     },
   });
 
-  const gitCheckSchema = Type.Object(
-    {},
-    {
-      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes git-path presence plus aggregate repository status fields.",
-    },
-  );
-  pi.registerTool({
-    name: "git-check",
-    label: "git-check",
-    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes repository validation status through direct fields without request echoes.",
-    promptSnippet: "Return the structured git-validation payload for the runtime repository.",
-    promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: result + execution. Result exposes git_path_present and aggregate status.",
-      "Behavior contract: the tool checks work-tree membership, porcelain cleanliness, and symbolic-or-detached HEAD validity.",
-      "Failure contract: execution.code and execution.stderr_lines surface git-path or repository-state errors.",
-    ],
-    parameters: gitCheckSchema,
-    async execute() {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      let execution;
-      try {
-        execution = buildToolExecutionSection(runGitCheck(projectBase, config));
-      } catch (error) {
-        execution = buildToolExecutionSection(normalizeToolFailure(error));
-      }
-      const payload = buildGitCheckToolPayload(projectBase, resolveRuntimeGitPath(projectBase), execution);
-      return buildStructuredToolExecuteResult(payload);
-    },
-  });
-
-  const docsCheckSchema = Type.Object(
-    {},
-    {
-      description: "Input contract: no params. Output contract: JSON object with summary, files, and execution. File entries expose canonical paths, prompt_command remediation, and presence status for canonical docs.",
-    },
-  );
-  pi.registerTool({
-    name: "docs-check",
-    label: "docs-check",
-    description: "Scope: canonical docs. Return a token-optimized JSON payload with summary, files, and execution sections. File entries expose remediation prompt commands and direct presence facts for REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.",
-    promptSnippet: "Return the structured canonical-document validation payload.",
-    promptGuidelines: [
-      "Input contract: no params. Scope is docs-dir from the cwd-derived project configuration.",
-      "Output contract: summary + files + execution. File entries expose file_name, canonical_path, prompt_command, and status.",
-      "Specialization trigger: remediation differs per missing canonical file through prompt_command.",
-      "Failure contract: execution.code is non-zero when any canonical document is missing; execution.stderr_lines enumerate missing files.",
-    ],
-    parameters: docsCheckSchema,
-    async execute() {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      const payload = buildDocsCheckToolPayload(projectBase, config["docs-dir"]);
-      return buildStructuredToolExecuteResult(payload);
-    },
-  });
-
-  const gitWtNameSchema = Type.Object(
-    {},
-    {
-      description: "Input contract: no params. Output contract: JSON object with result and execution. Result exposes worktree_name when generation succeeds.",
-    },
-  );
-  pi.registerTool({
-    name: "git-wt-name",
-    label: "git-wt-name",
-    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the generated worktree name while static naming rules remain in registration metadata.",
-    promptSnippet: "Return the structured worktree-name generation payload.",
-    promptGuidelines: [
-      "Input contract: no params. Scope is the cwd-derived runtime path context.",
-      "Output contract: result + execution. Result exposes worktree_name.",
-      "Behavior contract: generation follows useReq-<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>.",
-      "Failure contract: execution.code and execution.stderr_lines surface git-path or branch-resolution errors.",
-    ],
-    parameters: gitWtNameSchema,
-    async execute() {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      let execution;
-      try {
-        execution = buildToolExecutionSection(runGitWtName(projectBase, config));
-      } catch (error) {
-        execution = buildToolExecutionSection(normalizeToolFailure(error));
-      }
-      const payload = buildWorktreeNameToolPayload(projectBase, resolveRuntimeGitPath(projectBase), execution);
-      return buildStructuredToolExecuteResult(payload);
-    },
-  });
-
-  const gitWtCreateSchema = Type.Object(
-    {
-      wtName: Type.String({ description: "Exact target worktree name and branch name" }),
-    },
-    {
-      description: "Input contract: wtName. Output contract: JSON object with result and execution. Result exposes worktree_name and derived worktree_path.",
-    },
-  );
-  pi.registerTool({
-    name: "git-wt-create",
-    label: "git-wt-create",
-    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the exact worktree name and derived path without static operation echoes.",
-    promptSnippet: "Return the structured worktree-creation payload for the requested name.",
-    promptGuidelines: [
-      "Input contract: wtName is required and must match the exact worktree/branch name to create.",
-      "Output contract: result + execution. Result exposes worktree_name and worktree_path.",
-      "Specialization trigger: worktree_path depends on the runtime git root parent directory.",
-      "Failure contract: execution.code and execution.stderr_lines surface invalid-name, git, or finalization errors.",
-    ],
-    parameters: gitWtCreateSchema,
-    async execute(_toolCallId, params) {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      let execution;
-      try {
-        execution = buildToolExecutionSection(runGitWtCreate(projectBase, params.wtName, config));
-      } catch (error) {
-        execution = buildToolExecutionSection(normalizeToolFailure(error));
-      }
-      const payload = buildWorktreeMutationToolPayload(
-        "git-wt-create",
-        projectBase,
-        resolveRuntimeGitPath(projectBase),
-        params.wtName,
-        execution,
-      );
-      return buildStructuredToolExecuteResult(payload);
-    },
-  });
-
-  const gitWtDeleteSchema = Type.Object(
-    {
-      wtName: Type.String({ description: "Exact target worktree name and branch name" }),
-    },
-    {
-      description: "Input contract: wtName. Output contract: JSON object with result and execution. Result exposes worktree_name and derived worktree_path.",
-    },
-  );
-  pi.registerTool({
-    name: "git-wt-delete",
-    label: "git-wt-delete",
-    description: "Scope: current runtime path. Return a token-optimized JSON payload with result and execution sections. Result exposes the exact worktree name and derived path without static operation echoes.",
-    promptSnippet: "Return the structured worktree-deletion payload for the requested name.",
-    promptGuidelines: [
-      "Input contract: wtName is required and must match the exact worktree/branch name to delete.",
-      "Output contract: result + execution. Result exposes worktree_name and worktree_path.",
-      "Specialization trigger: worktree_path depends on the runtime git root parent directory.",
-      "Failure contract: execution.code and execution.stderr_lines surface missing-target or deletion errors.",
-    ],
-    parameters: gitWtDeleteSchema,
-    async execute(_toolCallId, params) {
-      const projectBase = getProjectBase(process.cwd());
-      const config = loadProjectConfig(process.cwd());
-      let execution;
-      try {
-        execution = buildToolExecutionSection(runGitWtDelete(projectBase, params.wtName, config));
-      } catch (error) {
-        execution = buildToolExecutionSection(normalizeToolFailure(error));
-      }
-      const payload = buildWorktreeMutationToolPayload(
-        "git-wt-delete",
-        projectBase,
-        resolveRuntimeGitPath(projectBase),
-        params.wtName,
-        execution,
-      );
-      return buildStructuredToolExecuteResult(payload);
-    },
-  });
 }
 
 /**
@@ -2108,28 +2922,20 @@ function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): 
       value: `${tools.length} targets`,
       description: "Disable every configurable startup tool for future session starts.",
     },
-    {
-      id: "reset-defaults",
-      label: "Reset defaults",
-      value: `${normalizeEnabledPiUsereqTools(undefined).length} defaults`,
-      description: "Restore the documented default startup-tool selection.",
-    },
-    {
-      id: "save-and-close",
-      label: "Save and close",
-      value: "",
-      description: "Return to the parent configuration menu.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: `${normalizeEnabledPiUsereqTools(undefined).length} defaults`,
+      resetDefaultsDescription: "Restore the documented default startup-tool selection.",
+    }),
   ];
 }
 
 /**
  * @brief Builds the shared settings-menu choices for per-tool startup toggles.
- * @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state. Runtime is O(t) in configurable-tool count. No external state is mutated.
+ * @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime is O(t) in configurable-tool count. No external state is mutated.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
- * @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154
+ * @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-231, REQ-232
  */
 function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
@@ -2140,25 +2946,28 @@ function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig):
       value: enabledTools.has(tool.name) ? "on" : "off",
       description: tool.description ?? `Toggle startup activation for ${tool.name}.`,
     })),
-    {
-      id: "back",
-      label: "Back",
-      value: "",
-      description: "Return to the Enable tools menu.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: `${normalizeEnabledPiUsereqTools(undefined).length} defaults`,
+      resetDefaultsDescription: "Restore the documented default startup-tool selection.",
+    }),
   ];
 }
 
 /**
  * @brief Runs the interactive active-tool configuration menu.
- * @details Synchronizes runtime active tools with persisted config, renders startup-tool actions through the shared settings-menu UI, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
+ * @details Synchronizes runtime active tools with persisted config, renders startup-tool actions through the shared settings-menu UI, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
+ * @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-231, REQ-232
  */
-async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
+async function configurePiUsereqToolsMenu(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  config: UseReqConfig,
+  onConfigChange: () => void,
+): Promise<void> {
   applyConfiguredPiUsereqTools(pi, config);
   let focusedChoiceId: string | undefined;
   while (true) {
@@ -2168,32 +2977,71 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
       initialSelectedId: focusedChoiceId,
     });
 
-    if (!choice || choice === "save-and-close") {
+    if (!choice) {
       return;
     }
     focusedChoiceId = choice;
 
     if (choice === "enable-all-tools") {
       setConfiguredPiUsereqTools(pi, config, tools.map((tool) => tool.name));
+      onConfigChange();
       ctx.ui.notify("Enabled all configurable active tools", "info");
       continue;
     }
 
     if (choice === "disable-all-tools") {
       setConfiguredPiUsereqTools(pi, config, []);
+      onConfigChange();
       ctx.ui.notify("Disabled all configurable active tools", "info");
       continue;
     }
 
     if (choice === "reset-defaults") {
+      const approved = await confirmResetChanges(
+        ctx,
+        "Confirm Enable tools reset",
+        [{
+          label: "Enable tools",
+          previousValue: String(getConfiguredEnabledPiUsereqTools(config).length),
+          nextValue: String(normalizeEnabledPiUsereqTools(undefined).length),
+        }].filter((change) => change.previousValue !== change.nextValue),
+        "Approve restoring the documented default startup-tool selection.",
+        "Abort the startup-tool reset and keep the current values.",
+      );
+      if (!approved) {
+        ctx.ui.notify("Aborted startup-tool reset", "info");
+        continue;
+      }
       setConfiguredPiUsereqTools(pi, config, normalizeEnabledPiUsereqTools(undefined));
+      onConfigChange();
       ctx.ui.notify("Restored default configurable active tools", "info");
       continue;
     }
 
     if (choice === "enable-tools") {
       const selectedToolName = await showPiUsereqSettingsMenu(ctx, "Enable tools", buildPiUsereqToolToggleChoices(pi, config));
-      if (!selectedToolName || selectedToolName === "back") {
+      if (!selectedToolName) {
+        continue;
+      }
+      if (selectedToolName === "reset-defaults") {
+        const approved = await confirmResetChanges(
+          ctx,
+          "Confirm Enable tools reset",
+          [{
+            label: "Enable tools",
+            previousValue: String(getConfiguredEnabledPiUsereqTools(config).length),
+            nextValue: String(normalizeEnabledPiUsereqTools(undefined).length),
+          }].filter((change) => change.previousValue !== change.nextValue),
+          "Approve restoring the documented default startup-tool selection.",
+          "Abort the startup-tool reset and keep the current values.",
+        );
+        if (!approved) {
+          ctx.ui.notify("Aborted startup-tool reset", "info");
+          continue;
+        }
+        setConfiguredPiUsereqTools(pi, config, normalizeEnabledPiUsereqTools(undefined));
+        onConfigChange();
+        ctx.ui.notify("Restored default configurable active tools", "info");
         continue;
       }
       if (enabledTools.has(selectedToolName)) {
@@ -2202,6 +3050,7 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
         enabledTools.add(selectedToolName);
       }
       setConfiguredPiUsereqTools(pi, config, tools.map((tool) => tool.name).filter((toolName) => enabledTools.has(toolName)));
+      onConfigChange();
       ctx.ui.notify(
         `${enabledTools.has(selectedToolName) ? "Enabled" : "Disabled"} ${selectedToolName}`,
         "info",
@@ -2211,34 +3060,75 @@ async function configurePiUsereqToolsMenu(pi: ExtensionAPI, ctx: ExtensionComman
 }
 
 /**
- * @brief Summarizes configured static-check languages.
- * @details Keeps only languages with at least one configured checker, sorts them, and emits a compact `Language (count)` list. Runtime is O(l log l). No side effects occur.
+ * @brief Resolves one static-check language config for menu rendering.
+ * @details Returns the configured per-language static-check object when present and otherwise synthesizes a disabled empty-language object so menu code can render all supported languages deterministically. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {string} Compact summary string or `(none)`.
+ * @param[in] language {string} Canonical language name.
+ * @return {StaticCheckLanguageConfig} Resolved per-language config object.
+ */
+function getStaticCheckLanguageConfigForMenu(
+  config: UseReqConfig,
+  language: string,
+): StaticCheckLanguageConfig {
+  return config["static-check"][language] ?? createStaticCheckLanguageConfig([]);
+}
+
+/**
+ * @brief Counts languages that currently expose at least one configured checker.
+ * @details Treats configured-but-disabled languages as configured when their checker list is non-empty so removal actions remain deterministic. Runtime is O(l). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {number} Number of languages with at least one configured checker.
+ */
+function countConfiguredStaticCheckLanguages(config: UseReqConfig): number {
+  return Object.values(config["static-check"]).filter((languageConfig) => languageConfig.checkers.length > 0).length;
+}
+
+/**
+ * @brief Counts languages whose static-check enable flag is on.
+ * @details Counts only languages whose persisted per-language config explicitly sets `enabled=enable`, regardless of checker count. Runtime is O(l). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {number} Number of enabled languages.
+ */
+function countEnabledStaticCheckLanguages(config: UseReqConfig): number {
+  return Object.values(config["static-check"]).filter((languageConfig) => languageConfig.enabled === "enable").length;
+}
+
+/**
+ * @brief Restores the documented static-check default configuration.
+ * @details Replaces the mutable config subtree with a fresh clone of the documented per-language defaults so menu reset actions restore both enable flags and checker lists in one step. Runtime is O(l + c). Side effect: mutates `config`.
+ * @param[in,out] config {UseReqConfig} Mutable configuration object.
+ * @return {void} No return value.
+ * @satisfies REQ-250, REQ-251, REQ-252
+ */
+function resetStaticCheckConfig(config: UseReqConfig): void {
+  config["static-check"] = getDefaultStaticCheckConfig();
+}
+
+/**
+ * @brief Summarizes enabled and configured static-check languages.
+ * @details Counts enabled languages and languages with at least one checker, then emits one compact summary string suitable for the top-level configuration menu. Runtime is O(l). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Compact summary string.
  */
 function formatStaticCheckLanguagesSummary(config: UseReqConfig): string {
-  const languages = Object.entries(config["static-check"])
-    .filter(([, entries]) => Array.isArray(entries) && entries.length > 0)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([language, entries]) => `${language} (${entries.length})`);
-  return languages.join(", ") || "(none)";
+  return `${countEnabledStaticCheckLanguages(config)} enabled • ${countConfiguredStaticCheckLanguages(config)} configured`;
 }
 
 /**
  * @brief Builds the shared settings-menu choices for static-check management.
- * @details Serializes guided Command-oriented static-check actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting raw-spec and reference-only actions. Runtime is O(1). No external state is mutated.
+ * @details Serializes guided Command-oriented add and remove actions, renders one direct on/off toggle row for every supported language, and appends canonical terminal rows while omitting raw-spec and reference-only actions. Runtime is O(l). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
- * @satisfies REQ-008, REQ-150, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
+ * @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248
  */
 function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
-  const supportedLanguageCount = getSupportedStaticCheckLanguageSupport().length;
-  const configuredLanguageCount = Object.values(config["static-check"]).filter((entries) => entries.length > 0).length;
+  const supportedLanguages = getSupportedStaticCheckLanguageSupport();
+  const configuredLanguageCount = countConfiguredStaticCheckLanguages(config);
   return [
     {
       id: "add-static-check-entry",
       label: "Add static code checker",
-      value: `${supportedLanguageCount} languages`,
+      value: `${supportedLanguages.length} languages`,
       description: "Select a supported language, then configure one Command static-check executable.",
     },
     {
@@ -2247,96 +3137,137 @@ function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenu
       value: configuredLanguageCount > 0 ? `${configuredLanguageCount} configured` : "(none)",
       description: "Remove every configured static-check entry for one language.",
     },
-    {
-      id: "reset-defaults",
-      label: "Reset defaults",
-      value: configuredLanguageCount > 0 ? `${configuredLanguageCount} configured` : "(none)",
-      description: "Remove every configured static-check entry and restore the default empty static-check configuration.",
-    },
-    {
-      id: "save-and-close",
-      label: "Save and close",
-      value: "",
-      description: "Return to the parent configuration menu.",
-    },
+    ...supportedLanguages.map(({ language, extensions }) => {
+      const languageConfig = getStaticCheckLanguageConfigForMenu(config, language);
+      const configuredCount = languageConfig.checkers.length;
+      const suffix = configuredCount === 1 ? "checker" : "checkers";
+      return {
+        id: `toggle-static-check-language:${language}`,
+        label: language,
+        value: languageConfig.enabled === "enable" ? "on" : "off",
+        description: `Toggle static-check execution for ${language}. Configured ${configuredCount} ${suffix}. Supported extensions: ${extensions.join(", ")}.`,
+      };
+    }),
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: formatStaticCheckLanguagesSummary(config),
+      resetDefaultsDescription: "Restore the documented per-language static-check defaults.",
+    }),
   ];
 }
 
 /**
  * @brief Builds the shared settings-menu choices for supported static-check languages.
- * @details Exposes every supported language as one row whose right-side value reports extensions plus the current configured checker count for Command-oriented configuration flows. Runtime is O(l log l). No external state is mutated.
+ * @details Exposes every supported language as one row whose right-side value reports extensions, enablement, and configured checker count for guided Command configuration flows, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
  */
 function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
     ...getSupportedStaticCheckLanguageSupport().map(({ language, extensions }) => {
-      const configuredCount = config["static-check"][language]?.length ?? 0;
+      const languageConfig = getStaticCheckLanguageConfigForMenu(config, language);
+      const configuredCount = languageConfig.checkers.length;
       const suffix = configuredCount === 1 ? "checker" : "checkers";
       return {
         id: language,
         label: language,
-        value: `${extensions.join(", ")} • ${configuredCount} ${suffix}`,
-        description: `Configure the Command static-check entry for ${language}. Supported extensions: ${extensions.join(", ")}.`,
+        value: `${extensions.join(", ")} • ${languageConfig.enabled === "enable" ? "on" : "off"} • ${configuredCount} ${suffix}`,
+        description: `Configure the Command static-check entries for ${language}. Supported extensions: ${extensions.join(", ")}.`,
       };
     }),
-    {
-      id: "back",
-      label: "Back",
-      value: "",
-      description: "Return to the Language static code checkers menu.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: formatStaticCheckLanguagesSummary(config),
+      resetDefaultsDescription: "Restore the documented per-language static-check defaults.",
+    }),
   ];
 }
 
 /**
  * @brief Builds the shared settings-menu choices for configured static-check languages.
- * @details Exposes only languages that currently have at least one configured checker so removal remains deterministic. Runtime is O(l log l). No external state is mutated.
+ * @details Exposes only languages whose checker lists are non-empty so removal remains deterministic, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
  */
 function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
     ...getSupportedStaticCheckLanguageSupport()
-      .filter(({ language }) => (config["static-check"][language] ?? []).length > 0)
-      .map(({ language, extensions }) => ({
-        id: language,
-        label: language,
-        value: `${extensions.join(", ")} • ${config["static-check"][language]!.length} configured`,
-        description: `Remove every configured static-check entry for ${language}.`,
-      })),
-    {
-      id: "back",
-      label: "Back",
-      value: "",
-      description: "Return to the Language static code checkers menu.",
-    },
+      .filter(({ language }) => getStaticCheckLanguageConfigForMenu(config, language).checkers.length > 0)
+      .map(({ language, extensions }) => {
+        const languageConfig = getStaticCheckLanguageConfigForMenu(config, language);
+        return {
+          id: language,
+          label: language,
+          value: `${extensions.join(", ")} • ${languageConfig.checkers.length} configured`,
+          description: `Remove every configured static-check entry for ${language}.`,
+        };
+      }),
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: formatStaticCheckLanguagesSummary(config),
+      resetDefaultsDescription: "Restore the documented per-language static-check defaults.",
+    }),
   ];
 }
 
 /**
  * @brief Runs the interactive static-check configuration menu.
- * @details Lets the user add Command entries by guided prompts, remove configured language entries, and reset the static-check configuration through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Lets the user add Command entries by guided prompts, remove configured language entries, toggle direct per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-008, REQ-150, REQ-160, REQ-161, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-195
+ * @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253
  */
-async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: UseReqConfig): Promise<void> {
+async function configureStaticCheckMenu(
+  ctx: ExtensionCommandContext,
+  config: UseReqConfig,
+  onConfigChange: () => void,
+): Promise<void> {
   let focusedChoiceId: string | undefined;
   while (true) {
     const staticChoice = await showPiUsereqSettingsMenu(ctx, "Language static code checkers", buildStaticCheckMenuChoices(config), {
       initialSelectedId: focusedChoiceId,
     });
 
-    if (!staticChoice || staticChoice === "save-and-close") {
+    if (!staticChoice) {
       return;
     }
     focusedChoiceId = staticChoice;
 
+    if (staticChoice.startsWith("toggle-static-check-language:")) {
+      const language = staticChoice.slice("toggle-static-check-language:".length);
+      config["static-check"][language] ??= createStaticCheckLanguageConfig([]);
+      const languageConfig = config["static-check"][language]!;
+      languageConfig.enabled = languageConfig.enabled === "enable" ? "disable" : "enable";
+      onConfigChange();
+      ctx.ui.notify(
+        `${languageConfig.enabled === "enable" ? "Enabled" : "Disabled"} static-check for ${language}`,
+        "info",
+      );
+      continue;
+    }
+
     if (staticChoice === "add-static-check-entry") {
       const selectedLanguage = await showPiUsereqSettingsMenu(ctx, "static-check language", buildSupportedStaticCheckLanguageChoices(config));
-      if (!selectedLanguage || selectedLanguage === "back") {
+      if (!selectedLanguage) {
+        continue;
+      }
+      if (selectedLanguage === "reset-defaults") {
+        const approved = await confirmResetChanges(
+          ctx,
+          "Confirm static-check reset",
+          [{
+            label: "Language static code checkers",
+            previousValue: formatStaticCheckLanguagesSummary(config),
+            nextValue: formatStaticCheckLanguagesSummary({ ...config, "static-check": getDefaultStaticCheckConfig() }),
+          }].filter((change) => change.previousValue !== change.nextValue),
+          "Approve restoring the documented per-language static-check defaults.",
+          "Abort the static-check reset and keep the current values.",
+        );
+        if (!approved) {
+          ctx.ui.notify("Aborted static-check reset", "info");
+          continue;
+        }
+        resetStaticCheckConfig(config);
+        onConfigChange();
+        ctx.ui.notify("Restored default static code checker configuration", "info");
         continue;
       }
 
@@ -2356,23 +3287,64 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
         entry.params = params;
       }
 
-      config["static-check"][selectedLanguage] ??= [];
-      config["static-check"][selectedLanguage]!.push(entry);
+      config["static-check"][selectedLanguage] ??= createStaticCheckLanguageConfig([]);
+      config["static-check"][selectedLanguage]!.enabled = "enable";
+      config["static-check"][selectedLanguage]!.checkers.push(entry);
+      onConfigChange();
       ctx.ui.notify(`Added ${entry.module} checker for ${selectedLanguage}`, "info");
       continue;
     }
 
     if (staticChoice === "remove-static-check-entry") {
       const configuredLanguage = await showPiUsereqSettingsMenu(ctx, "Remove static code checker", buildConfiguredStaticCheckLanguageChoices(config));
-      if (!configuredLanguage || configuredLanguage === "back") {
+      if (!configuredLanguage) {
         continue;
       }
-      delete config["static-check"][configuredLanguage];
+      if (configuredLanguage === "reset-defaults") {
+        const approved = await confirmResetChanges(
+          ctx,
+          "Confirm static-check reset",
+          [{
+            label: "Language static code checkers",
+            previousValue: formatStaticCheckLanguagesSummary(config),
+            nextValue: formatStaticCheckLanguagesSummary({ ...config, "static-check": getDefaultStaticCheckConfig() }),
+          }].filter((change) => change.previousValue !== change.nextValue),
+          "Approve restoring the documented per-language static-check defaults.",
+          "Abort the static-check reset and keep the current values.",
+        );
+        if (!approved) {
+          ctx.ui.notify("Aborted static-check reset", "info");
+          continue;
+        }
+        resetStaticCheckConfig(config);
+        onConfigChange();
+        ctx.ui.notify("Restored default static code checker configuration", "info");
+        continue;
+      }
+      config["static-check"][configuredLanguage] = createStaticCheckLanguageConfig([]);
+      onConfigChange();
       ctx.ui.notify(`Removed static-check entries for ${configuredLanguage}`, "info");
       continue;
     }
+
     if (staticChoice === "reset-defaults") {
-      config["static-check"] = {};
+      const approved = await confirmResetChanges(
+        ctx,
+        "Confirm static-check reset",
+        [{
+          label: "Language static code checkers",
+          previousValue: formatStaticCheckLanguagesSummary(config),
+          nextValue: formatStaticCheckLanguagesSummary({ ...config, "static-check": getDefaultStaticCheckConfig() }),
+        }].filter((change) => change.previousValue !== change.nextValue),
+        "Approve restoring the documented per-language static-check defaults.",
+        "Abort the static-check reset and keep the current values.",
+      );
+      if (!approved) {
+        ctx.ui.notify("Aborted static-check reset", "info");
+        continue;
+      }
+      resetStaticCheckConfig(config);
+      onConfigChange();
       ctx.ui.notify("Restored default static code checker configuration", "info");
     }
   }
@@ -2380,16 +3352,21 @@ async function configureStaticCheckMenu(ctx: ExtensionCommandContext, config: Us
 
 /**
  * @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
- * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the display-only config path beside `show-config`. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and the display-only config path beside `show-config`. Runtime is O(s) in source-directory count. No external state is mutated.
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240
  */
 function buildPiUsereqMenuChoices(
   cwd: string,
   config: UseReqConfig,
 ): PiUsereqSettingsMenuChoice[] {
+  const autoGitCommitDisabled = config.AUTO_GIT_COMMIT === "disable";
+  const effectiveGitWorktreeEnabled = resolveEffectiveGitWorktreeEnabled(
+    config.AUTO_GIT_COMMIT,
+    config.GIT_WORKTREE_ENABLED,
+  );
   return [
     {
       id: "docs-dir",
@@ -2410,10 +3387,36 @@ function buildPiUsereqMenuChoices(
       description: "Edit the repository-relative directory used for project test assets and static-check selection.",
     },
     {
+      id: "auto-git-commit",
+      label: "Auto git commit",
+      value: config.AUTO_GIT_COMMIT,
+      description: "Select bundled `git_commit.md` or `git_read-only.md` for `%%COMMIT%%`; disabling also forces prompt-command worktrees off.",
+    },
+    {
+      id: "git-worktree-enabled",
+      label: "Git worktree",
+      labelTone: autoGitCommitDisabled ? "dim" : undefined,
+      value: effectiveGitWorktreeEnabled,
+      valueTone: autoGitCommitDisabled ? "dim" : undefined,
+      description: autoGitCommitDisabled
+        ? "Forced to `disable` while `Auto git commit` is disabled."
+        : "Enable or disable prompt-command worktree orchestration.",
+    },
+    {
+      id: "git-worktree-prefix",
+      label: "Worktree prefix",
+      labelTone: autoGitCommitDisabled ? "dim" : undefined,
+      value: config.GIT_WORKTREE_PREFIX,
+      valueTone: autoGitCommitDisabled ? "dim" : undefined,
+      description: autoGitCommitDisabled
+        ? "Stored prefix is locked while `Auto git commit` is disabled."
+        : "Edit the static prefix used by generated worktree names.",
+    },
+    {
       id: "static-check",
       label: "Language static code checkers",
       value: formatStaticCheckLanguagesSummary(config),
-      description: "Manage guided Command static-check entries by language.",
+      description: "Manage guided Command static-check entries and per-language enable flags.",
     },
     {
       id: "startup-tools",
@@ -2428,24 +3431,21 @@ function buildPiUsereqMenuChoices(
       description: "Manage command-notify, sound, and Pushover settings with dedicated event submenus.",
     },
     {
+      id: "debug",
+      label: "Debug",
+      value: formatDebugMenuSummary(config),
+      description: "Manage debug logging for tools and `req-*` prompt orchestration.",
+    },
+    {
       id: "show-config",
       label: "Show configuration",
       value: formatProjectConfigPathForMenu(cwd),
       valueTone: "dim",
-      description: "Write the current project configuration JSON into the editor without saving additional changes.",
+      description: "Persist the current project configuration file and write its exact text into the editor.",
     },
-    {
-      id: "reset-defaults",
-      label: "Reset defaults",
-      value: "",
-      description: "Restore the default pi-usereq configuration for the current project base.",
-    },
-    {
-      id: "save-and-close",
-      label: "Save and close",
-      value: "",
-      description: "Persist the current configuration and return to the normal pi session UI.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsDescription: "Restore the default pi-usereq configuration for the current project base.",
+    }),
   ];
 }
 
@@ -2470,24 +3470,16 @@ function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoic
       value: config["src-dir"].join(", "),
       description: "Select one configured source directory to remove from the current configuration.",
     },
-    {
-      id: "reset-defaults",
-      label: "Reset defaults",
-      value: `${DEFAULT_SRC_DIRS.join(", ")}`,
-      description: "Restore the documented default source-directory configuration.",
-    },
-    {
-      id: "save-and-close",
-      label: "Save and close",
-      value: "",
-      description: "Return to the parent configuration menu.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: `${DEFAULT_SRC_DIRS.join(", ")}`,
+      resetDefaultsDescription: "Restore the documented default source-directory configuration.",
+    }),
   ];
 }
 
 /**
  * @brief Builds the shared settings-menu choices for removing one source-directory entry.
- * @details Exposes every configured `src-dir` entry as one removable row and appends a `Back` action for cancellation. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @details Exposes every configured `src-dir` entry as one removable row and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime is O(s) in source-directory count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
  * @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
@@ -2500,34 +3492,36 @@ function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuCh
       value: "remove",
       description: `Remove the source-directory entry ${entry} from the current configuration.`,
     })),
-    {
-      id: "back",
-      label: "Back",
-      value: "",
-      description: "Return to the source-directory menu.",
-    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsValue: `${DEFAULT_SRC_DIRS.join(", ")}`,
+      resetDefaultsDescription: "Restore the documented default source-directory configuration.",
+    }),
   ];
 }
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/static-check/startup-tool/notification actions through the shared settings-menu renderer, persists changes on exit, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
+ * @details Loads project config, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243
  */
 async function configurePiUsereq(
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
   statusController: PiUsereqStatusController,
 ): Promise<void> {
+  bootstrapRuntimePathState(ctx.cwd, {
+    gitPath: resolveRuntimeGitPath(ctx.cwd),
+  });
   let config = loadProjectConfig(ctx.cwd);
   const projectBase = getProjectBase(ctx.cwd);
   const initialShortcut = config["notify-sound-toggle-shortcut"];
-  const ensureSaved = () => saveProjectConfig(ctx.cwd, config);
-  const refreshStatus = () => {
+  const persistConfigChange = () => {
+    Object.assign(config, normalizeConfigPaths(projectBase, config));
+    saveProjectConfig(ctx.cwd, config);
     setPiUsereqStatusConfig(statusController, config);
     renderPiUsereqStatus(statusController, ctx);
   };
@@ -2540,9 +3534,7 @@ async function configurePiUsereq(
       buildPiUsereqMenuChoices(ctx.cwd, config),
       { initialSelectedId: focusedChoiceId },
     );
-    if (!choice || choice === "save-and-close") {
-      ensureSaved();
-      refreshStatus();
+    if (!choice) {
       if (config["notify-sound-toggle-shortcut"] !== initialShortcut) {
         ctx.ui.notify("Sound toggle hotkey bind updated; run /reload to apply the new binding", "info");
       }
@@ -2551,12 +3543,61 @@ async function configurePiUsereq(
     focusedChoiceId = choice;
     if (choice === "docs-dir") {
       const value = await ctx.ui.input("Document directory", config["docs-dir"]);
-      if (value?.trim()) config["docs-dir"] = value.trim();
+      if (value?.trim()) {
+        config["docs-dir"] = value.trim();
+        persistConfigChange();
+      }
       continue;
     }
     if (choice === "tests-dir") {
       const value = await ctx.ui.input("Unit tests directory", config["tests-dir"]);
-      if (value?.trim()) config["tests-dir"] = value.trim();
+      if (value?.trim()) {
+        config["tests-dir"] = value.trim();
+        persistConfigChange();
+      }
+      continue;
+    }
+    if (choice === "auto-git-commit") {
+      const nextAutoGitCommit = config.AUTO_GIT_COMMIT === "enable"
+        ? "disable"
+        : "enable";
+      config.AUTO_GIT_COMMIT = nextAutoGitCommit;
+      if (nextAutoGitCommit === "disable") {
+        config.GIT_WORKTREE_ENABLED = "disable";
+        persistConfigChange();
+        ctx.ui.notify("Auto git commit disabled; Git worktree forced off", "info");
+      } else {
+        persistConfigChange();
+        ctx.ui.notify("Auto git commit enabled", "info");
+      }
+      continue;
+    }
+    if (choice === "git-worktree-enabled") {
+      if (config.AUTO_GIT_COMMIT === "disable") {
+        ctx.ui.notify("Git worktree is locked while Auto git commit is disabled", "info");
+        continue;
+      }
+      config.GIT_WORKTREE_ENABLED = config.GIT_WORKTREE_ENABLED === "enable"
+        ? "disable"
+        : "enable";
+      persistConfigChange();
+      ctx.ui.notify(
+        `Git worktree ${resolveEffectiveGitWorktreeEnabled(config.AUTO_GIT_COMMIT, config.GIT_WORKTREE_ENABLED) === "enable" ? "enabled" : "disabled"}`,
+        "info",
+      );
+      continue;
+    }
+    if (choice === "git-worktree-prefix") {
+      if (config.AUTO_GIT_COMMIT === "disable") {
+        ctx.ui.notify("Worktree prefix is locked while Auto git commit is disabled", "info");
+        continue;
+      }
+      const value = await ctx.ui.input("Worktree prefix", config.GIT_WORKTREE_PREFIX);
+      if (value !== undefined) {
+        config.GIT_WORKTREE_PREFIX = value.trim() || DEFAULT_GIT_WORKTREE_PREFIX;
+        persistConfigChange();
+        ctx.ui.notify(`Worktree prefix set to ${config.GIT_WORKTREE_PREFIX}`, "info");
+      }
       continue;
     }
     if (choice === "src-dir") {
@@ -2565,7 +3606,7 @@ async function configurePiUsereq(
         const srcAction = await showPiUsereqSettingsMenu(ctx, "Source-code directories", buildSrcDirMenuChoices(config), {
           initialSelectedId: srcFocusedChoiceId,
         });
-        if (!srcAction || srcAction === "save-and-close") {
+        if (!srcAction) {
           break;
         }
         srcFocusedChoiceId = srcAction;
@@ -2573,47 +3614,118 @@ async function configurePiUsereq(
           const value = await ctx.ui.input("New source-code directory", "src");
           if (value?.trim()) {
             config["src-dir"] = [...config["src-dir"], value.trim()];
+            persistConfigChange();
           }
           continue;
         }
         if (srcAction === "remove-src-dir-entry") {
           const toRemove = await showPiUsereqSettingsMenu(ctx, "Remove source-code directory", buildSrcDirRemovalChoices(config));
-          if (toRemove && toRemove !== "back") {
-            config["src-dir"] = config["src-dir"].filter((entry) => entry !== toRemove);
-            if (config["src-dir"].length === 0) {
-              config["src-dir"] = ["src"];
-            }
+          if (!toRemove) {
+            continue;
           }
+          if (toRemove === "reset-defaults") {
+            const approved = await confirmResetChanges(
+              ctx,
+              "Confirm source-directory reset",
+              [{
+                label: "Source-code directories",
+                previousValue: config["src-dir"].join(", "),
+                nextValue: DEFAULT_SRC_DIRS.join(", "),
+              }].filter((change) => change.previousValue !== change.nextValue),
+              "Approve restoring the documented default source-directory configuration.",
+              "Abort the source-directory reset and keep the current values.",
+            );
+            if (!approved) {
+              ctx.ui.notify("Aborted source-directory reset", "info");
+              continue;
+            }
+            config["src-dir"] = [...DEFAULT_SRC_DIRS];
+            persistConfigChange();
+            ctx.ui.notify("Restored default source-code directories", "info");
+            continue;
+          }
+          config["src-dir"] = config["src-dir"].filter((entry) => entry !== toRemove);
+          if (config["src-dir"].length === 0) {
+            config["src-dir"] = ["src"];
+          }
+          persistConfigChange();
           continue;
         }
         if (srcAction === "reset-defaults") {
+          const approved = await confirmResetChanges(
+            ctx,
+            "Confirm source-directory reset",
+            [{
+              label: "Source-code directories",
+              previousValue: config["src-dir"].join(", "),
+              nextValue: DEFAULT_SRC_DIRS.join(", "),
+            }].filter((change) => change.previousValue !== change.nextValue),
+            "Approve restoring the documented default source-directory configuration.",
+            "Abort the source-directory reset and keep the current values.",
+          );
+          if (!approved) {
+            ctx.ui.notify("Aborted source-directory reset", "info");
+            continue;
+          }
           config["src-dir"] = [...DEFAULT_SRC_DIRS];
+          persistConfigChange();
           ctx.ui.notify("Restored default source-code directories", "info");
         }
       }
       continue;
     }
     if (choice === "static-check") {
-      await configureStaticCheckMenu(ctx, config);
+      await configureStaticCheckMenu(ctx, config, persistConfigChange);
       continue;
     }
     if (choice === "startup-tools") {
-      await configurePiUsereqToolsMenu(pi, ctx, config);
+      await configurePiUsereqToolsMenu(pi, ctx, config, persistConfigChange);
       continue;
     }
     if (choice === "notifications") {
-      await configurePiNotifyMenu(ctx, config);
+      await configurePiNotifyMenu(ctx, config, persistConfigChange);
+      continue;
+    }
+    if (choice === "debug") {
+      await configureDebugMenu(ctx, config, persistConfigChange);
       continue;
     }
     if (choice === "reset-defaults") {
-      config = getDefaultConfig(projectBase);
+      const defaultConfig = getDefaultConfig(projectBase);
+      const approved = await confirmResetChanges(
+        ctx,
+        "Confirm pi-usereq reset",
+        [
+          { label: "Document directory", previousValue: config["docs-dir"], nextValue: defaultConfig["docs-dir"] },
+          { label: "Source-code directories", previousValue: config["src-dir"].join(", "), nextValue: defaultConfig["src-dir"].join(", ") },
+          { label: "Unit tests directory", previousValue: config["tests-dir"], nextValue: defaultConfig["tests-dir"] },
+          { label: "Auto git commit", previousValue: config.AUTO_GIT_COMMIT, nextValue: defaultConfig.AUTO_GIT_COMMIT },
+          { label: "Git worktree", previousValue: config.GIT_WORKTREE_ENABLED, nextValue: defaultConfig.GIT_WORKTREE_ENABLED },
+          { label: "Worktree prefix", previousValue: config.GIT_WORKTREE_PREFIX, nextValue: defaultConfig.GIT_WORKTREE_PREFIX },
+          { label: "Enable tools", previousValue: String(getConfiguredEnabledPiUsereqTools(config).length), nextValue: String(getConfiguredEnabledPiUsereqTools(defaultConfig).length) },
+          { label: "Notifications", previousValue: buildPiNotifyMenuChoices(config).length.toString(), nextValue: buildPiNotifyMenuChoices(defaultConfig).length.toString() },
+          { label: "Debug", previousValue: formatDebugMenuSummary(config), nextValue: formatDebugMenuSummary(defaultConfig) },
+        ].filter((change) => change.previousValue !== change.nextValue),
+        "Approve restoring the default pi-usereq configuration.",
+        "Abort the pi-usereq reset and keep the current values.",
+      );
+      if (!approved) {
+        ctx.ui.notify("Aborted pi-usereq reset", "info");
+        continue;
+      }
+      config = defaultConfig;
       applyConfiguredPiUsereqTools(pi, config);
+      persistConfigChange();
       ctx.ui.notify("Restored all default configuration values", "info");
       continue;
     }
     if (choice === "show-config") {
-      ctx.ui.setEditorText(`${JSON.stringify(config, null, 2)}\n`);
-      continue;
+      persistConfigChange();
+      if (config["notify-sound-toggle-shortcut"] !== initialShortcut) {
+        ctx.ui.notify("Sound toggle hotkey bind updated; run /reload to apply the new binding", "info");
+      }
+      writePersistedProjectConfigToEditor(ctx, ctx.cwd, config);
+      return;
     }
   }
 }
@@ -2645,14 +3757,14 @@ function registerConfigCommands(
  * notification-sound shortcut when the runtime supports shortcuts, and
  * installs shared wrappers for all supported pi lifecycle hooks so status
  * telemetry, context usage, prompt timing, cumulative runtime, prompt-specific
- * Pushover metadata, and pi-notify effects remain synchronized with runtime
- * events. Runtime is O(h) in hook
+ * Pushover metadata, tool-result debug logging, and prompt-orchestration debug
+ * effects remain synchronized with runtime events. Runtime is O(h) in hook
  * count during registration. Side effects include filesystem reads,
- * command/tool/shortcut registration, UI updates, active-tool changes, and
- * timer scheduling.
+ * command/tool/shortcut registration, UI updates, active-tool changes,
+ * optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-045, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-148, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();
