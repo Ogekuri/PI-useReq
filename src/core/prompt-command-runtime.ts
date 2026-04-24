@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Implements prompt-command preflight and worktree orchestration.
- * @details Centralizes `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, session-backed cwd switching plus verification, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success fast-forward merge finalization, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, and filesystem reads and writes.
+ * @details Centralizes `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, session-backed cwd switching plus verification, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success fast-forward merge finalization with restored-session transcript preservation, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, and filesystem reads and writes.
  */
 
 import fs from "node:fs";
@@ -419,6 +419,169 @@ function readPromptSessionFileCwd(sessionFile: string): string | undefined {
   }
   const headerCwd = (parsed as { cwd?: unknown }).cwd;
   return typeof headerCwd === "string" ? headerCwd : undefined;
+}
+
+/**
+ * @brief Reads one persisted session file as ordered parsed JSONL records.
+ * @details Loads the raw session file, preserves every non-empty serialized line verbatim, parses each line as one JSON object, and rejects unreadable or structurally invalid files so prompt-closure helpers can replay exact execution-session transcript records into the restored base session without reserialization drift. Runtime is O(n) in session-file size. No external state is mutated.
+ * @param[in] sessionFile {string} Absolute session-file path.
+ * @return {Array<{ rawLine: string; parsed: Record<string, unknown> }>} Parsed non-empty JSONL lines in file order.
+ * @throws {ReqError} Throws when the file cannot be read, when it contains no JSONL records, when any record is not a JSON object, or when the header record is missing.
+ */
+function readPromptSessionJsonLines(
+  sessionFile: string,
+): Array<{ rawLine: string; parsed: Record<string, unknown> }> {
+  const normalizedSessionFile = path.resolve(sessionFile);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(normalizedSessionFile, "utf8");
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ReqError(
+      `ERROR: Unable to read session file ${normalizedSessionFile}: ${errorMessage}.`,
+      1,
+    );
+  }
+  const parsedLines: Array<{ rawLine: string; parsed: Record<string, unknown> }> = [];
+  for (const [index, rawLine] of raw.split(/\r?\n/u).entries()) {
+    if (rawLine.trim() === "") {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawLine);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new ReqError(
+        `ERROR: Unable to parse session file ${normalizedSessionFile} line ${index + 1}: ${errorMessage}.`,
+        1,
+      );
+    }
+    if (typeof parsed !== "object" || parsed === null) {
+      throw new ReqError(
+        `ERROR: Session file ${normalizedSessionFile} line ${index + 1} is not a JSON object.`,
+        1,
+      );
+    }
+    parsedLines.push({ rawLine, parsed: parsed as Record<string, unknown> });
+  }
+  if (parsedLines.length === 0) {
+    throw new ReqError(`ERROR: Session file ${normalizedSessionFile} is empty.`, 1);
+  }
+  if (parsedLines[0]?.parsed.type !== "session") {
+    throw new ReqError(
+      `ERROR: Session file ${normalizedSessionFile} is missing a valid session header.`,
+      1,
+    );
+  }
+  return parsedLines;
+}
+
+/**
+ * @brief Copies successful execution-session transcript records into the restored base session file.
+ * @details Reads the execution session JSONL file, preserves the original base-session header when it already exists, materializes a restored base-session header when the reserved original session file is still pending persistence, appends any execution-session records missing from the original session in original execution order, and re-reads the restored file to verify both `base-path` cwd and copied entry identifiers. Runtime is O(n) in combined session-file size. Side effects include session-file creation or append operations for the restored base session.
+ * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose original and execution session files must be synchronized.
+ * @return {void} No return value.
+ * @throws {ReqError} Throws when either session file is unreadable or when appended execution records are not persisted to the original session file.
+ * @satisfies REQ-208
+ */
+function preservePromptCommandExecutionTranscript(plan: PromptCommandExecutionPlan): void {
+  const normalizedOriginalSessionFile = path.resolve(plan.originalSessionFile);
+  const normalizedExecutionSessionFile = path.resolve(plan.executionSessionFile);
+  if (normalizedOriginalSessionFile === normalizedExecutionSessionFile) {
+    return;
+  }
+  const executionLines = readPromptSessionJsonLines(normalizedExecutionSessionFile);
+  const executionEntryIds = executionLines
+    .slice(1)
+    .map((line) => line.parsed.id)
+    .filter((entryId): entryId is string => typeof entryId === "string" && entryId !== "");
+  if (!fs.existsSync(normalizedOriginalSessionFile)) {
+    const rewrittenHeader: Record<string, unknown> = {
+      ...executionLines[0]!.parsed,
+      cwd: plan.basePath,
+    };
+    if (
+      typeof rewrittenHeader.parentSession === "string"
+      && path.resolve(rewrittenHeader.parentSession) === normalizedOriginalSessionFile
+    ) {
+      delete rewrittenHeader.parentSession;
+    }
+    try {
+      fs.mkdirSync(path.dirname(normalizedOriginalSessionFile), { recursive: true });
+      const serializedLines = [
+        JSON.stringify(rewrittenHeader),
+        ...executionLines.slice(1).map((line) => line.rawLine),
+      ];
+      fs.writeFileSync(
+        normalizedOriginalSessionFile,
+        `${serializedLines.join("\n")}\n`,
+        "utf8",
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new ReqError(
+        `ERROR: Unable to materialize restored session transcript in ${normalizedOriginalSessionFile}: ${errorMessage}.`,
+        1,
+      );
+    }
+  } else {
+    const originalLines = readPromptSessionJsonLines(normalizedOriginalSessionFile);
+    const existingEntryIds = new Set<string>();
+    for (const line of originalLines.slice(1)) {
+      const entryId = line.parsed.id;
+      if (typeof entryId === "string" && entryId !== "") {
+        existingEntryIds.add(entryId);
+      }
+    }
+    const missingExecutionLines = executionLines.slice(1).filter((line) => {
+      const entryId = line.parsed.id;
+      return typeof entryId === "string"
+        && entryId !== ""
+        && !existingEntryIds.has(entryId);
+    });
+    if (missingExecutionLines.length > 0) {
+      const originalRaw = fs.readFileSync(normalizedOriginalSessionFile, "utf8");
+      const leadingSeparator = originalRaw === "" || originalRaw.endsWith("\n") ? "" : "\n";
+      try {
+        fs.appendFileSync(
+          normalizedOriginalSessionFile,
+          `${leadingSeparator}${missingExecutionLines.map((line) => line.rawLine).join("\n")}\n`,
+          "utf8",
+        );
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new ReqError(
+          `ERROR: Unable to preserve execution transcript in ${normalizedOriginalSessionFile}: ${errorMessage}.`,
+          1,
+        );
+      }
+    }
+  }
+  const synchronizedSessionCwd = readPromptSessionFileCwd(normalizedOriginalSessionFile);
+  if (
+    typeof synchronizedSessionCwd !== "string"
+    || path.resolve(synchronizedSessionCwd) !== path.resolve(plan.basePath)
+  ) {
+    throw new ReqError(
+      `ERROR: Restored session transcript expected cwd ${path.resolve(plan.basePath)} but observed ${synchronizedSessionCwd ?? "missing"}.`,
+      1,
+    );
+  }
+  const synchronizedEntryIds = new Set<string>();
+  for (const line of readPromptSessionJsonLines(normalizedOriginalSessionFile).slice(1)) {
+    const entryId = line.parsed.id;
+    if (typeof entryId === "string" && entryId !== "") {
+      synchronizedEntryIds.add(entryId);
+    }
+  }
+  const missingSynchronizedIds = executionEntryIds.filter((entryId) => !synchronizedEntryIds.has(entryId));
+  if (missingSynchronizedIds.length > 0) {
+    throw new ReqError(
+      `ERROR: Unable to verify execution transcript preservation for ${normalizedOriginalSessionFile}: missing entries ${missingSynchronizedIds.join(", ")}.`,
+      1,
+    );
+  }
 }
 
 /**
@@ -1528,7 +1691,7 @@ export async function abortPromptCommandExecution(
 
 /**
  * @brief Finalizes one matched successful worktree-backed prompt execution.
- * @details Re-verifies persisted execution-session metadata plus worktree artifacts, restores the original session-backed `base-path`, fast-forward merges the successful worktree branch from `base-path`, deletes the worktree after merge success, and preserves the restored base session across closure failures. Closure intentionally treats `base-path` restoration as authoritative even when pi CLI has already started end-of-session session replacement or other housekeeping that moved the live runtime away from `worktree-path`. Runtime is dominated by session switching plus git subprocess execution. Side effects include active-session replacement, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Re-verifies persisted execution-session metadata plus worktree artifacts, copies any execution-session transcript records missing from the original session file, restores the original session-backed `base-path`, fast-forward merges the successful worktree branch from `base-path`, deletes the worktree after merge success, and preserves the restored base session across closure failures. Closure intentionally treats `base-path` restoration as authoritative even when pi CLI has already started end-of-session session replacement or other housekeeping that moved the live runtime away from `worktree-path`. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file appends, active-session replacement, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan.
  * @param[in] ctx {PromptCommandSessionContext | undefined} Optional prompt-command context.
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
@@ -1550,6 +1713,9 @@ export async function finalizePromptCommandExecution(
   let verificationErrorMessage: string | undefined;
   try {
     verifyPromptCommandClosureArtifacts(plan);
+    if (plan.worktreePath && plan.worktreeDir && plan.worktreeRootPath) {
+      preservePromptCommandExecutionTranscript(plan);
+    }
   } catch (error) {
     verificationErrorMessage = error instanceof Error ? error.message : String(error);
   }

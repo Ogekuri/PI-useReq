@@ -222,7 +222,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-206**: MUST derive `worktree-dir` as `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` and `worktree-path` as `<parent-path>/<worktree-dir>/<base-dir>` when worktrees are enabled.
 - **REQ-271**: MUST create one dedicated worktree under `parent-path`, fork the current active session into an execution session file whose header cwd equals `worktree-path`, and switch the active pi CLI session to that file before agent start.
 - **REQ-207**: MUST keep `context-path`, `ctx.cwd`, and `process.cwd()` at `base-path` when worktree creation is disabled.
-- **REQ-208**: MUST restore the original session-backed `base-path`, fast-forward-only merge from `base-path`, and delete the worktree plus branch after successful orchestrated session closure.
+- **REQ-208**: MUST restore the original session-backed `base-path`, fast-forward-only merge from `base-path`, delete the worktree plus branch, and preserve the successful worktree execution transcript in the client-visible session after closure.
 - **REQ-209**: MUST restore the original session-backed `base-path`, notify the pi CLI of closure failure, and retain the worktree plus branch when orchestrated session closure is interrupted, failed, aborted, or incomplete.
 - **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, and `error`.
 - **REQ-222**: MUST render `status` immediately before `base` as the current prompt-orchestration state and refresh it on every internal or pi CLI state transition.
