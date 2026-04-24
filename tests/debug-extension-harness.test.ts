@@ -225,12 +225,19 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     const report = await replaySessionStart(projectBase);
     const status = report.ui.statuses["pi-usereq"] ?? "";
 
+    const expectedBranch = spawnSync("git", ["branch", "--show-current"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).stdout.trim() || "unknown";
+    const escapedBranch = expectedBranch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
     assert.deepEqual([...report.activeTools].sort(), ["files-tokens", "static-check"]);
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
     assert.match(status, /<accent>status:<\/accent><warning>idle<\/warning>/);
+    assert.match(status, new RegExp(`<accent>branch:<\\/accent><warning>${escapedBranch}<\\/warning>`));
     assert.doesNotMatch(status, /<accent>current-path:<\/accent>/);
-    assert.match(status, /<accent>context:<\/accent><warning>▕_▏<\/warning>/);
+    assert.match(status, /<accent>context:<\/accent>▕_▏/);
     assert.match(status, /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
     assert.doesNotMatch(status, /<accent>beep:<\/accent>/);

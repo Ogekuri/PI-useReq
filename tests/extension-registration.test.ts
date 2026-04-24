@@ -407,8 +407,29 @@ function formatFakeThemeBackgroundFromForeground(color: string, text: string): s
 }
 
 /**
+ * @brief Resolves the expected fake branch payload for status assertions.
+ * @details Reads `git branch --show-current` from the supplied base path and falls back to `unknown` when the path is outside a repository or HEAD has no branch name. Runtime is dominated by git execution. Side effects include subprocess creation.
+ * @param[in] basePath {string | undefined} Base path represented by the fake context.
+ * @return {string} Expected branch name or `unknown` when unavailable.
+ */
+function buildExpectedFakeBranchValue(basePath: string | undefined): string {
+  if (!basePath || !fs.existsSync(basePath)) {
+    return "unknown";
+  }
+  const result = spawnSync("git", ["branch", "--show-current"], {
+    cwd: basePath,
+    encoding: "utf8",
+  });
+  if (result.error || result.status !== 0) {
+    return "unknown";
+  }
+  const branchName = result.stdout.trim();
+  return branchName === "" ? "unknown" : branchName;
+}
+
+/**
  * @brief Builds the expected fake context-gauge payload for assertions.
- * @details Resolves the documented icon thresholds for `0-90%`, emits the blinking warning full icon for percent values above `90` through `100`, and emits the blinking red overflow icon for percent values above `100`. Runtime is O(1). No external state is mutated.
+ * @details Resolves the documented icon thresholds for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90`, emits the non-blinking error full icon for `>=90-<100`, and emits the blinking error full icon for `>=100`. Runtime is O(1). No external state is mutated.
  * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-gauge facts.
  * @return {string} Encoded context-gauge string.
  */
@@ -418,30 +439,30 @@ function buildExpectedFakeContextBar(options: {
 }): string {
   const percent = options.percent;
   if (percent === undefined || percent === null || percent <= 0) {
-    return formatFakeThemeForeground("warning", "▕_▏");
+    return "▕_▏";
   }
-  if (percent > 100) {
+  if (percent >= 100) {
     return formatFakeThemeForeground("error", "\u001b[5m▕█▏\u001b[25m");
   }
-  if (percent <= 25) {
-    return formatFakeThemeForeground("warning", "▕▂▏");
+  if (percent >= 90) {
+    return formatFakeThemeForeground("error", "▕█▏");
   }
-  if (percent <= 50) {
-    return formatFakeThemeForeground("warning", "▕▄▏");
+  if (percent < 25) {
+    return "▕▂▏";
   }
-  if (percent <= 90) {
-    return formatFakeThemeForeground("warning", "▕▆▏");
+  if (percent < 50) {
+    return "▕▄▏";
   }
-  return formatFakeThemeForeground("warning", "\u001b[5m▕█▏\u001b[25m");
+  if (percent < 75) {
+    return "▕▆▏";
+  }
+  return "▕█▏";
 }
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, workflow-state highlighting,
- * separators, icon-based context gauge, consolidated elapsed field, and sound
- * field emitted by the extension using deterministic fake theme markers.
- * Runtime is O(1). No external state is mutated.
- * @param[in] options {{ workflowState?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered `status`, `context`, `elapsed`, and `sound` fields.
+ * @details Reconstructs the field order, workflow-state highlighting, branch field, icon-based context gauge, consolidated elapsed field, and sound field emitted by the extension using deterministic fake theme markers. Runtime is O(1) plus optional git execution for branch discovery. No external state is mutated.
+ * @param[in] options {{ workflowState?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered `status`, `branch`, `context`, `elapsed`, and `sound` fields.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -461,12 +482,14 @@ function buildExpectedFakeStatusText(options: {
   const workflowStateValue = workflowStateText === "error"
     ? formatFakeThemeForeground("error", "\u001b[5merror\u001b[25m")
     : formatFakeThemeForeground("warning", workflowStateText);
+  const branchValue = buildExpectedFakeBranchValue(options.basePath);
   const contextBar = buildExpectedFakeContextBar({
     filledCells: options.contextFilledCells,
     percent: options.contextPercent,
   });
   return [
     `${formatFakeThemeForeground("accent", "status:")}${workflowStateValue}`,
+    buildField("branch", branchValue),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
     buildField("elapsed", options.et),
     buildField("sound", options.sound ?? "none"),
@@ -1560,10 +1583,20 @@ test("descendant configuration menus end with Reset defaults only", async () => 
 
   await command!.handler("", ctx);
 
+  const getMenuIndex = (title: string, marker?: string): number => {
+    const index = ctx.__state.selectCalls.findIndex(
+      (entry) => entry.title === title && (marker === undefined || entry.items.includes(marker)),
+    );
+    assert.notEqual(index, -1, `missing menu ${title}`);
+    return index;
+  };
   const getTerminalRows = (title: string, marker?: string): string[] => {
-    const call = ctx.__state.selectCalls.find((entry) => entry.title === title && (marker === undefined || entry.items.includes(marker)));
-    assert.ok(call, `missing menu ${title}`);
-    return call.items.slice(-1);
+    const index = getMenuIndex(title, marker);
+    return ctx.__state.selectCalls[index]!.items.slice(-1);
+  };
+  const getRenderedMenu = (title: string, marker?: string): string => {
+    const index = getMenuIndex(title, marker);
+    return (ctx.__state.customRenderLines[index] ?? []).join("\n");
   };
 
   assert.deepEqual(getTerminalRows("Enable sound", "high"), ["Reset defaults"]);
@@ -1573,6 +1606,11 @@ test("descendant configuration menus end with Reset defaults only", async () => 
   assert.deepEqual(getTerminalRows("static-check language", "Python"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Remove static code checker"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Remove source-code directory", "src"), ["Reset defaults"]);
+  assert.doesNotMatch(getRenderedMenu("Enable sound", "high"), /Reset defaults.*none/);
+  assert.doesNotMatch(getRenderedMenu("Pushover priority", "High"), /Reset defaults.*Normal/);
+  assert.doesNotMatch(getRenderedMenu("Enable tools", "static-check"), /Reset defaults.*defaults/);
+  assert.doesNotMatch(getRenderedMenu("Debug", "Log on status"), /Reset defaults.*running/);
+  assert.doesNotMatch(getRenderedMenu("Remove source-code directory", "src"), /Reset defaults.*src/);
 });
 
 test("debug menu dims locked rows and persists debug settings with focus-preserving re-renders", async () => {
@@ -2241,6 +2279,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     };
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
+    const originalBranchName = buildExpectedFakeBranchValue(projectBase);
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
     const promptText = String(pi.sentUserMessages[0]?.content ?? "");
     const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
@@ -2259,6 +2298,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(ctx.cwd, executionBasePath);
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", worktreeName)}`)));
 
     await pi.emit("before_agent_start", {}, ctx);
     assert.equal(process.cwd(), executionBasePath);
@@ -2293,7 +2333,10 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     );
     assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
-    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><warning>idle<\/warning>/);
+    assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", originalBranchName)}`)));
+    const finalStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
+    assert.match(finalStatus, /<accent>status:<\/accent><warning>idle<\/warning>/);
+    assert.ok(finalStatus.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", originalBranchName)}`));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -4047,7 +4090,47 @@ test("context hook refreshes context usage and rounds progress cells upward", as
   );
 });
 
-test("context hook renders the full context icon when usage exceeds ninety percent", async () => {
+/**
+ * @brief Verifies context-gauge icon cutovers below the error range.
+ * @details Replays deterministic context percentages at documented threshold boundaries below `90%` so the status bar proves the `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` transitions while keeping the default-color contract intact. Runtime is O(n) in case count. Side effects are limited to in-memory status updates.
+ * @return {Promise<void>} Promise resolved after all threshold assertions complete.
+ * @throws {AssertionError} Throws when any threshold renders the wrong icon.
+ * @satisfies TST-096
+ */
+test("context hook applies quarter-threshold gauge icons below the error range", async () => {
+  const cwd = createTempDir("pi-usereq-context-threshold-status-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const contextUsage = { tokens: 0, contextWindow: 1000, percent: 0 };
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    getContextUsage: () => ({ ...contextUsage }),
+  });
+
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+
+  for (const percent of [24.9, 25, 49.9, 50, 74.9, 75, 89.9]) {
+    contextUsage.tokens = Math.round(percent * 10);
+    contextUsage.percent = percent;
+    await pi.emit("context", { messages: [] }, ctx);
+
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: Math.ceil(percent / 10),
+        contextPercent: percent,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+      `unexpected context icon at ${percent}%`,
+    );
+  }
+});
+
+test("context hook renders the error full context icon when usage exceeds ninety percent", async () => {
   const cwd = createTempDir("pi-usereq-context-full-status-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const contextUsage = { tokens: 910, contextWindow: 1000, percent: 91 };
@@ -4074,14 +4157,14 @@ test("context hook renders the full context icon when usage exceeds ninety perce
   );
 });
 
-test("status overflow context icon uses only CLI-supported theme tokens", async () => {
+test("status overflow-threshold context icon uses only CLI-supported theme tokens", async () => {
   const cwd = createTempDir("pi-usereq-context-theme-contract-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const usedColors = new Set<string>();
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(cwd, { selects: [] }, {
-    getContextUsage: () => ({ tokens: 1250, contextWindow: 1000, percent: 125 }),
+    getContextUsage: () => ({ tokens: 1000, contextWindow: 1000, percent: 100 }),
     theme: {
       fg(color: string, text: string) {
         assert.ok(["accent", "warning", "dim", "error"].includes(color));
@@ -4110,7 +4193,7 @@ test("status overflow context icon uses only CLI-supported theme tokens", async 
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 10,
-      contextPercent: 125,
+      contextPercent: 100,
       et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );

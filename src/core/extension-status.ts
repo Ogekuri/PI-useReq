@@ -1,8 +1,7 @@
 /**
  * @file
  * @brief Tracks pi-usereq extension status state and renders status-bar telemetry.
- * @details Centralizes hook interception, context-usage snapshots, run timing,
- * and deterministic status-bar formatting for the pi-usereq extension. Runtime
+ * @details Centralizes hook interception, context-usage snapshots, active-branch lookup, run timing, and deterministic status-bar formatting for the pi-usereq extension. Runtime
  * is O(1) per event plus interval-driven re-renders while a prompt remains
  * active. Side effects are limited to in-memory state mutation and interval
  * scheduling through exported controller helpers.
@@ -20,6 +19,7 @@ import {
   restorePersistedPromptCommandRuntimeStateForSession,
   writePersistedPromptCommandRuntimeState,
 } from "./prompt-command-state.js";
+import { resolveRuntimeGitBranchName } from "./runtime-project-paths.js";
 
 /**
  * @brief Enumerates the CLI-supported theme tokens consumed by status rendering.
@@ -320,6 +320,17 @@ function createStatusThemeAdapter(theme: RawStatusTheme): StatusThemeAdapter {
 }
 
 /**
+ * @brief Resolves the active git branch value rendered in the status bar.
+ * @details Reads the current branch from the active context working directory on every status render so worktree switches and restored base-session renders expose the latest branch immediately. Runtime is dominated by git execution when the working directory belongs to a repository. Side effects include subprocess creation.
+ * @param[in] ctx {ExtensionContext} Active extension context.
+ * @return {string} Active branch name or `unknown` when unavailable.
+ * @satisfies REQ-121, REQ-283
+ */
+function resolveStatusBranchValue(ctx: ExtensionContext): string {
+  return resolveRuntimeGitBranchName(ctx.cwd);
+}
+
+/**
  * @brief Normalizes one raw context-usage snapshot.
  * @details Preserves the runtime token and context-window counts, derives a
  * percentage when the runtime omits it, clamps negative percentages to `0`,
@@ -366,12 +377,10 @@ function refreshContextUsage(
 
 /**
  * @brief Resolves the icon text for one normalized context-usage snapshot.
- * @details Maps context usage to one fixed-width icon band so footer rendering
- * remains compact and deterministic. Unavailable usage degrades to the `0%`
- * icon. Runtime is O(1). No external state is mutated.
+ * @details Maps context usage to one fixed-width icon band so footer rendering remains compact and deterministic across the documented `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands. Unavailable usage degrades to the `0%` icon. Runtime is O(1). No external state is mutated.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
  * @return {string} Fixed-width gauge icon text.
- * @satisfies REQ-121, REQ-122
+ * @satisfies REQ-122, REQ-284
  */
 function resolveContextUsageIconText(
   contextUsage: ContextUsage | undefined,
@@ -380,13 +389,13 @@ function resolveContextUsageIconText(
   if (percent === undefined || percent === null || percent <= 0) {
     return "▕_▏";
   }
-  if (percent <= 25) {
+  if (percent < 25) {
     return "▕▂▏";
   }
-  if (percent <= 50) {
+  if (percent < 50) {
     return "▕▄▏";
   }
-  if (percent <= 90) {
+  if (percent < 75) {
     return "▕▆▏";
   }
   return "▕█▏";
@@ -394,24 +403,24 @@ function resolveContextUsageIconText(
 
 /**
  * @brief Formats one icon-based context-usage gauge.
- * @details Renders the documented `warning`-colored icon bands for `0-90%`, applies terminal blink control to the `warning`-colored `>90-100%` icon, and applies terminal blink control to the `error`-colored overflow icon so unsupported terminals degrade to non-blinking colored text automatically. Runtime is O(1). No external state is mutated.
+ * @details Renders the documented gauge icon with theme `error` for `>=90%`, enables terminal blink only for `>=100%`, and otherwise leaves the gauge in the default terminal color. Runtime is O(1). No external state is mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
  * @return {string} Rendered fixed-width gauge icon.
- * @satisfies REQ-121, REQ-122, REQ-126, REQ-127, REQ-128, REQ-233
+ * @satisfies REQ-122, REQ-126, REQ-127, REQ-128, REQ-233, REQ-284
  */
 function formatContextUsageBar(
   theme: StatusThemeAdapter,
   contextUsage: ContextUsage | undefined,
 ): string {
   const percent = contextUsage?.percent ?? 0;
-  if (percent > 100) {
+  if (percent >= 100) {
     return theme.colorize("error", "\u001b[5m▕█▏\u001b[25m");
   }
-  if (percent > 90) {
-    return theme.colorize("warning", "\u001b[5m▕█▏\u001b[25m");
+  if (percent >= 90) {
+    return theme.colorize("error", "▕█▏");
   }
-  return theme.value(resolveContextUsageIconText(contextUsage));
+  return resolveContextUsageIconText(contextUsage);
 }
 
 /**
@@ -541,18 +550,20 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders status, context, elapsed, and sound fields in the canonical order with dim bullet separators, workflow-state highlighting, and the documented icon-based context gauge. Runtime is O(1). No external state is mutated.
+ * @details Renders status, branch, context, elapsed, and sound fields in the canonical order with dim bullet separators, workflow-state highlighting, and the documented icon-based context gauge. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
+ * @param[in] branchName {string} Active git branch name shown in the footer.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-156, REQ-159, REQ-180, REQ-222, REQ-223
+ * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-156, REQ-159, REQ-180, REQ-222, REQ-223, REQ-233, REQ-283, REQ-284
  */
 function buildPiUsereqStatusText(
   config: UseReqConfig,
   theme: StatusThemeAdapter,
   state: PiUsereqStatusState,
+  branchName: string,
   nowMs: number,
 ): string {
   const elapsedText = formatElapsedStatusValue(state, nowMs);
@@ -563,6 +574,7 @@ function buildPiUsereqStatusText(
       "status",
       formatWorkflowStateValue(theme, state.workflowState),
     ),
+    formatStatusField(theme, "branch", branchName),
     formatRenderedStatusField(
       theme,
       "context",
@@ -658,11 +670,11 @@ export function setPiUsereqStatusConfig(
 
 /**
  * @brief Renders the current pi-usereq status bar into the active UI context.
- * @details Updates the controller's latest context pointer and writes the single-line status text only when configuration is available, including the documented icon-based context gauge. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1). Side effect: mutates `ctx.ui` status when the context is still active.
+ * @details Updates the controller's latest context pointer and writes the single-line status text only when configuration is available, including the active branch field and documented icon-based context gauge. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1) plus git execution for branch refresh. Side effect: mutates `ctx.ui` status when the context is still active.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-159, REQ-180, REQ-280
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-159, REQ-180, REQ-233, REQ-280, REQ-283, REQ-284
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,
@@ -674,12 +686,14 @@ export function renderPiUsereqStatus(
   }
   try {
     const theme = createStatusThemeAdapter(ctx.ui.theme as RawStatusTheme);
+    const branchName = resolveStatusBranchValue(ctx);
     ctx.ui.setStatus(
       "pi-usereq",
       buildPiUsereqStatusText(
         controller.config,
         theme,
         controller.state,
+        branchName,
         Date.now(),
       ),
     );

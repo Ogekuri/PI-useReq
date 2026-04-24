@@ -279,20 +279,19 @@ function formatProjectConfigPathForMenu(cwd: string): string {
 
 /**
  * @brief Builds the standardized terminal rows appended to every configuration menu.
- * @details Returns the canonical `Reset defaults` row so all configuration menus and descendant selector menus share the same terminal ordering contract without rendering `Save and close`. Runtime is O(1). No external state is mutated.
- * @param[in] options {{ resetDefaultsDescription: string; resetDefaultsValue?: string | undefined }} Menu-specific terminal-row metadata.
+ * @details Returns the canonical value-less `Reset defaults` row so all configuration menus and descendant selector menus share the same terminal ordering contract without rendering `Save and close`. Runtime is O(1). No external state is mutated.
+ * @param[in] options {{ resetDefaultsDescription: string }} Menu-specific terminal-row metadata.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered terminal menu rows.
  * @satisfies REQ-193
  */
 function buildTerminalSettingsMenuChoices(options: {
   resetDefaultsDescription: string;
-  resetDefaultsValue?: string;
 }): PiUsereqSettingsMenuChoice[] {
   return [
     {
       id: "reset-defaults",
       label: "Reset defaults",
-      value: options.resetDefaultsValue ?? "",
+      value: "",
       description: options.resetDefaultsDescription,
     },
   ];
@@ -1356,7 +1355,6 @@ async function selectDebugLogOnStatus(
       description: `Write matching debug entries only while workflow state is ${workflowState}.`,
     })),
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: DEFAULT_DEBUG_LOG_ON_STATUS,
       resetDefaultsDescription: "Restore the documented default workflow-state filter.",
     }),
   ], { initialSelectedId: currentValue });
@@ -1444,7 +1442,6 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
       debugEnabled,
     )),
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: DEFAULT_DEBUG_LOG_ON_STATUS,
       resetDefaultsDescription: "Restore the documented default Debug configuration.",
     }),
   ];
@@ -1794,7 +1791,7 @@ function buildPiNotifyEventLauncherChoice(
 
 /**
  * @brief Builds the shared settings-menu choices for one notification event submenu.
- * @details Serializes completed/interrupted/failed rows with right-aligned `on|off` values, then appends `Reset defaults` and `Save and close` for submenu-scoped mutation control. Runtime is O(1). No external state is mutated.
+ * @details Serializes completed/interrupted/failed rows with right-aligned `on|off` values, then appends a value-less `Reset defaults` row for submenu-scoped mutation control. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered event-submenu choice vector.
@@ -1983,7 +1980,7 @@ function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuCh
 
 /**
  * @brief Opens the shared settings-menu selector for Pushover priority.
- * @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the notification menus and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the notification menus and appends a value-less subtree-local `Reset defaults` row. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] currentPriority {PiNotifyPushoverPriority} Persisted priority value.
  * @return {Promise<PiNotifyPushoverPriority | "reset-defaults" | undefined>} Selected priority, reset action, or `undefined` when cancelled.
@@ -2007,7 +2004,6 @@ async function selectPiNotifyPushoverPriority(
       description: "Send outbound Pushover messages with high priority `1`.",
     },
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: formatPiNotifyPushoverPriority(getDefaultConfig("")["notify-pushover-priority"]),
       resetDefaultsDescription: "Restore the documented default Pushover priority.",
     }),
   ], { initialSelectedId: String(currentPriority) });
@@ -2088,7 +2084,7 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
 
 /**
  * @brief Opens the shared settings-menu selector for the active sound level.
- * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the notification menu and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the notification menu and appends a value-less subtree-local `Reset defaults` row. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] currentLevel {PiNotifySoundLevel} Currently selected sound level.
  * @return {Promise<PiNotifySoundLevel | "reset-defaults" | undefined>} Selected sound level, reset action, or `undefined` when cancelled.
@@ -2124,7 +2120,6 @@ async function selectPiNotifySoundLevel(
       description: "Use the high-volume sound command when sound delivery is enabled for the current event.",
     },
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: getDefaultConfig("")["notify-sound"],
       resetDefaultsDescription: "Restore the documented default sound level.",
     }),
   ], { initialSelectedId: currentLevel });
@@ -2923,7 +2918,6 @@ function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): 
       description: "Disable every configurable startup tool for future session starts.",
     },
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: `${normalizeEnabledPiUsereqTools(undefined).length} defaults`,
       resetDefaultsDescription: "Restore the documented default startup-tool selection.",
     }),
   ];
@@ -2931,7 +2925,7 @@ function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): 
 
 /**
  * @brief Builds the shared settings-menu choices for per-tool startup toggles.
- * @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime is O(t) in configurable-tool count. No external state is mutated.
+ * @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends a value-less subtree-local `Reset defaults` row. Runtime is O(t) in configurable-tool count. No external state is mutated.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
@@ -2947,7 +2941,6 @@ function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig):
       description: tool.description ?? `Toggle startup activation for ${tool.name}.`,
     })),
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: `${normalizeEnabledPiUsereqTools(undefined).length} defaults`,
       resetDefaultsDescription: "Restore the documented default startup-tool selection.",
     }),
   ];
@@ -3149,7 +3142,6 @@ function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenu
       };
     }),
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: formatStaticCheckLanguagesSummary(config),
       resetDefaultsDescription: "Restore the documented per-language static-check defaults.",
     }),
   ];
@@ -3175,7 +3167,6 @@ function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsere
       };
     }),
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: formatStaticCheckLanguagesSummary(config),
       resetDefaultsDescription: "Restore the documented per-language static-check defaults.",
     }),
   ];
@@ -3201,7 +3192,6 @@ function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUser
         };
       }),
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: formatStaticCheckLanguagesSummary(config),
       resetDefaultsDescription: "Restore the documented per-language static-check defaults.",
     }),
   ];
@@ -3471,7 +3461,6 @@ function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoic
       description: "Select one configured source directory to remove from the current configuration.",
     },
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: `${DEFAULT_SRC_DIRS.join(", ")}`,
       resetDefaultsDescription: "Restore the documented default source-directory configuration.",
     }),
   ];
@@ -3479,7 +3468,7 @@ function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoic
 
 /**
  * @brief Builds the shared settings-menu choices for removing one source-directory entry.
- * @details Exposes every configured `src-dir` entry as one removable row and appends subtree-local `Reset defaults` plus `Save and close` rows. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @details Exposes every configured `src-dir` entry as one removable row and appends a value-less subtree-local `Reset defaults` row. Runtime is O(s) in source-directory count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
  * @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
@@ -3493,7 +3482,6 @@ function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuCh
       description: `Remove the source-directory entry ${entry} from the current configuration.`,
     })),
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsValue: `${DEFAULT_SRC_DIRS.join(", ")}`,
       resetDefaultsDescription: "Restore the documented default source-directory configuration.",
     }),
   ];

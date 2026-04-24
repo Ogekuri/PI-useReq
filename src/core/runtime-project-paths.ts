@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Derives runtime-only repository facts.
- * @details Centralizes git-repository probing and repository-root resolution for extension status, tool execution, and CLI flows. Runtime is dominated by git subprocess execution plus path normalization. Side effects are limited to subprocess spawning.
+ * @details Centralizes git-repository probing, repository-root resolution, and active-branch lookup for extension status, tool execution, and CLI flows. Runtime is dominated by git subprocess execution plus path normalization. Side effects are limited to subprocess spawning.
  */
 
 import path from "node:path";
@@ -65,6 +65,26 @@ export function resolveRuntimeGitPath(executionPath: string): string | undefined
   }
   const gitRoot = resolveGitRoot(normalizedExecutionPath);
   return isSameOrAncestorPath(gitRoot, normalizedExecutionPath) ? gitRoot : undefined;
+}
+
+/**
+ * @brief Resolves the active branch name for one runtime execution path.
+ * @details Resolves the enclosing git work tree from the supplied execution path, reads `git branch --show-current`, and falls back to `unknown` when the path is outside git or HEAD has no branch name. Runtime is dominated by git execution. Side effects include subprocess creation.
+ * @param[in] executionPath {string} Runtime execution path.
+ * @return {string} Active branch name or `unknown` when unavailable.
+ * @satisfies REQ-121, REQ-283
+ */
+export function resolveRuntimeGitBranchName(executionPath: string): string {
+  const gitRoot = resolveRuntimeGitPath(executionPath);
+  if (!gitRoot) {
+    return "unknown";
+  }
+  const result = runGitCapture(["git", "branch", "--show-current"], gitRoot);
+  if (result.error || result.status !== 0) {
+    return "unknown";
+  }
+  const branchName = result.stdout.trim();
+  return branchName === "" ? "unknown" : branchName;
 }
 
 

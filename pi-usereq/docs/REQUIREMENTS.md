@@ -62,7 +62,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-010**: MUST execute offline harness flows without requiring pi.dev services or `docs/pi.dev/agent-document-manifest.json`.
 - **CTN-011**: MUST store bundled prompt, instruction, template, and guideline resources under `src/resources/{prompts,instructions,templates,guidelines}` and install them under `<installation-path>/resources/{prompts,instructions,templates,guidelines}`.
 - **CTN-012**: MUST NOT persist derived `base-path`, `git-path`, `parent-path`, `base-dir`, `context-path`, `worktree-dir`, or `worktree-path` in `.pi-usereq.json`.
-- **CTN-013**: MUST default `DEBUG_ENABLED=disable`, `DEBUG_LOG_FILE=debug.json`, `DEBUG_STATUS_CHANGES=disable`, `DEBUG_WORKFLOW_EVENTS=disable`, `DEBUG_LOG_ON_STATUS=running`, `DEBUG_ENABLED_TOOLS=[]`, and `DEBUG_ENABLED_PROMPTS=[]` in persisted project configuration.
+- **CTN-013**: MUST default `DEBUG_ENABLED=disable`, `DEBUG_LOG_FILE=/tmp/PI-useReq.json`, `DEBUG_STATUS_CHANGES=disable`, `DEBUG_WORKFLOW_EVENTS=disable`, `DEBUG_LOG_ON_STATUS=running`, `DEBUG_ENABLED_TOOLS=[]`, and `DEBUG_ENABLED_PROMPTS=[]` in persisted project configuration.
 - **CTN-014**: MUST serialize every configured or derived path without a trailing `/`.
 - **CTN-015**: MUST reserve `*-path` names for absolute paths and `*-dir` names for relative paths.
 - **CTN-016**: MUST NOT modify any path under `docs/` during analysis, implementation, verification, or bug fixing.
@@ -115,7 +115,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-065**: MUST make `scripts/pi-usereq-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
 - **REQ-006**: MUST provide a `pi-usereq` menu that edits project directories, git automation, static-check settings, tools, notifications, and debug settings, exposes `Show configuration`, confirms reset actions, saves every change immediately, and never renders `Save and close`.
 - **REQ-236**: MUST persist `DEBUG_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
-- **REQ-237**: MUST persist `DEBUG_LOG_FILE` as a non-empty string defaulting to `debug.json`, and resolve relative paths against the original project base when writing logs.
+- **REQ-237**: MUST persist `DEBUG_LOG_FILE` as a non-empty string defaulting to `/tmp/PI-useReq.json`, and resolve relative paths against the original project base when writing logs.
 - **REQ-238**: MUST persist `DEBUG_LOG_ON_STATUS` with allowed values `any`, `idle`, `checking`, `running`, `merging`, and `error`, defaulting to `running`.
 - **REQ-239**: MUST persist enabled debug-tool names and enabled debug-prompt names as normalized arrays defaulting to empty.
 - **REQ-254**: MUST persist `DEBUG_STATUS_CHANGES` with allowed values `enable` and `disable`, defaulting to `disable`.
@@ -154,7 +154,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, reset workflow state to `idle` for `session_start` reasons `startup|new|reload`, and publish single-line `pi-usereq` status text.
 - **REQ-109**: MUST omit `current-path`, `base`, `docs`, `src`, and `tests` path fields from the single-line status bar.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
-- **REQ-112**: MUST render status-bar field names with the active theme `accent` token and non-error field values with the active theme `warning` token.
+- **REQ-112**: MUST render status-bar field names with the active theme `accent` token and non-error field values with the active theme `warning` token unless a field-specific requirement overrides the value token.
 - **REQ-113**: MUST register shared event wrappers for `resources_discover`, `session_start`, `session_before_switch`, `session_before_fork`, `session_before_compact`, `session_compact`, and `session_shutdown`.
 - **REQ-114**: MUST register shared event wrappers for `session_before_tree`, `session_tree`, `context`, `before_provider_request`, `before_agent_start`, `agent_start`, and `agent_end`.
 - **REQ-115**: MUST register shared event wrappers for `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, and `tool_execution_update`.
@@ -162,16 +162,18 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
-- **REQ-120**: MUST render single-line status fields in this order: `status`, `context`, `elapsed`, `sound`.
-- **REQ-121**: MUST render `context` immediately after `status` with separator ` • ` and one fixed-width gauge icon.
-- **REQ-122**: MUST map `context` usage to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-25`, `>25-50`, `>50-90`, and `>90-100` percent bands.
+- **REQ-120**: MUST render single-line status fields in this order: `status`, `branch`, `context`, `elapsed`, `sound`.
+- **REQ-121**: MUST render `branch` immediately after `status` with separator ` • ` and the active git branch name.
+- **REQ-283**: MUST resolve `branch` from the current `context-path` git HEAD during every status-bar rebuild so worktree switches and base-path restoration update immediately.
+- **REQ-284**: MUST render `context` immediately after `branch` with separator ` • ` and one fixed-width gauge icon.
+- **REQ-122**: MUST map `context` usage to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands.
 - **REQ-123**: MUST render `elapsed` immediately after `context` as `⏱︎ <active> ⚑ <last> ⌛︎<total>`.
 - **REQ-124**: MUST render `⏱︎ --:--` when no prompt is active, and `⚑ --:--` plus `⌛︎--:--` until the corresponding timers receive a normally completed prompt duration.
 - **REQ-125**: MUST render timed `elapsed` segments as `M:SS`, keep minutes unbounded above 59, zero-pad seconds to two digits, and preserve `⚑` plus `⌛︎` when escape-triggered cancellation ends the active run.
-- **REQ-126**: MUST render `context` gauge icons with theme `warning`, except the overflow state uses theme `error`.
-- **REQ-127**: MUST render `context` as blinking theme `warning` `▕█▏` when normalized usage is `>90-100` percent and terminal blink control is supported.
-- **REQ-233**: MUST render `context` as blinking theme `error` `▕█▏` when normalized usage exceeds 100 percent and terminal blink control is supported.
-- **REQ-128**: MUST render `context` as theme `error` `▕█▏` when normalized usage exceeds 100 percent and terminal blink control is unavailable.
+- **REQ-126**: MUST render `context` gauge icons in default terminal color below 90 percent and theme `error` at 90 percent or above.
+- **REQ-127**: MUST render `context` as non-blinking theme `error` `▕█▏` when normalized usage is `>=90-<100` percent.
+- **REQ-233**: MUST render `context` as blinking theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is supported.
+- **REQ-128**: MUST render `context` as theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is unavailable.
 - **REQ-131**: MUST persist a sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
 - **REQ-132**: MUST execute the configured sound command when the corresponding prompt-end sound event toggle is enabled and the sound level is not `none`.
 - **REQ-133**: MUST persist configurable shell-command strings for sound levels `low`, `mid`, and `high`, and MUST substitute `%%INSTALLATION_PATH%%` with the runtime extension installation path before execution.
@@ -203,7 +205,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, `Debug`, and `Show configuration`.
 - **REQ-191**: MUST order top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, `Debug`, `Show configuration`, and `Reset defaults`.
 - **REQ-192**: MUST preserve the selected settings-menu row after toggling or editing a setting value.
-- **REQ-193**: MUST append `Reset defaults` as the final row of every configuration menu and descendant selector menu, and MUST NOT render `Save and close`.
+- **REQ-193**: MUST append `Reset defaults` as a final row without right-aligned value text in every configuration menu and descendant selector menu, and MUST NOT render `Save and close`.
 - **REQ-194**: MUST make top-level `Reset defaults` show changed values with previous and next values, require explicit confirmation, restore full-tree defaults, and save immediately.
 - **REQ-195**: MUST make non-top-level `Reset defaults` show changed values with previous and next values, require explicit confirmation, restore subtree defaults, and save immediately.
 - **REQ-196**: MUST persist a global command-notify enable flag defaulting to disabled.
@@ -225,7 +227,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-208**: MUST restore the original session-backed `base-path`, fast-forward-only merge from `base-path`, delete the worktree plus branch, and preserve the successful worktree execution transcript in the client-visible session after closure.
 - **REQ-209**: MUST restore the original session-backed `base-path`, notify the pi CLI of closure failure, and retain the worktree plus branch when orchestrated session closure is interrupted, failed, aborted, or incomplete.
 - **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, and `error`.
-- **REQ-222**: MUST render `status` immediately before `base` as the current prompt-orchestration state and refresh it on every internal or pi CLI state transition.
+- **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
 - **REQ-224**: MUST reject a `req-<prompt>` command before any operation when workflow state is not `idle`, surfacing the error to pi CLI.
 - **REQ-225**: MUST transition workflow state to `checking` after the `idle` gate and keep it there through required-doc checks, worktree generation, worktree verification, and prompt handoff preparation.
@@ -353,23 +355,25 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-078**: MUST verify default configuration persists documented per-language `enabled` flags and checker lists for `C`, `C++`, `Python`, `JavaScript`, and `TypeScript`.
 - **TST-079**: MUST verify `files-static-check` and `static-check` execute zero checkers and expose empty configured-checker lists when the target language `enabled=disable`.
 - **TST-006**: MUST verify `session_start` activates configured startup tools, resets workflow state to `idle` for `startup|new|reload`, and updates the single-line `pi-usereq` status bar.
-- **TST-031**: MUST verify the status bar renders `status` before `context`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
+- **TST-031**: MUST verify the status bar renders `status` before `branch`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
-- **TST-033**: MUST verify the status bar renders ordered `status`, `context`, `elapsed`, and `sound` fields plus the documented icon-based `context` gauge thresholds.
+- **TST-033**: MUST verify the status bar renders ordered `status`, `branch`, `context`, `elapsed`, and `sound` fields plus the documented icon-based `context` gauge thresholds.
 - **TST-037**: MUST verify the `Notifications` menu persists notification and sound settings through `Notification events` and `Sound events` submenus using the documented labels, order, reset-confirmation flows, immediate-save behavior, and no `Save and close` rows.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
 - **TST-047**: MUST verify the `Notifications` menu exposes `Pushover events` before direct Pushover settings, keeps `Enable pushover` dimmed and locked until both credential fields are non-empty, and persists Pushover event and credential values.
 - **TST-072**: MUST verify `Pushover text` displays escaped control sequences in menus and decodes the documented escape sequences from input before persistence.
 - **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` for enabled prompt-end outcomes.
-- **TST-049**: MUST verify the status bar renders ordered `status`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
+- **TST-049**: MUST verify the status bar renders ordered `status`, `branch`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
 - **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
 - **TST-062**: MUST verify `Show configuration` saves pending config, closes the active configuration menu tree, and writes the persisted `.pi-usereq.json` file text into the editor.
 - **TST-063**: MUST verify `⚑` plus `⌛︎` survive `session_start` reason `new` and reset on `session_start` reason `reload`.
-- **TST-045**: MUST verify default configuration enables auto git commit, disables debug, notify, and Pushover globally, initializes sound to `none`, applies the documented debug and notification defaults, and persists the documented notify and Pushover templates.
+- **TST-045**: MUST verify default configuration enables auto git commit, disables debug, notify, and Pushover globally, initializes sound to `none`, sets `DEBUG_LOG_FILE=/tmp/PI-useReq.json`, and persists the documented notify and Pushover templates.
 - **TST-051**: MUST verify sound routing honors the selected sound state and completed/interrupted/failed sound toggles.
-- **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with the theme `warning` token.
-- **TST-036**: MUST verify context usage `>90-100` renders blinking warning `▕█▏`, and `>100` renders blinking error `▕█▏` or non-blinking error `▕█▏` when blink control is unavailable.
+- **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with default terminal color.
+- **TST-096**: MUST verify context usage `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90` render `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` in default terminal color.
+- **TST-036**: MUST verify context usage `>=90-<100` renders non-blinking error `▕█▏`, and `>=100` renders blinking error `▕█▏` or non-blinking error `▕█▏` when blink control is unavailable.
+- **TST-095**: MUST verify status-bar `branch` resolves from current `context-path` git HEAD and refreshes across worktree switches plus base-path restoration.
 - **TST-043**: MUST verify configuration menus reuse the active CLI settings-list theme semantics for labels, values, descriptions, cursor, and hints.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
 - **TST-010**: MUST verify `tsconfig.json` declares `NodeNext`, `strict`, `noEmit`, and includes both `src/**/*.ts` and `tests/**/*.ts`.
@@ -399,7 +403,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify `.pi-usereq.json` omits derived static and dynamic path fields while runtime path context and status rendering still derive them correctly.
-- **TST-041**: MUST verify the `pi-usereq` menu uses the documented labels and order, every configuration menu ends with `Reset defaults` only, dims locked git or debug rows, and preserves the documented summary rows.
+- **TST-041**: MUST verify the `pi-usereq` menu uses the documented labels and order, every configuration menu ends with `Reset defaults` without right-aligned value text, dims locked git or debug rows, and preserves the documented summary rows.
 - **TST-073**: MUST verify the `Debug` submenu persists `DEBUG_ENABLED`, `DEBUG_STATUS_CHANGES`, `DEBUG_WORKFLOW_EVENTS`, `DEBUG_LOG_FILE`, `DEBUG_LOG_ON_STATUS`, and per-item debug toggles through immediate-save, reset-confirmation, and focus-preserving re-render flows.
 - **TST-074**: MUST verify selected custom and embedded tool debug toggles append JSON entries with tool name, workflow state, input, result, and error flag, honoring `DEBUG_ENABLED` plus `DEBUG_LOG_ON_STATUS`.
 - **TST-075**: MUST verify selected `req-*` debug toggles append JSON entries for required-doc checks, worktree creation, fast-forward merge, worktree deletion, `workflow_state`, and `DEBUG_WORKFLOW_EVENTS`-gated workflow events across successful and failing prompt runs.

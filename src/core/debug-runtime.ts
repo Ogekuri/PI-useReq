@@ -26,10 +26,10 @@ export const DEFAULT_DEBUG_ENABLED = "disable" as const;
 
 /**
  * @brief Defines the default debug log file value.
- * @details Relative values resolve against the original project base when entries are written. Access complexity is O(1).
+ * @details New configurations write debug JSON entries to `/tmp/PI-useReq.json` unless the user overrides the path. Access complexity is O(1).
  * @satisfies CTN-013, REQ-237
  */
-export const DEFAULT_DEBUG_LOG_FILE = "debug.json";
+export const DEFAULT_DEBUG_LOG_FILE = "/tmp/PI-useReq.json";
 
 /**
  * @brief Defines the default workflow-transition logging mode.
