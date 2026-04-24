@@ -237,7 +237,7 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.match(status, /<accent>status:<\/accent><warning>idle<\/warning>/);
     assert.match(status, new RegExp(`<accent>branch:<\\/accent><warning>${escapedBranch}<\\/warning>`));
     assert.doesNotMatch(status, /<accent>current-path:<\/accent>/);
-    assert.match(status, /<accent>context:<\/accent>▕_▏/);
+    assert.match(status, /<accent>context:<\/accent><warning>▕_▏<\/warning>/);
     assert.match(status, /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
     assert.doesNotMatch(status, /<accent>beep:<\/accent>/);

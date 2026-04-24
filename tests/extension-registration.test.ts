@@ -431,7 +431,7 @@ function buildExpectedFakeBranchValue(basePath: string | undefined): string {
 
 /**
  * @brief Builds the expected fake context-gauge payload for assertions.
- * @details Resolves the documented icon thresholds for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90`, emits the non-blinking error full icon for `>=90-<100`, and emits the blinking error full icon for `>=100`. Runtime is O(1). No external state is mutated.
+ * @details Resolves the documented icon thresholds for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90`, renders those non-error bands with the same `warning` token used by the `status` value, emits the non-blinking error full icon for `>=90-<100`, and emits the blinking error full icon for `>=100`. Runtime is O(1). No external state is mutated.
  * @param[in] options {{ filledCells: number; percent?: number | null }} Expected context-gauge facts.
  * @return {string} Encoded context-gauge string.
  */
@@ -441,7 +441,7 @@ function buildExpectedFakeContextBar(options: {
 }): string {
   const percent = options.percent;
   if (percent === undefined || percent === null || percent <= 0) {
-    return "▕_▏";
+    return formatFakeThemeForeground("warning", "▕_▏");
   }
   if (percent >= 100) {
     return formatFakeThemeForeground("error", "\u001b[5m▕█▏\u001b[25m");
@@ -450,15 +450,15 @@ function buildExpectedFakeContextBar(options: {
     return formatFakeThemeForeground("error", "▕█▏");
   }
   if (percent < 25) {
-    return "▕▂▏";
+    return formatFakeThemeForeground("warning", "▕▂▏");
   }
   if (percent < 50) {
-    return "▕▄▏";
+    return formatFakeThemeForeground("warning", "▕▄▏");
   }
   if (percent < 75) {
-    return "▕▆▏";
+    return formatFakeThemeForeground("warning", "▕▆▏");
   }
-  return "▕█▏";
+  return formatFakeThemeForeground("warning", "▕█▏");
 }
 
 /**
@@ -4345,12 +4345,12 @@ test("context hook refreshes context usage and rounds progress cells upward", as
 
 /**
  * @brief Verifies context-gauge icon cutovers below the error range.
- * @details Replays deterministic context percentages at documented threshold boundaries below `90%` so the status bar proves the `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` transitions while keeping the default-color contract intact. Runtime is O(n) in case count. Side effects are limited to in-memory status updates.
+ * @details Replays deterministic context percentages at documented threshold boundaries below `90%` so the status bar proves the `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` transitions while rendering every non-error band with the same warning-token color used by the `status` value. Runtime is O(n) in case count. Side effects are limited to in-memory status updates.
  * @return {Promise<void>} Promise resolved after all threshold assertions complete.
- * @throws {AssertionError} Throws when any threshold renders the wrong icon.
- * @satisfies TST-096
+ * @throws {AssertionError} Throws when any threshold renders the wrong icon or low-band color.
+ * @satisfies REQ-122, REQ-126, TST-096
  */
-test("context hook applies quarter-threshold gauge icons below the error range", async () => {
+test("context hook applies warning-colored quarter-threshold gauge icons below the error range", async () => {
   const cwd = createTempDir("pi-usereq-context-threshold-status-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const contextUsage = { tokens: 0, contextWindow: 1000, percent: 0 };

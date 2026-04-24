@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.58"
+version: "0.0.59"
 date: "2026-04-24"
 author: "OpenAI Codex"
 scope:
@@ -170,7 +170,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-123**: MUST render `elapsed` immediately after `context` as `⏱︎ <active> ⚑ <last> ⌛︎<total>`.
 - **REQ-124**: MUST render `⏱︎ --:--` when no prompt is active, and `⚑ --:--` plus `⌛︎--:--` until the corresponding timers receive a normally completed prompt duration.
 - **REQ-125**: MUST render timed `elapsed` segments as `M:SS`, keep minutes unbounded above 59, zero-pad seconds to two digits, and preserve `⚑` plus `⌛︎` when escape-triggered cancellation ends the active run.
-- **REQ-126**: MUST render `context` gauge icons in default terminal color below 90 percent and theme `error` at 90 percent or above.
+- **REQ-126**: MUST render `context` gauge icons below 90 percent with the same non-error theme token used by `status`, and theme `error` at 90 percent or above.
 - **REQ-127**: MUST render `context` as non-blinking theme `error` `▕█▏` when normalized usage is `>=90-<100` percent.
 - **REQ-233**: MUST render `context` as blinking theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is supported.
 - **REQ-128**: MUST render `context` as theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is unavailable.
@@ -380,8 +380,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-063**: MUST verify `⚑` plus `⌛︎` survive `session_start` reason `new` and reset on `session_start` reason `reload`.
 - **TST-045**: MUST verify default configuration enables auto git commit, disables debug, notify, and Pushover globally, initializes sound to `none`, sets `DEBUG_LOG_FILE=/tmp/PI-useReq.json`, and persists the documented notify and Pushover templates.
 - **TST-051**: MUST verify sound routing honors the active runtime sound state and completed/interrupted/failed sound toggles.
-- **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with default terminal color.
-- **TST-096**: MUST verify context usage `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90` render `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` in default terminal color.
+- **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with the same non-error theme token used by `status`.
+- **TST-096**: MUST verify context usage `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90` render `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` with the same non-error theme token used by `status`.
 - **TST-036**: MUST verify context usage `>=90-<100` renders non-blinking error `▕█▏`, and `>=100` renders blinking error `▕█▏` or non-blinking error `▕█▏` when blink control is unavailable.
 - **TST-095**: MUST verify status-bar `branch` resolves from current `context-path` git HEAD and refreshes across worktree switches plus base-path restoration.
 - **TST-043**: MUST verify configuration menus reuse the active CLI settings-list theme semantics for labels, values, descriptions, cursor, and hints.

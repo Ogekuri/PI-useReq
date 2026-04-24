@@ -405,7 +405,7 @@ function resolveContextUsageIconText(
 
 /**
  * @brief Formats one icon-based context-usage gauge.
- * @details Renders the documented gauge icon with theme `error` for `>=90%`, enables terminal blink only for `>=100%`, and otherwise leaves the gauge in the default terminal color. Runtime is O(1). No external state is mutated.
+ * @details Renders the documented gauge icon with the same non-error status-value theme token used by `status` below `90%`, switches to theme `error` for `>=90%`, and enables terminal blink only for `>=100%`. Runtime is O(1). No external state is mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
  * @return {string} Rendered fixed-width gauge icon.
@@ -422,7 +422,7 @@ function formatContextUsageBar(
   if (percent >= 90) {
     return theme.colorize("error", "▕█▏");
   }
-  return resolveContextUsageIconText(contextUsage);
+  return theme.value(resolveContextUsageIconText(contextUsage));
 }
 
 /**
