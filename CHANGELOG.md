@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0](https://github.com/Ogekuri/PI-useReq/compare/v0.10.0..v0.11.0) - 2026-04-24
+### 🚜  Changes
+- BREAKING CHANGE: revise status bar branch gauge and debug defaults [useReq] *(extension-status)*
+  - update requirements for branch field, context thresholds, and debug log defaults
+  - remove Reset defaults right-side values across menus
+  - align source, tests, workflow, and references with the breaking change
+- preserve worktree transcript on session restore [useReq] *(prompt-command-runtime)*
+  - Update REQ-208 to require client-visible transcript preservation after closure.
+  - Copy execution-session JSONL entries into the restored base session before merge and cleanup.
+  - Refresh workflow and references docs for the new prompt-finalization path.
+- remove current-path from status footer [useReq] *(status-bar)*
+  - Trace: useReq-20260424-1530
+  - update requirements, workflow, and references
+  - stop rendering current-path in extension status output
+  - align harness and registration status tests
+
 ## [0.10.0](https://github.com/Ogekuri/PI-useReq/compare/v0.7.0..v0.10.0) - 2026-04-24
 ### ⛰️  Features
 - Add source code from a extranal branch.
@@ -295,6 +311,7 @@
 - \[0.6.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.6.0
 - \[0.7.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.7.0
 - \[0.10.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.10.0
+- \[0.11.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.11.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -304,3 +321,4 @@
 [0.6.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.5.0..v0.6.0
 [0.7.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.6.0..v0.7.0
 [0.10.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.7.0..v0.10.0
+[0.11.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.10.0..v0.11.0
