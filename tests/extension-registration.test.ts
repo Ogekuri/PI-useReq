@@ -2441,6 +2441,110 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
 });
 
 /**
+ * @brief Verifies successful closure stashes tracked `base-path` changes before merge and restores them afterward.
+ * @details Creates tracked `base-path` files, dirties one in the index and one in the worktree after worktree handoff, commits a worktree change, and proves prompt finalization runs `git stash`/merge/`git stash pop` semantics by merging successfully, restoring the local `base-path` changes, deleting the worktree, and surfacing a warning-only notification about the dirty restored base path.
+ * @return {Promise<void>} Promise resolved after stash-assisted merge assertions complete.
+ * @throws {AssertionError} Throws when finalization drops local `base-path` changes, skips the merge, or reports an error instead of a warning.
+ * @satisfies REQ-208, REQ-291, REQ-292
+ */
+test("worktree-backed successful closure stashes tracked base-path changes, merges, restores changes, and warns about dirty base-path", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const stagedBasePath = path.join(projectBase, "staged-base.txt");
+    const worktreeBasePath = path.join(projectBase, "worktree-base.txt");
+    fs.writeFileSync(stagedBasePath, "staged base clean\n", "utf8");
+    fs.writeFileSync(worktreeBasePath, "worktree base clean\n", "utf8");
+    assert.equal(
+      spawnSync("git", ["add", "staged-base.txt", "worktree-base.txt"], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    const baseCommit = spawnSync("git", ["commit", "-m", "tracked base files"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    });
+    assert.equal(baseCommit.status, 0, baseCommit.stderr);
+
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "stash-assisted.ts"), "export const STASH_ASSISTED = 1;\n", "utf8");
+    assert.equal(
+      spawnSync("git", ["add", "src/stash-assisted.ts"], {
+        cwd: executionBasePath,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "stash assisted change"], {
+      cwd: executionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    fs.writeFileSync(stagedBasePath, "staged base dirty\n", "utf8");
+    assert.equal(
+      spawnSync("git", ["add", "staged-base.txt"], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    fs.writeFileSync(worktreeBasePath, "worktree base dirty\n", "utf8");
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    const statusResult = spawnSync("git", ["status", "--porcelain"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    });
+    assert.equal(statusResult.status, 0, statusResult.stderr);
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "stash-assisted.ts")));
+    assert.equal(fs.readFileSync(stagedBasePath, "utf8"), "staged base dirty\n");
+    assert.equal(fs.readFileSync(worktreeBasePath, "utf8"), "worktree base dirty\n");
+    assert.match(statusResult.stdout, /staged-base\.txt/);
+    assert.match(statusResult.stdout, /worktree-base\.txt/);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.ok(
+      ctx.__state.notifications.some(
+        (entry) => entry.level === "info"
+          && /WARNING: Restored base-path changes after merge; base-path is not clean\./.test(entry.message),
+      ),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies prompt-command bootstrap ignores stale deleted-worktree session metadata on later commands.
  * @details Simulates the `/tmp/debug.json` follow-up failure mode: one successful worktree-backed `req-change` run restores `base-path` and deletes its worktree, then a later `req-change` invocation receives a stale command context whose `cwd` and session getters still point at the removed execution worktree. The test proves command bootstrap MUST discard deleted-worktree cwd/session residue, prepare a fresh worktree with a new identifier, and complete the second successful run without reusing the removed execution path.
  * @return {Promise<void>} Promise resolved after two successful prompt-command runs complete.

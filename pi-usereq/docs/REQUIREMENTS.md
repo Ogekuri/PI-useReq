@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.57"
+version: "0.0.58"
 date: "2026-04-24"
 author: "OpenAI Codex"
 scope:
@@ -125,7 +125,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-242**: MUST derive per-tool debug rows from `PI_USEREQ_CUSTOM_TOOL_NAMES` and `PI_USEREQ_EMBEDDED_TOOL_NAMES`.
 - **REQ-243**: MUST derive per-prompt debug rows from `PROMPT_COMMAND_NAMES` as `req-*` names.
 - **REQ-244**: MUST append one JSON entry to `DEBUG_LOG_FILE` for each selected custom or embedded tool execution, including tool name, workflow state, input, result, and error flag.
-- **REQ-245**: MUST append JSON debug entries from selected `req-*` commands for required-doc checks, worktree creation, fast-forward merge, worktree deletion, and workflow events when `DEBUG_WORKFLOW_EVENTS=enable`.
+- **REQ-245**: MUST append JSON debug entries from selected `req-*` commands for required-doc checks, worktree creation, merge finalization, worktree deletion, and workflow events when `DEBUG_WORKFLOW_EVENTS=enable`.
 - **REQ-255**: MUST append `workflow_state` debug entries for every actual prompt-orchestration state transition only when `DEBUG_STATUS_CHANGES=enable`.
 - **REQ-276**: MUST complete orchestrated session closure when pi lifecycle events expose non-command contexts without `switchSession()`, while keeping the client attached to the original `base-path` session.
 - **REQ-278**: MUST preserve the in-memory prompt workflow state plus pending or active prompt request across switch-triggered `session_shutdown` events until the initiating handler or replacement-session lifecycle hooks complete prompt orchestration.
@@ -229,7 +229,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-206**: MUST derive `worktree-dir` as `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` and `worktree-path` as `<parent-path>/<worktree-dir>/<base-dir>` when worktrees are enabled.
 - **REQ-271**: MUST create one dedicated worktree under `parent-path`, fork the current active session into an execution session file whose header cwd equals `worktree-path`, and switch the active pi CLI session to that file before agent start.
 - **REQ-207**: MUST keep `context-path`, `ctx.cwd`, and `process.cwd()` at `base-path` when worktree creation is disabled.
-- **REQ-208**: MUST restore the original session-backed `base-path`, fast-forward-only merge from `base-path`, delete the worktree plus branch, and preserve the successful worktree execution transcript in the client-visible session after closure.
+- **REQ-208**: MUST restore the original session-backed `base-path`, merge the successful worktree branch from `base-path`, and delete the worktree plus branch after successful closure.
+- **REQ-290**: MUST preserve the successful worktree execution transcript in the restored client-visible session after successful closure.
+- **REQ-291**: MUST detect staged or unstaged `base-path` changes before successful closure merge and execute `git stash`, merge, and `git stash pop` in that order when changes exist.
+- **REQ-292**: MUST complete successful stash-assisted closure without surfacing an error and MUST emit a warning that the restored `base-path` is not clean after merge.
 - **REQ-209**: MUST restore the original session-backed `base-path`, notify the pi CLI of closure failure, and retain the worktree plus branch when orchestrated session closure is interrupted, failed, aborted, or incomplete.
 - **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, and `error`.
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
@@ -239,7 +242,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during `req-<prompt>` preflight.
 - **REQ-227**: MUST transition workflow state to `running` only after required-doc checks, worktree generation, worktree verification, and prompt-session handoff succeed, and MUST make that transition the last slash-command action except logging.
 - **REQ-228**: MUST transition workflow state to `merging` immediately before merge and worktree/branch deletion begin during successful orchestrated session closure.
-- **REQ-229**: MUST transition workflow state to `error` and notify the pi CLI when base-path restoration, fast-forward merge, or worktree/branch deletion verification fails during orchestrated session closure.
+- **REQ-229**: MUST transition workflow state to `error` and notify the pi CLI when base-path restoration, merge, or worktree/branch deletion verification fails during orchestrated session closure.
 - **REQ-230**: MUST transition workflow state to `idle` before the orchestrated session-closure handler returns.
 - **REQ-219**: MUST verify created worktree registration via `git worktree list`, branch presence via `git branch` list, and filesystem path existence before changing the prompt execution path or dispatching a prompt message.
 - **REQ-256**: MUST store `base-path`, `context-path`, `git-path`, `parent-path`, `base-dir`, `worktree-dir`, `worktree-path`, branch name, original session file, and execution session file inside prompt-orchestration runtime state.

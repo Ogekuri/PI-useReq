@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Implements prompt-command preflight and worktree orchestration.
- * @details Centralizes `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, session-backed cwd switching plus verification, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success fast-forward merge finalization with restored-session transcript preservation, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, and filesystem reads and writes.
+ * @details Centralizes `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, session-backed cwd switching plus verification, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success stash-assisted fast-forward merge finalization with restored-session transcript preservation, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, stash-stack mutation, and filesystem reads and writes.
  */
 
 import fs from "node:fs";
@@ -856,6 +856,166 @@ function runCapture(command: string[], cwd: string): ReturnType<typeof spawnSync
 }
 
 /**
+ * @brief Lists tracked `base-path` status rows that require stash-assisted merge handling.
+ * @details Executes `git status --porcelain`, retains only tracked rows whose index or worktree slot reports a change, and excludes untracked or ignored rows because the required `git stash` command does not preserve them. Runtime is dominated by one git subprocess plus O(n) parsing in status-line count. Side effects include process spawning.
+ * @param[in] basePath {string} Restored project base path.
+ * @return {string[]} Tracked status rows requiring stash-assisted merge handling.
+ * @throws {ReqError} Throws when git status cannot be read from `basePath`.
+ * @satisfies REQ-291
+ */
+function listPromptTrackedBasePathChanges(basePath: string): string[] {
+  const statusResult = runCapture(["git", "status", "--porcelain"], basePath);
+  if (statusResult.error || statusResult.status !== 0) {
+    throw new ReqError("ERROR: Unable to inspect base-path changes before merge.", 1);
+  }
+  return statusResult.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line !== "")
+    .filter((line) => {
+      const statusCode = line.slice(0, 2);
+      if (statusCode === "??" || statusCode === "!!") {
+        return false;
+      }
+      const indexStatus = statusCode[0] ?? " ";
+      const worktreeStatus = statusCode[1] ?? " ";
+      return indexStatus !== " " || worktreeStatus !== " ";
+    });
+}
+
+/**
+ * @brief Executes the successful-closure merge sequence from restored `base-path`.
+ * @details Detects tracked staged or unstaged `base-path` changes, wraps the existing fast-forward merge in `git stash` and `git stash pop` when required, preserves the direct merge path when no tracked changes exist, emits a warning-only result after successful local-change restoration, and writes one merge-finalization debug entry when enabled. Runtime is dominated by up to four git subprocesses plus O(n) status parsing. Side effects include stash-stack mutation, branch merge attempts, and optional debug-log writes.
+ * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose branch should be merged.
+ * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
+ * @return {{ mergeAttempted: boolean; mergeSucceeded: boolean; errorMessage?: string; warningMessage?: string }} Merge-attempt facts plus optional warning text.
+ * @satisfies REQ-208, REQ-245, REQ-291, REQ-292
+ */
+function finalizePromptCommandMerge(
+  plan: PromptCommandExecutionPlan,
+  debugOptions?: PromptCommandDebugOptions,
+): {
+  mergeAttempted: boolean;
+  mergeSucceeded: boolean;
+  errorMessage?: string;
+  warningMessage?: string;
+} {
+  const worktreeDir = plan.worktreeDir ?? plan.branchName;
+  const mergeLogInput = {
+    worktree_dir: worktreeDir,
+    branch_name: plan.branchName,
+  };
+  let trackedStatusLines: string[];
+  try {
+    trackedStatusLines = listPromptTrackedBasePathChanges(plan.basePath);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (debugOptions) {
+      logDebugPromptEvent(
+        plan.basePath,
+        debugOptions.config,
+        debugOptions.workflowState,
+        plan.promptName,
+        "merge",
+        mergeLogInput,
+        {
+          success: false,
+          merge_attempted: false,
+          error: errorMessage,
+        },
+        true,
+      );
+    }
+    return {
+      mergeAttempted: false,
+      mergeSucceeded: false,
+      errorMessage,
+    };
+  }
+  const usedStash = trackedStatusLines.length > 0;
+  let stashStatus: number | null | undefined;
+  if (usedStash) {
+    const stashResult = runCapture(["git", "stash"], plan.basePath);
+    stashStatus = stashResult.status;
+    if (stashResult.error || stashResult.status !== 0) {
+      const errorMessage = `ERROR: Unable to stash base-path changes before merge for worktree ${worktreeDir}.`;
+      if (debugOptions) {
+        logDebugPromptEvent(
+          plan.basePath,
+          debugOptions.config,
+          debugOptions.workflowState,
+          plan.promptName,
+          "merge",
+          {
+            ...mergeLogInput,
+            used_stash: true,
+            tracked_change_count: trackedStatusLines.length,
+          },
+          {
+            success: false,
+            merge_attempted: false,
+            error: errorMessage,
+            stash_status: stashStatus,
+          },
+          true,
+        );
+      }
+      return {
+        mergeAttempted: false,
+        mergeSucceeded: false,
+        errorMessage,
+      };
+    }
+  }
+  const mergeResult = runCapture(
+    ["git", "merge", "--ff-only", plan.branchName],
+    plan.basePath,
+  );
+  const mergeSucceeded = !mergeResult.error && mergeResult.status === 0;
+  const errorMessage = mergeSucceeded
+    ? undefined
+    : `ERROR: Fast-forward merge failed for worktree ${worktreeDir}.`;
+  let stashPopStatus: number | null | undefined;
+  let warningMessage: string | undefined;
+  if (usedStash) {
+    const stashPopResult = runCapture(["git", "stash", "pop"], plan.basePath);
+    stashPopStatus = stashPopResult.status;
+    if (mergeSucceeded) {
+      warningMessage = "WARNING: Restored base-path changes after merge; base-path is not clean.";
+    }
+  }
+  if (debugOptions) {
+    logDebugPromptEvent(
+      plan.basePath,
+      debugOptions.config,
+      debugOptions.workflowState,
+      plan.promptName,
+      "merge",
+      {
+        ...mergeLogInput,
+        used_stash: usedStash,
+        tracked_change_count: trackedStatusLines.length,
+      },
+      {
+        success: mergeSucceeded,
+        merge_attempted: true,
+        error: errorMessage,
+        warning: warningMessage,
+        stash_status: stashStatus,
+        stash_pop_status: stashPopStatus,
+      },
+      !mergeSucceeded,
+    );
+  }
+  return {
+    mergeAttempted: true,
+    mergeSucceeded,
+    errorMessage,
+    warningMessage,
+  };
+}
+
+/**
  * @brief Stores or clears the prompt-command post-create test hook.
  * @details Enables deterministic simulation of post-create worktree verification failures without altering production control flow. Runtime is O(1). Side effect: mutates module-local test state.
  * @param[in] hook {PromptCommandPostCreateHook | undefined} Optional replacement hook.
@@ -1691,12 +1851,12 @@ export async function abortPromptCommandExecution(
 
 /**
  * @brief Finalizes one matched successful worktree-backed prompt execution.
- * @details Re-verifies persisted execution-session metadata plus worktree artifacts, copies any execution-session transcript records missing from the original session file, restores the original session-backed `base-path`, fast-forward merges the successful worktree branch from `base-path`, deletes the worktree after merge success, and preserves the restored base session across closure failures. Closure intentionally treats `base-path` restoration as authoritative even when pi CLI has already started end-of-session session replacement or other housekeeping that moved the live runtime away from `worktree-path`. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file appends, active-session replacement, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Re-verifies persisted execution-session metadata plus worktree artifacts, copies any execution-session transcript records missing from the original session file, restores the original session-backed `base-path`, executes the stash-assisted fast-forward merge sequence from `base-path`, deletes the worktree after merge success, and preserves the restored base session across closure failures. Closure intentionally treats `base-path` restoration as authoritative even when pi CLI has already started end-of-session session replacement or other housekeeping that moved the live runtime away from `worktree-path`. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file appends, active-session replacement, branch merges, stash-stack mutation, worktree deletion, and optional debug-log writes.
  * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan.
  * @param[in] ctx {PromptCommandSessionContext | undefined} Optional prompt-command context.
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
- * @return {Promise<{ mergeAttempted: boolean; mergeSucceeded: boolean; cleanupSucceeded: boolean; errorMessage?: string; activeContext?: PromptCommandSessionContext }>} Finalization facts plus the last valid active prompt-command context.
- * @satisfies REQ-208, REQ-209, REQ-220, REQ-245, REQ-282
+ * @return {Promise<{ mergeAttempted: boolean; mergeSucceeded: boolean; cleanupSucceeded: boolean; errorMessage?: string; warningMessage?: string; activeContext?: PromptCommandSessionContext }>} Finalization facts plus the last valid active prompt-command context.
+ * @satisfies REQ-208, REQ-209, REQ-220, REQ-245, REQ-282, REQ-291, REQ-292
  */
 export async function finalizePromptCommandExecution(
   plan: PromptCommandExecutionPlan,
@@ -1707,6 +1867,7 @@ export async function finalizePromptCommandExecution(
   mergeSucceeded: boolean;
   cleanupSucceeded: boolean;
   errorMessage?: string;
+  warningMessage?: string;
   activeContext?: PromptCommandSessionContext;
 }> {
   let activeContext = ctx;
@@ -1749,32 +1910,14 @@ export async function finalizePromptCommandExecution(
       activeContext,
     };
   }
-  const mergeResult = runCapture(
-    ["git", "merge", "--ff-only", plan.branchName],
-    plan.basePath,
-  );
-  const mergeSucceeded = !mergeResult.error && mergeResult.status === 0;
-  const errorMessage = mergeSucceeded
-    ? undefined
-    : `ERROR: Fast-forward merge failed for worktree ${plan.worktreeDir}.`;
-  if (debugOptions) {
-    logDebugPromptEvent(
-      plan.basePath,
-      debugOptions.config,
-      debugOptions.workflowState,
-      plan.promptName,
-      "merge",
-      { worktree_dir: plan.worktreeDir, branch_name: plan.branchName },
-      { success: mergeSucceeded, error: errorMessage },
-      !mergeSucceeded,
-    );
-  }
-  if (!mergeSucceeded) {
+  const mergeFinalization = finalizePromptCommandMerge(plan, debugOptions);
+  if (!mergeFinalization.mergeSucceeded) {
     return {
-      mergeAttempted: true,
+      mergeAttempted: mergeFinalization.mergeAttempted,
       mergeSucceeded: false,
       cleanupSucceeded: true,
-      errorMessage,
+      errorMessage: mergeFinalization.errorMessage,
+      warningMessage: mergeFinalization.warningMessage,
       activeContext,
     };
   }
@@ -1788,17 +1931,19 @@ export async function finalizePromptCommandExecution(
     );
   } catch {
     return {
-      mergeAttempted: true,
+      mergeAttempted: mergeFinalization.mergeAttempted,
       mergeSucceeded: true,
       cleanupSucceeded: false,
       errorMessage: `ERROR: Unable to remove worktree or branch ${plan.worktreeDir}.`,
+      warningMessage: mergeFinalization.warningMessage,
       activeContext,
     };
   }
   return {
-    mergeAttempted: true,
+    mergeAttempted: mergeFinalization.mergeAttempted,
     mergeSucceeded: true,
     cleanupSucceeded: true,
+    warningMessage: mergeFinalization.warningMessage,
     activeContext,
   };
 }
