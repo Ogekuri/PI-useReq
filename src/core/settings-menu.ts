@@ -9,7 +9,7 @@ import { Container, SettingsList, Text, type Component, type SettingItem, type S
 
 /**
  * @brief Describes one selectable pi-usereq settings-menu choice.
- * @details Stores the stable action identifier, left-column label, optional label and value tone overrides, optional disabled state, right-column current value, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the stable action identifier, left-column label, optional label and value tone overrides, optional disabled state, right-column current value, optional inline-cycle values, and bottom-line description consumed by the shared settings-menu renderer. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqSettingsMenuChoice {
   id: string;
@@ -18,6 +18,7 @@ export interface PiUsereqSettingsMenuChoice {
   value: string;
   valueTone?: "default" | "dim";
   disabled?: boolean;
+  values?: readonly string[];
   description: string;
 }
 
@@ -35,12 +36,12 @@ export interface PiUsereqSettingsMenuBridge {
 
 /**
  * @brief Describes optional behavior overrides for one settings-menu render.
- * @details Carries the caller-selected initial focus row so menu re-renders can
- * preserve selection after an in-place toggle or value edit. The interface is
- * compile-time only and introduces no runtime cost.
+ * @details Carries the caller-selected initial focus row, the optional dynamic choice supplier used to rebuild dependent rows after inline toggles, and the optional inline-change callback used to persist `SettingsList` value cycles without closing the menu. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqSettingsMenuOptions {
   initialSelectedId?: string;
+  getChoices?: () => PiUsereqSettingsMenuChoice[];
+  onChange?: (choiceId: string, newValue: string) => void;
 }
 
 /**
@@ -162,7 +163,7 @@ function createImmediateSelectionComponent(choiceId: string, done: (value?: stri
 
 /**
  * @brief Builds `SettingsList` items from one menu-choice vector.
- * @details Copies labels, current values, label-tone overrides, value-tone overrides, disabled-state semantics, and descriptions into `SettingItem` records and attaches a submenu that resolves the outer custom UI with the selected choice identifier only for enabled rows. Runtime is O(n) in choice count. No external state is mutated.
+ * @details Copies labels, current values, label-tone overrides, value-tone overrides, disabled-state semantics, inline-cycle values, and descriptions into `SettingItem` records. Non-disabled rows with `values` cycle inline on `Enter` or `Space`, while other non-disabled rows resolve the outer custom UI through the immediate submenu bridge. Runtime is O(n) in choice count. No external state is mutated.
  * @param[in] theme {PiUsereqSettingsTheme} Callback-local pi theme adapter.
  * @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
  * @param[in] done {(value?: string) => void} Outer custom-UI completion callback.
@@ -182,19 +183,49 @@ function buildSettingItems(
     currentValue: choice.valueTone === "dim"
       ? theme.fg("dim", choice.value)
       : choice.value,
-    submenu: choice.disabled
+    values: choice.disabled || choice.values === undefined
+      ? undefined
+      : [...choice.values],
+    submenu: choice.disabled || choice.values !== undefined
       ? undefined
       : () => createImmediateSelectionComponent(choice.id, done),
   }));
 }
 
 /**
+ * @brief Writes one best-effort selected row index into a `SettingsList` instance.
+ * @details Uses reflective access so pi-usereq can preserve focus across menu re-renders without depending on the private field at compile time. Runtime is O(1). Side effect: mutates the underlying `SettingsList` selection state when the field exists.
+ * @param[in,out] settingsList {SettingsList} Mutable settings-list instance.
+ * @param[in] selectedIndex {number} Zero-based row index to restore.
+ * @return {void} No return value.
+ */
+function setSettingsListSelectedIndex(
+  settingsList: SettingsList,
+  selectedIndex: number,
+): void {
+  Reflect.set(settingsList as object, "selectedIndex", selectedIndex);
+}
+
+/**
+ * @brief Reads the current selected row index from a `SettingsList` instance.
+ * @details Uses reflective access so pi-usereq can report the current focused row through the offline bridge without referencing the private field in the static type system. Runtime is O(1). No external state is mutated.
+ * @param[in] settingsList {SettingsList} Settings-list instance.
+ * @return {number | undefined} Zero-based selected row index when available.
+ */
+function getSettingsListSelectedIndex(
+  settingsList: SettingsList,
+): number | undefined {
+  const selectedIndex = Reflect.get(settingsList as object, "selectedIndex");
+  return typeof selectedIndex === "number" ? selectedIndex : undefined;
+}
+
+/**
  * @brief Renders one shared pi-usereq settings menu and resolves the selected action.
- * @details Uses `ctx.ui.custom(...)` plus `SettingsList` so every configuration menu shares pi.dev styling, right-aligned current values, circular scrolling, bottom-line descriptions, and optional disabled rows. The returned custom component also exposes an offline bridge for deterministic tests and debug harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
+ * @details Uses `ctx.ui.custom(...)` plus `SettingsList` so every configuration menu shares pi.dev styling, right-aligned current values, circular scrolling, bottom-line descriptions, optional disabled rows, and inline toggle cycles that do not close the menu. When callers provide `getChoices(...)`, dependent rows are rebuilt after inline changes while preserving focus on the changed row. The returned custom component also exposes an offline bridge for deterministic tests and debug harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering and caller-owned inline-change callbacks.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] title {string} Menu title displayed in the heading and offline bridge.
  * @param[in] choices {PiUsereqSettingsMenuChoice[]} Ordered menu-choice vector.
- * @param[in] options {PiUsereqSettingsMenuOptions | undefined} Optional initial-focus override.
+ * @param[in] options {PiUsereqSettingsMenuOptions | undefined} Optional initial-focus override plus inline-change behavior.
  * @return {Promise<string | undefined>} Selected choice identifier or `undefined` when cancelled.
  * @satisfies REQ-151, REQ-152, REQ-153, REQ-154, REQ-156, REQ-192
  */
@@ -211,22 +242,43 @@ export async function showPiUsereqSettingsMenu(
       0,
       0,
     );
-    const settingsList = new SettingsList(
-      buildSettingItems(theme, choices, done),
-      Math.min(Math.max(choices.length, 1), 12),
-      buildPiUsereqSettingsListTheme(theme),
-      () => undefined,
-      () => done(undefined),
-    );
-    const initialSelectedIndex = options.initialSelectedId === undefined
-      ? 0
-      : choices.findIndex((choice) => choice.id === options.initialSelectedId);
-    if (initialSelectedIndex >= 0) {
-      (settingsList as SettingsList & { selectedIndex: number }).selectedIndex = initialSelectedIndex;
-    }
-    container.addChild(titleText);
-    container.addChild(new Text("", 0, 0));
-    container.addChild(settingsList);
+    const spacer = new Text("", 0, 0);
+    let currentChoices = options.getChoices?.() ?? choices;
+    let settingsList: SettingsList;
+
+    const buildSettingsList = (
+      menuChoices: PiUsereqSettingsMenuChoice[],
+      selectedChoiceId?: string,
+    ): SettingsList => {
+      const nextSettingsList = new SettingsList(
+        buildSettingItems(theme, menuChoices, done),
+        Math.min(Math.max(menuChoices.length, 1), 12),
+        buildPiUsereqSettingsListTheme(theme),
+        (choiceId, newValue) => {
+          options.onChange?.(choiceId, newValue);
+          rebuildMenu(choiceId);
+        },
+        () => done(undefined),
+      );
+      const initialSelectedIndex = selectedChoiceId === undefined
+        ? 0
+        : menuChoices.findIndex((choice) => choice.id === selectedChoiceId);
+      if (initialSelectedIndex >= 0) {
+        setSettingsListSelectedIndex(nextSettingsList, initialSelectedIndex);
+      }
+      return nextSettingsList;
+    };
+
+    const rebuildMenu = (selectedChoiceId?: string): void => {
+      currentChoices = options.getChoices?.() ?? choices;
+      settingsList = buildSettingsList(currentChoices, selectedChoiceId);
+      container.clear();
+      container.addChild(titleText);
+      container.addChild(spacer);
+      container.addChild(settingsList);
+    };
+
+    rebuildMenu(options.initialSelectedId);
 
     const component: PiUsereqSettingsMenuComponent = {
       render(width: number): string[] {
@@ -242,13 +294,18 @@ export async function showPiUsereqSettingsMenu(
       },
       __piUsereqSettingsMenu: {
         title,
-        choices,
-        selectedChoiceId: initialSelectedIndex >= 0 ? choices[initialSelectedIndex]?.id : undefined,
+        get choices(): PiUsereqSettingsMenuChoice[] {
+          return currentChoices;
+        },
+        get selectedChoiceId(): string | undefined {
+          const selectedIndex = getSettingsListSelectedIndex(settingsList) ?? 0;
+          return currentChoices[selectedIndex]?.id;
+        },
         selectByLabel(label: string): boolean {
-          const choice = choices.find(
+          const choice = currentChoices.find(
             (candidate) => candidate.label === label || candidate.id === label,
           );
-          if (!choice || choice.disabled) {
+          if (!choice) {
             return false;
           }
           done(choice.id);

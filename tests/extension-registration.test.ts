@@ -45,9 +45,11 @@ import {
 } from "../src/core/pi-usereq-tools.js";
 import {
   createPiUsereqStatusController,
+  renderPiUsereqStatus,
   setPiUsereqStatusConfig,
   setPiUsereqWorkflowState,
 } from "../src/core/extension-status.js";
+import { showPiUsereqSettingsMenu } from "../src/core/settings-menu.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
 import { createTempDir, initFixtureRepo } from "./helpers.js";
 
@@ -1501,7 +1503,7 @@ test("configuration menus expose show-config ordering and omit overview or notif
   assert.ok(renderedMenu.includes("disable"));
   assert.doesNotMatch(renderedMenu, /beep:/);
   assert.match(renderedNotificationsMenu, /<dim>Enable pushover/);
-  assert.match(renderedNotificationsMenu, /<dim>off<\/dim>/);
+  assert.match(renderedNotificationsMenu, /<dim>configure user\/token keys first<\/dim>/);
   assert.deepEqual(ctx.__state.selectCalls[1]?.items ?? [], [
     "Enable notification",
     "Notification events",
@@ -1915,6 +1917,101 @@ test("notifications menu preserves focus on toggled and edited rows", async () =
   ]);
   assert.equal(notificationEventCalls[0]?.selectedChoiceId, "notify-on-completed");
   assert.equal(notificationEventCalls[1]?.selectedChoiceId, "notify-on-failed");
+});
+
+/**
+ * @brief Verifies inline toggle rows stay open and preserve selection for confirm keys.
+ * @details Builds one shared settings-menu instance with a primary inline toggle and a dependent secondary row whose disabled styling changes after each toggle. The test proves `space` and `enter` must mutate the selected row in place, rebuild dependent rows without closing the menu, and preserve focus on the toggled row until explicit cancel.
+ * @return {Promise<void>} Promise resolved after the raw-input interaction sequence completes.
+ * @throws {AssertionError} Throws when the menu closes early, loses focus, or fails to rebuild dependent row styling after a toggle.
+ * @satisfies REQ-192, TST-052
+ */
+test("shared settings menu keeps inline toggles focused and open for space and enter", async () => {
+  let primaryEnabled = true;
+  let component:
+    | {
+      handleInput?: (data: string) => void;
+      render: (width: number) => string[];
+    }
+    | undefined;
+  let resolved = false;
+  const changes: string[] = [];
+  const theme = {
+    fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
+    bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
+    bold: (text: string) => `<bold>${text}</bold>`,
+  };
+  const ctx = {
+    ui: {
+      async custom<T>(factory: (tui: { requestRender: () => void }, customTheme: typeof theme, keybindings: Record<string, never>, done: (value?: T) => void) => unknown) {
+        let resolveResult!: (value: T | undefined) => void;
+        const resultPromise = new Promise<T | undefined>((resolve) => {
+          resolveResult = (value?: T) => {
+            resolved = true;
+            resolve(value);
+          };
+        });
+        component = factory(
+          { requestRender: () => undefined },
+          theme,
+          {},
+          (value?: T) => resolveResult(value),
+        ) as typeof component;
+        return resultPromise;
+      },
+    },
+  } as any;
+  const buildChoices = () => [
+    {
+      id: "primary",
+      label: "Primary",
+      value: primaryEnabled ? "enable" : "disable",
+      values: ["enable", "disable"],
+      description: "Toggle the primary row in place.",
+    },
+    {
+      id: "secondary",
+      label: "Secondary",
+      labelTone: primaryEnabled ? undefined : "dim",
+      value: primaryEnabled ? "editable" : "locked",
+      valueTone: primaryEnabled ? undefined : "dim",
+      disabled: !primaryEnabled,
+      description: "Dependent row that must rebuild without closing the menu.",
+    },
+  ] as any;
+
+  const resultPromise = showPiUsereqSettingsMenu(
+    ctx,
+    "Toggle menu",
+    buildChoices(),
+    {
+      getChoices: buildChoices,
+      onChange: (choiceId: string, newValue: string) => {
+        if (choiceId === "primary") {
+          primaryEnabled = newValue === "enable";
+          changes.push(newValue);
+        }
+      },
+    } as any,
+  );
+
+  assert.ok(component);
+  assert.doesNotMatch(component.render(120).join("\n"), /<dim>Secondary/);
+
+  component.handleInput?.(" ");
+  await Promise.resolve();
+  assert.deepEqual(changes, ["disable"]);
+  assert.equal(resolved, false);
+  assert.match(component.render(120).join("\n"), /<dim>Secondary/);
+
+  component.handleInput?.("\r");
+  await Promise.resolve();
+  assert.deepEqual(changes, ["disable", "enable"]);
+  assert.equal(resolved, false);
+  assert.doesNotMatch(component.render(120).join("\n"), /<dim>Secondary/);
+
+  component.handleInput?.("\x1b");
+  assert.equal(await resultPromise, undefined);
 });
 
 test("notifications reset defaults preserves non-notification settings", async () => {
@@ -3997,6 +4094,58 @@ test("session_start renders the 0-percent context icon when context usage is emp
 });
 
 /**
+ * @brief Verifies direct status renders refresh context usage before drawing the footer.
+ * @details Exercises `renderPiUsereqStatus(...)` without going through an intercepted lifecycle hook, then mutates the fake `getContextUsage()` result to simulate a post-compaction context reset. The test proves direct rerender call sites must fetch fresh context usage so the `context:` gauge updates immediately instead of reusing stale controller state.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when a direct render ignores the live `getContextUsage()` snapshot or fails to clear the gauge after context reset.
+ * @satisfies REQ-118, REQ-119, REQ-122, REQ-284
+ */
+test("direct status rerenders refresh the context gauge after context reset", () => {
+  const cwd = createTempDir("pi-usereq-context-direct-render-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const controller = createPiUsereqStatusController();
+  setPiUsereqStatusConfig(controller, getDefaultConfig(cwd));
+  const contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } = {
+    tokens: 910,
+    contextWindow: 1000,
+    percent: 91,
+  };
+  const ctx = createFakeCtx(cwd, { selects: [] }, {
+    getContextUsage: () => ({ ...contextUsage }),
+  });
+
+  renderPiUsereqStatus(controller, ctx);
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      contextFilledCells: 10,
+      contextPercent: 91,
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+    }),
+  );
+
+  contextUsage.tokens = null;
+  contextUsage.percent = null;
+  renderPiUsereqStatus(controller, ctx);
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      contextFilledCells: 0,
+      contextPercent: null,
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+    }),
+  );
+});
+
+/**
  * @brief Verifies stale replacement contexts do not break workflow-state rendering.
  * @details Simulates the guarded pi runtime error thrown when an extension context is accessed after session replacement or reload. The test proves workflow-state updates must preserve internal state while suppressing stale-context render failures instead of surfacing extension errors.
  * @return {void} No return value.
@@ -4662,7 +4811,7 @@ test("notifications menu escapes pushover text and locks pushover enablement unt
   const renderedNotificationsMenu = (ctx.__state.customRenderLines[2] ?? []).join("\n");
   assert.match(renderedNotificationsMenu, /first line\\nsecond line/);
   assert.match(renderedNotificationsMenu, /<dim>Enable pushover/);
-  assert.match(renderedNotificationsMenu, /<dim>off<\/dim>/);
+  assert.match(renderedNotificationsMenu, /<dim>configure user\/token keys first<\/dim>/);
 });
 
 test("prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates", async () => {

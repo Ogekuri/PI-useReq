@@ -1383,6 +1383,7 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
       id: "debug-enabled",
       label: "Debug",
       value: config.DEBUG_ENABLED,
+      values: ["enable", "disable"],
       description: "Enable or disable all debug logging behavior and unlock the remaining Debug rows.",
     },
     buildDebugMenuChoice(
@@ -1408,6 +1409,7 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         id: "debug-status-changes",
         label: "Status changes",
         value: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES),
+        values: ["enable", "disable"],
         description: "Enable or disable `workflow_state` debug entries for prompt-orchestration transitions.",
       },
       debugEnabled,
@@ -1417,6 +1419,7 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         id: "debug-workflow-events",
         label: "Workflow events",
         value: normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS),
+        values: ["enable", "disable"],
         description: "Enable or disable dedicated workflow debug entries for activation, restoration, closure, and session-shutdown diagnostics.",
       },
       debugEnabled,
@@ -1426,6 +1429,7 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         id: `debug-tool:${toolName}`,
         label: toolName,
         value: enabledTools.has(toolName) ? "enable" : "disable",
+        values: ["enable", "disable"],
         description: PI_USEREQ_CUSTOM_TOOL_NAMES.includes(toolName as never)
           ? `Toggle debug logging for custom tool ${toolName}.`
           : `Toggle debug logging for embedded tool ${toolName}.`,
@@ -1437,6 +1441,7 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         id: `debug-prompt:${promptName}`,
         label: promptName,
         value: enabledPrompts.has(promptName) ? "enable" : "disable",
+        values: ["enable", "disable"],
         description: `Toggle prompt-orchestration debug logging for /${promptName}.`,
       },
       debugEnabled,
@@ -1464,6 +1469,58 @@ async function configureDebugMenu(
   while (true) {
     const choice = await showPiUsereqSettingsMenu(ctx, "Debug", buildDebugMenuChoices(config), {
       initialSelectedId: focusedChoiceId,
+      getChoices: () => buildDebugMenuChoices(config),
+      onChange: (choiceId, newValue) => {
+        if (choiceId === "debug-enabled") {
+          config.DEBUG_ENABLED = newValue === "enable" ? "enable" : "disable";
+          onConfigChange();
+          ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
+          return;
+        }
+        if (choiceId === "debug-status-changes") {
+          config.DEBUG_STATUS_CHANGES = normalizeDebugStatusChanges(newValue);
+          onConfigChange();
+          ctx.ui.notify(`Debug status-change logging ${config.DEBUG_STATUS_CHANGES}`, "info");
+          return;
+        }
+        if (choiceId === "debug-workflow-events") {
+          config.DEBUG_WORKFLOW_EVENTS = normalizeDebugWorkflowEvents(newValue);
+          onConfigChange();
+          ctx.ui.notify(`Debug workflow-event logging ${config.DEBUG_WORKFLOW_EVENTS}`, "info");
+          return;
+        }
+        if (choiceId.startsWith("debug-tool:")) {
+          const toolName = choiceId.slice("debug-tool:".length) as PiUsereqStartupToolName;
+          const enabledTools = new Set(normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS));
+          if (newValue === "enable") {
+            enabledTools.add(toolName);
+          } else {
+            enabledTools.delete(toolName);
+          }
+          config.DEBUG_ENABLED_TOOLS = getDebugToolToggleNames().filter((name) => enabledTools.has(name));
+          onConfigChange();
+          ctx.ui.notify(
+            `${newValue === "enable" ? "Enabled" : "Disabled"} debug logging for ${toolName}`,
+            "info",
+          );
+          return;
+        }
+        if (choiceId.startsWith("debug-prompt:")) {
+          const promptName = choiceId.slice("debug-prompt:".length) as (typeof DEBUG_PROMPT_NAMES)[number];
+          const enabledPrompts = new Set(normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS));
+          if (newValue === "enable") {
+            enabledPrompts.add(promptName);
+          } else {
+            enabledPrompts.delete(promptName);
+          }
+          config.DEBUG_ENABLED_PROMPTS = DEBUG_PROMPT_NAMES.filter((name) => enabledPrompts.has(name));
+          onConfigChange();
+          ctx.ui.notify(
+            `${newValue === "enable" ? "Enabled" : "Disabled"} debug logging for ${promptName}`,
+            "info",
+          );
+        }
+      },
     });
     if (!choice) {
       return;
@@ -1806,6 +1863,7 @@ function buildPiNotifyEventMenuChoices(
       id: eventMenu.keys[row.eventId],
       label: row.label,
       value: config[eventMenu.keys[row.eventId]] ? "on" : "off",
+      values: ["on", "off"],
       description: `${eventMenu.systemLabel}: ${row.description}`,
     })),
     ...buildTerminalSettingsMenuChoices({
@@ -1870,7 +1928,23 @@ async function configurePiNotifyEventMenu(
       ctx,
       eventMenu.submenuTitle,
       buildPiNotifyEventMenuChoices(config, eventMenu),
-      { initialSelectedId: focusedChoiceId },
+      {
+        initialSelectedId: focusedChoiceId,
+        getChoices: () => buildPiNotifyEventMenuChoices(config, eventMenu),
+        onChange: (choiceId, newValue) => {
+          const enabled = newValue === "on";
+          config[choiceId as PiNotifyEventBooleanConfigKey] = enabled;
+          onConfigChange();
+          const eventLabel = resolvePiNotifyEventLabel(
+            choiceId as PiNotifyEventBooleanConfigKey,
+            eventMenu,
+          );
+          ctx.ui.notify(
+            `${eventMenu.systemLabel} ${eventLabel} ${enabled ? "enabled" : "disabled"}`,
+            "info",
+          );
+        },
+      },
     );
     if (!choice) {
       return;
@@ -1922,7 +1996,7 @@ async function configurePiNotifyEventMenu(
 
 /**
  * @brief Builds the direct Pushover rows rendered inside `Notifications`.
- * @details Serializes the global enable flag, shared-event submenu launcher, priority, title, text, and credential rows into right-valued menu items appended after the sound-command rows, dims and disables the enable row until both credentials are populated, and escapes control characters for the single-line `Pushover text` value. Runtime is O(n) in the rendered text-template length. No external state is mutated.
+ * @details Serializes the global enable flag, shared-event submenu launcher, priority, title, text, and credential rows into right-valued menu items appended after the sound-command rows, dims and disables the enable row until both credentials are populated, renders the locked value as `configure user/token keys first`, and escapes control characters for the single-line `Pushover text` value. Runtime is O(n) in the rendered text-template length. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered direct Pushover rows.
  * @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-198, REQ-234, REQ-235
@@ -1934,8 +2008,9 @@ function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuCh
       id: "notify-pushover-enabled",
       label: "Enable pushover",
       labelTone: pushoverCredentialsReady ? undefined : "dim",
-      value: pushoverCredentialsReady ? formatPiNotifyPushoverStatus(config) : "off",
+      value: pushoverCredentialsReady ? formatPiNotifyPushoverStatus(config) : "configure user/token keys first",
       valueTone: pushoverCredentialsReady ? undefined : "dim",
+      values: ["on", "off"],
       disabled: !pushoverCredentialsReady,
       description: pushoverCredentialsReady
         ? "Enable or disable all Pushover delivery globally."
@@ -2029,6 +2104,7 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       id: "notify-enabled",
       label: "Enable notification",
       value: formatPiNotifyStatus(config),
+      values: ["on", "off"],
       description: "Enable or disable command-notify delivery globally.",
     },
     buildPiNotifyEventLauncherChoice(
@@ -2152,7 +2228,27 @@ async function configurePiNotifyMenu(
       ctx,
       "Notifications",
       buildPiNotifyMenuChoices(config),
-      { initialSelectedId: focusedChoiceId },
+      {
+        initialSelectedId: focusedChoiceId,
+        getChoices: () => buildPiNotifyMenuChoices(config),
+        onChange: (choiceId, newValue) => {
+          if (choiceId === "notify-enabled" || choiceId === "notify-pushover-enabled") {
+            if (choiceId === "notify-pushover-enabled" && !hasPiNotifyPushoverCredentials(config)) {
+              config["notify-pushover-enabled"] = false;
+              ctx.ui.notify("Populate both Pushover credential fields before enabling Pushover", "info");
+              return;
+            }
+            const enabled = newValue === "on";
+            config[choiceId as PiNotifyBooleanConfigKey] = enabled;
+            onConfigChange();
+            const labelMap: Record<string, string> = {
+              "notify-enabled": "Notification",
+              "notify-pushover-enabled": "Pushover",
+            };
+            ctx.ui.notify(`${labelMap[choiceId]} ${enabled ? "enabled" : "disabled"}`, "info");
+          }
+        },
+      },
     );
     if (!choice) {
       return config["notify-sound-toggle-shortcut"] !== originalShortcut;
@@ -2938,6 +3034,7 @@ function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig):
       id: tool.name,
       label: tool.name,
       value: enabledTools.has(tool.name) ? "on" : "off",
+      values: ["on", "off"],
       description: tool.description ?? `Toggle startup activation for ${tool.name}.`,
     })),
     ...buildTerminalSettingsMenuChoices({
@@ -3012,7 +3109,29 @@ async function configurePiUsereqToolsMenu(
     }
 
     if (choice === "enable-tools") {
-      const selectedToolName = await showPiUsereqSettingsMenu(ctx, "Enable tools", buildPiUsereqToolToggleChoices(pi, config));
+      const selectedToolName = await showPiUsereqSettingsMenu(ctx, "Enable tools", buildPiUsereqToolToggleChoices(pi, config), {
+        getChoices: () => buildPiUsereqToolToggleChoices(pi, config),
+        onChange: (toolName, newValue) => {
+          const enabledTools = new Set(getConfiguredEnabledPiUsereqTools(config));
+          if (newValue === "on") {
+            enabledTools.add(toolName as PiUsereqStartupToolName);
+          } else {
+            enabledTools.delete(toolName as PiUsereqStartupToolName);
+          }
+          setConfiguredPiUsereqTools(
+            pi,
+            config,
+            getPiUsereqStartupTools(pi)
+              .map((tool) => tool.name)
+              .filter((currentToolName) => enabledTools.has(currentToolName)),
+          );
+          onConfigChange();
+          ctx.ui.notify(
+            `${newValue === "on" ? "Enabled" : "Disabled"} ${toolName}`,
+            "info",
+          );
+        },
+      });
       if (!selectedToolName) {
         continue;
       }
@@ -3138,6 +3257,7 @@ function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenu
         id: `toggle-static-check-language:${language}`,
         label: language,
         value: languageConfig.enabled === "enable" ? "on" : "off",
+        values: ["on", "off"],
         description: `Toggle static-check execution for ${language}. Configured ${configuredCount} ${suffix}. Supported extensions: ${extensions.join(", ")}.`,
       };
     }),
@@ -3214,6 +3334,19 @@ async function configureStaticCheckMenu(
   while (true) {
     const staticChoice = await showPiUsereqSettingsMenu(ctx, "Language static code checkers", buildStaticCheckMenuChoices(config), {
       initialSelectedId: focusedChoiceId,
+      getChoices: () => buildStaticCheckMenuChoices(config),
+      onChange: (choiceId, newValue) => {
+        if (choiceId.startsWith("toggle-static-check-language:")) {
+          const language = choiceId.slice("toggle-static-check-language:".length);
+          config["static-check"][language] ??= createStaticCheckLanguageConfig([]);
+          config["static-check"][language]!.enabled = newValue === "on" ? "enable" : "disable";
+          onConfigChange();
+          ctx.ui.notify(
+            `${newValue === "on" ? "Enabled" : "Disabled"} static-check for ${language}`,
+            "info",
+          );
+        }
+      },
     });
 
     if (!staticChoice) {
@@ -3380,6 +3513,7 @@ function buildPiUsereqMenuChoices(
       id: "auto-git-commit",
       label: "Auto git commit",
       value: config.AUTO_GIT_COMMIT,
+      values: ["enable", "disable"],
       description: "Select bundled `git_commit.md` or `git_read-only.md` for `%%COMMIT%%`; disabling also forces prompt-command worktrees off.",
     },
     {
@@ -3388,6 +3522,8 @@ function buildPiUsereqMenuChoices(
       labelTone: autoGitCommitDisabled ? "dim" : undefined,
       value: effectiveGitWorktreeEnabled,
       valueTone: autoGitCommitDisabled ? "dim" : undefined,
+      values: ["enable", "disable"],
+      disabled: autoGitCommitDisabled,
       description: autoGitCommitDisabled
         ? "Forced to `disable` while `Auto git commit` is disabled."
         : "Enable or disable prompt-command worktree orchestration.",
@@ -3520,7 +3656,36 @@ async function configurePiUsereq(
       ctx,
       "pi-usereq",
       buildPiUsereqMenuChoices(ctx.cwd, config),
-      { initialSelectedId: focusedChoiceId },
+      {
+        initialSelectedId: focusedChoiceId,
+        getChoices: () => buildPiUsereqMenuChoices(ctx.cwd, config),
+        onChange: (choiceId, newValue) => {
+          if (choiceId === "auto-git-commit") {
+            config.AUTO_GIT_COMMIT = newValue === "enable" ? "enable" : "disable";
+            if (config.AUTO_GIT_COMMIT === "disable") {
+              config.GIT_WORKTREE_ENABLED = "disable";
+              persistConfigChange();
+              ctx.ui.notify("Auto git commit disabled; Git worktree forced off", "info");
+            } else {
+              persistConfigChange();
+              ctx.ui.notify("Auto git commit enabled", "info");
+            }
+            return;
+          }
+          if (choiceId === "git-worktree-enabled") {
+            if (config.AUTO_GIT_COMMIT === "disable") {
+              ctx.ui.notify("Git worktree is locked while Auto git commit is disabled", "info");
+              return;
+            }
+            config.GIT_WORKTREE_ENABLED = newValue === "enable" ? "enable" : "disable";
+            persistConfigChange();
+            ctx.ui.notify(
+              `Git worktree ${resolveEffectiveGitWorktreeEnabled(config.AUTO_GIT_COMMIT, config.GIT_WORKTREE_ENABLED) === "enable" ? "enabled" : "disabled"}`,
+              "info",
+            );
+          }
+        },
+      },
     );
     if (!choice) {
       if (config["notify-sound-toggle-shortcut"] !== initialShortcut) {

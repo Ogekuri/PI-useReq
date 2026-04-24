@@ -670,11 +670,11 @@ export function setPiUsereqStatusConfig(
 
 /**
  * @brief Renders the current pi-usereq status bar into the active UI context.
- * @details Updates the controller's latest context pointer and writes the single-line status text only when configuration is available, including the active branch field and documented icon-based context gauge. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1) plus git execution for branch refresh. Side effect: mutates `ctx.ui` status when the context is still active.
+ * @details Updates the controller's latest context pointer, refreshes the live `getContextUsage()` snapshot for direct render call sites that do not pass through `updateExtensionStatus(...)`, and writes the single-line status text only when configuration is available, including the active branch field and documented icon-based context gauge. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1) plus git execution for branch refresh. Side effect: mutates `controller.state.contextUsage` and `ctx.ui` status when the context is still active.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-159, REQ-180, REQ-233, REQ-280, REQ-283, REQ-284
+ * @satisfies REQ-118, REQ-119, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-159, REQ-180, REQ-233, REQ-280, REQ-283, REQ-284
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,
@@ -685,6 +685,7 @@ export function renderPiUsereqStatus(
     return;
   }
   try {
+    refreshContextUsage(controller.state, ctx);
     const theme = createStatusThemeAdapter(ctx.ui.theme as RawStatusTheme);
     const branchName = resolveStatusBranchValue(ctx);
     ctx.ui.setStatus(
