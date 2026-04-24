@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.59"
+version: "0.0.60"
 date: "2026-04-24"
 author: "OpenAI Codex"
 scope:
@@ -42,7 +42,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ### 2.1 Project Functions
 - **PRJ-001**: MUST expose prompt commands that render bundled prompt templates with configuration-derived path substitutions and internal tool-reference adaptation.
-- **PRJ-002**: MUST expose CLI and agent-tool interfaces for token counting, references generation, compression, construct search, and static-check execution on explicit files or configured project sources.
+- **PRJ-002**: MUST expose CLI and agent-tool interfaces for token counting, source summarization, compression, construct search, and static-check execution on explicit files or configured project sources.
 - **PRJ-003**: MUST provide an interactive pi configuration surface for project paths, git automation, static-check entries, active-tool enablement, notifications, and debug logging controls.
 - **PRJ-004**: MUST provide slash-command-owned git validation plus configurable-prefix prompt-command worktree naming, creation, deletion, merge, and cleanup using runtime project and git paths.
 - **PRJ-005**: MUST install bundled prompts, git execution instructions, documentation templates, and guidelines under the extension installation path and expose them through shared runtime path context.
@@ -93,8 +93,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-211**: MUST replace `%%PROMPT%%` with the current prompt name without the `req-` prefix when rendering bundled prompts and bundled commit instructions.
 - **REQ-213**: MUST replace prompt token `%%COMMIT%%` with rendered `<installation-path>/resources/instructions/git_commit.md` when `AUTO_GIT_COMMIT=enable`, and with rendered `<installation-path>/resources/instructions/git_read-only.md` when `AUTO_GIT_COMMIT=disable`.
 - **REQ-214**: MUST preprocess bundled `git_commit.md` and `git_read-only.md` with the same runtime token-replacement rules used for prompts before injecting them through `%%COMMIT%%`.
-- **REQ-005**: MUST expose `files-tokens`, `files-references`, `files-compress`, and `files-search` only through agent-tool registration.
-- **REQ-044**: MUST expose `references`, `compress`, `search`, `tokens`, `files-static-check`, and `static-check` only through agent-tool registration.
+- **REQ-005**: MUST expose `files-tokens`, `files-summarize`, `files-compress`, and `files-search` only through agent-tool registration.
+- **REQ-044**: MUST expose `summarize`, `compress`, `search`, `tokens`, `files-static-check`, and `static-check` only through agent-tool registration.
 - **REQ-046**: MUST implement a recording extension API supporting `registerCommand`, `registerTool`, `on`, `getAllTools`, `getActiveTools`, `setActiveTools`, and `sendUserMessage`, and preserve stable registration order in serialized snapshots.
 - **REQ-047**: MUST implement a recording command context UI supporting `select`, `input`, `notify`, `setStatus`, and `setEditorText`, and serialize queued inputs plus emitted UI side effects.
 - **REQ-048**: MUST load the target extension via its default export, invoke it as a black box, and execute offline replays only through registered `session_start`, command, and tool handlers.
@@ -139,7 +139,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-231**: MUST order non-`files-*` custom-tool toggles alphabetically, append `files-*` custom-tool toggles alphabetically, and place default-disabled custom-tool toggles after default-enabled custom-tool toggles inside each custom subgroup.
 - **REQ-232**: MUST order embedded-tool toggles alphabetically and place default-disabled embedded-tool toggles after default-enabled embedded-tool toggles.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls`.
-- **REQ-064**: MUST default `files-tokens`, `files-references`, `files-compress`, `files-search`, `references`, `compress`, `search`, `tokens`, `files-static-check`, `static-check`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
+- **REQ-064**: MUST default `files-tokens`, `files-summarize`, `files-compress`, `files-search`, `summarize`, `compress`, `search`, `tokens`, `files-static-check`, `static-check`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted project configuration.
 - **REQ-067**: MUST send every rendered `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that sends the rendered prompt through the forked execution session after the worktree switch by using only the replacement-session context for post-switch session-bound operations.
@@ -219,7 +219,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-199**: MUST render `%%RESULT%%` as `successed`, `aborted`, or `failed` for completed, interrupted, and failed prompt-end outcomes.
 - **REQ-200**: MUST run slash-command-owned git validation immediately after the `idle` gate at the start of every `req-<prompt>` command and abort before prompt dispatch on failure.
 - **REQ-201**: MUST require `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` before `analyze`, `change`, `check`, `cover`, `fix`, `flowchart`, `new`, `readme`, `recreate`, `refactor`, and `renumber`.
-- **REQ-202**: MUST require `REQUIREMENTS.md` before `implement` and `references`, and MUST skip required-doc prechecks for `create`, `workflow`, and `write`.
+- **REQ-202**: MUST require `REQUIREMENTS.md` before `implement` and `req-references`, and MUST skip required-doc prechecks for `create`, `workflow`, and `write`.
 - **REQ-203**: MUST abort a `req-<prompt>` command before worktree creation and prompt dispatch when any prompt-required doc is missing and surface the missing canonical path plus remediation prompt command.
 - **REQ-212**: MUST persist `AUTO_GIT_COMMIT` with allowed values `enable` and `disable`, defaulting to `enable`.
 - **REQ-204**: MUST persist `GIT_WORKTREE_ENABLED` with allowed values `enable` and `disable`, defaulting to `enable`.
@@ -255,10 +255,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-217**: MUST reset `⚑` plus `⌛︎` only during `session_start` with reason `startup` or `reload`.
 - **REQ-173**: MUST optimize every affected agent-tool response by reusing Python-compatible monolithic renderer structure, preserving source-leading tabs in source-derived text, and omitting mirrored JSON bodies, duplicate facts, and caller-known request echoes.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` return the Python-compatible pack-summary text through `content[0].text`.
-- **REQ-011**: MUST make `files-references` analyze supported source files and return the Python-compatible references markdown through `content[0].text`.
+- **REQ-011**: MUST make `files-summarize` analyze supported source files and return the Python-compatible summary markdown through `content[0].text`.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving full indentation for Python, Haskell, and Elixir, preserving leading-tab indentation for other languages, and optionally preserving original line numbers.
 - **REQ-013**: MUST search explicit files by tag filter and name regex, then return Python-compatible markdown matches with signatures, line ranges, Doxygen bullets, and stripped code excerpts.
-- **REQ-014**: MUST make `references` scan configured `src-dir` files and return the Python-compatible file-structure-plus-references markdown through `content[0].text`.
+- **REQ-014**: MUST make `summarize` scan configured `src-dir` files and return the Python-compatible file-structure-plus-summary markdown through `content[0].text`.
 - **REQ-015**: MUST make CLI project-scope compression scan configured `src-dir` files and emit Python-compatible compressed markdown blocks for every supported file.
 - **REQ-016**: MUST make `find` scan configured `src-dir` files using the requested tag filter and regular expression, then emit Python-compatible markdown matches.
 - **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the `files-tokens` pack-summary text contract, and fail when none exist.
@@ -269,11 +269,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-073**: MUST omit caller-known request echoes, mirrored file tables, and duplicate metrics from `files-tokens` and `tokens` runtime payloads.
 - **REQ-074**: MUST reserve `files-tokens` and `tokens` `details` for execution metadata and MUST NOT mirror content text or derived guidance there.
 - **REQ-075**: MUST surface `files-tokens` and `tokens` skip or read-error observations through `details.execution` diagnostics instead of structured runtime file entries.
-- **REQ-076**: MUST make `files-references` and `references` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
-- **REQ-077**: MUST keep `files-references` markdown aligned to the Python references renderer in section ordering and non-source formatting while preserving leading tabs in source-derived lines.
-- **REQ-078**: MUST prepend project-scope `references` output with the file-structure markdown block before the per-file references markdown.
-- **REQ-079**: MUST omit mirrored JSON structures and request echoes from `files-references` and `references` runtime payloads.
-- **REQ-080**: MUST register `files-references` and `references` with machine-oriented descriptions describing scope, monolithic markdown contract, and stable failure conditions.
+- **REQ-076**: MUST make `files-summarize` and `summarize` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
+- **REQ-077**: MUST keep `files-summarize` markdown aligned to the Python summary renderer in section ordering and non-source formatting while preserving leading tabs in source-derived lines.
+- **REQ-078**: MUST prepend project-scope `summarize` output with the file-structure markdown block before the per-file summary markdown.
+- **REQ-079**: MUST omit mirrored JSON structures and request echoes from `files-summarize` and `summarize` runtime payloads.
+- **REQ-080**: MUST register `files-summarize` and `summarize` with machine-oriented descriptions describing scope, monolithic markdown contract, and stable failure conditions.
 - **REQ-081**: MUST make `files-compress` and `compress` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
 - **REQ-082**: MUST keep `files-compress` and `compress` content aligned to the Python compression renderer in headers, line-range metadata, code fences, and file ordering while preserving leading tabs in retained source lines.
 - **REQ-083**: MUST make `enableLineNumbers` for `files-compress` and `compress` toggle original source line prefixes inside emitted fenced code blocks without changing header or line-range formatting.
@@ -324,12 +324,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-253**: MUST set `static-check.<language>.enabled=enable` whenever guided or CLI `--enable-static-check` entry creation targets that language.
 - **REQ-036**: MUST preserve existing `static-check` entries, append non-duplicate `--enable-static-check` entries in argument order, and treat canonical language, module, cmd, and params as the duplicate identity.
 - **REQ-037**: MUST reject `--enable-static-check` `Command` entries whose executable is unavailable on `PATH` and MUST NOT modify persisted project configuration when validation fails.
-- **REQ-038**: MUST honor `--verbose` only for `files-references`, `files-compress`, `files-find`, `references`, `compress`, and `find`, emitting command progress to stderr while leaving stdout payload format unchanged.
+- **REQ-038**: MUST honor `--verbose` only for `files-summarize`, `files-compress`, `files-find`, `summarize`, `compress`, and `find`, emitting command progress to stderr while leaving stdout payload format unchanged.
 - **REQ-039**: MUST support `--enable-line-numbers` only for `files-compress`, `compress`, `files-find`, and `find`, and MUST leave corresponding outputs unnumbered when the flag is absent.
 - **REQ-040**: MUST store canonical expected CLI result fixtures as UTF-8 text files under `tests/fixtures_attended_results/`, preserving normalized exit code, stdout, and stderr for each archived scenario.
 - **REQ-041**: MUST canonicalize environment-dependent path and timestamp segments in archived and observed CLI results with stable placeholder tokens before exact comparison.
-- **REQ-042**: MUST archive explicit-file scenarios for `files-tokens`, `files-references`, `files-compress`, `files-find`, and `test-static-check` across every file under `tests/fixtures/`.
-- **REQ-043**: MUST archive repository scenarios for `references`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, and `static-check`.
+- **REQ-042**: MUST archive explicit-file scenarios for `files-tokens`, `files-summarize`, `files-compress`, `files-find`, and `test-static-check` across every file under `tests/fixtures/`.
+- **REQ-043**: MUST archive repository scenarios for `summarize`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, and `static-check`.
 - **REQ-138**: MUST make `.github/workflows/release-npm.yml` trigger release automation from pushed tags matched by the existing workflow filter `v[0-9]+.[0-9]+.[0-9]+`.
 - **REQ-139**: MUST skip downstream release work unless `check-branch` confirms the tagged commit is contained in `origin/master`.
 - **REQ-140**: MUST configure Node.js plus npm registry authentication, run `npm ci`, remove manifest `private`, and publish with provenance and public access using `secrets.NPM_TOKEN`.
@@ -354,8 +354,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
 - **TST-002**: MUST verify installed bundled prompt, commit-instruction, template, and guideline resources remain readable from `installation-path`.
 - **TST-060**: MUST verify prompt rendering replaces `%%PROMPT%%` and expands `%%COMMIT%%` from rendered `git_commit.md` or `git_read-only.md` according to `AUTO_GIT_COMMIT`.
-- **TST-003**: MUST verify standalone `files-tokens` outputs match the Python oracle, `--test-static-check` dummy or command outputs match archived fixtures, and `files-references`, `files-compress`, plus `files-find` preserve leading source tabs.
-- **TST-004**: MUST verify project `tokens` outputs match the Python oracle, verify `files-static-check` plus `static-check` against archived fixtures, and verify `references`, `compress`, plus `find` preserve leading source tabs.
+- **TST-003**: MUST verify standalone `files-tokens` outputs match the Python oracle, `--test-static-check` dummy or command outputs match archived fixtures, and `files-summarize`, `files-compress`, plus `files-find` preserve leading source tabs.
+- **TST-004**: MUST verify project `tokens` outputs match the Python oracle, verify `files-static-check` plus `static-check` against archived fixtures, and verify `summarize`, `compress`, plus `find` preserve leading source tabs.
 - **TST-005**: MUST verify the configuration menu saves `docs-dir`, `AUTO_GIT_COMMIT`, `GIT_WORKTREE_ENABLED`, and `GIT_WORKTREE_PREFIX` immediately after each change, preserves toggle ordering, and omits prompt-delivery controls plus `Save and close`.
 - **TST-084**: MUST verify configuration persistence trims trailing `/` and keeps `docs-dir`, `tests-dir`, and `src-dir` relative.
 - **TST-046**: MUST verify `Language static code checkers` omits module selection, raw-spec actions, supported-language reference actions, and hides `Dummy`, `Pylance`, and `Ruff` from user-configurable actions.
@@ -391,8 +391,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-030**: MUST verify pi.dev-aware prompt rendering injects an explicit interface-contract mandate covering `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json`.
 - **TST-087**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/pi-mono` validation when manifest or `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client behavior.
 - **TST-088**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/pi-mono` validation for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
-- **TST-012**: MUST verify TypeScript CLI parity for standalone command-option regressions covering `--files-tokens`, `--files-references`, `--files-compress`, `--files-find`, `--test-static-check`, `--enable-line-numbers`, `--enable-static-check`, and `--verbose`.
-- **TST-013**: MUST verify TypeScript CLI parity for project-scoped command-option regressions covering `--references`, `--compress`, `--find`, `--tokens`, `--files-static-check`, and `--static-check`.
+- **TST-012**: MUST verify TypeScript CLI parity for standalone command-option regressions covering `--files-tokens`, `--files-summarize`, `--files-compress`, `--files-find`, `--test-static-check`, `--enable-line-numbers`, `--enable-static-check`, and `--verbose`.
+- **TST-013**: MUST verify TypeScript CLI parity for project-scoped command-option regressions covering `--summarize`, `--compress`, `--find`, `--tokens`, `--files-static-check`, and `--static-check`.
 - **TST-014**: MUST maintain an executable mapping from each imported command-option regression case to one TypeScript test case identifier and fail verification when any mapped case is missing.
 - **TST-015**: MUST verify archive-backed standalone CLI scenarios load expected results from `tests/fixtures_attended_results/standalone` and compare exact normalized exit code, stdout, and stderr for every file under `tests/fixtures/`.
 - **TST-016**: MUST verify archive-backed repository CLI scenarios load expected results from `tests/fixtures_attended_results/project` and compare exact normalized exit code, stdout, and stderr for the archived command set.
@@ -401,8 +401,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-019**: MUST verify offline harness command and tool replay invoke registered handlers, preserve requested cwd semantics, and capture prompt payloads, tool results, and UI side effects.
 - **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, and `package.json` declares the `debug:ext*` harness scripts.
 - **TST-021**: MUST verify `scripts/pi-usereq-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
-- **TST-022**: MUST verify `files-references` and `references` agent-tool outputs place monolithic references markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
-- **TST-023**: MUST verify harness inspection surfaces `files-references` and `references` descriptions covering scope, monolithic markdown output, and failure details.
+- **TST-022**: MUST verify `files-summarize` and `summarize` agent-tool outputs place monolithic summary markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
+- **TST-023**: MUST verify harness inspection surfaces `files-summarize` and `summarize` descriptions covering scope, monolithic markdown output, and failure details.
 - **TST-024**: MUST verify `files-search` and `search` agent-tool outputs place monolithic search markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
 - **TST-025**: MUST verify harness inspection surfaces `files-search` and `search` descriptions covering parameters, regex semantics, supported tags, monolithic markdown output, and failure details.
 - **TST-026**: MUST verify `files-compress` and `compress` agent-tool outputs place monolithic compression markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
@@ -554,7 +554,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | ID | Evidence |
 | --- | --- |
 | PRJ-001 | `src/index.ts` :: `registerPromptCommands` :: `pi.registerCommand(\`req-${promptName}\`, ...)`; `src/core/prompts.ts` :: `renderPrompt` :: `return adaptPromptForInternalTools(applyReplacements(prompt, replacements));` |
-| PRJ-002 | `src/index.ts` :: `registerAgentTools` :: tool names include `files-tokens`, `references`, `compress`, `search`, `files-static-check`, and `static-check`. |
+| PRJ-002 | `src/index.ts` :: `registerAgentTools` :: tool names include `files-tokens`, `summarize`, `compress`, `search`, `files-static-check`, and `static-check`. |
 | PRJ-003 | `src/index.ts` :: `buildPiUsereqMenuChoices`, `configurePiUsereq`, and `configureDebugMenu` :: expose project paths, git automation, static-check, startup tools, notifications, and debug logging controls. |
 | PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution` :: slash-command-owned git validation plus worktree orchestration remain internal to prompt execution. |
 | PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,templates,guidelines}`. |
@@ -572,11 +572,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ### 8.2 DES Evidence
 | ID | Evidence |
 | --- | --- |
-| DES-001 | `src/cli.ts` :: `parseArgs` and `main` :: parses flags then dispatches with branches such as `runReferences`, `runCompress`, `runSearch`, `runProjectStaticCheck`, and `runStaticCheck`. |
+| DES-001 | `src/cli.ts` :: `parseArgs` and `main` :: parses flags then dispatches with branches such as `runSummarize`, `runCompress`, `runSearch`, `runProjectStaticCheck`, and `runStaticCheck`. |
 | DES-002 | `src/index.ts` :: `piUsereqExtension` :: calls `registerPromptCommands`, `registerToolWrapperCommands`, `registerAgentTools`, `registerConfigCommands`, then installs `pi.on("session_start", ...)`. |
 | DES-003 | `src/core/source-analyzer.ts` :: `class SourceElement`; `SourceAnalyzer.enrich` :: invokes `extractSignatures`, `detectHierarchy`, `extractVisibility`, `extractInheritance`, `extractBodyAnnotations`, and `extractDoxygenFields`. |
 | DES-004 | `src/core/static-check.ts` :: `StaticCheckBase` and `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the modular implementation by module name. |
-| DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runReferences`, `runCompress`, `runSearch`, `runFilesStaticCheck`, and `runProjectStaticCheck`. |
+| DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runFilesSummarize`, `runSummarize`, `runCompress`, `runSearch`, `runFilesStaticCheck`, and `runProjectStaticCheck`. |
 | DES-006 | `src/core/compress.ts` :: `normalizeRetainedLineIndentation`; `src/core/source-analyzer.ts` :: `normalizeSourceLineForExtraction`; `src/core/compress-files.ts` and `src/core/find-constructs.ts` reuse shared markdown emitters with preserved source tabs. |
 | DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags and `origin/master`, publish with npm authentication, and create the GitHub Release. |
 
@@ -614,10 +614,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-161 | `src/core/static-check.ts` :: `dispatchStaticCheckForFile` and `runStaticCheck` :: keep `Dummy` only for existing config entries and the debug driver. |
 | REQ-009 | `src/index.ts` :: `pi.on("session_start", ...)` :: calls `ensureHomeResources()`, `applyConfiguredPiUsereqTools`, and `ctx.ui.setStatus(...)`. |
 | REQ-010 | `src/core/token-counter.ts` :: `new TokenCounter("cl100k_base")`; `formatPackSummary`; `src/core/tool-runner.ts` :: `runFilesTokens` validates files and returns summary plus warnings. |
-| REQ-011 | `src/core/tool-runner.ts` :: `runFilesReferences` :: returns `generateMarkdown(...)`; `src/core/source-analyzer.ts` :: `formatMarkdown` renders source-derived lines with preserved leading tabs. |
+| REQ-011 | `src/core/tool-runner.ts` :: `runFilesSummarize` :: returns `generateMarkdown(...)`; `src/core/source-analyzer.ts` :: `formatMarkdown` renders source-derived lines with preserved leading tabs. |
 | REQ-012 | `src/core/compress.ts` :: `INDENT_SIGNIFICANT`, `normalizeRetainedLineIndentation`, and `compressSourceDetailed` :: preserve full indentation for indentation-significant languages and preserve leading tabs for other languages. |
 | REQ-013 | `src/core/find-constructs.ts` :: `searchConstructsInFiles` and `formatConstruct` :: filters by tags/regex and emits signature, lines, Doxygen bullets, and stripped code with preserved leading tabs. |
-| REQ-014 | `src/core/tool-runner.ts` :: `runReferences` :: prepends file structure and returns `generateMarkdown(...)`; `src/core/source-analyzer.ts` :: `formatMarkdown` preserves source-derived leading tabs. |
+| REQ-014 | `src/core/tool-runner.ts` :: `runSummarize` :: prepends file structure and returns `generateMarkdown(...)`; `src/core/source-analyzer.ts` :: `formatMarkdown` preserves source-derived leading tabs. |
 | REQ-015 | `src/core/tool-runner.ts` :: `runCompress` :: collects configured project files then returns `compressFiles(files, enableLineNumbers, verbose, base)`. |
 | REQ-016 | `src/core/tool-runner.ts` :: `runSearch` :: collects configured project files and executes `searchConstructsInFiles(files, tagFilter, pattern, ...)`. |
 | REQ-017 | `src/core/tool-runner.ts` :: `runTokens` :: `canonicalNames = ["REQUIREMENTS.md", "WORKFLOW.md", "REFERENCES.md"]` and fails if no canonical docs exist. |
@@ -639,8 +639,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | --- | --- |
 | TST-001 | `tests/extension-registration.test.ts` :: `extension registers all required prompt commands, tool wrappers, and agent tools` validates command and tool registration sets. |
 | TST-002 | `tests/prompt-rendering.test.ts` :: `embedded resources are copied ...` and `prompt rendering replaces all dynamic placeholders ...`. |
-| TST-003 | `tests/oracle-standalone.test.ts` :: preserves Python-oracle coverage for non-tab-sensitive fixtures, asserts Go-fixture tab preservation for `files-references`, `files-compress`, and `files-find`, and keeps archived `test-static-check` coverage. |
-| TST-004 | `tests/oracle-project.test.ts` :: preserves Python-oracle coverage for non-tab-sensitive project fixtures, asserts Go-source tab preservation for `references`, `compress`, and `find`, and keeps archived static-check coverage. |
+| TST-003 | `tests/oracle-standalone.test.ts` :: preserves Python-oracle coverage for non-tab-sensitive fixtures, asserts Go-fixture tab preservation for `files-summarize`, `files-compress`, and `files-find`, and keeps archived `test-static-check` coverage. |
+| TST-004 | `tests/oracle-project.test.ts` :: preserves Python-oracle coverage for non-tab-sensitive project fixtures, asserts Go-source tab preservation for `summarize`, `compress`, and `find`, and keeps archived static-check coverage. |
 | TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and `configuration menu can add guided static-check entries ...`. |
 | TST-046 | `tests/extension-registration.test.ts` :: `configuration menu hides removed static-check modules from user-facing actions`. |
 | TST-073 | `tests/extension-registration.test.ts` :: `debug menu dims locked rows and persists debug settings with focus-preserving re-renders` validates `DEBUG_WORKFLOW_EVENTS` alongside the existing Debug fields. |
@@ -654,8 +654,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
 | TST-009 | `package.json` :: `"type": "module"`, `"pi": { "extensions": ["./src/index.ts"] }`, and `"scripts"` entries for `test`, `test:watch`, and `cli`. |
 | TST-010 | `tsconfig.json` :: `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"strict": true`, `"noEmit": true`, and `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
-| TST-022 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-references` and `references` monolithic-output tests. |
-| TST-023 | `tests/extension-registration.test.ts` :: `reference tools register agent-oriented descriptions and schema details`. |
+| TST-022 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-summarize` and `summarize` monolithic-output tests. |
+| TST-023 | `tests/extension-registration.test.ts` :: `summary tools register agent-oriented descriptions and schema details`. |
 | TST-024 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-search` and `search` monolithic-output tests. |
 | TST-026 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-compress` and `compress` monolithic-output tests. |
 | TST-039 | `tests/release-workflow.test.ts` :: workflow-content assertions cover semver gating, `origin/master` containment, npm publication, and GitHub release generation. |

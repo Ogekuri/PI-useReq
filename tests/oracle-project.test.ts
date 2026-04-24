@@ -35,7 +35,7 @@ test("project-scan commands match the Python oracle on a git-backed repository w
     fs.rmSync(projectBase, { recursive: true, force: true });
   });
 
-  await t.test("references", () => compareCli(["--references"], projectBase));
+  await t.test("summarize", () => compareCli(["--summarize"], projectBase));
   await t.test("compress", () => compareCli(["--compress"], projectBase));
   await t.test("compress with line numbers", () => compareCli(["--compress", "--enable-line-numbers"], projectBase));
   await t.test("find", () => {
@@ -53,9 +53,9 @@ test("project-scan source extraction preserves leading tabs for Go sources", (t)
     fs.rmSync(projectBase, { recursive: true, force: true });
   });
 
-  const references = runNodeCli(["--references"], projectBase);
-  assert.equal(references.status, 0, references.stderr);
-  assert.match(references.stdout, /\tvar wg sync\.WaitGroup/);
+  const summarize = runNodeCli(["--summarize"], projectBase);
+  assert.equal(summarize.status, 0, summarize.stderr);
+  assert.match(summarize.stdout, /\tvar wg sync\.WaitGroup/);
 
   const compress = runNodeCli(["--compress", "--enable-line-numbers"], projectBase);
   assert.equal(compress.status, 0, compress.stderr);

@@ -31,8 +31,8 @@ test("standalone command outputs match the Python oracle for fixtures without pr
     if (fileName === TAB_SENSITIVE_FIXTURE_NAME) {
       continue;
     }
-    await t.test(`files-references ${fileName}`, () => {
-      compareCli(["--files-references", fixture]);
+    await t.test(`files-summarize ${fileName}`, () => {
+      compareCli(["--files-summarize", fixture]);
     });
     await t.test(`files-compress ${fileName}`, () => {
       compareCli(["--files-compress", fixture]);
@@ -54,9 +54,9 @@ test("standalone source extraction preserves leading tabs for the Go fixture", (
   assert.ok(fixture, `missing ${TAB_SENSITIVE_FIXTURE_NAME}`);
   const cwd = path.dirname(fixture);
 
-  const references = runNodeCli(["--files-references", fixture], cwd);
-  assert.equal(references.status, 0, references.stderr);
-  assert.match(references.stdout, /\tvar wg sync\.WaitGroup/);
+  const summarize = runNodeCli(["--files-summarize", fixture], cwd);
+  assert.equal(summarize.status, 0, summarize.stderr);
+  assert.match(summarize.stdout, /\tvar wg sync\.WaitGroup/);
 
   const compress = runNodeCli(["--files-compress", fixture, "--enable-line-numbers"], cwd);
   assert.equal(compress.status, 0, compress.stderr);

@@ -10,10 +10,10 @@
  */
 export const PI_USEREQ_CUSTOM_TOOL_NAMES = [
   "files-tokens",
-  "files-references",
+  "files-summarize",
   "files-compress",
   "files-search",
-  "references",
+  "summarize",
   "compress",
   "search",
   "tokens",
@@ -51,10 +51,10 @@ export const PI_USEREQ_STARTUP_TOOL_NAMES = [
  */
 export const PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES = [
   "files-tokens",
-  "files-references",
+  "files-summarize",
   "files-compress",
   "files-search",
-  "references",
+  "summarize",
   "compress",
   "search",
   "tokens",

@@ -239,15 +239,15 @@ export function runFilesTokens(files: string[]): ToolResult {
 }
 
 /**
- * @brief Generates the monolithic references markdown for explicit files.
- * @details Delegates to `generateMarkdown(...)`, keeps output paths relative to the caller cwd, and returns the Python-compatible markdown document through stdout. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @brief Generates the monolithic summary markdown for explicit files.
+ * @details Delegates to `generateMarkdown(...)`, keeps output paths relative to the caller cwd, and returns the Python-compatible summary markdown document through stdout. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] files {string[]} Explicit file paths.
  * @param[in] cwd {string} Base directory used for relative output paths. Defaults to `process.cwd()`.
  * @param[in] verbose {boolean} When `true`, emit per-file progress diagnostics to stderr.
  * @return {ToolResult} Successful tool result containing monolithic markdown.
  * @satisfies REQ-011, REQ-076, REQ-077, REQ-078, REQ-079
  */
-export function runFilesReferences(files: string[], cwd = process.cwd(), verbose = false): ToolResult {
+export function runFilesSummarize(files: string[], cwd = process.cwd(), verbose = false): ToolResult {
   try {
     return ok(`${generateMarkdown(files, verbose, cwd)}\n`);
   } catch (error) {
@@ -286,8 +286,8 @@ export function runFilesSearch(argsList: string[], enableLineNumbers = false, ve
 }
 
 /**
- * @brief Generates the monolithic references markdown for configured source directories.
- * @details Resolves the project base, collects configured source files, prepends the repository file-structure markdown block, and returns the Python-compatible references document through stdout. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+ * @brief Generates the monolithic summary markdown for configured source directories.
+ * @details Resolves the project base, collects configured source files, prepends the repository file-structure markdown block, and returns the Python-compatible summary document through stdout. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
@@ -295,7 +295,7 @@ export function runFilesSearch(argsList: string[], enableLineNumbers = false, ve
  * @throws {ReqError} Throws when no source files are found or no file can be analyzed.
  * @satisfies REQ-014, REQ-076, REQ-077, REQ-078, REQ-079
  */
-export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult {
+export function runSummarize(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult {
   const [base, srcDirs] = resolveProjectSrcDirs(projectBase, config);
   const files = collectSourceFiles(srcDirs, base);
   if (files.length === 0) fail("Error: no source files found in configured directories.", 1);

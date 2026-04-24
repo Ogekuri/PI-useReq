@@ -260,10 +260,10 @@
   - update requirements, workflow, and references for the structured compression contract
   - add structured compression payload generation with line, symbol, and Doxygen metadata
   - keep CLI markdown compression output while tool responses and debug examples use JSON
-- emit agent-oriented JSON for reference tools [useReq] *(references)*
-  - update requirements, workflow, and references docs for structured reference payloads
-  - add structured Doxygen and symbol JSON extraction for files-references and references
-  - refresh targeted tests and archived reference fixtures
+- emit agent-oriented JSON for summary tools [useReq] *(summarize)*
+  - update requirements, workflow, and references docs for structured summary payloads
+  - add structured Doxygen and symbol JSON extraction for files-summarize and summarize
+  - refresh targeted tests and archived summary fixtures
 - optimize token tool JSON payloads for agents [useReq] *(token-counter)*
   - update requirements for agent-optimized files-tokens and tokens payloads
   - restructure token payloads with direct-access metrics and guidance sections

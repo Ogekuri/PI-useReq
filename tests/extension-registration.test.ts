@@ -797,10 +797,10 @@ test("extension registers prompt and config commands while exposing tool capabil
 
   for (const name of [
     "files-tokens",
-    "files-references",
+    "files-summarize",
     "files-compress",
     "files-search",
-    "references",
+    "summarize",
     "compress",
     "search",
     "tokens",
@@ -815,10 +815,10 @@ test("extension registers prompt and config commands while exposing tool capabil
   const toolNames = pi.tools.map((tool: RegisteredTool) => tool.name).sort();
   for (const name of [
     "files-tokens",
-    "files-references",
+    "files-summarize",
     "files-compress",
     "files-search",
-    "references",
+    "summarize",
     "compress",
     "search",
     "tokens",
@@ -847,24 +847,24 @@ test("token tools register agent-oriented descriptions and schema details", () =
   assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic pack-summary text/);
 });
 
-test("reference tools register agent-oriented descriptions and schema details", () => {
+test("summary tools register agent-oriented descriptions and schema details", () => {
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  const filesReferences = pi.tools.find((tool: RegisteredTool) => tool.name === "files-references");
-  const references = pi.tools.find((tool: RegisteredTool) => tool.name === "references");
-  assert.ok(filesReferences, "missing files-references tool");
-  assert.ok(references, "missing references tool");
+  const filesSummarize = pi.tools.find((tool: RegisteredTool) => tool.name === "files-summarize");
+  const summarize = pi.tools.find((tool: RegisteredTool) => tool.name === "summarize");
+  assert.ok(filesSummarize, "missing files-summarize tool");
+  assert.ok(summarize, "missing summarize tool");
 
-  assert.match(filesReferences.description ?? "", /monolithic references markdown report/);
-  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
-  assert.ok(filesReferences.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
-  assert.match(String((filesReferences.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
+  assert.match(filesSummarize.description ?? "", /monolithic summary markdown report/);
+  assert.ok(filesSummarize.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
+  assert.ok(filesSummarize.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+  assert.match(String((filesSummarize.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 
-  assert.match(references.description ?? "", /configured project source directories/);
-  assert.ok(references.promptGuidelines?.some((line) => line.includes("file-structure markdown block")));
-  assert.ok(references.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
-  assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
+  assert.match(summarize.description ?? "", /configured project source directories/);
+  assert.ok(summarize.promptGuidelines?.some((line) => line.includes("file-structure markdown block")));
+  assert.ok(summarize.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
+  assert.match(String((summarize.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
 test("search tools register agent-oriented descriptions and schema details", () => {
@@ -915,10 +915,10 @@ test("agent tools define custom renderResult with compact and expanded structure
     piUsereqExtension(pi);
     const toolNames = [
       "files-tokens",
-      "files-references",
+      "files-summarize",
       "files-compress",
       "files-search",
-      "references",
+      "summarize",
       "compress",
       "search",
       "tokens",
@@ -965,7 +965,7 @@ test("files-tokens returns monolithic token summary text with execution diagnost
     docs: {
       "REQUIREMENTS.md": "---\ntitle: Requirements\n---\n# Requirements\nAlpha\nBeta\n",
       "WORKFLOW.md": "# Workflow\nStep one\n",
-      "REFERENCES.md": "# References\nEntry one\n",
+      "REFERENCES.md": "# Summarize\nEntry one\n",
     },
   });
   try {
@@ -1013,7 +1013,7 @@ test("files-tokens defers js-tiktoken loading until execution and returns monoli
   }
 });
 
-test("files-references returns monolithic references markdown", async () => {
+test("files-summarize returns monolithic summary markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
   fs.writeFileSync(samplePath, `/**
@@ -1034,7 +1034,7 @@ export function buildSample(input: string): string {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "files-references", projectBase, {
+    const result = await executeRegisteredTool(pi, "files-summarize", projectBase, {
       files: ["src/sample.ts", "src/missing.ts"],
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1053,7 +1053,7 @@ export function buildSample(input: string): string {
   }
 });
 
-test("references returns monolithic project references markdown", async () => {
+test("summarize returns monolithic project summary markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
   fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
@@ -1061,7 +1061,7 @@ test("references returns monolithic project references markdown", async () => {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+    const result = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
     };
@@ -1266,21 +1266,21 @@ func (s *Server) Start(ctx context.Context) error {
     const pi = createFakePi();
     piUsereqExtension(pi);
 
-    const filesReferencesResult = await executeRegisteredTool(pi, "files-references", projectBase, {
+    const filesSummarizeResult = await executeRegisteredTool(pi, "files-summarize", projectBase, {
       files: ["src/sample.go"],
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number } };
     };
-    assert.match(filesReferencesResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
-    assert.equal(filesReferencesResult.details?.execution.code, 0);
+    assert.match(filesSummarizeResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
+    assert.equal(filesSummarizeResult.details?.execution.code, 0);
 
-    const referencesResult = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+    const summarizeResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number } };
     };
-    assert.match(referencesResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
-    assert.equal(referencesResult.details?.execution.code, 0);
+    assert.match(summarizeResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
+    assert.equal(summarizeResult.details?.execution.code, 0);
 
     const filesCompressResult = await executeRegisteredTool(pi, "files-compress", projectBase, {
       files: ["src/sample.go"],
@@ -4726,14 +4726,14 @@ test("configuration menu orders tool toggles and can enable embedded builtin too
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "compress",
-    "references",
     "search",
     "static-check",
+    "summarize",
     "tokens",
     "files-compress",
-    "files-references",
     "files-search",
     "files-static-check",
+    "files-summarize",
     "files-tokens",
     "bash",
     "edit",

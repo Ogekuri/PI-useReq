@@ -137,13 +137,13 @@ import {
 import {
   runCompress,
   runFilesCompress,
-  runFilesReferences,
   runFilesSearch,
   runFilesStaticCheck,
+  runFilesSummarize,
   runFilesTokens,
   runProjectStaticCheck,
-  runReferences,
   runSearch,
+  runSummarize,
   runTokens,
   type ToolResult,
 } from "./core/tool-runner.js";
@@ -2700,7 +2700,7 @@ function registerPromptCommands(
  * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102
  */
 function registerAgentTools(pi: ExtensionAPI): void {
-  const filesReferencesSchema = Type.Object(
+  const filesSummarizeSchema = Type.Object(
     {
       files: Type.Array(
         Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
@@ -2752,21 +2752,21 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "files-references",
-    label: "files-references",
-    description: "Scope: explicit source files. Return the monolithic references markdown report in content[0].text and keep only execution metadata in details.execution.",
-    promptSnippet: "Return the monolithic references markdown report for caller-selected source files.",
+    name: "files-summarize",
+    label: "files-summarize",
+    description: "Scope: explicit source files. Return the monolithic summary markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic summary markdown report for caller-selected source files.",
     promptGuidelines: [
       "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
       "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
-      "Formatting contract: content matches the Python reference renderer used by `generate_markdown.py`.",
+      "Formatting contract: content matches the Python summary renderer used by `generate_markdown.py`.",
       "Behavior contract: missing inputs, non-file inputs, unsupported extensions, and analysis failures surface through details.execution diagnostics.",
     ],
-    renderResult: buildStructuredToolRenderResult("files-references"),
-    parameters: filesReferencesSchema,
+    renderResult: buildStructuredToolRenderResult("files-summarize"),
+    parameters: filesSummarizeSchema,
     async execute(_toolCallId, params) {
       const contextPath = getRuntimeContextPath(process.cwd());
-      return executeMonolithicTool(() => runFilesReferences(params.files, contextPath));
+      return executeMonolithicTool(() => runFilesSummarize(params.files, contextPath));
     },
   });
 
@@ -2837,7 +2837,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
-  const referencesSchema = Type.Object(
+  const summarizeSchema = Type.Object(
     {},
     {
       description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics.",
@@ -2851,23 +2851,23 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "references",
-    label: "references",
-    description: "Scope: configured project source directories. Return the monolithic references markdown report in content[0].text and keep only execution metadata in details.execution.",
-    promptSnippet: "Return the monolithic project references markdown report from the configured source directories.",
+    name: "summarize",
+    label: "summarize",
+    description: "Scope: configured project source directories. Return the monolithic summary markdown report in content[0].text and keep only execution metadata in details.execution.",
+    promptSnippet: "Return the monolithic project summary markdown report from the configured source directories.",
     promptGuidelines: [
       "Scope: no params; resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
       "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
       "Formatting contract: content prepends the file-structure markdown block before the per-file markdown produced by `generate_markdown.py`.",
       "Configuration contract: output changes with cwd-derived project config and src-dir values; the tool does not accept explicit file overrides.",
     ],
-    renderResult: buildStructuredToolRenderResult("references"),
-    parameters: referencesSchema,
+    renderResult: buildStructuredToolRenderResult("summarize"),
+    parameters: summarizeSchema,
     async execute() {
       const contextPath = getRuntimeContextPath(process.cwd());
       const projectBase = getProjectBase(contextPath);
       const config = loadProjectConfig(projectBase);
-      return executeMonolithicTool(() => runReferences(contextPath, config));
+      return executeMonolithicTool(() => runSummarize(contextPath, config));
     },
   });
 

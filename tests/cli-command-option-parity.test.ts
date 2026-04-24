@@ -171,18 +171,18 @@ const IMPORTED_CASE_MAPPINGS: ImportedCaseMapping[] = [
   { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_no_base_required", targetId: "oracle::standalone::files-tokens-explicit-files" },
   { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_skip_missing", targetId: "oracle::standalone::files-tokens-explicit-files" },
   { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_all_missing_errors", targetId: "oracle::standalone::files-tokens-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_basic", targetId: "direct::files-references-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_no_base_required", targetId: "direct::files-references-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesReferencesCommand::test_files_references_verbose_outputs_progress", targetId: "direct::files-references-verbose" },
+  { sourceId: "test_files_commands.py::TestFilesSummarizeCommand::test_files_summarize_basic", targetId: "direct::files-summarize-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesSummarizeCommand::test_files_summarize_no_base_required", targetId: "direct::files-summarize-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesSummarizeCommand::test_files_summarize_verbose_outputs_progress", targetId: "direct::files-summarize-verbose" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_basic", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_base_required", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_line_numbers_by_default", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_enable_line_numbers", targetId: "oracle::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_verbose_outputs_progress", targetId: "oracle::standalone::files-compress-verbose" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_rejects_base", targetId: "direct::references-modes" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_with_here", targetId: "direct::references-modes" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_prepends_files_structure", targetId: "direct::references-modes" },
-  { sourceId: "test_files_commands.py::TestReferencesCommand::test_references_from_config", targetId: "direct::references-modes" },
+  { sourceId: "test_files_commands.py::TestSummarizeCommand::test_rejects_base", targetId: "direct::summarize-modes" },
+  { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_with_here", targetId: "direct::summarize-modes" },
+  { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_prepends_files_structure", targetId: "direct::summarize-modes" },
+  { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_from_config", targetId: "direct::summarize-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_rejects_base", targetId: "oracle::project::compress-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_with_here", targetId: "oracle::project::compress-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_no_line_numbers_by_default", targetId: "oracle::project::compress-modes" },
@@ -254,7 +254,7 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "direct::files-references-explicit-files",
+    id: "direct::files-summarize-explicit-files",
     run(t) {
       const filePath = createScratchFile(
         t,
@@ -262,8 +262,8 @@ const TARGET_CASES: TargetParityCase[] = [
         "/**\n * @file\n * @brief Sample file.\n */\n\n/**\n * @brief Build sample value.\n * @param[in] input {string} Caller text.\n * @return {string} Upper-cased text.\n */\nexport function buildSample(input: string): string {\n  return input.toUpperCase();\n}\n",
       );
       const cwd = path.dirname(filePath);
-      const node = runNodeCli(["--files-references", filePath], cwd);
-      const python = runPythonCli(["--files-references", filePath], cwd);
+      const node = runNodeCli(["--files-summarize", filePath], cwd);
+      const python = runPythonCli(["--files-summarize", filePath], cwd);
       assert.equal(node.status, python.status);
       assert.equal(node.stdout, python.stdout);
       assert.equal(node.stderr, python.stderr);
@@ -273,12 +273,12 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "direct::files-references-verbose",
+    id: "direct::files-summarize-verbose",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "value = 1\n");
       const cwd = path.dirname(filePath);
-      const node = runNodeCli(["--verbose", "--files-references", filePath], cwd);
-      const python = runPythonCli(["--verbose", "--files-references", filePath], cwd);
+      const node = runNodeCli(["--verbose", "--files-summarize", filePath], cwd);
+      const python = runPythonCli(["--verbose", "--files-summarize", filePath], cwd);
       assert.equal(node.status, python.status);
       assert.equal(node.stdout, python.stdout);
       assert.equal(node.stderr, python.stderr);
@@ -302,15 +302,15 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "direct::references-modes",
+    id: "direct::summarize-modes",
     run(t) {
       const { projectBase } = createFixtureRepo(t, { fixtures: [] });
       fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
       fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
       fs.writeFileSync(path.join(projectBase, "src", "nested", "beta.ts"), "export function beta(): number {\n  return 2;\n}\n", "utf8");
 
-      const directNode = runNodeCli(["--references"], projectBase);
-      const directPython = runPythonCli(["--references"], projectBase);
+      const directNode = runNodeCli(["--summarize"], projectBase);
+      const directPython = runPythonCli(["--summarize"], projectBase);
       assert.equal(directNode.status, directPython.status);
       assert.equal(directNode.stdout, directPython.stdout);
       assert.equal(directNode.stderr, directPython.stderr);
@@ -318,13 +318,13 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.match(directNode.stdout, /src\/nested\/beta\.ts/);
       assert.match(directNode.stdout, /# beta\.ts \| TypeScript/);
 
-      const hereNode = runNodeCli(["--here", "--references"], projectBase);
-      const herePython = runPythonCli(["--here", "--references"], projectBase);
+      const hereNode = runNodeCli(["--here", "--summarize"], projectBase);
+      const herePython = runPythonCli(["--here", "--summarize"], projectBase);
       assert.equal(hereNode.status, herePython.status);
       assert.equal(hereNode.stdout, herePython.stdout);
       assert.equal(hereNode.stderr, herePython.stderr);
 
-      const baseRejected = runNodeCli(["--base", projectBase, "--references"], projectBase);
+      const baseRejected = runNodeCli(["--base", projectBase, "--summarize"], projectBase);
       assert.notEqual(baseRejected.status, 0);
       assert.match(baseRejected.stderr, /do not allow --base/);
     },
@@ -709,7 +709,7 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "direct::fixtures::files-references-fixture-shape",
+    id: "direct::fixtures::files-summarize-fixture-shape",
     async run(t) {
       for (const fixture of getFixtureFiles()) {
         if (path.basename(fixture) === TAB_SENSITIVE_FIXTURE_NAME) {
@@ -717,8 +717,8 @@ const TARGET_CASES: TargetParityCase[] = [
         }
         await t.test(path.basename(fixture), () => {
           const cwd = path.dirname(fixture);
-          const node = runNodeCli(["--files-references", fixture], cwd);
-          const python = runPythonCli(["--files-references", fixture], cwd);
+          const node = runNodeCli(["--files-summarize", fixture], cwd);
+          const python = runPythonCli(["--files-summarize", fixture], cwd);
           assert.equal(node.status, python.status);
           assert.equal(node.stdout, python.stdout);
           assert.equal(node.stderr, python.stderr);
@@ -748,9 +748,9 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.ok(fixture, `missing ${TAB_SENSITIVE_FIXTURE_NAME}`);
       const cwd = path.dirname(fixture);
 
-      const references = runNodeCli(["--files-references", fixture], cwd);
-      assert.equal(references.status, 0, references.stderr);
-      assert.match(references.stdout, /\tvar wg sync\.WaitGroup/);
+      const summarize = runNodeCli(["--files-summarize", fixture], cwd);
+      assert.equal(summarize.status, 0, summarize.stderr);
+      assert.match(summarize.stdout, /\tvar wg sync\.WaitGroup/);
 
       const compress = runNodeCli(["--files-compress", fixture, "--enable-line-numbers"], cwd);
       assert.equal(compress.status, 0, compress.stderr);

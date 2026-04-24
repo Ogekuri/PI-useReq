@@ -211,10 +211,10 @@ const PROMPT_COMMAND_EXAMPLES: Record<string, string> = {
  */
 const TOOL_EXAMPLES: Record<string, string> = {
   "files-tokens": `npm run debug:ext:tool -- --name files-tokens --params '{"files":["pi-usereq/docs/REQUIREMENTS.md","pi-usereq/docs/WORKFLOW.md"]}' --cwd . --format json`,
-  "files-references": `npm run debug:ext:tool -- --name files-references --params '{"files":["src/index.ts","src/core/tool-runner.ts"]}' --cwd . --format pretty`,
+  "files-summarize": `npm run debug:ext:tool -- --name files-summarize --params '{"files":["src/index.ts","src/core/tool-runner.ts"]}' --cwd . --format pretty`,
   "files-compress": `npm run debug:ext:tool -- --name files-compress --params '{"files":["src/index.ts"],"enableLineNumbers":true}' --cwd . --format json`,
   "files-search": `npm run debug:ext:tool -- --name files-search --params '{"tag":"FUNCTION|METHOD","pattern":"^run","files":["src/core/tool-runner.ts"],"enableLineNumbers":true}' --cwd . --format pretty`,
-  references: "npm run debug:ext:tool -- --name references --cwd . --format pretty",
+  summarize: "npm run debug:ext:tool -- --name summarize --cwd . --format pretty",
   compress: `npm run debug:ext:tool -- --name compress --params '{"enableLineNumbers":true}' --cwd . --format json`,
   search: `npm run debug:ext:tool -- --name search --params '{"tag":"FUNCTION","pattern":"^run","enableLineNumbers":true}' --cwd . --format pretty`,
   tokens: "npm run debug:ext:tool -- --name tokens --cwd . --format json",

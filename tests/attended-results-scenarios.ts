@@ -312,9 +312,9 @@ function buildStandaloneScenarios(): AttendedScenario[] {
         ["--files-tokens", relativeFixturePath],
       ),
       createStandaloneScenario(
-        `standalone/files-references/${fixtureName}`,
-        path.posix.join("standalone", "files-references", `${fixtureName}.json`),
-        ["--files-references", relativeFixturePath],
+        `standalone/files-summarize/${fixtureName}`,
+        path.posix.join("standalone", "files-summarize", `${fixtureName}.json`),
+        ["--files-summarize", relativeFixturePath],
       ),
       createStandaloneScenario(
         `standalone/files-compress/${fixtureName}`,
@@ -369,10 +369,10 @@ function getFailingStaticCheckConfig(): UseReqConfig["static-check"] {
  */
 function buildProjectScenarios(): AttendedScenario[] {
   return [
-    createProjectScenario("project/references", path.posix.join("project", "references.json"), () => {
+    createProjectScenario("project/summarize", path.posix.join("project", "summarize.json"), () => {
       const { projectBase } = initFixtureRepo();
       return {
-        args: ["--references"],
+        args: ["--summarize"],
         cwd: projectBase,
         normalize: createProjectNormalizer(projectBase),
         cleanup: () => removePath(projectBase),

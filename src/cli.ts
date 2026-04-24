@@ -20,12 +20,12 @@ import {
   runCompress,
   runFilesCompress,
   runFilesSearch,
-  runFilesReferences,
+  runFilesSummarize,
   runFilesStaticCheck,
   runFilesTokens,
   runSearch,
   runProjectStaticCheck,
-  runReferences,
+  runSummarize,
   runTokens,
 } from "./core/tool-runner.js";
 import {
@@ -46,10 +46,10 @@ interface ParsedArgs {
   enableLineNumbers?: boolean;
   enableStaticCheck?: string[];
   filesTokens?: string[];
-  filesReferences?: string[];
+  filesSummarize?: string[];
   filesCompress?: string[];
   filesSearch?: string[];
-  references?: boolean;
+  summarize?: boolean;
   compress?: boolean;
   search?: [string, string];
   tokens?: boolean;
@@ -106,9 +106,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         index = next;
         break;
       }
-      case "--files-references": {
+      case "--files-summarize": {
         const [values, next] = takeUntilOption(index + 1);
-        parsed.filesReferences = values;
+        parsed.filesSummarize = values;
         index = next;
         break;
       }
@@ -124,8 +124,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         index = next;
         break;
       }
-      case "--references":
-        parsed.references = true;
+      case "--summarize":
+        parsed.summarize = true;
         index += 1;
         break;
       case "--compress":
@@ -256,12 +256,12 @@ export function main(argv = process.argv.slice(2)): number {
     }
     const args = parseArgs(argv);
     const hereOnlyProjectCommand = !!(
-      args.references || args.compress || args.tokens || args.search || args.staticCheck
+      args.summarize || args.compress || args.tokens || args.search || args.staticCheck
     );
     if (hereOnlyProjectCommand) {
       if (args.base) {
         throw new ReqError(
-          "Error: --references, --compress, --tokens, --find, and --static-check do not allow --base; use --here.",
+          "Error: --summarize, --compress, --tokens, --find, and --static-check do not allow --base; use --here.",
           1,
         );
       }
@@ -281,12 +281,12 @@ export function main(argv = process.argv.slice(2)): number {
     }
 
     if (args.filesTokens) return writeResult(runFilesTokens(args.filesTokens));
-    if (args.filesReferences) return writeResult(runFilesReferences(args.filesReferences, process.cwd(), args.verbose));
+    if (args.filesSummarize) return writeResult(runFilesSummarize(args.filesSummarize, process.cwd(), args.verbose));
     if (args.filesCompress) return writeResult(runFilesCompress(args.filesCompress, process.cwd(), args.enableLineNumbers, args.verbose));
     if (args.filesSearch) return writeResult(runFilesSearch(args.filesSearch, args.enableLineNumbers, args.verbose));
     if (args.testStaticCheck) return runStaticCheck(args.testStaticCheck);
     if (args.filesStaticCheck) return writeResult(runFilesStaticCheck(args.filesStaticCheck, projectBase, config));
-    if (args.references) return writeResult(runReferences(projectBase, config, args.verbose));
+    if (args.summarize) return writeResult(runSummarize(projectBase, config, args.verbose));
     if (args.compress) return writeResult(runCompress(projectBase, config, args.enableLineNumbers, args.verbose));
     if (args.search) return writeResult(runSearch(projectBase, args.search[0], args.search[1], config, args.enableLineNumbers, args.verbose));
     if (args.tokens) return writeResult(runTokens(projectBase, config));

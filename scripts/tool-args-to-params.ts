@@ -97,7 +97,7 @@ function takeBooleanFlag(tokens: string[], flag: string): { tokens: string[]; pr
 export function buildToolParamsFromArgsText(toolName: string, argsText: string): Record<string, unknown> {
   const tokens = shellSplit(argsText);
   switch (toolName) {
-    case "references":
+    case "summarize":
     case "tokens":
     case "static-check":
       if (tokens.length !== 0) {
@@ -105,7 +105,7 @@ export function buildToolParamsFromArgsText(toolName: string, argsText: string):
       }
       return {};
     case "files-tokens":
-    case "files-references":
+    case "files-summarize":
     case "files-static-check":
       return { files: tokens };
     case "files-compress": {

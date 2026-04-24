@@ -60,7 +60,7 @@ TODO: complete table with the extension custom commands
   | `new` | Implement a new requirement and the corresponding source code changes |
   | `refactor` | Perform a refactor without changing the requirements |
   | `readme` | Write `README.md` from user-visible implementation evidence |
-  | `references` | Write a `REFERENCES.md` using the project's source code |
+  | `req-references` | Write a `REFERENCES.md` using the project's source code |
   | `workflow` | Write a `WORKFLOW.md` using the project's source code |
   | `flowchart` | Write a `FLOWCHART.md` using the project's source code |
 
@@ -148,8 +148,8 @@ TODO: complete with the extension custom tools full documentasions
 - Count tokens and chars for the given files
   `files-tokens FILE [FILE ...]`
 
-- Generate LLM reference markdown for the given files
-  `files-references FILE [FILE ...]`
+- Generate LLM summary markdown for the given files
+  `files-summarize FILE [FILE ...]`
 
 - Generate compressed output for the given files
   `files-compress FILE [FILE ...]`
@@ -163,8 +163,8 @@ TODO: complete with the extension custom tools full documentasions
 - Count tokens and chars for canonical docs files in configured `docs-dir` (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`).
   `tokens`
 
-- Generate LLM reference markdown for source files selected by `git ls-files cached others exclude-standard` under configured `src-dir` directories.
-  `references`
+- Generate LLM summary markdown for source files selected by `git ls-files cached others exclude-standard` under configured `src-dir` directories.
+  `summarize`
 
 - Generate compressed output for source files selected by `git ls-files cached others exclude-standard` under configured `src-dir` directories.  
   `compress`

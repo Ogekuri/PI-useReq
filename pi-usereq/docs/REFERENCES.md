@@ -1,3 +1,7 @@
+
+> pi-usereq@0.11.0 cli
+> node --import tsx ./src/cli.ts --here --summarize
+
 # Files Structure
 ```
 .
@@ -23,7 +27,6 @@
     │   ├── prompt-command-runtime.ts
     │   ├── prompt-command-state.ts
     │   ├── prompts.ts
-    │   ├── reference-payload.ts
     │   ├── resources.ts
     │   ├── runtime-project-paths.ts
     │   ├── settings-menu.ts
@@ -3140,7 +3143,7 @@ import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
 
 ---
 
-# prompts.ts | TypeScript | 316L | 9 symbols | 7 imports | 17 comments
+# prompts.ts | TypeScript | 314L | 9 symbols | 7 imports | 17 comments
 > Path: `src/core/prompts.ts`
 - @brief Renders bundled pi-usereq prompts for the current project context.
 - @details Applies placeholder substitution, legacy tool-name rewrites, and conditional pi.dev governance guidance before prompt text is sent to the agent. Runtime is linear in prompt size plus replacement count. Side effects are limited to filesystem reads used for manifest checks and bundled prompt loading.
@@ -3158,7 +3161,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 
 ## Definitions
 
-### fn `function buildPiDevConformanceBlock(promptName: string, projectBase: string): string` (L111-120)
+### fn `function buildPiDevConformanceBlock(promptName: string, projectBase: string): string` (L109-118)
 - @brief Builds the conditional pi.dev governance block for one rendered prompt.
 - @details Emits the manifest-driven governance rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the pi.dev manifest. Time complexity O(1). No filesystem writes.
 - @param[in] promptName {string} Bundled prompt identifier.
@@ -3166,7 +3169,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Markdown bullet block or the empty string when injection is not applicable.
 - @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
 
-### fn `function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string` (L131-138)
+### fn `function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string` (L129-136)
 - @brief Injects the pi.dev governance block into the prompt behavior section.
 - @details Inserts the block immediately after the `## Behavior` heading so downstream agents evaluate the rule before workflow steps. Leaves prompts unchanged when no behavior section exists or the block is already present. Time complexity O(n).
 - @param[in] text {string} Prompt markdown after placeholder replacement.
@@ -3175,14 +3178,14 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Prompt markdown with zero or one injected conformance block.
 - @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
 
-### fn `export function adaptPromptForInternalTools(text: string): string` (L147-153)
+### fn `export function adaptPromptForInternalTools(text: string): string` (L145-151)
 - @brief Rewrites bundled prompt tool references from legacy `req --...` syntax to internal tool names.
 - @details Applies deterministic global regex replacements so prompt text matches the extension-registered tool surface instead of the standalone CLI spelling. Time complexity O(p*r) where p is pattern count and r is prompt length.
 - @param[in] text {string} Prompt markdown before tool-reference normalization.
 - @return {string} Prompt markdown with internal tool names.
 - @satisfies REQ-003
 
-### fn `export function applyReplacements(text: string, replacements: Record<string, string>): string` (L163-169)
+### fn `export function applyReplacements(text: string, replacements: Record<string, string>): string` (L161-167)
 - @brief Applies literal placeholder replacements to bundled prompt markdown.
 - @details Replaces every placeholder token using split/join semantics so all occurrences are updated without regex escaping. Time complexity O(t*n) where t is replacement count and n is prompt length.
 - @param[in] text {string} Prompt markdown containing placeholder tokens.
@@ -3190,7 +3193,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Prompt markdown with all placeholder tokens expanded.
 - @satisfies REQ-002
 
-### fn `function buildPromptExecutionBlock(` (L179-201)
+### fn `function buildPromptExecutionBlock(` (L177-199)
 - @brief Builds the prompt-command execution block injected at prompt start.
 - @details Serializes the already-completed repository validation, prompt-specific required-doc validation, worktree routing decision, and extension-owned lifecycle responsibilities so downstream agents do not repeat command-side orchestration. Time complexity is O(d) in required-doc count. No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt identifier.
@@ -3198,7 +3201,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Markdown block or the empty string when runtime execution metadata is unavailable.
 - @satisfies REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209
 
-### fn `function injectPromptExecutionBlock(` (L211-222)
+### fn `function injectPromptExecutionBlock(` (L209-220)
 - @brief Injects the prompt-command execution block near the start of the rendered prompt.
 - @details Inserts the execution block immediately after the first level-1 heading so downstream agents evaluate extension-owned orchestration before workflow steps. Leaves prompts unchanged when no execution block is provided or when the block is already present. Time complexity O(n).
 - @param[in] text {string} Prompt markdown after placeholder replacement.
@@ -3206,7 +3209,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @param[in] executionPlan {PromptCommandExecutionPlan | undefined} Prepared execution plan.
 - @return {string} Prompt markdown with zero or one injected execution block.
 
-### fn `function buildPromptReplacements(` (L234-246)
+### fn `function buildPromptReplacements(` (L232-244)
 - @brief Builds prompt-specific runtime placeholder replacements.
 - @details Merges shared path substitutions with prompt-scoped runtime values for `%%ARGS%%` and `%%PROMPT%%`. Time complexity is O(g log g + s) due to delegated path replacement building, where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads delegated to shared path-context helpers.
 - @param[in] promptName {string} Bundled prompt identifier without the `req-` prefix.
@@ -3216,7 +3219,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {Record<string, string>} Prompt-specific placeholder-to-value map.
 - @satisfies REQ-002, REQ-211
 
-### fn `function renderBundledCommitInstruction(` (L258-272)
+### fn `function renderBundledCommitInstruction(` (L256-270)
 - @brief Renders the bundled git instruction injected through `%%COMMIT%%`.
 - @details Selects `resources/instructions/git_commit.md` when automatic git commit is enabled and `resources/instructions/git_read-only.md` otherwise, then applies the same runtime placeholder substitutions used by bundled prompts before returning the rendered markdown. Time complexity is O(n + g log g + s) where n is instruction size, g is guideline count, and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] promptName {string} Bundled prompt identifier without the `req-` prefix.
@@ -3226,7 +3229,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Rendered bundled git instruction selected for the current automatic-commit mode.
 - @satisfies REQ-211, REQ-213, REQ-214
 
-### fn `export function renderPrompt(` (L285-316)
+### fn `export function renderPrompt(` (L283-314)
 - @brief Renders a bundled prompt for the current project context.
 - @details Loads the bundled markdown template, expands configuration-derived placeholders, injects extension-owned execution guidance plus conditional pi.dev governance guidance, expands the optional bundled commit instruction, and rewrites legacy tool references to internal names. Time complexity O(n) relative to prompt size plus delegated commit-instruction rendering. No tracked files are modified.
 - @param[in] promptName {string} Bundled prompt identifier.
@@ -3240,206 +3243,15 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`buildPiDevConformanceBlock`|fn||111-120|function buildPiDevConformanceBlock(promptName: string, p...|
-|`injectPiDevConformanceBlock`|fn||131-138|function injectPiDevConformanceBlock(text: string, prompt...|
-|`adaptPromptForInternalTools`|fn||147-153|export function adaptPromptForInternalTools(text: string)...|
-|`applyReplacements`|fn||163-169|export function applyReplacements(text: string, replaceme...|
-|`buildPromptExecutionBlock`|fn||179-201|function buildPromptExecutionBlock(|
-|`injectPromptExecutionBlock`|fn||211-222|function injectPromptExecutionBlock(|
-|`buildPromptReplacements`|fn||234-246|function buildPromptReplacements(|
-|`renderBundledCommitInstruction`|fn||258-272|function renderBundledCommitInstruction(|
-|`renderPrompt`|fn||285-316|export function renderPrompt(|
-
-
----
-
-# reference-payload.ts | TypeScript | 752L | 28 symbols | 5 imports | 27 comments
-> Path: `src/core/reference-payload.ts`
-- @brief Builds agent-oriented JSON payloads for `files-references` and `references`.
-- @details Converts analyzed source files into deterministic JSON sections ordered for LLM traversal, including repository structure, per-file metrics, imports, symbols, structured Doxygen fields, and structured comment evidence. Runtime is O(F log F + S) where F is file count and S is total source size. Side effects are limited to filesystem reads and optional stderr logging.
-
-## Imports
-```
-import fs from "node:fs";
-import path from "node:path";
-import {
-import { detectLanguage } from "./compress.js";
-import {
-```
-
-## Definitions
-
-- type `export type ReferenceToolScope = "explicit-files" | "configured-source-directories";` (L27)
-- @brief Enumerates supported references-payload scopes.
-- @details Distinguishes explicit-file requests from configured project scans while preserving one stable JSON contract. The alias is compile-time only and introduces no runtime cost.
-- type `export type ReferenceFileStatus = "analyzed" | "error" | "skipped";` (L33)
-- @brief Enumerates supported per-file references entry statuses.
-- @details Separates analyzed files, analysis failures, and skipped inputs so downstream agents can branch without reparsing stderr text. The alias is compile-time only and introduces no runtime cost.
-### iface `export interface ReferenceLineRange` (L39-43)
-- @brief Describes one numeric source line range.
-- @details Exposes start and end line numbers plus the same inclusive range as a numeric tuple for direct agent access. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceImportEntry extends ReferenceLineRange` : ReferenceLineRange (L49-52)
-- @brief Describes one structured import record.
-- @details Stores the normalized import identity, raw import statement, and declaration line range without requiring agents to parse markdown blocks. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceCommentEntry extends ReferenceLineRange` : ReferenceLineRange (L58-61)
-- @brief Describes one structured standalone or attached comment record.
-- @details Preserves normalized comment text plus per-line comment fragments so agents can consume comment evidence without reparsing source delimiters. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceExitPointEntry` (L67-70)
-- @brief Describes one structured exit-point annotation.
-- @details Preserves the normalized exit expression text together with its source line number for downstream reasoning about control flow hints. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceSymbolEntry extends ReferenceLineRange` : ReferenceLineRange (L76-96)
-- @brief Describes one structured symbol record.
-- @details Orders direct-access identity fields before hierarchy, locations, Doxygen metadata, and comment evidence so agents can branch without reparsing monolithic summaries. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceToolFileEntry extends ReferenceLineRange` : ReferenceLineRange (L102-115)
-- @brief Describes one per-file references payload entry.
-- @details Stores canonical identity, line metrics, structured imports, structured symbols, structured comment evidence, and optional file-level Doxygen metadata. Derivable identity and filesystem-probe fields are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceToolRequestSection` (L121-130)
-- @brief Describes the request section of the references payload.
-- @details Captures tool identity, scope, base directory, requested path inventory, and configured source-directory scope so agents can reason about how the file set was selected. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceToolSummarySection` (L136-147)
-- @brief Describes the summary section of the references payload.
-- @details Exposes aggregate file, symbol, import, comment, and Doxygen counts as numeric fields plus deterministic symbol-kind totals. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceRepositoryTreeNode` (L153-159)
-- @brief Describes one repository tree node in the references payload.
-- @details Encodes directory and file hierarchy without ASCII-art decoration so agents can traverse repository structure as structured JSON. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceToolRepositorySection` (L165-169)
-- @brief Describes the repository section of the references payload.
-- @details Stores configured source-directory scope, the canonical analyzed file list, and the structured directory tree used during analysis. Static root-path echoes are intentionally omitted to reduce token cost. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface ReferenceToolPayload` (L175-179)
-- @brief Describes the full agent-oriented references payload.
-- @details Exposes only aggregate analysis totals, repository structure, and per-file reference records, omitting request echoes that are already known to the caller or encoded in the tool registration. The interface is compile-time only and introduces no runtime cost.
-
-### iface `export interface BuildReferenceToolPayloadOptions` (L185-192)
-- @brief Describes the options required to build one references payload.
-- @details Supplies tool identity, scope, base directory, requested paths, and optional configured source directories while keeping payload construction deterministic. The interface is compile-time only and introduces no runtime cost.
-
-### fn `function canonicalizeReferencePath(targetPath: string, baseDir: string): string` (L201-209)
-- @brief Canonicalizes one filesystem path relative to the payload base directory.
-- @details Emits a slash-normalized relative path when the target is under the base directory; otherwise emits the normalized absolute path. Runtime is O(p) in path length. No side effects occur.
-- @param[in] targetPath {string} Absolute or relative filesystem path.
-- @param[in] baseDir {string} Base directory used for relative canonicalization.
-- @return {string} Canonicalized path string.
-
-### fn `function buildLineRange(startLineNumber: number, endLineNumber: number): ReferenceLineRange` (L218-224)
-- @brief Builds one structured line-range record.
-- @details Duplicates the inclusive range as start, end, and tuple fields so callers can address whichever shape is most convenient. Runtime is O(1). No side effects occur.
-- @param[in] startLineNumber {number} Inclusive start line number.
-- @param[in] endLineNumber {number} Inclusive end line number.
-- @return {ReferenceLineRange} Structured line-range record.
-
-### fn `function extractCommentText(commentElement: SourceElement, maxLength = 0): string` (L233-253)
-- @brief Extracts normalized plain text from one comment element.
-- @details Removes language comment markers, drops delimiter-only lines, joins content with spaces, and optionally truncates the result. Runtime is O(n) in comment length. No side effects occur.
-- @param[in] commentElement {SourceElement} Comment element.
-- @param[in] maxLength {number} Optional maximum output length; `0` disables truncation.
-- @return {string} Cleaned comment text.
-
-### fn `function extractCommentLines(commentElement: SourceElement): string[]` (L261-275)
-- @brief Extracts cleaned individual lines from one comment element.
-- @details Removes language comment markers while preserving line granularity for structured comment payloads. Runtime is O(n) in comment length. No side effects occur.
-- @param[in] commentElement {SourceElement} Comment element.
-- @return {string[]} Cleaned comment lines.
-
-### fn `function buildCommentMaps(elements: SourceElement[]): [Record<number, SourceElement[]>, SourceElement[], string]` (L283-333)
-- @brief Associates nearby comment blocks with definitions and standalone comment groups.
-- @details Reuses the repository comment-attachment heuristic that binds comments within three lines of a definition while preserving early file-description text. Runtime is O(n log n). No side effects occur.
-- @param[in] elements {SourceElement[]} Analyzed source elements.
-- @return {[Record<number, SourceElement[]>, SourceElement[], string]} Attached-comment map, standalone comments, and compact file description.
-
-### fn `function resolveSymbolName(element: SourceElement): string` (L341-343)
-- @brief Resolves one stable symbol name from an analyzed element.
-- @details Prefers explicit analyzer name metadata, then falls back to the derived signature or the first source line so every symbol retains a direct-access identifier. Runtime is O(1). No side effects occur.
-- @param[in] element {SourceElement} Source element.
-- @return {string} Stable symbol name.
-
-### fn `function resolveParentElement(definitions: SourceElement[], child: SourceElement): SourceElement | undefined` (L352-361)
-- @brief Resolves the direct parent element for one child symbol.
-- @details Matches by parent name plus inclusive line containment and chooses the deepest enclosing definition. Runtime is O(n) in definition count. No side effects occur.
-- @param[in] definitions {SourceElement[]} Sorted definition elements.
-- @param[in] child {SourceElement} Candidate child symbol.
-- @return {SourceElement | undefined} Matched parent definition when available.
-
-### fn `function buildCommentEntry(commentElement: SourceElement): ReferenceCommentEntry` (L369-376)
-- @brief Builds one structured comment record from a comment element.
-- @details Preserves numeric line-range metadata plus normalized text and per-line fragments. Runtime is O(n) in comment length. No side effects occur.
-- @param[in] commentElement {SourceElement} Source comment element.
-- @return {ReferenceCommentEntry} Structured comment record.
-
-### fn `function buildRepositoryTree(canonicalPaths: string[]): ReferenceRepositoryTreeNode` (L384-443)
-- @brief Builds one structured repository tree from canonical file paths.
-- @details Materializes a nested directory map and converts it into recursively ordered JSON nodes without decorative ASCII formatting. Runtime is O(n log n) in path count. No side effects occur.
-- @param[in] canonicalPaths {string[]} Canonical file paths.
-- @return {ReferenceRepositoryTreeNode} Structured repository tree rooted at `.`.
-
-### fn `const ensureDirectory = (parent: ReferenceRepositoryTreeNode, nodeName: string, relativePath: string): ReferenceRepositoryTreeNode =>` (L393-407)
-
-### fn `const finalizeNode = (node: ReferenceRepositoryTreeNode): ReferenceRepositoryTreeNode =>` (L429-440)
-
-### fn `function analyzeReferenceFile(` (L456-621)
-- @brief Builds one analyzed file entry for the references payload.
-- @details Parses the file with `SourceAnalyzer`, extracts structured imports and symbols, attaches structured Doxygen fields, and preserves standalone comment evidence. Runtime is O(S log S) in file size and symbol count. Side effects are limited to filesystem reads and optional stderr logging.
-- @param[in] analyzer {SourceAnalyzer} Shared source analyzer instance.
-- @param[in] inputPath {string} Caller-provided input path.
-- @param[in] absolutePath {string} Absolute file path.
-- @param[in] requestIndex {number} Zero-based request index.
-- @param[in] baseDir {string} Base directory used for canonical paths.
-- @param[in] verbose {boolean} When `true`, emit per-file progress diagnostics to stderr.
-- @return {ReferenceToolFileEntry} Structured file entry.
-
-### fn `export function buildReferenceToolPayload(options: BuildReferenceToolPayloadOptions): ReferenceToolPayload` (L630-730)
-- @brief Builds the full agent-oriented references payload.
-- @details Validates requested paths against the filesystem, analyzes processable files in caller order, preserves skipped and failed inputs in structured file entries, computes aggregate numeric totals, and emits structured repository data without echoing request metadata already known to the caller. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
-- @param[in] options {BuildReferenceToolPayloadOptions} Payload-construction options.
-- @return {ReferenceToolPayload} Structured references payload ordered as summary, repository, and files.
-- @satisfies REQ-011, REQ-014, REQ-076, REQ-077, REQ-078, REQ-079
-
-### fn `export function buildReferenceToolExecutionStderr(payload: ReferenceToolPayload): string` (L738-752)
-- @brief Builds deterministic stderr diagnostics from a references payload.
-- @details Serializes skipped-input and analysis-error entries into stable newline-delimited diagnostics while leaving fully analyzed payloads silent. Runtime is O(n) in file-entry count. No side effects occur.
-- @param[in] payload {ReferenceToolPayload} Structured references payload.
-- @return {string} Newline-delimited diagnostics.
-
-## Symbol Index
-|Symbol|Kind|Vis|Lines|Sig|
-|---|---|---|---|---|
-|`ReferenceToolScope`|type||27||
-|`ReferenceFileStatus`|type||33||
-|`ReferenceLineRange`|iface||39-43|export interface ReferenceLineRange|
-|`ReferenceImportEntry`|iface||49-52|export interface ReferenceImportEntry extends ReferenceLi...|
-|`ReferenceCommentEntry`|iface||58-61|export interface ReferenceCommentEntry extends ReferenceL...|
-|`ReferenceExitPointEntry`|iface||67-70|export interface ReferenceExitPointEntry|
-|`ReferenceSymbolEntry`|iface||76-96|export interface ReferenceSymbolEntry extends ReferenceLi...|
-|`ReferenceToolFileEntry`|iface||102-115|export interface ReferenceToolFileEntry extends Reference...|
-|`ReferenceToolRequestSection`|iface||121-130|export interface ReferenceToolRequestSection|
-|`ReferenceToolSummarySection`|iface||136-147|export interface ReferenceToolSummarySection|
-|`ReferenceRepositoryTreeNode`|iface||153-159|export interface ReferenceRepositoryTreeNode|
-|`ReferenceToolRepositorySection`|iface||165-169|export interface ReferenceToolRepositorySection|
-|`ReferenceToolPayload`|iface||175-179|export interface ReferenceToolPayload|
-|`BuildReferenceToolPayloadOptions`|iface||185-192|export interface BuildReferenceToolPayloadOptions|
-|`canonicalizeReferencePath`|fn||201-209|function canonicalizeReferencePath(targetPath: string, ba...|
-|`buildLineRange`|fn||218-224|function buildLineRange(startLineNumber: number, endLineN...|
-|`extractCommentText`|fn||233-253|function extractCommentText(commentElement: SourceElement...|
-|`extractCommentLines`|fn||261-275|function extractCommentLines(commentElement: SourceElemen...|
-|`buildCommentMaps`|fn||283-333|function buildCommentMaps(elements: SourceElement[]): [Re...|
-|`resolveSymbolName`|fn||341-343|function resolveSymbolName(element: SourceElement): string|
-|`resolveParentElement`|fn||352-361|function resolveParentElement(definitions: SourceElement[...|
-|`buildCommentEntry`|fn||369-376|function buildCommentEntry(commentElement: SourceElement)...|
-|`buildRepositoryTree`|fn||384-443|function buildRepositoryTree(canonicalPaths: string[]): R...|
-|`ensureDirectory`|fn||393-407|const ensureDirectory = (parent: ReferenceRepositoryTreeN...|
-|`finalizeNode`|fn||429-440|const finalizeNode = (node: ReferenceRepositoryTreeNode):...|
-|`analyzeReferenceFile`|fn||456-621|function analyzeReferenceFile(|
-|`buildReferenceToolPayload`|fn||630-730|export function buildReferenceToolPayload(options: BuildR...|
-|`buildReferenceToolExecutionStderr`|fn||738-752|export function buildReferenceToolExecutionStderr(payload...|
+|`buildPiDevConformanceBlock`|fn||109-118|function buildPiDevConformanceBlock(promptName: string, p...|
+|`injectPiDevConformanceBlock`|fn||129-136|function injectPiDevConformanceBlock(text: string, prompt...|
+|`adaptPromptForInternalTools`|fn||145-151|export function adaptPromptForInternalTools(text: string)...|
+|`applyReplacements`|fn||161-167|export function applyReplacements(text: string, replaceme...|
+|`buildPromptExecutionBlock`|fn||177-199|function buildPromptExecutionBlock(|
+|`injectPromptExecutionBlock`|fn||209-220|function injectPromptExecutionBlock(|
+|`buildPromptReplacements`|fn||232-244|function buildPromptReplacements(|
+|`renderBundledCommitInstruction`|fn||256-270|function renderBundledCommitInstruction(|
+|`renderPrompt`|fn||283-314|export function renderPrompt(|
 
 
 ---
@@ -4320,9 +4132,9 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {ToolResult} Tool result containing the formatted summary and warnings.
 - @throws {ReqError} Throws when no valid files are provided.
 
-### fn `export function runFilesReferences(files: string[], cwd = process.cwd(), verbose = false): ToolResult` (L250-256)
-- @brief Generates the monolithic references markdown for explicit files.
-- @details Delegates to `generateMarkdown(...)`, keeps output paths relative to the caller cwd, and returns the Python-compatible markdown document through stdout. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
+### fn `export function runFilesSummarize(files: string[], cwd = process.cwd(), verbose = false): ToolResult` (L250-256)
+- @brief Generates the monolithic summary markdown for explicit files.
+- @details Delegates to `generateMarkdown(...)`, keeps output paths relative to the caller cwd, and returns the Python-compatible summary markdown document through stdout. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] files {string[]} Explicit file paths.
 - @param[in] cwd {string} Base directory used for relative output paths. Defaults to `process.cwd()`.
 - @param[in] verbose {boolean} When `true`, emit per-file progress diagnostics to stderr.
@@ -4347,9 +4159,9 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {ToolResult} Successful tool result containing construct markdown.
 - @throws {ReqError} Throws when required arguments are missing.
 
-### fn `export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L298-309)
-- @brief Generates the monolithic references markdown for configured source directories.
-- @details Resolves the project base, collects configured source files, prepends the repository file-structure markdown block, and returns the Python-compatible references document through stdout. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
+### fn `export function runSummarize(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L298-309)
+- @brief Generates the monolithic summary markdown for configured source directories.
+- @details Resolves the project base, collects configured source files, prepends the repository file-structure markdown block, and returns the Python-compatible summary document through stdout. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
@@ -4418,10 +4230,10 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 |`resolveProjectSrcDirs`|fn||196-204|export function resolveProjectSrcDirs(projectBase: string...|
 |`loadAndRepairConfig`|fn||213-218|export function loadAndRepairConfig(projectBase: string):...|
 |`runFilesTokens`|fn||227-239|export function runFilesTokens(files: string[]): ToolResult|
-|`runFilesReferences`|fn||250-256|export function runFilesReferences(files: string[], cwd =...|
+|`runFilesSummarize`|fn||250-256|export function runFilesSummarize(files: string[], cwd = ...|
 |`runFilesCompress`|fn||267-269|export function runFilesCompress(files: string[], cwd = p...|
 |`runFilesSearch`|fn||280-286|export function runFilesSearch(argsList: string[], enable...|
-|`runReferences`|fn||298-309|export function runReferences(projectBase: string, config...|
+|`runSummarize`|fn||298-309|export function runSummarize(projectBase: string, config?...|
 |`runCompress`|fn||321-326|export function runCompress(projectBase: string, config?:...|
 |`runSearch`|fn||340-349|export function runSearch(projectBase: string, tagFilter:...|
 |`runTokens`|fn||359-368|export function runTokens(projectBase: string, config?: U...|
