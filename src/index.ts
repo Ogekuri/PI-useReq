@@ -123,8 +123,10 @@ import {
   PI_USEREQ_STATUS_HOOK_NAMES,
   createPiUsereqStatusController,
   disposePiUsereqStatusController,
+  getPiUsereqRuntimeSoundLevel,
   isStaleExtensionContextError,
   renderPiUsereqStatus,
+  setPiUsereqRuntimeSoundLevel,
   setPiUsereqStatusConfig,
   setPiUsereqWorkflowState,
   shouldPreservePromptCommandStateOnShutdown,
@@ -1025,7 +1027,10 @@ async function handleExtensionStatusEvent(
   if (hookName === "agent_end") {
     if (statusController.config) {
       runPiNotifyEffects(
-        statusController.config,
+        {
+          ...statusController.config,
+          "notify-sound": getPiUsereqRuntimeSoundLevel(statusController),
+        },
         event as { messages: AgentEndEvent["messages"] },
         notifyRequest,
       );
@@ -1809,6 +1814,13 @@ const PI_NOTIFY_EVENT_MENU_DEFINITIONS: Record<
 };
 
 /**
+ * @brief Defines the canonical label used for persisted boot-sound menu rows.
+ * @details Reuses one shared string literal across notification menu rows, selectors, reset previews, and tests so the persisted boot-sound terminology remains stable. Access complexity is O(1).
+ * @satisfies REQ-149, REQ-179
+ */
+const PI_NOTIFY_BOOT_SOUND_LABEL = "Enable sound (boot value)";
+
+/**
  * @brief Formats the top-level summary value for one notification event submenu.
  * @details Counts enabled completed/interrupted/failed toggles for the selected transport and renders the result as `n/3 on` for right-aligned menu display. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -2093,10 +2105,10 @@ async function selectPiNotifyPushoverPriority(
 
 /**
  * @brief Builds the shared settings-menu choices for notification configuration.
- * @details Serializes command-notify, sound, and Pushover blocks with dedicated shared-event submenu launchers so the settings-menu renderer can expose one unified but modular configuration surface, including locked Pushover enablement and escaped single-line rendering for `Pushover text`. Runtime is O(n) in the longest rendered command or text field. No external state is mutated.
+ * @details Serializes command-notify, sound, and Pushover blocks with dedicated shared-event submenu launchers so the settings-menu renderer can expose one unified but modular configuration surface, including locked Pushover enablement, persisted boot-sound rows that stay decoupled from the active runtime sound level, and escaped single-line rendering for `Pushover text`. Runtime is O(n) in the longest rendered command or text field. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
- * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193, REQ-198, REQ-234, REQ-235
+ * @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193, REQ-198, REQ-234, REQ-235, REQ-289
  */
 function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   return [
@@ -2119,9 +2131,9 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
     },
     {
       id: "selected-sound-command",
-      label: "Enable sound",
+      label: PI_NOTIFY_BOOT_SOUND_LABEL,
       value: config["notify-sound"],
-      description: "Select which sound command level is currently active.",
+      description: "Edit the persisted boot sound level without changing the active runtime sound level.",
     },
     buildPiNotifyEventLauncherChoice(
       config,
@@ -2131,25 +2143,25 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
       id: "sound-toggle-hotkey-bind",
       label: "Sound toggle hotkey bind",
       value: config["notify-sound-toggle-shortcut"],
-      description: "Edit the keyboard shortcut that cycles the selected sound command.",
+      description: "Edit the keyboard shortcut that cycles the active runtime sound level.",
     },
     {
       id: "sound-command-low",
       label: "Sound command (low vol.)",
       value: config.PI_NOTIFY_SOUND_LOW_CMD,
-      description: "Edit the shell command used when the selected sound command is `low`.",
+      description: "Edit the shell command used when the active runtime sound level is `low`.",
     },
     {
       id: "sound-command-mid",
       label: "Sound command (mid vol.)",
       value: config.PI_NOTIFY_SOUND_MID_CMD,
-      description: "Edit the shell command used when the selected sound command is `mid`.",
+      description: "Edit the shell command used when the active runtime sound level is `mid`.",
     },
     {
       id: "sound-command-high",
       label: "Sound command (high vol.)",
       value: config.PI_NOTIFY_SOUND_HIGH_CMD,
-      description: "Edit the shell command used when the selected sound command is `high`.",
+      description: "Edit the shell command used when the active runtime sound level is `high`.",
     },
     ...buildPiNotifyPushoverRows(config),
     ...buildTerminalSettingsMenuChoices({
@@ -2159,44 +2171,44 @@ function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuCho
 }
 
 /**
- * @brief Opens the shared settings-menu selector for the active sound level.
- * @details Reuses the pi-usereq settings-menu renderer so sound-level selection remains stylistically aligned with the notification menu and appends a value-less subtree-local `Reset defaults` row. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @brief Opens the shared settings-menu selector for the persisted boot sound level.
+ * @details Reuses the pi-usereq settings-menu renderer so boot-sound selection remains stylistically aligned with the notification menu, keeps the active runtime sound level unchanged, and appends a value-less subtree-local `Reset defaults` row. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
- * @param[in] currentLevel {PiNotifySoundLevel} Currently selected sound level.
- * @return {Promise<PiNotifySoundLevel | "reset-defaults" | undefined>} Selected sound level, reset action, or `undefined` when cancelled.
- * @satisfies REQ-131, REQ-179, REQ-192
+ * @param[in] currentLevel {PiNotifySoundLevel} Persisted boot sound level.
+ * @return {Promise<PiNotifySoundLevel | "reset-defaults" | undefined>} Selected boot sound level, reset action, or `undefined` when cancelled.
+ * @satisfies REQ-131, REQ-179, REQ-192, REQ-289
  */
 async function selectPiNotifySoundLevel(
   ctx: ExtensionCommandContext,
   currentLevel: PiNotifySoundLevel,
 ): Promise<PiNotifySoundLevel | "reset-defaults" | undefined> {
-  const choice = await showPiUsereqSettingsMenu(ctx, "Enable sound", [
+  const choice = await showPiUsereqSettingsMenu(ctx, PI_NOTIFY_BOOT_SOUND_LABEL, [
     {
       id: "none",
       label: "none",
       value: currentLevel === "none" ? "selected" : "",
-      description: "Disable sound-command delivery while preserving per-event sound toggles.",
+      description: "Persist `none` as the boot sound level loaded during the next session start.",
     },
     {
       id: "low",
       label: "low",
       value: currentLevel === "low" ? "selected" : "",
-      description: "Use the low-volume sound command when sound delivery is enabled for the current event.",
+      description: "Persist `low` as the boot sound level loaded during the next session start.",
     },
     {
       id: "mid",
       label: "mid",
       value: currentLevel === "mid" ? "selected" : "",
-      description: "Use the mid-volume sound command when sound delivery is enabled for the current event.",
+      description: "Persist `mid` as the boot sound level loaded during the next session start.",
     },
     {
       id: "high",
       label: "high",
       value: currentLevel === "high" ? "selected" : "",
-      description: "Use the high-volume sound command when sound delivery is enabled for the current event.",
+      description: "Persist `high` as the boot sound level loaded during the next session start.",
     },
     ...buildTerminalSettingsMenuChoices({
-      resetDefaultsDescription: "Restore the documented default sound level.",
+      resetDefaultsDescription: "Restore the documented default boot sound level.",
     }),
   ], { initialSelectedId: currentLevel });
   if (!choice) {
@@ -2210,11 +2222,11 @@ async function selectPiNotifySoundLevel(
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, delegates completed/interrupted/failed toggles to dedicated event submenus, keeps `Enable pushover` locked until both credentials are populated, decodes escaped control-sequence input for `Pushover text`, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, delegates completed/interrupted/failed toggles to dedicated event submenus, persists boot-sound changes without altering the active runtime sound level, keeps `Enable pushover` locked until both credentials are populated, decodes escaped control-sequence input for `Pushover text`, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
- * @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196, REQ-198, REQ-234, REQ-235
+ * @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196, REQ-198, REQ-234, REQ-235, REQ-288, REQ-289
  */
 async function configurePiNotifyMenu(
   ctx: ExtensionCommandContext,
@@ -2312,22 +2324,22 @@ async function configurePiNotifyMenu(
         const approved = await confirmResetChanges(
           ctx,
           "Confirm sound reset",
-          [{ label: "Enable sound", previousValue: config["notify-sound"], nextValue: defaultSoundLevel }]
+          [{ label: PI_NOTIFY_BOOT_SOUND_LABEL, previousValue: config["notify-sound"], nextValue: defaultSoundLevel }]
             .filter((change) => change.previousValue !== change.nextValue),
-          "Approve restoring the documented default sound level.",
-          "Abort the sound reset and keep the current value.",
+          "Approve restoring the documented default boot sound level.",
+          "Abort the boot sound reset and keep the current value.",
         );
         if (!approved) {
-          ctx.ui.notify("Aborted sound reset", "info");
+          ctx.ui.notify("Aborted boot sound reset", "info");
         } else {
           config["notify-sound"] = defaultSoundLevel;
           onConfigChange();
-          ctx.ui.notify("Restored default sound level", "info");
+          ctx.ui.notify("Restored default boot sound level; active runtime sound is unchanged", "info");
         }
       } else if (nextLevel !== undefined) {
         config["notify-sound"] = nextLevel;
         onConfigChange();
-        ctx.ui.notify(`Enable sound set to ${nextLevel}`, "info");
+        ctx.ui.notify(`Stored ${PI_NOTIFY_BOOT_SOUND_LABEL.toLowerCase()} as ${nextLevel}; active runtime sound is unchanged`, "info");
       }
       continue;
     }
@@ -2472,7 +2484,7 @@ async function configurePiNotifyMenu(
       const defaults = getDefaultConfig("");
       const resetPreview: ResetConfirmationChange[] = [
         { label: "Enable notification", previousValue: formatPiNotifyStatus(config), nextValue: formatPiNotifyStatus(defaults) },
-        { label: "Enable sound", previousValue: config["notify-sound"], nextValue: defaults["notify-sound"] },
+        { label: PI_NOTIFY_BOOT_SOUND_LABEL, previousValue: config["notify-sound"], nextValue: defaults["notify-sound"] },
         { label: "Sound toggle hotkey bind", previousValue: config["notify-sound-toggle-shortcut"], nextValue: defaults["notify-sound-toggle-shortcut"] },
         { label: "Notify command", previousValue: config.PI_NOTIFY_CMD, nextValue: defaults.PI_NOTIFY_CMD },
         { label: "Sound command (low vol.)", previousValue: config.PI_NOTIFY_SOUND_LOW_CMD, nextValue: defaults.PI_NOTIFY_SOUND_LOW_CMD },
@@ -2507,15 +2519,15 @@ async function configurePiNotifyMenu(
 /**
  * @brief Registers the configurable notification-sound shortcut when supported.
  * @details Loads the current project config, registers one raw pi shortcut when
- * the runtime exposes `registerShortcut(...)`, cycles persisted sound state on
- * invocation, saves the config, refreshes the status bar, and emits one info
- * notification. Runtime is O(1) for registration plus config I/O per shortcut
- * use. Side effects include shortcut registration, config writes, and status
- * updates.
+ * the runtime exposes `registerShortcut(...)`, cycles only the active runtime
+ * sound level on invocation, leaves `.pi-usereq.json` unchanged, refreshes the
+ * status bar, and emits one info notification. Runtime is O(1) for registration
+ * plus one status update per shortcut use. Side effects include shortcut
+ * registration and status updates.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-131, REQ-134, REQ-180
+ * @satisfies REQ-134, REQ-180, REQ-286, REQ-287
  */
 function registerPiNotifyShortcut(
   pi: ExtensionAPI,
@@ -2529,12 +2541,15 @@ function registerPiNotifyShortcut(
   shortcutRegistrar.registerShortcut(config["notify-sound-toggle-shortcut"], {
     description: "Cycle pi-usereq notification sound level",
     handler: async (ctx) => {
-      const nextConfig = loadProjectConfig(ctx.cwd);
-      nextConfig["notify-sound"] = cyclePiNotifySoundLevel(nextConfig["notify-sound"]);
-      saveProjectConfig(ctx.cwd, nextConfig);
-      setPiUsereqStatusConfig(statusController, nextConfig);
-      renderPiUsereqStatus(statusController, ctx);
-      ctx.ui.notify(`pi-usereq sound:${nextConfig["notify-sound"]}`, "info");
+      const nextRuntimeSoundLevel = cyclePiNotifySoundLevel(
+        getPiUsereqRuntimeSoundLevel(statusController),
+      );
+      setPiUsereqRuntimeSoundLevel(
+        statusController,
+        nextRuntimeSoundLevel,
+        ctx,
+      );
+      ctx.ui.notify(`pi-usereq sound:${nextRuntimeSoundLevel}`, "info");
     },
   });
 }

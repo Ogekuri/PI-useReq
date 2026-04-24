@@ -1508,7 +1508,7 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "Enable notification",
     "Notification events",
     "Notify command",
-    "Enable sound",
+    "Enable sound (boot value)",
     "Sound events",
     "Sound toggle hotkey bind",
     "Sound command (low vol.)",
@@ -1558,7 +1558,7 @@ test("descendant configuration menus end with Reset defaults only", async () => 
   const ctx = createFakeCtx(cwd, {
     selects: [
       "notifications",
-      "Enable sound",
+      "Enable sound (boot value)",
       "Save and close",
       "Pushover priority",
       "Save and close",
@@ -1601,14 +1601,14 @@ test("descendant configuration menus end with Reset defaults only", async () => 
     return (ctx.__state.customRenderLines[index] ?? []).join("\n");
   };
 
-  assert.deepEqual(getTerminalRows("Enable sound", "high"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("Enable sound (boot value)", "high"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Pushover priority", "High"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Enable tools", "static-check"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Debug", "Log on status"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("static-check language", "Python"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Remove static code checker"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Remove source-code directory", "src"), ["Reset defaults"]);
-  assert.doesNotMatch(getRenderedMenu("Enable sound", "high"), /Reset defaults.*none/);
+  assert.doesNotMatch(getRenderedMenu("Enable sound (boot value)", "high"), /Reset defaults.*none/);
   assert.doesNotMatch(getRenderedMenu("Pushover priority", "High"), /Reset defaults.*Normal/);
   assert.doesNotMatch(getRenderedMenu("Enable tools", "static-check"), /Reset defaults.*defaults/);
   assert.doesNotMatch(getRenderedMenu("Debug", "Log on status"), /Reset defaults.*running/);
@@ -2026,7 +2026,7 @@ test("notifications reset defaults preserves non-notification settings", async (
       "docs-dir",
       "notifications",
       "Enable notification",
-      "Enable sound",
+      "Enable sound (boot value)",
       "high",
       "Reset defaults",
       "Approve reset",
@@ -4664,7 +4664,7 @@ test("configuration menu can disable configurable active tools", async () => {
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
 
-test("configuration menu can persist notify and sound settings", async () => {
+test("configuration menu can persist notify and boot-sound settings without changing runtime sound", async () => {
   const cwd = createTempDir("pi-usereq-menu-notify-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -4678,7 +4678,7 @@ test("configuration menu can persist notify and sound settings", async () => {
       "Notification events",
       "Prompt failed",
       "Save and close",
-      "Enable sound",
+      "Enable sound (boot value)",
       "high",
       "Sound events",
       "Prompt interrupted",
@@ -4700,6 +4700,7 @@ test("configuration menu can persist notify and sound settings", async () => {
     ],
   });
 
+  await pi.emit("session_start", { reason: "startup" }, ctx);
   await command!.handler("", ctx);
 
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
@@ -4725,7 +4726,7 @@ test("configuration menu can persist notify and sound settings", async () => {
       srcDir: ["src"],
       contextFilledCells: 0,
       et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
-      sound: "high",
+      sound: "none",
     }),
   );
 });
@@ -5274,9 +5275,11 @@ test("sound routing honors the selected sound state and per-event toggles", asyn
   }
 });
 
-test("sound toggle shortcut cycles persisted pi-notify sound levels", async () => {
+test("sound toggle shortcut cycles active runtime pi-notify sound levels without persisting boot config", async () => {
   const cwd = createTempDir("pi-usereq-shortcut-notify-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const persistedConfigText = `${JSON.stringify(getDefaultConfig(cwd), null, 2)}\n`;
+  fs.writeFileSync(getProjectConfigPath(cwd), persistedConfigText, "utf8");
   const previousCwd = process.cwd();
   const pi = createFakePi();
   process.chdir(cwd);
@@ -5293,8 +5296,7 @@ test("sound toggle shortcut cycles persisted pi-notify sound levels", async () =
 
   for (const expectedSound of ["low", "mid", "high", "none"]) {
     await shortcut!.handler(ctx);
-    const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-    assert.equal(config["notify-sound"], expectedSound);
+    assert.equal(fs.readFileSync(getProjectConfigPath(cwd), "utf8"), persistedConfigText);
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
@@ -5308,6 +5310,42 @@ test("sound toggle shortcut cycles persisted pi-notify sound levels", async () =
       }),
     );
   }
+});
+
+test("session_start loads the active runtime sound from persisted boot config", async () => {
+  const cwd = createTempDir("pi-usereq-session-start-sound-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const persistedConfig = getDefaultConfig(cwd);
+  persistedConfig["notify-sound"] = "mid";
+  fs.writeFileSync(
+    getProjectConfigPath(cwd),
+    `${JSON.stringify(persistedConfig, null, 2)}\n`,
+    "utf8",
+  );
+  const previousCwd = process.cwd();
+  const pi = createFakePi();
+  process.chdir(cwd);
+  try {
+    piUsereqExtension(pi);
+  } finally {
+    process.chdir(previousCwd);
+  }
+
+  const ctx = createFakeCtx(cwd);
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+
+  assert.equal(
+    ctx.__state.statuses.get("pi-usereq"),
+    buildExpectedFakeStatusText({
+      basePath: buildExpectedFakeBasePath(cwd),
+      docsDir: DEFAULT_DOCS_DIR,
+      testsDir: "tests",
+      srcDir: ["src"],
+      contextFilledCells: 0,
+      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      sound: "mid",
+    }),
+  );
 });
 
 test("static-check exposes the supported programming languages", () => {

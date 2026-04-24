@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.56"
-date: "2026-04-23"
+version: "0.0.57"
+date: "2026-04-24"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -174,10 +174,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-127**: MUST render `context` as non-blinking theme `error` `▕█▏` when normalized usage is `>=90-<100` percent.
 - **REQ-233**: MUST render `context` as blinking theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is supported.
 - **REQ-128**: MUST render `context` as theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is unavailable.
-- **REQ-131**: MUST persist a sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
-- **REQ-132**: MUST execute the configured sound command when the corresponding prompt-end sound event toggle is enabled and the sound level is not `none`.
+- **REQ-131**: MUST persist a boot sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
+- **REQ-132**: MUST execute the configured sound command when the corresponding prompt-end sound event toggle is enabled and the active runtime sound level is not `none`.
 - **REQ-133**: MUST persist configurable shell-command strings for sound levels `low`, `mid`, and `high`, and MUST substitute `%%INSTALLATION_PATH%%` with the runtime extension installation path before execution.
-- **REQ-134**: MUST persist a configurable sound-level toggle shortcut, defaulting to `alt+s`, and MUST cycle sound levels in the order `none`, `low`, `mid`, `high`, `none`.
+- **REQ-134**: MUST persist a configurable sound-level toggle shortcut, defaulting to `alt+s`.
+- **REQ-285**: MUST load the active runtime sound level from persisted `notify-sound` during `session_start`.
+- **REQ-286**: MUST cycle only the active runtime sound level when the configured shortcut fires.
+- **REQ-287**: MUST NOT update `.pi-usereq.json` when the configured shortcut fires.
 - **REQ-137**: MUST make the `Notifications` menu render contiguous command-notify, sound, and Pushover configuration blocks in that order.
 - **REQ-163**: MUST persist a global Pushover enable flag defaulting to disabled.
 - **REQ-164**: MUST expose a `Pushover events` submenu and MUST keep non-event Pushover settings directly in `Notifications`.
@@ -193,10 +196,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-175**: MUST persist `PI_NOTIFY_CMD` defaulting to `notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a "PI-useReq" "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"`.
 - **REQ-176**: MUST implement command-notify exclusively by executing `PI_NOTIFY_CMD` when command-notify is globally enabled and the corresponding prompt-end notify event toggle is enabled.
 - **REQ-178**: MUST persist sound event toggles in keys `notify-sound-on-completed`, `notify-sound-on-interrupted`, and `notify-sound-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
-- **REQ-179**: MUST label sound rows as `Enable sound` and `Sound command (low vol.)`, `Sound command (mid vol.)`, and `Sound command (high vol.)`.
-- **REQ-180**: MUST render `sound` immediately after `elapsed`, showing one of `none`, `low`, `mid`, or `high`.
+- **REQ-179**: MUST label sound rows as `Enable sound (boot value)` and `Sound command (low vol.)`, `Sound command (mid vol.)`, and `Sound command (high vol.)`.
+- **REQ-180**: MUST render `sound` immediately after `elapsed`, showing the active runtime sound level as `none`, `low`, `mid`, or `high`.
 - **REQ-181**: MUST make the `Notifications` menu expose `Enable notification`, `Notification events`, and `Notify command` before sound rows.
-- **REQ-183**: MUST make the `Notifications` menu expose `Sound events` immediately after `Enable sound` and before sound hotkey plus command rows.
+- **REQ-183**: MUST make the `Notifications` menu expose `Sound events` immediately after `Enable sound (boot value)` and before sound hotkey plus command rows.
+- **REQ-288**: MUST persist menu-selected `notify-sound` changes to `.pi-usereq.json` without changing the active runtime sound level.
+- **REQ-289**: MUST render configuration-menu sound values from persisted `notify-sound`, even when the active runtime sound level differs.
 - **REQ-184**: MUST persist Pushover event toggles in keys `notify-pushover-on-completed`, `notify-pushover-on-interrupted`, and `notify-pushover-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
 - **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%RESULT%%\n%%ARGS%%`.
 - **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
@@ -334,7 +339,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-144**: MUST default `PI_NOTIFY_SOUND_HIGH_CMD` to `paplay --volume=65535 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
 - **REQ-145**: MUST derive static `git-path` during bootstrap from `base-path` and repository ancestry rules, ignoring project-configuration JSON values.
 - **REQ-146**: MUST NOT read or persist `base-path` or `git-path` in project-configuration JSON.
-- **REQ-149**: MUST label notification settings actions as `Notify command`, `Enable sound`, `Sound toggle hotkey bind`, `Sound command (low|mid|high vol.)`, `Pushover User Key/Delivery Group Key`, and `Pushover Token/API Token Key`.
+- **REQ-149**: MUST label notification settings actions as `Notify command`, `Enable sound (boot value)`, `Sound toggle hotkey bind`, `Sound command (low|mid|high vol.)`, `Pushover User Key/Delivery Group Key`, and `Pushover Token/API Token Key`.
 - **REQ-150**: MUST omit overview rows and reference-only actions from the main, notification, startup-tool, and static-check configuration menus.
 - **REQ-151**: MUST render `pi-usereq`, notification, static-check, and startup-tool menus with left-aligned labels and right-aligned current values using the active CLI settings-list theme semantics.
 - **REQ-156**: MUST restrict extension-owned status and settings rendering to CLI-supported theme APIs and documented theme tokens.
@@ -358,8 +363,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-031**: MUST verify the status bar renders `status` before `branch`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
 - **TST-033**: MUST verify the status bar renders ordered `status`, `branch`, `context`, `elapsed`, and `sound` fields plus the documented icon-based `context` gauge thresholds.
-- **TST-037**: MUST verify the `Notifications` menu persists notification and sound settings through `Notification events` and `Sound events` submenus using the documented labels, order, reset-confirmation flows, immediate-save behavior, and no `Save and close` rows.
-- **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
+- **TST-037**: MUST verify the `Notifications` menu persists notification and boot-sound settings through `Notification events` and `Sound events` submenus using the documented labels, order, reset-confirmation flows, immediate-save behavior, and no `Save and close` rows.
+- **TST-038**: MUST verify the sound-toggle shortcut cycles only the active runtime sound level, leaves `.pi-usereq.json` unchanged, and refreshes the status bar with the updated `sound` field.
+- **TST-097**: MUST verify `session_start` loads the active runtime sound level from persisted `notify-sound`.
+- **TST-098**: MUST verify menu-selected boot sound changes persist to `.pi-usereq.json` without changing the active runtime sound level.
 - **TST-047**: MUST verify the `Notifications` menu exposes `Pushover events` before direct Pushover settings, keeps `Enable pushover` dimmed and locked until both credential fields are non-empty, and persists Pushover event and credential values.
 - **TST-072**: MUST verify `Pushover text` displays escaped control sequences in menus and decodes the documented escape sequences from input before persistence.
 - **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` for enabled prompt-end outcomes.
@@ -369,7 +376,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-062**: MUST verify `Show configuration` saves pending config, closes the active configuration menu tree, and writes the persisted `.pi-usereq.json` file text into the editor.
 - **TST-063**: MUST verify `⚑` plus `⌛︎` survive `session_start` reason `new` and reset on `session_start` reason `reload`.
 - **TST-045**: MUST verify default configuration enables auto git commit, disables debug, notify, and Pushover globally, initializes sound to `none`, sets `DEBUG_LOG_FILE=/tmp/PI-useReq.json`, and persists the documented notify and Pushover templates.
-- **TST-051**: MUST verify sound routing honors the selected sound state and completed/interrupted/failed sound toggles.
+- **TST-051**: MUST verify sound routing honors the active runtime sound state and completed/interrupted/failed sound toggles.
 - **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with default terminal color.
 - **TST-096**: MUST verify context usage `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90` render `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` in default terminal color.
 - **TST-036**: MUST verify context usage `>=90-<100` renders non-blinking error `▕█▏`, and `>=100` renders blinking error `▕█▏` or non-blinking error `▕█▏` when blink control is unavailable.

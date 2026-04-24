@@ -14,6 +14,7 @@ import type {
   ThemeColor,
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
+import type { PiNotifySoundLevel } from "./pi-notify.js";
 import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
 import {
   restorePersistedPromptCommandRuntimeStateForSession,
@@ -111,7 +112,7 @@ export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" 
 
 /**
  * @brief Stores the mutable runtime facts displayed by the status bar.
- * @details Persists the prompt-orchestration workflow state, the latest context-usage snapshot, the active run start timestamp, the most recent normally completed run duration, the accumulated duration of all normally completed runs, and prompt-request metadata carried from command dispatch into the next runtime execution. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
+ * @details Persists the prompt-orchestration workflow state, the latest context-usage snapshot, the active run start timestamp, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, and prompt-request metadata carried from command dispatch into the next runtime execution. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqStatusState {
   workflowState: PiUsereqWorkflowState;
@@ -119,6 +120,7 @@ export interface PiUsereqStatusState {
   runStartTimeMs: number | undefined;
   lastRunDurationMs: number | undefined;
   totalRunDurationMs: number | undefined;
+  runtimeSoundLevel: PiNotifySoundLevel | undefined;
   pendingPromptRequest: PiUsereqPromptRequest | undefined;
   activePromptRequest: PiUsereqPromptRequest | undefined;
 }
@@ -549,8 +551,23 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 }
 
 /**
+ * @brief Resolves the active runtime sound level used by status and notify flows.
+ * @details Prefers the mutable runtime sound state, then falls back to the cached persisted boot value, and finally defaults to `none` before `session_start` loads configuration. Runtime is O(1). No external state is mutated.
+ * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
+ * @param[in] config {UseReqConfig | undefined} Cached project configuration.
+ * @return {PiNotifySoundLevel} Active runtime sound level.
+ * @satisfies REQ-180, REQ-285
+ */
+function resolvePiUsereqRuntimeSoundLevel(
+  state: PiUsereqStatusState,
+  config: UseReqConfig | undefined,
+): PiNotifySoundLevel {
+  return state.runtimeSoundLevel ?? config?.["notify-sound"] ?? "none";
+}
+
+/**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders status, branch, context, elapsed, and sound fields in the canonical order with dim bullet separators, workflow-state highlighting, and the documented icon-based context gauge. Runtime is O(1). No external state is mutated.
+ * @details Renders status, branch, context, elapsed, and sound fields in the canonical order with dim bullet separators, workflow-state highlighting, the documented icon-based context gauge, and the active runtime sound level instead of the persisted boot value. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
@@ -567,7 +584,7 @@ function buildPiUsereqStatusText(
   nowMs: number,
 ): string {
   const elapsedText = formatElapsedStatusValue(state, nowMs);
-  const soundText = config["notify-sound"];
+  const soundText = resolvePiUsereqRuntimeSoundLevel(state, config);
   return [
     formatRenderedStatusField(
       theme,
@@ -630,7 +647,7 @@ function syncPiUsereqStatusTicker(
 
 /**
  * @brief Creates an empty pi-usereq status controller.
- * @details Initializes the mutable status snapshot, including empty prompt-request tracking, and starts with no config, no context, and no live ticker. Runtime is O(1). No external state is mutated.
+ * @details Initializes the mutable status snapshot, including empty prompt-request tracking and an unset runtime sound level that later loads from persisted config during `session_start`, and starts with no config, no context, and no live ticker. Runtime is O(1). No external state is mutated.
  * @return {PiUsereqStatusController} New status controller.
  * @satisfies DES-010
  */
@@ -644,6 +661,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       runStartTimeMs: undefined,
       lastRunDurationMs: undefined,
       totalRunDurationMs: undefined,
+      runtimeSoundLevel: undefined,
       pendingPromptRequest: undefined,
       activePromptRequest: undefined,
     },
@@ -654,8 +672,9 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
 /**
  * @brief Stores the effective project configuration used by status rendering.
  * @details Replaces the controller's cached configuration so later status
- * renders reuse the latest docs, tests, source-path, and pi-notify values
- * without reading from disk on every event. Runtime is O(1). Side effect:
+ * renders reuse the latest docs, tests, source-path, and persisted pi-notify
+ * values without reading from disk on every event, while leaving the active
+ * runtime sound level in `controller.state`. Runtime is O(1). Side effect:
  * mutates `controller.config`.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -669,8 +688,42 @@ export function setPiUsereqStatusConfig(
 }
 
 /**
+ * @brief Returns the active runtime sound level tracked by the status controller.
+ * @details Exposes the in-memory runtime sound state so shortcut handlers and prompt-end notification dispatch can stay decoupled from the persisted boot value stored in `.pi-usereq.json`. Runtime is O(1). No external state is mutated.
+ * @param[in] controller {PiUsereqStatusController} Mutable status controller.
+ * @return {PiNotifySoundLevel} Active runtime sound level.
+ * @satisfies REQ-180, REQ-285
+ */
+export function getPiUsereqRuntimeSoundLevel(
+  controller: PiUsereqStatusController,
+): PiNotifySoundLevel {
+  return resolvePiUsereqRuntimeSoundLevel(controller.state, controller.config);
+}
+
+/**
+ * @brief Stores one new runtime sound level and refreshes the status bar.
+ * @details Mutates only the in-memory runtime sound state so shortcut-driven sound changes do not update `.pi-usereq.json`, then re-renders the footer when an active extension context is available. Runtime is O(1). Side effect: mutates `controller.state.runtimeSoundLevel` and may update `ctx.ui` status.
+ * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
+ * @param[in] runtimeSoundLevel {PiNotifySoundLevel} Next active runtime sound level.
+ * @param[in] ctx {ExtensionContext | undefined} Optional active extension context.
+ * @return {void} No return value.
+ * @satisfies REQ-180, REQ-286, REQ-287
+ */
+export function setPiUsereqRuntimeSoundLevel(
+  controller: PiUsereqStatusController,
+  runtimeSoundLevel: PiNotifySoundLevel,
+  ctx?: ExtensionContext,
+): void {
+  controller.state.runtimeSoundLevel = runtimeSoundLevel;
+  const renderContext = ctx ?? controller.latestContext;
+  if (renderContext) {
+    renderPiUsereqStatus(controller, renderContext);
+  }
+}
+
+/**
  * @brief Renders the current pi-usereq status bar into the active UI context.
- * @details Updates the controller's latest context pointer, refreshes the live `getContextUsage()` snapshot for direct render call sites that do not pass through `updateExtensionStatus(...)`, and writes the single-line status text only when configuration is available, including the active branch field and documented icon-based context gauge. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1) plus git execution for branch refresh. Side effect: mutates `controller.state.contextUsage` and `ctx.ui` status when the context is still active.
+ * @details Updates the controller's latest context pointer, refreshes the live `getContextUsage()` snapshot for direct render call sites that do not pass through `updateExtensionStatus(...)`, and writes the single-line status text only when configuration is available, including the active branch field, documented icon-based context gauge, and active runtime sound level. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1) plus git execution for branch refresh. Side effect: mutates `controller.state.contextUsage` and `ctx.ui` status when the context is still active.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
@@ -733,13 +786,13 @@ export function setPiUsereqWorkflowState(
 
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing on `agent_start`, promotes pending prompt-request metadata into the active run, captures non-aborted run duration on `agent_end`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing on `agent_start`, promotes pending prompt-request metadata into the active run, captures non-aborted run duration on `agent_end`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280
+ * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285
  */
 export function updateExtensionStatus(
   controller: PiUsereqStatusController,
@@ -758,6 +811,9 @@ export function updateExtensionStatus(
     } else {
       restorePersistedElapsedState(controller.state);
     }
+    controller.state.runtimeSoundLevel = controller.config?.["notify-sound"]
+      ?? controller.state.runtimeSoundLevel
+      ?? "none";
     const shouldResetWorkflowState = shouldResetWorkflowStateOnSessionStart(event);
     if (shouldResetWorkflowState) {
       controller.state.workflowState = "idle";

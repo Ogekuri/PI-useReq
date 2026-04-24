@@ -110,7 +110,7 @@ export interface PiNotifyEventRequest {
 
 /**
  * @brief Describes the configuration fields consumed by pi-notify helpers.
- * @details Narrows the full project config to the persisted notify, sound, and Pushover fields used by status rendering, prompt-end routing, and shortcut toggles. Compile-time only and introduces no runtime cost.
+ * @details Narrows the full project config to the notify, sound, and Pushover fields used by status rendering and prompt-end routing. Callers may override `notify-sound` with the active runtime sound level before dispatch. Compile-time only and introduces no runtime cost.
  */
 export type PiNotifyConfigFields = Pick<
   UseReqConfig,
@@ -363,10 +363,10 @@ export function formatPiNotifyPushoverStatus(config: Pick<UseReqConfig, "notify-
 
 /**
  * @brief Cycles one sound level through the canonical shortcut order.
- * @details Advances persisted sound state in the exact order `none -> low -> mid -> high -> none`, enabling deterministic shortcut toggling and menu reuse. Runtime is O(1). No external state is mutated.
- * @param[in] currentLevel {PiNotifySoundLevel} Current persisted sound level.
- * @return {PiNotifySoundLevel} Next sound level in the cycle.
- * @satisfies REQ-134
+ * @details Advances the active runtime sound state in the exact order `none -> low -> mid -> high -> none`, enabling deterministic shortcut toggling without mutating persisted boot configuration. Runtime is O(1). No external state is mutated.
+ * @param[in] currentLevel {PiNotifySoundLevel} Current active runtime sound level.
+ * @return {PiNotifySoundLevel} Next runtime sound level in the cycle.
+ * @satisfies REQ-286
  */
 export function cyclePiNotifySoundLevel(currentLevel: PiNotifySoundLevel): PiNotifySoundLevel {
   const currentIndex = PI_NOTIFY_SOUND_LEVELS.indexOf(currentLevel);
