@@ -228,9 +228,8 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.deepEqual([...report.activeTools].sort(), ["files-tokens", "static-check"]);
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
-    const normalizedBasePath = projectBase.split(path.sep).join("/");
     assert.match(status, /<accent>status:<\/accent><warning>idle<\/warning>/);
-    assert.match(status, new RegExp(`<accent>current-path:</accent><warning>${normalizedBasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</warning>`));
+    assert.doesNotMatch(status, /<accent>current-path:<\/accent>/);
     assert.match(status, /<accent>context:<\/accent><warning>▕_▏<\/warning>/);
     assert.match(status, /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);

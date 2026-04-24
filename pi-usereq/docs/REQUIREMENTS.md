@@ -152,7 +152,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-251**: MUST default `static-check.Python`, `JavaScript`, and `TypeScript` to `enabled=enable` with their documented Command checker entries.
 - **REQ-252**: MUST default every other supported `static-check.<language>` entry to `enabled=disable` with `checkers=[]`.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, reset workflow state to `idle` for `session_start` reasons `startup|new|reload`, and publish single-line `pi-usereq` status text.
-- **REQ-109**: MUST make the single-line status bar render the explicit runtime `current-path` value from `context-path` and omit `base`, `docs`, `src`, and `tests` path fields.
+- **REQ-109**: MUST omit `current-path`, `base`, `docs`, `src`, and `tests` path fields from the single-line status bar.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
 - **REQ-112**: MUST render status-bar field names with the active theme `accent` token and non-error field values with the active theme `warning` token.
 - **REQ-113**: MUST register shared event wrappers for `resources_discover`, `session_start`, `session_before_switch`, `session_before_fork`, `session_before_compact`, `session_compact`, and `session_shutdown`.
@@ -162,8 +162,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
-- **REQ-120**: MUST render single-line status fields in this order: `status`, `current-path`, `context`, `elapsed`, `sound`.
-- **REQ-121**: MUST render `context` immediately after `current-path` with separator ` • ` and one fixed-width gauge icon.
+- **REQ-120**: MUST render single-line status fields in this order: `status`, `context`, `elapsed`, `sound`.
+- **REQ-121**: MUST render `context` immediately after `status` with separator ` • ` and one fixed-width gauge icon.
 - **REQ-122**: MUST map `context` usage to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-25`, `>25-50`, `>50-90`, and `>90-100` percent bands.
 - **REQ-123**: MUST render `elapsed` immediately after `context` as `⏱︎ <active> ⚑ <last> ⌛︎<total>`.
 - **REQ-124**: MUST render `⏱︎ --:--` when no prompt is active, and `⚑ --:--` plus `⌛︎--:--` until the corresponding timers receive a normally completed prompt duration.
@@ -332,7 +332,6 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-144**: MUST default `PI_NOTIFY_SOUND_HIGH_CMD` to `paplay --volume=65535 %%INSTALLATION_PATH%%/resources/sounds/Soft-high-tech-notification-sound-effect.mp3`.
 - **REQ-145**: MUST derive static `git-path` during bootstrap from `base-path` and repository ancestry rules, ignoring project-configuration JSON values.
 - **REQ-146**: MUST NOT read or persist `base-path` or `git-path` in project-configuration JSON.
-- **REQ-148**: MUST render status-bar `current-path` as dynamic `context-path`, home-relative with `~` when applicable.
 - **REQ-149**: MUST label notification settings actions as `Notify command`, `Enable sound`, `Sound toggle hotkey bind`, `Sound command (low|mid|high vol.)`, `Pushover User Key/Delivery Group Key`, and `Pushover Token/API Token Key`.
 - **REQ-150**: MUST omit overview rows and reference-only actions from the main, notification, startup-tool, and static-check configuration menus.
 - **REQ-151**: MUST render `pi-usereq`, notification, static-check, and startup-tool menus with left-aligned labels and right-aligned current values using the active CLI settings-list theme semantics.
@@ -354,15 +353,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-078**: MUST verify default configuration persists documented per-language `enabled` flags and checker lists for `C`, `C++`, `Python`, `JavaScript`, and `TypeScript`.
 - **TST-079**: MUST verify `files-static-check` and `static-check` execute zero checkers and expose empty configured-checker lists when the target language `enabled=disable`.
 - **TST-006**: MUST verify `session_start` activates configured startup tools, resets workflow state to `idle` for `startup|new|reload`, and updates the single-line `pi-usereq` status bar.
-- **TST-031**: MUST verify the status bar renders `status` before the home-relative `current-path`, omits `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
+- **TST-031**: MUST verify the status bar renders `status` before `context`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
-- **TST-033**: MUST verify the status bar renders ordered `status`, `current-path`, `context`, `elapsed`, and `sound` fields plus the documented icon-based `context` gauge thresholds.
+- **TST-033**: MUST verify the status bar renders ordered `status`, `context`, `elapsed`, and `sound` fields plus the documented icon-based `context` gauge thresholds.
 - **TST-037**: MUST verify the `Notifications` menu persists notification and sound settings through `Notification events` and `Sound events` submenus using the documented labels, order, reset-confirmation flows, immediate-save behavior, and no `Save and close` rows.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles persisted sound levels and refreshes the status bar with the updated `sound` field.
 - **TST-047**: MUST verify the `Notifications` menu exposes `Pushover events` before direct Pushover settings, keeps `Enable pushover` dimmed and locked until both credential fields are non-empty, and persists Pushover event and credential values.
 - **TST-072**: MUST verify `Pushover text` displays escaped control sequences in menus and decodes the documented escape sequences from input before persistence.
 - **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` for enabled prompt-end outcomes.
-- **TST-049**: MUST verify the status bar renders ordered `status`, `current-path`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
+- **TST-049**: MUST verify the status bar renders ordered `status`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
 - **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
 - **TST-062**: MUST verify `Show configuration` saves pending config, closes the active configuration menu tree, and writes the persisted `.pi-usereq.json` file text into the editor.

@@ -3,8 +3,8 @@
  * @brief Tracks pi-usereq extension status state and renders status-bar telemetry.
  * @details Centralizes hook interception, context-usage snapshots, run timing,
  * and deterministic status-bar formatting for the pi-usereq extension. Runtime
- * is O(1) per event plus O(s) in configured source-path count during status
- * rendering. Side effects are limited to in-memory state mutation and interval
+ * is O(1) per event plus interval-driven re-renders while a prompt remains
+ * active. Side effects are limited to in-memory state mutation and interval
  * scheduling through exported controller helpers.
  */
 
@@ -16,10 +16,6 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
 import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
-import {
-  formatRuntimePathForDisplay,
-  getRuntimeContextPath,
-} from "./path-context.js";
 import {
   restorePersistedPromptCommandRuntimeStateForSession,
   writePersistedPromptCommandRuntimeState,
@@ -545,23 +541,20 @@ function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean {
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders status, current-path, context, elapsed, and sound fields in the canonical order with dim bullet separators, workflow-state highlighting, and the documented icon-based context gauge. Runtime is O(1). No external state is mutated.
- * @param[in] cwd {string} Runtime working directory used for context-path derivation.
+ * @details Renders status, context, elapsed, and sound fields in the canonical order with dim bullet separators, workflow-state highlighting, and the documented icon-based context gauge. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-148, REQ-156, REQ-159, REQ-180, REQ-222, REQ-223
+ * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-156, REQ-159, REQ-180, REQ-222, REQ-223
  */
 function buildPiUsereqStatusText(
-  cwd: string,
   config: UseReqConfig,
   theme: StatusThemeAdapter,
   state: PiUsereqStatusState,
   nowMs: number,
 ): string {
-  const currentPathText = formatRuntimePathForDisplay(getRuntimeContextPath(cwd));
   const elapsedText = formatElapsedStatusValue(state, nowMs);
   const soundText = config["notify-sound"];
   return [
@@ -570,7 +563,6 @@ function buildPiUsereqStatusText(
       "status",
       formatWorkflowStateValue(theme, state.workflowState),
     ),
-    formatStatusField(theme, "current-path", currentPathText),
     formatRenderedStatusField(
       theme,
       "context",
@@ -666,11 +658,11 @@ export function setPiUsereqStatusConfig(
 
 /**
  * @brief Renders the current pi-usereq status bar into the active UI context.
- * @details Updates the controller's latest context pointer and writes the single-line status text only when configuration is available, deriving `current-path` from the active runtime context path aligned to `ctx.cwd` and including the documented icon-based context gauge. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(s) in configured source-path count. Side effect: mutates `ctx.ui` status when the context is still active.
+ * @details Updates the controller's latest context pointer and writes the single-line status text only when configuration is available, including the documented icon-based context gauge. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1). Side effect: mutates `ctx.ui` status when the context is still active.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-148, REQ-159, REQ-180, REQ-280
+ * @satisfies REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-159, REQ-180, REQ-280
  */
 export function renderPiUsereqStatus(
   controller: PiUsereqStatusController,
@@ -685,7 +677,6 @@ export function renderPiUsereqStatus(
     ctx.ui.setStatus(
       "pi-usereq",
       buildPiUsereqStatusText(
-        ctx.cwd,
         controller.config,
         theme,
         controller.state,

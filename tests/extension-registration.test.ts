@@ -437,13 +437,16 @@ function buildExpectedFakeContextBar(options: {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, workflow-state highlighting, separators, icon-based context gauge, consolidated elapsed field, and sound field emitted by the extension using deterministic fake theme markers. Runtime is O(1). No external state is mutated.
- * @param[in] options {{ workflowState?: string; basePath: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts where `basePath` carries the rendered `current-path` value.
+ * @details Reconstructs the field order, workflow-state highlighting,
+ * separators, icon-based context gauge, consolidated elapsed field, and sound
+ * field emitted by the extension using deterministic fake theme markers.
+ * Runtime is O(1). No external state is mutated.
+ * @param[in] options {{ workflowState?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered `status`, `context`, `elapsed`, and `sound` fields.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
   workflowState?: string;
-  basePath: string;
+  basePath?: string;
   docsDir?: string;
   testsDir?: string;
   srcDir?: string[];
@@ -464,7 +467,6 @@ function buildExpectedFakeStatusText(options: {
   });
   return [
     `${formatFakeThemeForeground("accent", "status:")}${workflowStateValue}`,
-    buildField("current-path", options.basePath),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
     buildField("elapsed", options.et),
     buildField("sound", options.sound ?? "none"),
@@ -472,10 +474,11 @@ function buildExpectedFakeStatusText(options: {
 }
 
 /**
- * @brief Formats one expected absolute base path for fake status assertions.
+ * @brief Formats one expected absolute base path for prompt and status assertions.
  * @details Resolves the supplied cwd and normalizes path separators to `/` so
- * fake status comparisons stay stable across operating systems. Runtime is O(p)
- * in path length. No external state is mutated.
+ * prompt-text comparisons and legacy status-call-site inputs stay stable across
+ * operating systems. Runtime is O(p) in path length. No external state is
+ * mutated.
  * @param[in] cwd {string} Runtime working directory.
  * @return {string} Slash-normalized absolute base path.
  */
