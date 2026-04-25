@@ -3256,7 +3256,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 
 ---
 
-# resources.ts | TypeScript | 119L | 7 symbols | 3 imports | 8 comments
+# resources.ts | TypeScript | 102L | 7 symbols | 3 imports | 8 comments
 > Path: `src/core/resources.ts`
 - @brief Resolves installation-owned bundled resource locations.
 - @details Encapsulates installation-path discovery, bundled-resource validation, prompt enumeration, prompt loading, and bundled instruction loading directly from the installed extension payload. Runtime is proportional to directory-entry enumeration and resource file size. Side effects are limited to filesystem reads.
@@ -3296,20 +3296,20 @@ import { getInstallationPath, RESOURCE_ROOT_DIRNAME } from "./path-context.js";
 - @return {string} Raw prompt markdown content.
 - @throws {Error} Propagates `fs.readFileSync` errors when the prompt file is missing or unreadable.
 
-### fn `export function readBundledPromptDescription(promptName: string): string` (L73-95)
-- @brief Extracts the YAML-front-matter `description` field from one bundled prompt.
-- @details Parses only the leading front-matter block, resolves the first scalar `description` entry, strips one matching pair of wrapping quotes, and unescapes quoted apostrophe or quote characters used in prompt metadata. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads delegated through `readBundledPrompt(...)`.
+### fn `export function readBundledPromptDescription(promptName: string): string` (L73-78)
+- @brief Extracts the first Markdown level-one heading from one bundled prompt.
+- @details Removes one optional leading YAML front-matter block, scans the remaining markdown body for the first line that begins with `# `, and returns the heading payload without the marker or surrounding whitespace. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads delegated through `readBundledPrompt(...)`.
 - @param[in] promptName {string} Prompt identifier without the `.md` suffix.
-- @return {string} Normalized prompt description or the empty string when the front matter does not declare one.
+- @return {string} First `# ` heading payload, or the empty string when no level-one heading exists.
 
-### fn `export function readBundledInstruction(instructionName: string): string` (L104-106)
+### fn `export function readBundledInstruction(instructionName: string): string` (L87-89)
 - @brief Reads one bundled markdown instruction by logical instruction name.
 - @details Resolves the instruction file under the installation-owned `resources/instructions` directory, validates resource accessibility, and loads it as UTF-8 text. Time complexity is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] instructionName {string} Instruction identifier without the `.md` suffix.
 - @return {string} Raw instruction markdown content.
 - @throws {Error} Propagates `fs.readFileSync` errors when the instruction file is missing or unreadable.
 
-### fn `export function listBundledPromptNames(): string[]` (L113-119)
+### fn `export function listBundledPromptNames(): string[]` (L96-102)
 - @brief Lists bundled prompt identifiers available in the installed extension payload.
 - @details Scans the installation-owned prompt directory, keeps visible markdown files only, strips the `.md` suffix, and returns a lexicographically sorted list. Time complexity is O(n log n). Side effects are limited to filesystem reads.
 - @return {string[]} Sorted prompt names without file extensions.
@@ -3321,9 +3321,9 @@ import { getInstallationPath, RESOURCE_ROOT_DIRNAME } from "./path-context.js";
 |`ensureBundledResourcesAccessible`|fn||26-38|export function ensureBundledResourcesAccessible(): string|
 |`readBundledMarkdownResource`|fn||48-54|function readBundledMarkdownResource(|
 |`readBundledPrompt`|fn||63-65|export function readBundledPrompt(promptName: string): st...|
-|`readBundledPromptDescription`|fn||73-95|export function readBundledPromptDescription(promptName: ...|
-|`readBundledInstruction`|fn||104-106|export function readBundledInstruction(instructionName: s...|
-|`listBundledPromptNames`|fn||113-119|export function listBundledPromptNames(): string[]|
+|`readBundledPromptDescription`|fn||73-78|export function readBundledPromptDescription(promptName: ...|
+|`readBundledInstruction`|fn||87-89|export function readBundledInstruction(instructionName: s...|
+|`listBundledPromptNames`|fn||96-102|export function listBundledPromptNames(): string[]|
 
 
 ---
@@ -4580,7 +4580,7 @@ cost.
 
 ### fn `function resolvePromptCommandDescription(` (L847-851)
 - @brief Resolves the runtime slash-command description for one bundled prompt.
-- @details Reads the bundled prompt front matter, extracts its normalized `description` field, and falls back to the historical generated label when the prompt metadata omits a description. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads.
+- @details Reads the bundled prompt markdown, extracts the first `# ` heading payload, and falls back to the historical generated label when the prompt omits a level-one heading. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads.
 - @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
 - @return {string} Runtime command description.
 

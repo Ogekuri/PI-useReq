@@ -840,7 +840,7 @@ function transitionPromptWorkflowState(
 
 /**
  * @brief Resolves the runtime slash-command description for one bundled prompt.
- * @details Reads the bundled prompt front matter, extracts its normalized `description` field, and falls back to the historical generated label when the prompt metadata omits a description. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads.
+ * @details Reads the bundled prompt markdown, extracts the first `# ` heading payload, and falls back to the historical generated label when the prompt omits a level-one heading. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads.
  * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
  * @return {string} Runtime command description.
  */

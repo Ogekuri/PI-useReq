@@ -65,33 +65,16 @@ export function readBundledPrompt(promptName: string): string {
 }
 
 /**
- * @brief Extracts the YAML-front-matter `description` field from one bundled prompt.
- * @details Parses only the leading front-matter block, resolves the first scalar `description` entry, strips one matching pair of wrapping quotes, and unescapes quoted apostrophe or quote characters used in prompt metadata. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads delegated through `readBundledPrompt(...)`.
+ * @brief Extracts the first Markdown level-one heading from one bundled prompt.
+ * @details Removes one optional leading YAML front-matter block, scans the remaining markdown body for the first line that begins with `# `, and returns the heading payload without the marker or surrounding whitespace. Runtime is O(n) in prompt length. Side effects are limited to filesystem reads delegated through `readBundledPrompt(...)`.
  * @param[in] promptName {string} Prompt identifier without the `.md` suffix.
- * @return {string} Normalized prompt description or the empty string when the front matter does not declare one.
+ * @return {string} First `# ` heading payload, or the empty string when no level-one heading exists.
  */
 export function readBundledPromptDescription(promptName: string): string {
   const promptText = readBundledPrompt(promptName);
-  const frontMatterMatch = promptText.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!frontMatterMatch) {
-    return "";
-  }
-  const descriptionLine = frontMatterMatch[1]
-    .split(/\r?\n/)
-    .find((line) => line.startsWith("description:"));
-  if (!descriptionLine) {
-    return "";
-  }
-  const rawValue = descriptionLine.slice("description:".length).trim();
-  const unquotedValue = rawValue.length >= 2
-    && ((rawValue.startsWith('"') && rawValue.endsWith('"'))
-      || (rawValue.startsWith("'") && rawValue.endsWith("'")))
-    ? rawValue.slice(1, -1)
-    : rawValue;
-  return unquotedValue
-    .replace(/\\"/g, '"')
-    .replace(/\\'/g, "'")
-    .trim();
+  const promptBody = promptText.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
+  const headingMatch = promptBody.match(/^# (.+?)\s*$/m);
+  return headingMatch?.[1]?.trim() ?? "";
 }
 
 /**

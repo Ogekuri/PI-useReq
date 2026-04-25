@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.60"
-date: "2026-04-24"
+version: "0.0.61"
+date: "2026-04-25"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -89,7 +89,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-002**: MUST replace `%%DOC_PATH%%`, `%%GUIDELINES_*%%`, `%%TEMPLATE_PATH%%`, `%%SRC_PATHS%%`, and `%%TEST_PATH%%` when rendering prompts.
 - **REQ-266**: MUST replace `%%PROJECT_BASE%%`, `%%CONTEXT_PATH%%`, `%%INSTALLATION_PATH%%`, `%%CONFIG_PATH%%`, and `%%ARGS%%` when rendering prompts.
 - **REQ-003**: MUST rewrite legacy `req --...` prompt text references to surviving internal tool names and slash-command-owned runtime behaviors.
-- **REQ-004**: MUST register `req-<prompt>` commands for every bundled prompt name using the bundled YAML `description` field as the runtime command description, run prompt preflight/worktree orchestration, and send rendered prompt content as a user message.
+- **REQ-004**: MUST register `req-<prompt>` commands for every bundled prompt name using the first Markdown `# ` heading with the prefix removed as the runtime command description, run prompt preflight/worktree orchestration, and send rendered prompt content as a user message.
 - **REQ-211**: MUST replace `%%PROMPT%%` with the current prompt name without the `req-` prefix when rendering bundled prompts and bundled commit instructions.
 - **REQ-213**: MUST replace prompt token `%%COMMIT%%` with rendered `<installation-path>/resources/instructions/git_commit.md` when `AUTO_GIT_COMMIT=enable`, and with rendered `<installation-path>/resources/instructions/git_read-only.md` when `AUTO_GIT_COMMIT=disable`.
 - **REQ-214**: MUST preprocess bundled `git_commit.md` and `git_read-only.md` with the same runtime token-replacement rules used for prompts before injecting them through `%%COMMIT%%`.
@@ -419,7 +419,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-075**: MUST verify selected `req-*` debug toggles append JSON entries for required-doc checks, worktree creation, fast-forward merge, worktree deletion, `workflow_state`, and `DEBUG_WORKFLOW_EVENTS`-gated workflow events across successful and failing prompt runs.
 - **TST-076**: MUST verify Debug submenu tool and prompt rows derive from `PI_USEREQ_CUSTOM_TOOL_NAMES`, `PI_USEREQ_EMBEDDED_TOOL_NAMES`, and `PROMPT_COMMAND_NAMES`.
 - **TST-085**: MUST verify the `Debug` submenu orders `Log on status` before `Status changes` and preserves the documented immediate-save plus focus-preserving re-render behavior.
-- **TST-080**: MUST verify each `req-*` command description is loaded at runtime from the bundled prompt YAML `description` field.
+- **TST-080**: MUST verify each `req-*` command description is loaded at runtime from the first bundled prompt Markdown `# ` heading with the prefix removed.
 - **TST-081**: MUST verify worktree-backed prompt execution verifies worktree registration and branch presence, switches active-session cwd, `ctx.cwd`, and `process.cwd()` to `worktree-path` before agent start, and restores them to `base-path` before session-closure handling returns.
 - **TST-082**: MUST verify worktree-backed successful runs enter `running` only after prompt handoff succeeds, merge with `--ff-only` from `base-path`, and delete the worktree only after deletion verification passes.
 - **TST-083**: MUST verify worktree merge failures notify the pi CLI, transition through `error`, retain the worktree checkout for manual recovery, and keep `base-path` active after session-closure handling.
