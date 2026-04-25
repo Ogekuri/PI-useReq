@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.64"
+version: "0.0.65"
 date: "2026-04-25"
 author: "OpenAI Codex"
 scope:
@@ -226,7 +226,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-197**: MUST summarize top-level `Notifications` as `notification:<state> • sound:<level> • pushover:<state>`.
 - **REQ-198**: MUST render `Notification events`, `Sound events`, and `Pushover events` as identical submenu lists with right-aligned `on|off` values for `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
 - **REQ-199**: MUST render `%%RESULT%%` as `successed`, `aborted`, or `failed` for completed, interrupted, and failed prompt-end outcomes.
-- **REQ-200**: MUST run slash-command-owned git validation immediately after the `idle` gate at the start of every `req-*` command and abort before command execution on failure.
+- **REQ-200**: MUST run slash-command-owned git validation immediately after the `idle` gate at the start of every `req-*` slash command except `req-reset` and abort before command execution on failure.
 - **REQ-201**: MUST require `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` before `analyze`, `change`, `check`, `cover`, `fix`, `flowchart`, `new`, `readme`, `recreate`, `refactor`, and `renumber`.
 - **REQ-202**: MUST require `REQUIREMENTS.md` before `implement`, and MUST skip required-doc prechecks for `create`, `references`, `workflow`, and `write`.
 - **REQ-203**: MUST abort a bundled prompt-backed `req-<prompt>` command before worktree creation and prompt dispatch when any prompt-required doc is missing, surfacing the missing canonical path plus remediation prompt command.
@@ -246,11 +246,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, and `error`.
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
-- **REQ-224**: MUST reject a `req-<prompt>` command before any operation when workflow state is not `idle`, surfacing the error to pi CLI.
+- **REQ-224**: MUST reject every `req-*` slash command except `req-reset` before any operation when workflow state is not `idle`, surface the error to pi CLI, and transition workflow state to `error`.
 - **REQ-225**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `checking` after the `idle` gate and keep it there through required-doc checks, worktree preparation, and prompt handoff preparation.
 - **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during bundled prompt-backed `req-<prompt>` preflight.
 - **REQ-227**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `running` only after required-doc checks, worktree preparation, worktree verification, and prompt-session handoff succeed.
-- **REQ-299**: MUST make `req-references` transition workflow state to `checking`, validate slash-command-owned git state, and transition directly to `running` without worktree creation, session switching, or LLM-session initialization.
+- **REQ-299**: MUST make `req-references`, after passing the shared `idle` gate, transition workflow state to `checking`, validate slash-command-owned git state, and transition directly to `running` without worktree creation, session switching, or LLM-session initialization.
 - **REQ-300**: MUST make `req-references` execute the same reference-generation and overwrite logic as `references`, writing configured-source reference markdown to `<base-path>/<docs-dir>/REFERENCES.md`.
 - **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]`.
 - **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `idle` before the command handler returns.
@@ -472,7 +472,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-061**: MUST verify `req-<prompt>` commands skip worktree creation when `AUTO_GIT_COMMIT=disable`, even if persisted `GIT_WORKTREE_ENABLED=enable`.
 - **TST-064**: MUST verify worktree-backed `req-<prompt>` commands confirm created worktree directory plus branch existence before prompt dispatch and abort without dispatch when verification fails.
 - **TST-067**: MUST verify `status:error` renders with blinking error styling and non-error `status` values follow the documented status-bar theme convention.
-- **TST-068**: MUST verify every `req-<prompt>` command rejects non-`idle` workflow state before performing checks, worktree operations, or direct references execution.
+- **TST-068**: MUST verify every `req-*` slash command except `req-reset` rejects non-`idle` workflow state before checks, worktree operations, or direct references execution, surfaces an error, and transitions workflow state to `error`.
 - **TST-069**: MUST verify bundled prompt-backed `req-<prompt>` commands transition workflow state through `checking`, `error`, and `running` for documented preflight and prompt-handoff paths.
 - **TST-070**: MUST verify prompt-end handling ignores unrelated or non-success completions and performs cleanup only for the matched successful prompt.
 - **TST-071**: MUST verify matched successful cleanup transitions workflow state through `merging` to `idle` and transitions to `error` on merge or deletion failure.

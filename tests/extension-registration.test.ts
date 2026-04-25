@@ -2744,8 +2744,16 @@ test("prompt commands capture checking before handoff and running at prompt inje
   }
 });
 
-test("prompt commands reject non-idle workflow state before starting a new orchestration", async () => {
+/**
+ * @brief Verifies every req command except `req-reset` rejects non-`idle` workflow state and transitions to `error`.
+ * @details Starts one no-worktree `req-change` run until workflow state becomes `running`, invokes `req-analyze` and `req-references` while orchestration remains active, and verifies both handlers reject with deterministic diagnostics, emit error notifications, send no additional LLM prompt, and move the shared workflow state to `error` before `agent_end` restores `idle`. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after rejection-path assertions complete.
+ * @throws {AssertionError} Throws when a busy req command starts new orchestration, skips the error transition, or prevents the active no-worktree prompt from returning to `idle`.
+ * @satisfies TST-068
+ */
+test("req commands except req-reset reject non-idle workflow state and transition to error", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
     const pi = createFakePi();
@@ -2772,11 +2780,36 @@ test("prompt commands reject non-idle workflow state before starting a new orche
       /expected idle/,
     );
     assert.equal(pi.sentUserMessages.length, 1);
-    assert.ok(ctx.__state.notifications.some((entry) => /expected idle/.test(entry.message)));
+    assert.equal(
+      ctx.__state.notifications.filter((entry) => /expected idle/.test(entry.message)).length,
+      1,
+    );
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
-        workflowState: "running",
+        workflowState: "error",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+
+    await assert.rejects(
+      pi.commands.get("req-references")!.handler("", ctx),
+      /expected idle/,
+    );
+    assert.equal(pi.sentUserMessages.length, 1);
+    assert.equal(
+      ctx.__state.notifications.filter((entry) => /expected idle/.test(entry.message)).length,
+      2,
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -2803,6 +2836,115 @@ test("prompt commands reject non-idle workflow state before starting a new orche
       }),
     );
   } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies a worktree-backed prompt still finalizes after a busy req-command rejection moves workflow state to `error`.
+ * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree with workflow state `running`, invokes `req-analyze` while the active run is still in progress so the busy-command guard forces workflow state to `error`, then emits the matched lifecycle completion and verifies `base-path` restoration, worktree plus branch deletion, unchanged prompt count, and final workflow state `idle`. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after finalization-path assertions complete.
+ * @throws {AssertionError} Throws when busy-command rejection orphaned the successful worktree-backed run or prevented cleanup.
+ * @satisfies TST-068, TST-082
+ */
+test("worktree-backed prompt finalization still succeeds after a busy-command rejection", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const originalSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(originalSessionFile, "");
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    const sentMessageCount = pi.sentUserMessages.length;
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    assert.equal(ctx.cwd, executionBasePath);
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(fs.existsSync(executionBasePath), true);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "running",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+
+    await assert.rejects(
+      pi.commands.get("req-analyze")!.handler("Inspect src/index.ts", ctx),
+      /expected idle/,
+    );
+    assert.equal(pi.sentUserMessages.length, sentMessageCount);
+    assert.equal(
+      ctx.__state.notifications.filter((entry) => /expected idle/.test(entry.message)).length,
+      1,
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.sessionManager.getSessionFile(), originalSessionFile);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(
+      spawnSync("git", ["status", "--porcelain"], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).stdout.trim(),
+      "",
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "idle",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });

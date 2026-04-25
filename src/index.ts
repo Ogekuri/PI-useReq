@@ -944,6 +944,38 @@ function notifyContextSafely(
 }
 
 /**
+ * @brief Rejects one non-`idle` req-command invocation and records the workflow error state.
+ * @details Builds a deterministic busy-state diagnostic from the current workflow state, transitions the shared workflow state to `error`, preserves any pending or active prompt execution metadata for later closure handling, emits an error notification, and throws `ReqError`. Bundled prompt commands reuse `transitionPromptWorkflowState(...)` when cached configuration is available so prompt debug logging captures the actual state transition; specialized non-prompt commands fall back to direct status mutation. Runtime is O(1). Side effects include workflow-state mutation, status-bar rendering, optional debug-log writes, and user notification delivery.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @param[in] ctx {ExtensionContext | ExtensionCommandContext} Active extension context.
+ * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName | undefined} Optional bundled prompt name used for prompt debug logging.
+ * @return {never} This helper always throws a deterministic `ReqError`.
+ * @throws {ReqError} Always throws because non-`idle` req commands are rejected.
+ * @satisfies REQ-224
+ */
+function rejectNonIdleReqCommand(
+  statusController: PiUsereqStatusController,
+  ctx: ExtensionContext | ExtensionCommandContext,
+  promptName?: import("./core/prompt-command-catalog.js").PromptCommandName,
+): never {
+  const message = `ERROR: Prompt workflow state is ${statusController.state.workflowState}, expected idle.`;
+  if (promptName !== undefined && statusController.config !== undefined) {
+    transitionPromptWorkflowState(
+      statusController,
+      ctx,
+      resolveDebugProjectBase(ctx.cwd, statusController),
+      statusController.config,
+      promptName,
+      "error",
+    );
+  } else {
+    setPiUsereqWorkflowState(statusController, "error", ctx);
+  }
+  notifyContextSafely(ctx, message, "error");
+  throw new ReqError(message, 1);
+}
+
+/**
  * @brief Returns the configurable active-tool inventory visible to the extension.
  * @details Filters runtime tools against the canonical configurable-tool set, keeps only builtin-backed embedded tools, and orders the result by the documented custom/files/embedded/default-disabled grouping. Runtime is O(t log t). No external state is mutated.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -1001,7 +1033,7 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
 
 /**
  * @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
- * @details Applies session-start-specific resource validation, project-config refresh, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, restores the original session-backed `base-path` for every matched worktree-backed completion by reusing persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the stash-assisted merge-and-delete finalization path only for matched successful completions, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful `agent_end` handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Applies session-start-specific resource validation, project-config refresh, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, restores the original session-backed `base-path` for every matched worktree-backed completion by reusing persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the stash-assisted merge-and-delete finalization path for every matched successful worktree-backed completion even when a later busy-command rejection already moved workflow state to `error`, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful `agent_end` handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
@@ -1098,7 +1130,6 @@ async function handleExtensionStatusEvent(
         ? `ERROR: Prompt closure retained worktree ${activePromptRequest.worktreeDir} after ${outcome} outcome.`
         : undefined;
       const shouldFinalizeMatchedSuccess = outcome === "completed"
-        && statusController.state.workflowState === "running"
         && activePromptRequest.worktreeDir !== undefined;
       if (debugConfig) {
         logPromptWorkflowEvent(
@@ -2715,7 +2746,7 @@ function registerReqResetCommand(
 
 /**
  * @brief Registers the specialized `req-references` slash command.
- * @details Registers the non-agentic references-maintenance command that reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle|error`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
+ * @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -2729,9 +2760,7 @@ function registerReqReferencesCommand(
     description: REQ_REFERENCES_COMMAND_DESCRIPTION,
     handler: async (_args, ctx) => {
       if (statusController.state.workflowState !== "idle") {
-        const message = `ERROR: Prompt workflow state is ${statusController.state.workflowState}, expected idle.`;
-        ctx.ui.notify(message, "error");
-        throw new ReqError(message, 1);
+        rejectNonIdleReqCommand(statusController, ctx);
       }
       const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
       syncContextCwdMirror(ctx, commandCwd);
@@ -2767,7 +2796,7 @@ function registerReqReferencesCommand(
 
 /**
  * @brief Registers bundled prompt-backed commands with the extension.
- * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state, transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, user-message delivery during execution, and optional debug-log writes.
+ * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, user-message delivery during execution, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -2782,9 +2811,7 @@ function registerPromptCommands(
       description: resolvePromptCommandDescription(promptName),
       handler: async (args, ctx) => {
         if (statusController.state.workflowState !== "idle") {
-          const message = `ERROR: Prompt workflow state is ${statusController.state.workflowState}, expected idle.`;
-          ctx.ui.notify(message, "error");
-          throw new ReqError(message, 1);
+          rejectNonIdleReqCommand(statusController, ctx, promptName);
         }
         const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
         syncContextCwdMirror(ctx, commandCwd);
