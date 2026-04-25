@@ -801,6 +801,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "files-compress",
     "files-search",
     "summarize",
+    "references",
     "compress",
     "search",
     "tokens",
@@ -819,6 +820,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "files-compress",
     "files-search",
     "summarize",
+    "references",
     "compress",
     "search",
     "tokens",
@@ -865,6 +867,19 @@ test("summary tools register agent-oriented descriptions and schema details", ()
   assert.ok(summarize.promptGuidelines?.some((line) => line.includes("file-structure markdown block")));
   assert.ok(summarize.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
   assert.match(String((summarize.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
+});
+
+test("references tool registers agent-oriented descriptions and schema details", () => {
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  const references = pi.tools.find((tool: RegisteredTool) => tool.name === "references");
+  assert.ok(references, "missing references tool");
+
+  assert.match(references.description ?? "", /configured project source directories and configured docs-dir/);
+  assert.ok(references.promptGuidelines?.some((line) => line.includes("overwrite `<docs-dir>/REFERENCES.md`")));
+  assert.ok(references.promptGuidelines?.some((line) => line.includes("generated markdown is never returned")));
+  assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /content\[0\]\.text returns only `success` or `error: <diagnostic>`/);
 });
 
 test("search tools register agent-oriented descriptions and schema details", () => {
@@ -919,6 +934,7 @@ test("agent tools define custom renderResult with compact and expanded structure
       "files-compress",
       "files-search",
       "summarize",
+      "references",
       "compress",
       "search",
       "tokens",
@@ -1076,6 +1092,85 @@ test("summarize returns monolithic project summary markdown", async () => {
     assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("references overwrites the configured REFERENCES.md and returns status-only success", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
+  fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
+  fs.writeFileSync(path.join(projectBase, "src", "nested", "beta.ts"), "export function beta(): number {\n  return 2;\n}\n", "utf8");
+  const docsDir = path.join(projectBase, "docs", "custom");
+  fs.mkdirSync(docsDir, { recursive: true });
+  fs.writeFileSync(path.join(docsDir, "REFERENCES.md"), "stale\n", "utf8");
+  const configPath = getProjectConfigPath(projectBase);
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  config["docs-dir"] = "docs/custom";
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const referencesResult = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
+    };
+    const summarizeResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+
+    const referencesPath = path.join(docsDir, "REFERENCES.md");
+    const writtenText = fs.readFileSync(referencesPath, "utf8");
+    assert.equal(referencesResult.content?.[0]?.text ?? "", "success");
+    assert.equal(writtenText.trimEnd(), summarizeResult.content?.[0]?.text ?? "");
+    assert.doesNotMatch(writtenText, /^stale$/m);
+    assert.equal(referencesResult.details?.execution.code, 0);
+    assert.deepEqual(referencesResult.details?.execution.stderr_lines, undefined);
+    assert.deepEqual(referencesResult.details?.execution.stdout_lines, undefined);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+test("references returns status-only errors for source-discovery and write failures", async () => {
+  const sourceFailure = initFixtureRepo({ fixtures: [] });
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "references", sourceFailure.projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
+    };
+
+    assert.equal(result.content?.[0]?.text ?? "", "error: no source files found in configured directories.");
+    assert.equal(result.details?.execution.code, 1);
+    assert.deepEqual(result.details?.execution.stdout_lines, undefined);
+    assert.ok(result.details?.execution.stderr_lines?.some((line) => line.includes("no source files found in configured directories.")));
+  } finally {
+    fs.rmSync(sourceFailure.projectBase, { recursive: true, force: true });
+  }
+
+  const writeFailure = initFixtureRepo({ fixtures: [] });
+  fs.writeFileSync(path.join(writeFailure.projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
+  const writeFailureConfigPath = getProjectConfigPath(writeFailure.projectBase);
+  const writeFailureConfig = JSON.parse(fs.readFileSync(writeFailureConfigPath, "utf8")) as Record<string, unknown>;
+  writeFailureConfig["docs-dir"] = "docs/missing/custom";
+  fs.writeFileSync(writeFailureConfigPath, `${JSON.stringify(writeFailureConfig, null, 2)}\n`, "utf8");
+
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "references", writeFailure.projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
+    };
+
+    assert.match(result.content?.[0]?.text ?? "", /^error: ENOENT:/);
+    assert.equal(result.details?.execution.code, 1);
+    assert.deepEqual(result.details?.execution.stdout_lines, undefined);
+    assert.ok(result.details?.execution.stderr_lines?.some((line) => /^error: ENOENT:/.test(line)));
+  } finally {
+    fs.rmSync(writeFailure.projectBase, { recursive: true, force: true });
   }
 });
 
@@ -4726,6 +4821,7 @@ test("configuration menu orders tool toggles and can enable embedded builtin too
   const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "compress",
+    "references",
     "search",
     "static-check",
     "summarize",

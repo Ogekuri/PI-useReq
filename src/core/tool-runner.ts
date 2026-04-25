@@ -309,6 +309,26 @@ export function runSummarize(projectBase: string, config?: UseReqConfig, verbose
 }
 
 /**
+ * @brief Writes configured project references markdown to the canonical docs file.
+ * @details Reuses `runSummarize(...)` to generate the same file-structure-plus-summary markdown, resolves `<docs-dir>/REFERENCES.md` from the effective project configuration, overwrites the target file, and returns the status-only stdout `success`. Runtime is O(F log F + S) plus one file write. Side effects include filesystem writes.
+ * @param[in] projectBase {string} Candidate project root.
+ * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
+ * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr during summary generation.
+ * @return {ToolResult} Successful tool result containing the status-only stdout payload.
+ * @throws {ReqError} Throws when source discovery, summary generation, or file writing fails.
+ * @satisfies REQ-293
+ */
+export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult {
+  const base = resolveProjectBase(projectBase);
+  const effectiveConfig = config ?? loadConfig(base);
+  const docsDir = effectiveConfig["docs-dir"].replace(/[/\\]+$/, "");
+  const referencesPath = path.join(base, docsDir, "REFERENCES.md");
+  const summarizeResult = runSummarize(base, effectiveConfig, verbose);
+  fs.writeFileSync(referencesPath, summarizeResult.stdout, "utf8");
+  return ok("success\n");
+}
+
+/**
  * @brief Compresses all source files from configured source directories.
  * @details Resolves the project base, collects source files, and delegates to `compressFiles`. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] projectBase {string} Candidate project root.

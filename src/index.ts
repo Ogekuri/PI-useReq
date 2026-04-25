@@ -142,6 +142,7 @@ import {
   runFilesSummarize,
   runFilesTokens,
   runProjectStaticCheck,
+  runReferences,
   runSearch,
   runSummarize,
   runTokens,
@@ -685,6 +686,44 @@ function executeMonolithicTool(operation: () => ToolResult): ReturnType<typeof b
     return buildMonolithicToolExecuteResult(operation());
   } catch (error) {
     return buildMonolithicToolExecuteResult(normalizeToolFailure(error));
+  }
+}
+
+/**
+ * @brief Executes one CLI-style runner for a status-only agent tool.
+ * @details Reuses the standalone tool-runner contract, preserves `content[0].text` as the status-only `success` or `error: <diagnostic>` payload, and strips success-path `stdout_lines` so `details.execution` stays limited to the numeric code plus optional residual stderr diagnostics. Runtime is dominated by the delegated runner. Side effects depend on the selected tool.
+ * @param[in] operation {() => ToolResult} Runner callback.
+ * @return {ReturnType<typeof buildMonolithicToolExecuteResult>} Status-only tool execute result.
+ * @satisfies REQ-294, REQ-295, REQ-296
+ */
+function executeStatusTool(operation: () => ToolResult): ReturnType<typeof buildMonolithicToolExecuteResult> {
+  const normalizeExecution = (
+    payload: ReturnType<typeof buildMonolithicToolExecuteResult>,
+  ): ReturnType<typeof buildMonolithicToolExecuteResult> => {
+    const execution = payload.details.execution;
+    return {
+      content: payload.content,
+      details: {
+        execution: {
+          code: execution.code,
+          ...(Array.isArray(execution.stderr_lines) && execution.stderr_lines.length > 0
+            ? { stderr_lines: execution.stderr_lines }
+            : {}),
+        },
+      },
+    };
+  };
+
+  try {
+    return normalizeExecution(buildMonolithicToolExecuteResult(operation()));
+  } catch (error) {
+    const failure = normalizeToolFailure(error);
+    const diagnostic = failure.stderr.trim().replace(/^(Error|error):\s*/u, "") || "unknown failure";
+    return normalizeExecution(buildMonolithicToolExecuteResult({
+      stdout: "",
+      stderr: `error: ${diagnostic}`,
+      code: failure.code,
+    }));
   }
 }
 
@@ -2697,7 +2736,7 @@ function registerPromptCommands(
  * @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102
+ * @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102, REQ-293, REQ-294, REQ-295, REQ-296, REQ-297
  */
 function registerAgentTools(pi: ExtensionAPI): void {
   const filesSummarizeSchema = Type.Object(
@@ -2843,6 +2882,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
       description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics.",
     },
   );
+  const referencesSchema = Type.Object(
+    {},
+    {
+      description: "Input contract: no params. Scope is the configured src-dir list plus configured docs-dir resolved from the current project configuration. Output contract: content[0].text returns only `success` or `error: <diagnostic>`; the tool overwrites `<docs-dir>/REFERENCES.md` and keeps details.execution diagnostics.",
+    },
+  );
   const tokensSchema = Type.Object(
     {},
     {
@@ -2868,6 +2913,27 @@ function registerAgentTools(pi: ExtensionAPI): void {
       const projectBase = getProjectBase(contextPath);
       const config = loadProjectConfig(projectBase);
       return executeMonolithicTool(() => runSummarize(contextPath, config));
+    },
+  });
+
+  pi.registerTool({
+    name: "references",
+    label: "references",
+    description: "Scope: configured project source directories and configured docs-dir. Overwrite REFERENCES.md and return only success or error in content[0].text while keeping execution metadata in details.execution.",
+    promptSnippet: "Generate REFERENCES.md from the configured source directories without returning the generated markdown.",
+    promptGuidelines: [
+      "Scope: no params; resolve src-dir and docs-dir from the current project configuration and current working directory.",
+      "Behavior contract: generate the same file-structure-plus-summary markdown as `summarize` and overwrite `<docs-dir>/REFERENCES.md`.",
+      "Output contract: `content[0].text` is `success` on success or `error: <diagnostic>` on failure; generated markdown is never returned to the LLM.",
+      "Failure contract: source discovery, markdown generation, and file-write errors surface through the status text plus details.execution diagnostics.",
+    ],
+    renderResult: buildStructuredToolRenderResult("references"),
+    parameters: referencesSchema,
+    async execute() {
+      const contextPath = getRuntimeContextPath(process.cwd());
+      const projectBase = getProjectBase(contextPath);
+      const config = loadProjectConfig(projectBase);
+      return executeStatusTool(() => runReferences(contextPath, config));
     },
   });
 
