@@ -6,6 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import piUsereqExtension from "../src/index.ts";
 import {
+  REQ_REFERENCES_COMMAND_DESCRIPTION,
+  REQ_REFERENCES_COMMIT_MESSAGE,
+} from "../src/core/req-references-command.js";
+import {
   createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
   getDefaultConfig,
@@ -829,6 +833,26 @@ test("extension registers prompt and config commands while exposing tool capabil
   ]) {
     assert.ok(toolNames.includes(name), `missing tool ${name}`);
   }
+});
+
+/**
+ * @brief Verifies `req-references` registration is independent from bundled prompt inventory.
+ * @details Confirms `references` is absent from `PROMPT_COMMAND_NAMES` while extension activation still registers `req-references` with the fixed dedicated description. Runtime is O(1). Side effects are limited to extension registration.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when `references` remains in the bundled prompt inventory or the command description diverges.
+ * @satisfies TST-102
+ */
+test("req-references registers outside the bundled prompt inventory and keeps its dedicated description", () => {
+  const bundledPromptNames = PROMPT_COMMAND_NAMES as readonly string[];
+  assert.equal(bundledPromptNames.includes("references"), false);
+
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  assert.equal(
+    pi.commands.get("req-references")?.description,
+    REQ_REFERENCES_COMMAND_DESCRIPTION,
+  );
 });
 
 test("token tools register agent-oriented descriptions and schema details", () => {
@@ -2222,6 +2246,215 @@ test("prompt commands use the current session by default", async () => {
     assert.match(String(pi.sentUserMessages[0]?.content), /Inspect src\/index\.ts for prompt coverage/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies successful `req-references` completion uses the specialized direct commit workflow.
+ * @details Confirms the command regenerates configured `REFERENCES.md`, creates no worktree, sends no LLM user message, stages only the target file, commits the fixed message, and restores workflow state `idle`. Runtime is dominated by temporary git execution and reference generation. Side effects are limited to temporary repository mutation and command-handler notifications.
+ * @return {Promise<void>} Promise resolved after success-path assertions complete.
+ * @throws {AssertionError} Throws when `req-references` creates a worktree, starts a session handoff, skips the fixed commit, or leaves the repository dirty.
+ * @satisfies TST-103
+ */
+test("req-references updates REFERENCES.md with a direct commit workflow and no LLM session", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
+    fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
+    fs.writeFileSync(path.join(projectBase, "src", "nested", "beta.ts"), "export function beta(): number {\n  return 2;\n}\n", "utf8");
+    const docsDir = path.join(projectBase, "docs", "custom");
+    fs.mkdirSync(docsDir, { recursive: true });
+    fs.writeFileSync(path.join(docsDir, "REFERENCES.md"), "stale\n", "utf8");
+    writeProjectConfigOverrides(projectBase, { "docs-dir": "docs/custom" });
+    assert.equal(spawnSync("git", ["add", "src/alpha.ts", "src/nested/beta.ts", "docs/custom/REFERENCES.md"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).status, 0);
+    const fixtureCommit = spawnSync("git", ["commit", "-m", "fixture sources"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    });
+    assert.equal(fixtureCommit.status, 0, fixtureCommit.stderr);
+
+    const worktreeParentPath = path.dirname(projectBase);
+    const initialEntries = new Set(fs.readdirSync(worktreeParentPath));
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    const recordedStatuses: string[] = [];
+    let switchSessionCalls = 0;
+    const originalSetStatus = ctx.ui.setStatus.bind(ctx.ui);
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    ctx.ui.setStatus = (key: string, value?: string) => {
+      if (key === "pi-usereq" && value !== undefined) {
+        recordedStatuses.push(value);
+      }
+      originalSetStatus(key, value);
+    };
+    ctx.switchSession = async (sessionPath: string) => {
+      switchSessionCalls += 1;
+      return originalSwitchSession(sessionPath);
+    };
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-references")!.handler("", ctx);
+
+    const summarizeResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+      content?: Array<{ type?: string; text?: string }>;
+    };
+    const referencesPath = path.join(docsDir, "REFERENCES.md");
+    const writtenText = fs.readFileSync(referencesPath, "utf8");
+    const lastCommitMessage = spawnSync("git", ["log", "-1", "--pretty=%s"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).stdout.trim();
+    const committedPaths = spawnSync("git", ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).stdout.trim().split(/\r?\n/).filter((line) => line !== "");
+    const createdWorktreeEntries = fs.readdirSync(worktreeParentPath)
+      .filter((entry) => !initialEntries.has(entry))
+      .filter((entry) => /^PI-useReq-/.test(entry));
+    const finalStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
+
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.equal(switchSessionCalls, 0);
+    assert.deepEqual(createdWorktreeEntries, []);
+    assert.equal(writtenText.trimEnd(), summarizeResult.content?.[0]?.text ?? "");
+    assert.doesNotMatch(writtenText, /^stale$/m);
+    assert.equal(lastCommitMessage, REQ_REFERENCES_COMMIT_MESSAGE);
+    assert.deepEqual(committedPaths, ["docs/custom/REFERENCES.md"]);
+    assert.equal(
+      spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
+      "",
+    );
+    assert.ok(ctx.__state.notifications.some((entry) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.every((status) => !/<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
+    assert.equal(
+      finalStatus,
+      buildExpectedFakeStatusText({
+        workflowState: "idle",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: "docs/custom",
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies failing `req-references` runs report errors without session handoff.
+ * @details Covers both git-preflight failure and reference-generation failure, proving the command creates no worktree, sends no LLM message, transitions workflow state to `error`, and preserves the previous git commit when execution aborts. Runtime is dominated by temporary repository setup plus failing command invocations. Side effects are limited to temporary filesystem and git mutation inside fixture repositories.
+ * @return {Promise<void>} Promise resolved after failure-path assertions complete.
+ * @throws {AssertionError} Throws when `req-references` hides failures, mutates history, or attempts prompt-session orchestration.
+ * @satisfies TST-104
+ */
+test("req-references surfaces git-validation and reference-generation failures without session handoff", async () => {
+  const gitFailure = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    fs.writeFileSync(path.join(gitFailure.projectBase, "DIRTY.txt"), "dirty\n", "utf8");
+    const worktreeParentPath = path.dirname(gitFailure.projectBase);
+    const initialEntries = new Set(fs.readdirSync(worktreeParentPath));
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(gitFailure.projectBase);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await assert.rejects(
+      pi.commands.get("req-references")!.handler("", ctx),
+      /ERROR: Git status unclear!/,
+    );
+
+    const createdWorktreeEntries = fs.readdirSync(worktreeParentPath)
+      .filter((entry) => !initialEntries.has(entry))
+      .filter((entry) => /^PI-useReq-/.test(entry));
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.deepEqual(createdWorktreeEntries, []);
+    assert.ok(ctx.__state.notifications.some((entry) => /ERROR: Git status unclear!/.test(entry.message)));
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        basePath: buildExpectedFakeBasePath(gitFailure.projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+    assert.equal(
+      spawnSync("git", ["log", "-1", "--pretty=%s"], {
+        cwd: gitFailure.projectBase,
+        encoding: "utf8",
+      }).stdout.trim(),
+      "init",
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(gitFailure.projectBase, { recursive: true, force: true });
+  }
+
+  const sourceFailure = initFixtureRepo({ fixtures: [] });
+  try {
+    const worktreeParentPath = path.dirname(sourceFailure.projectBase);
+    const initialEntries = new Set(fs.readdirSync(worktreeParentPath));
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(sourceFailure.projectBase);
+    const recordedStatuses: string[] = [];
+    const originalSetStatus = ctx.ui.setStatus.bind(ctx.ui);
+    ctx.ui.setStatus = (key: string, value?: string) => {
+      if (key === "pi-usereq" && value !== undefined) {
+        recordedStatuses.push(value);
+      }
+      originalSetStatus(key, value);
+    };
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await assert.rejects(
+      pi.commands.get("req-references")!.handler("", ctx),
+      /no source files found in configured directories/,
+    );
+
+    const createdWorktreeEntries = fs.readdirSync(worktreeParentPath)
+      .filter((entry) => !initialEntries.has(entry))
+      .filter((entry) => /^PI-useReq-/.test(entry));
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.deepEqual(createdWorktreeEntries, []);
+    assert.ok(ctx.__state.notifications.some((entry) => /no source files found in configured directories/.test(entry.message)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        basePath: buildExpectedFakeBasePath(sourceFailure.projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+    assert.equal(
+      spawnSync("git", ["log", "-1", "--pretty=%s"], {
+        cwd: sourceFailure.projectBase,
+        encoding: "utf8",
+      }).stdout.trim(),
+      "init",
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(sourceFailure.projectBase, { recursive: true, force: true });
   }
 });
 

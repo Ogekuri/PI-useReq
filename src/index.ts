@@ -92,6 +92,11 @@ import {
   type PromptCommandExecutionPlan,
 } from "./core/prompt-command-runtime.js";
 import {
+  REQ_REFERENCES_COMMAND_DESCRIPTION,
+  executeReqReferencesCommandExecution,
+  prepareReqReferencesCommandExecution,
+} from "./core/req-references-command.js";
+import {
   DEBUG_PROMPT_NAMES,
   DEBUG_WORKFLOW_STATES,
   DEFAULT_DEBUG_LOG_FILE,
@@ -2603,8 +2608,60 @@ function registerPiNotifyShortcut(
 }
 
 /**
- * @brief Registers bundled prompt commands with the extension.
- * @details Creates one `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state, transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, user-message delivery during execution, and optional debug-log writes.
+ * @brief Registers the specialized `req-references` slash command.
+ * @details Registers the non-agentic references-maintenance command that reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle|error`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @return {void} No return value.
+ * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303
+ */
+function registerReqReferencesCommand(
+  pi: ExtensionAPI,
+  statusController: PiUsereqStatusController,
+): void {
+  pi.registerCommand("req-references", {
+    description: REQ_REFERENCES_COMMAND_DESCRIPTION,
+    handler: async (_args, ctx) => {
+      if (statusController.state.workflowState !== "idle") {
+        const message = `ERROR: Prompt workflow state is ${statusController.state.workflowState}, expected idle.`;
+        ctx.ui.notify(message, "error");
+        throw new ReqError(message, 1);
+      }
+      const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
+      syncContextCwdMirror(ctx, commandCwd);
+      bootstrapRuntimePathState(commandCwd, {
+        gitPath: resolveRuntimeGitPath(commandCwd),
+      });
+      const projectBase = getProjectBase(commandCwd);
+      const config = loadProjectConfig(commandCwd);
+      setPiUsereqStatusConfig(statusController, config);
+      statusController.state.pendingPromptRequest = undefined;
+      statusController.state.activePromptRequest = undefined;
+      setPiUsereqWorkflowState(statusController, "checking", ctx);
+      try {
+        const executionPlan = prepareReqReferencesCommandExecution(projectBase, config);
+        setPiUsereqWorkflowState(statusController, "running", ctx);
+        executeReqReferencesCommandExecution(executionPlan, config);
+        setPiUsereqWorkflowState(statusController, "idle", ctx);
+        ctx.ui.notify(
+          `SUCCESS: Updated ${formatRuntimePathForDisplay(executionPlan.referencesPath)} and committed changes.`,
+          "info",
+        );
+      } catch (error) {
+        statusController.state.pendingPromptRequest = undefined;
+        statusController.state.activePromptRequest = undefined;
+        setPiUsereqWorkflowState(statusController, "error", ctx);
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(message, "error");
+        throw error;
+      }
+    },
+  });
+}
+
+/**
+ * @brief Registers bundled prompt-backed commands with the extension.
+ * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state, transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, user-message delivery during execution, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -3995,23 +4052,15 @@ function registerConfigCommands(
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Validates installation-owned bundled resources, registers prompt and
- * configuration commands plus agent tools, registers the configurable
- * notification-sound shortcut when the runtime supports shortcuts, and
- * installs shared wrappers for all supported pi lifecycle hooks so status
- * telemetry, context usage, prompt timing, cumulative runtime, prompt-specific
- * Pushover metadata, tool-result debug logging, and prompt-orchestration debug
- * effects remain synchronized with runtime events. Runtime is O(h) in hook
- * count during registration. Side effects include filesystem reads,
- * command/tool/shortcut registration, UI updates, active-tool changes,
- * optional debug-log writes, and timer scheduling.
+ * @details Validates installation-owned bundled resources, registers the specialized `req-references` command plus bundled prompt-backed commands and agent tools, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();
   ensureBundledResourcesAccessible();
+  registerReqReferencesCommand(pi, statusController);
   registerPromptCommands(pi, statusController);
   registerAgentTools(pi);
   registerConfigCommands(pi, statusController);

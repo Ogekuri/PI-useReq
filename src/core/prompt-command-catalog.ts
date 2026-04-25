@@ -1,12 +1,12 @@
 /**
  * @file
- * @brief Declares the canonical bundled `req-*` prompt-command inventory.
- * @details Centralizes prompt-command names shared by extension registration, configuration normalization, debug-menu rendering, and prompt-runtime orchestration. The module is side-effect free. Lookup cost is O(1) per exported constant access.
+ * @brief Declares the canonical bundled prompt-backed `req-*` command inventory.
+ * @details Centralizes only prompt-template-backed command names shared by extension registration, configuration normalization, debug-menu rendering, and prompt-runtime orchestration. Specialized slash commands such as `req-references` are registered outside this inventory. The module is side-effect free. Lookup cost is O(1) per exported constant access.
  */
 
 /**
- * @brief Lists bundled prompt-command names handled by the extension.
- * @details Provides the single source of truth for `req-*` prompt registration, required-document routing, debug-prompt inventory derivation, and prompt-command worktree orchestration. Access complexity is O(1).
+ * @brief Lists bundled prompt-backed command names handled by the extension.
+ * @details Provides the single source of truth for prompt-template-backed `req-*` registration, required-document routing, debug-prompt inventory derivation, and prompt-command worktree orchestration. Access complexity is O(1).
  */
 export const PROMPT_COMMAND_NAMES = [
   "analyze",
@@ -21,7 +21,6 @@ export const PROMPT_COMMAND_NAMES = [
   "readme",
   "recreate",
   "refactor",
-  "references",
   "renumber",
   "workflow",
   "write",

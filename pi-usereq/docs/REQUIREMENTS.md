@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.62"
+version: "0.0.63"
 date: "2026-04-25"
 author: "OpenAI Codex"
 scope:
@@ -41,10 +41,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ## 2. Project Requirements
 
 ### 2.1 Project Functions
-- **PRJ-001**: MUST expose prompt commands that render bundled prompt templates with configuration-derived path substitutions and internal tool-reference adaptation.
+- **PRJ-001**: MUST expose bundled prompt-backed slash commands with configuration-derived path substitutions plus a dedicated `req-references` slash command for direct reference-file regeneration.
 - **PRJ-002**: MUST expose CLI and agent-tool interfaces for token counting, source summarization, compression, construct search, and static-check execution, plus an agent-tool interface for reference-file generation.
 - **PRJ-003**: MUST provide an interactive pi configuration surface for project paths, git automation, static-check entries, active-tool enablement, notifications, and debug logging controls.
-- **PRJ-004**: MUST provide slash-command-owned git validation plus configurable-prefix prompt-command worktree naming, creation, deletion, merge, and cleanup using runtime project and git paths.
+- **PRJ-004**: MUST provide slash-command-owned git validation plus bundled-prompt worktree orchestration and dedicated `req-references` direct reference-file commit orchestration using runtime project and git paths.
 - **PRJ-005**: MUST install bundled prompts, git execution instructions, documentation templates, and guidelines under the extension installation path and expose them through shared runtime path context.
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
@@ -72,9 +72,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ### 3.1 Design and Implementation
 - **DES-001**: MUST implement the standalone executable in `src/cli.ts` as flag parsing plus dispatch to `tool-runner.ts` or `runStaticCheck`.
-- **DES-002**: MUST implement extension activation in `src/index.ts` by registering prompt commands with dedicated prompt-runtime orchestration, agent tools, configuration commands, and shared wrappers for supported pi CLI lifecycle hooks.
+- **DES-002**: MUST implement extension activation in `src/index.ts` by registering bundled prompt commands, dedicated `req-references` command orchestration, agent tools, config commands, and shared pi CLI lifecycle-hook wrappers.
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
-- **DES-012**: MUST implement prompt-command git validation and worktree lifecycle logic in `src/core/prompt-command-runtime.ts` without invoking extension custom-tool executors from `src/core/tool-runner.ts`.
+- **DES-012**: MUST implement bundled prompt-command git validation and worktree lifecycle logic in `src/core/prompt-command-runtime.ts` without invoking extension custom-tool executors from `src/core/tool-runner.ts`.
+- **DES-013**: MUST implement dedicated `req-references` git-validation, reference-write, staging, commit, and clean-repository verification logic in `src/core/req-references-command.ts` without starting an LLM session or creating a worktree.
 - **DES-004**: MUST implement modular static-check execution through debug-capable `StaticCheckBase` and user-facing `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token counting, summary generation, reference-file generation, compression, construct search, and static-check execution in `src/core/tool-runner.ts`.
 - **DES-006**: MUST reuse shared markdown and text renderers for CLI and agent-tool compression plus construct-search outputs, preserving source-leading tabs in emitted excerpts instead of dedicated agent-tool JSON payload builders.
@@ -89,7 +90,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-002**: MUST replace `%%DOC_PATH%%`, `%%GUIDELINES_*%%`, `%%TEMPLATE_PATH%%`, `%%SRC_PATHS%%`, and `%%TEST_PATH%%` when rendering prompts.
 - **REQ-266**: MUST replace `%%PROJECT_BASE%%`, `%%CONTEXT_PATH%%`, `%%INSTALLATION_PATH%%`, `%%CONFIG_PATH%%`, and `%%ARGS%%` when rendering prompts.
 - **REQ-003**: MUST rewrite legacy `req --...` prompt text references to surviving internal tool names and slash-command-owned runtime behaviors.
-- **REQ-004**: MUST register `req-<prompt>` commands for every bundled prompt name using the first Markdown `# ` heading with the prefix removed as the runtime command description, run prompt preflight/worktree orchestration, and send rendered prompt content as a user message.
+- **REQ-004**: MUST register bundled prompt-backed `req-<prompt>` commands using the first Markdown `# ` heading as description, run prompt preflight/worktree orchestration, and send rendered prompt content as a user message.
+- **REQ-298**: MUST register `req-references` as a dedicated extension command with description `Write a REFERENCES.md using the project's source code` and MUST NOT depend on a bundled prompt Markdown file.
 - **REQ-211**: MUST replace `%%PROMPT%%` with the current prompt name without the `req-` prefix when rendering bundled prompts and bundled commit instructions.
 - **REQ-213**: MUST replace prompt token `%%COMMIT%%` with rendered `<installation-path>/resources/instructions/git_commit.md` when `AUTO_GIT_COMMIT=enable`, and with rendered `<installation-path>/resources/instructions/git_read-only.md` when `AUTO_GIT_COMMIT=disable`.
 - **REQ-214**: MUST preprocess bundled `git_commit.md` and `git_read-only.md` with the same runtime token-replacement rules used for prompts before injecting them through `%%COMMIT%%`.
@@ -146,8 +148,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls`.
 - **REQ-064**: MUST default `files-tokens`, `files-summarize`, `files-compress`, `files-search`, `summarize`, `references`, `compress`, `search`, `tokens`, `files-static-check`, `static-check`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted project configuration.
-- **REQ-067**: MUST send every rendered `req-<prompt>` payload into the current active session.
-- **REQ-068**: MUST use one prompt-delivery path that sends the rendered prompt through the forked execution session after the worktree switch by using only the replacement-session context for post-switch session-bound operations.
+- **REQ-067**: MUST send every bundled prompt-backed `req-<prompt>` payload into the current active session.
+- **REQ-068**: MUST use one prompt-delivery path that sends bundled prompt-backed `req-<prompt>` payloads through the forked execution session by using only the replacement-session context for post-switch session-bound operations.
 - **REQ-008**: MUST provide a `Language static code checkers` submenu that adds Command entries by guided language flow, removes configured language entries, toggles per-language enablement, and resets the static-check configuration.
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
@@ -222,17 +224,17 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-197**: MUST summarize top-level `Notifications` as `notification:<state> • sound:<level> • pushover:<state>`.
 - **REQ-198**: MUST render `Notification events`, `Sound events`, and `Pushover events` as identical submenu lists with right-aligned `on|off` values for `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
 - **REQ-199**: MUST render `%%RESULT%%` as `successed`, `aborted`, or `failed` for completed, interrupted, and failed prompt-end outcomes.
-- **REQ-200**: MUST run slash-command-owned git validation immediately after the `idle` gate at the start of every `req-<prompt>` command and abort before prompt dispatch on failure.
+- **REQ-200**: MUST run slash-command-owned git validation immediately after the `idle` gate at the start of every `req-*` command and abort before command execution on failure.
 - **REQ-201**: MUST require `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` before `analyze`, `change`, `check`, `cover`, `fix`, `flowchart`, `new`, `readme`, `recreate`, `refactor`, and `renumber`.
-- **REQ-202**: MUST require `REQUIREMENTS.md` before `implement` and `req-references`, and MUST skip required-doc prechecks for `create`, `workflow`, and `write`.
-- **REQ-203**: MUST abort a `req-<prompt>` command before worktree creation and prompt dispatch when any prompt-required doc is missing and surface the missing canonical path plus remediation prompt command.
+- **REQ-202**: MUST require `REQUIREMENTS.md` before `implement`, and MUST skip required-doc prechecks for `create`, `references`, `workflow`, and `write`.
+- **REQ-203**: MUST abort a bundled prompt-backed `req-<prompt>` command before worktree creation and prompt dispatch when any prompt-required doc is missing, surfacing the missing canonical path plus remediation prompt command.
 - **REQ-212**: MUST persist `AUTO_GIT_COMMIT` with allowed values `enable` and `disable`, defaulting to `enable`.
 - **REQ-204**: MUST persist `GIT_WORKTREE_ENABLED` with allowed values `enable` and `disable`, defaulting to `enable`.
 - **REQ-205**: MUST persist `GIT_WORKTREE_PREFIX` as the configurable prefix used by `worktree-dir` generation, defaulting to `PI-useReq-`.
 - **REQ-215**: MUST force the effective `GIT_WORKTREE_ENABLED` value to `disable` whenever `AUTO_GIT_COMMIT=disable`.
 - **REQ-216**: MUST render `Git worktree` and `Worktree prefix` as dimmed non-editable rows whenever `AUTO_GIT_COMMIT=disable`.
 - **REQ-206**: MUST derive `worktree-dir` as `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` and `worktree-path` as `<parent-path>/<worktree-dir>/<base-dir>` when worktrees are enabled.
-- **REQ-271**: MUST create one dedicated worktree under `parent-path`, fork the current active session into an execution session file whose header cwd equals `worktree-path`, and switch the active pi CLI session to that file before agent start.
+- **REQ-271**: MUST make bundled prompt-backed `req-<prompt>` commands create one dedicated worktree under `parent-path`, fork the current active session, and switch the active pi CLI session before agent start.
 - **REQ-207**: MUST keep `context-path`, `ctx.cwd`, and `process.cwd()` at `base-path` when worktree creation is disabled.
 - **REQ-208**: MUST restore the original session-backed `base-path`, merge the successful worktree branch from `base-path`, and delete the worktree plus branch after successful closure.
 - **REQ-290**: MUST preserve the successful worktree execution transcript in the restored client-visible session after successful closure.
@@ -243,9 +245,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
 - **REQ-224**: MUST reject a `req-<prompt>` command before any operation when workflow state is not `idle`, surfacing the error to pi CLI.
-- **REQ-225**: MUST transition workflow state to `checking` after the `idle` gate and keep it there through required-doc checks, worktree generation, worktree verification, and prompt handoff preparation.
-- **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during `req-<prompt>` preflight.
-- **REQ-227**: MUST transition workflow state to `running` only after required-doc checks, worktree generation, worktree verification, and prompt-session handoff succeed, and MUST make that transition the last slash-command action except logging.
+- **REQ-225**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `checking` after the `idle` gate and keep it there through required-doc checks, worktree preparation, and prompt handoff preparation.
+- **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during bundled prompt-backed `req-<prompt>` preflight.
+- **REQ-227**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `running` only after required-doc checks, worktree preparation, worktree verification, and prompt-session handoff succeed.
+- **REQ-299**: MUST make `req-references` transition workflow state to `checking`, validate slash-command-owned git state, and transition directly to `running` without worktree creation, session switching, or LLM-session initialization.
+- **REQ-300**: MUST make `req-references` execute the same reference-generation and overwrite logic as `references`, writing configured-source reference markdown to `<base-path>/<docs-dir>/REFERENCES.md`.
+- **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]`.
+- **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `idle` before the command handler returns.
+- **REQ-303**: MUST make failing `req-references` execution notify pi CLI, transition workflow state to `error`, and surface git or reference-generation failures without LLM-session initialization.
 - **REQ-228**: MUST transition workflow state to `merging` immediately before merge and worktree/branch deletion begin during successful orchestrated session closure.
 - **REQ-229**: MUST transition workflow state to `error` and notify the pi CLI when base-path restoration, merge, or worktree/branch deletion verification fails during orchestrated session closure.
 - **REQ-230**: MUST transition workflow state to `idle` before the orchestrated session-closure handler returns.
@@ -411,6 +418,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-099**: MUST verify extension activation and tool menus include `references` with the documented agent-tool-only registration and default-enabled ordering.
 - **TST-100**: MUST verify `references` overwrites configured `docs-dir`/`REFERENCES.md`, returns only `success` in `content[0].text`, and restricts `details` to execution metadata.
 - **TST-101**: MUST verify `references` returns `error: <diagnostic>` plus failing execution metadata when source discovery, markdown generation, or `REFERENCES.md` writing fails.
+- **TST-102**: MUST verify `req-references` registers outside the bundled prompt inventory and retains description `Write a REFERENCES.md using the project's source code`.
+- **TST-103**: MUST verify successful `req-references` runs create no worktree or LLM message, overwrite configured `REFERENCES.md`, stage only that file, commit exact message, notify success, and restore workflow state `idle`.
+- **TST-104**: MUST verify failing `req-references` runs transition workflow state to `error`, notify pi CLI, create no worktree or LLM message, and surface git or reference-generation failures.
 - **TST-024**: MUST verify `files-search` and `search` agent-tool outputs place monolithic search markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
 - **TST-025**: MUST verify harness inspection surfaces `files-search` and `search` descriptions covering parameters, regex semantics, supported tags, monolithic markdown output, and failure details.
 - **TST-026**: MUST verify `files-compress` and `compress` agent-tool outputs place monolithic compression markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
@@ -427,7 +437,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-075**: MUST verify selected `req-*` debug toggles append JSON entries for required-doc checks, worktree creation, fast-forward merge, worktree deletion, `workflow_state`, and `DEBUG_WORKFLOW_EVENTS`-gated workflow events across successful and failing prompt runs.
 - **TST-076**: MUST verify Debug submenu tool and prompt rows derive from `PI_USEREQ_CUSTOM_TOOL_NAMES`, `PI_USEREQ_EMBEDDED_TOOL_NAMES`, and `PROMPT_COMMAND_NAMES`.
 - **TST-085**: MUST verify the `Debug` submenu orders `Log on status` before `Status changes` and preserves the documented immediate-save plus focus-preserving re-render behavior.
-- **TST-080**: MUST verify each `req-*` command description is loaded at runtime from the first bundled prompt Markdown `# ` heading with the prefix removed.
+- **TST-080**: MUST verify each bundled prompt-backed `req-*` command description is loaded at runtime from the first bundled prompt Markdown `# ` heading with the prefix removed.
 - **TST-081**: MUST verify worktree-backed prompt execution verifies worktree registration and branch presence, switches active-session cwd, `ctx.cwd`, and `process.cwd()` to `worktree-path` before agent start, and restores them to `base-path` before session-closure handling returns.
 - **TST-082**: MUST verify worktree-backed successful runs enter `running` only after prompt handoff succeeds, merge with `--ff-only` from `base-path`, and delete the worktree only after deletion verification passes.
 - **TST-083**: MUST verify worktree merge failures notify the pi CLI, transition through `error`, retain the worktree checkout for manual recovery, and keep `base-path` active after session-closure handling.
@@ -440,32 +450,32 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-052**: MUST verify toggling or editing a settings entry preserves focus on the affected row when the menu re-renders.
 - **TST-053**: MUST verify top-level reset restores the full menu tree and submenu reset restores only the targeted recursive subtree.
 - **TST-054**: MUST verify every `req-<prompt>` command aborts when slash-command-owned git validation fails and dispatches no prompt message.
-- **TST-055**: MUST verify `req-<prompt>` commands enforce the documented required-doc matrix, create no worktree, and dispatch no prompt when a required doc is missing.
+- **TST-055**: MUST verify bundled prompt-backed `req-<prompt>` commands enforce the documented required-doc matrix, create no worktree, and dispatch no prompt when a required doc is missing.
 - **TST-056**: MUST verify worktree-backed `req-<prompt>` commands derive `worktree-dir` from persisted `GIT_WORKTREE_PREFIX` for both default and override values.
 - **TST-057**: MUST verify `req-<prompt>` commands create `worktree-path`, dispatch prompts through the replacement-session context of the switched execution session, and run tool executions against prepared `context-path`.
 - **TST-058**: MUST verify worktree-backed `req-<prompt>` commands skip merge plus worktree/branch deletion, restore `base-path`, and notify pi CLI of closure failure when the matched run ends interrupted, failed, or aborted.
 - **TST-061**: MUST verify `req-<prompt>` commands skip worktree creation when `AUTO_GIT_COMMIT=disable`, even if persisted `GIT_WORKTREE_ENABLED=enable`.
 - **TST-064**: MUST verify worktree-backed `req-<prompt>` commands confirm created worktree directory plus branch existence before prompt dispatch and abort without dispatch when verification fails.
 - **TST-067**: MUST verify `status:error` renders with blinking error styling and non-error `status` values follow the documented status-bar theme convention.
-- **TST-068**: MUST verify every `req-<prompt>` command rejects non-`idle` workflow state before performing checks, worktree operations, or prompt dispatch.
-- **TST-069**: MUST verify `req-<prompt>` commands transition workflow state through `checking`, `error`, and `running` for documented preflight and prompt-handoff paths.
+- **TST-068**: MUST verify every `req-<prompt>` command rejects non-`idle` workflow state before performing checks, worktree operations, or direct references execution.
+- **TST-069**: MUST verify bundled prompt-backed `req-<prompt>` commands transition workflow state through `checking`, `error`, and `running` for documented preflight and prompt-handoff paths.
 - **TST-070**: MUST verify prompt-end handling ignores unrelated or non-success completions and performs cleanup only for the matched successful prompt.
 - **TST-071**: MUST verify matched successful cleanup transitions workflow state through `merging` to `idle` and transitions to `error` on merge or deletion failure.
 - **TST-065**: MUST verify default startup-tool enablement matches the documented enabled and disabled tool matrix.
 - **TST-066**: MUST verify `req-<prompt>` commands keep working when extension custom-tool registrations are removed from the runtime inventory.
 - **TST-059**: MUST verify every agent-tool registration defines custom `renderResult` and that compact rendering shows essential invocation parameters while expanded rendering avoids fallback raw-content display.
-- **TST-086**: MUST verify `req-<prompt>` commands abort before prompt dispatch when the persisted execution-session header cwd or `process.cwd()` differs from the expected execution path, and abort before merge when persisted execution-session header metadata or verified worktree artifacts diverge, while stale pre-switch context probes alone do not abort.
+- **TST-086**: MUST verify bundled prompt-backed `req-<prompt>` commands abort before prompt dispatch when the persisted execution-session header cwd or `process.cwd()` differs from the expected execution path, and abort before merge when persisted execution-session header metadata or verified worktree artifacts diverge, while stale pre-switch context probes alone do not abort.
 
 ## 5. Observed Component Model
 
 ### 5.1 Runtime Surfaces
 - `src/cli.ts` parses CLI flags, repairs config for project-scoped commands, and dispatches to `tool-runner.ts` or `runStaticCheck`.
-- `src/index.ts` activates the pi extension, registers commands and agent tools, and manages interactive menu/status behavior through `ctx.ui`.
+- `src/index.ts` activates the pi extension, registers bundled prompt-backed commands plus specialized `req-references` orchestration and agent tools, and manages interactive menu/status behavior through `ctx.ui`.
 - `src/core/tool-runner.ts` orchestrates project file collection, markdown generation, compression, construct search, and static-check execution.
 - `src/core/source-analyzer.ts` defines `SourceElement`, language specs, extraction heuristics, Doxygen attachment, and Markdown rendering support.
 - `src/core/generate-markdown.ts`, `src/core/compress.ts`, and `src/core/find-constructs.ts` share analyzer and compressor logic to produce reusable Markdown outputs.
 - `src/core/static-check.ts` maps languages/extensions, parses Command-only enable specs, preserves debug `Dummy` handling, resolves inputs, and dispatches modular checker classes.
-- `src/core/config.ts`, `src/core/resources.ts`, and `src/core/prompts.ts` provide config persistence, home-resource synchronization, and prompt rendering.
+- `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, home-resource synchronization, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 
@@ -478,7 +488,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `fast-glob` provides wildcard expansion for static-check inputs evidence in `src/core/static-check.ts`, `package.json`, and `package-lock.json`.
 - `tsx` is the manifest-declared TypeScript execution runner for tests and CLI scripts evidenced by `package.json` and `package-lock.json`.
 - `typescript` is the manifest-declared compiler and type-checker evidenced by `package.json`, `package-lock.json`, and `tsconfig.json`.
-- `git` CLI is a runtime dependency for repository discovery, source-file collection, and prompt-command worktree orchestration evidence in `src/core/tool-runner.ts` plus `src/core/prompt-command-runtime.ts`.
+- `git` CLI is a runtime dependency for repository discovery, source-file collection, bundled prompt-command worktree orchestration, and direct `req-references` commit orchestration evidenced in `src/core/tool-runner.ts`, `src/core/prompt-command-runtime.ts`, and `src/core/req-references-command.ts`.
 
 ### 5.3 Packaging and Tooling Surface
 - `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
@@ -509,6 +519,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   │   ├── generate-markdown.ts
 │   │   ├── pi-usereq-tools.ts
 │   │   ├── prompts.ts
+│   │   ├── req-references-command.ts
 │   │   ├── resources.ts
 │   │   ├── source-analyzer.ts
 │   │   ├── static-check.ts
@@ -518,7 +529,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   └── resources/
 │       ├── templates/{Requirements_Template.md,HDT_Test_Authoring_Guide.md,Document_Source_Code_in_Doxygen_Style.md}
 │       ├── guidelines/{Google_Python_Style_Guide.md,Google_C++_Style_Guide.md}
-│       └── prompts/{analyze.md,change.md,check.md,cover.md,create.md,fix.md,flowchart.md,implement.md,new.md,readme.md,recreate.md,refactor.md,references.md,renumber.md,workflow.md,write.md}
+│       └── prompts/{analyze.md,change.md,check.md,cover.md,create.md,fix.md,flowchart.md,implement.md,new.md,readme.md,recreate.md,refactor.md,renumber.md,workflow.md,write.md}
 ├── tests/
 │   ├── extension-registration.test.ts
 │   ├── helpers.ts
@@ -549,7 +560,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ## 7. Test Evidence Summary
 
 ### 7.1 Covered Behaviors
-- `tests/extension-registration.test.ts` covers extension registration, config-menu persistence, startup-tool enablement, static-check menu mutation flows, and prompt-command worktree orchestration.
+- `tests/extension-registration.test.ts` covers extension registration, config-menu persistence, startup-tool enablement, static-check menu mutation flows, bundled prompt-command worktree orchestration, and specialized `req-references` direct commit orchestration.
 - `tests/prompt-rendering.test.ts` covers home-resource synchronization and placeholder replacement in rendered prompts.
 - `tests/oracle-standalone.test.ts` compares non-tab-sensitive standalone `files-*` outputs against the Python `usereq.cli` oracle, asserts Go-fixture tab preservation, and compares `--test-static-check` dummy/command outputs against archived fixtures.
 - `tests/oracle-project.test.ts` compares non-tab-sensitive project commands against the Python oracle, asserts Go-source tab preservation for project extraction commands, and verifies archived `files-static-check` plus `static-check` outputs.
@@ -561,10 +572,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ### 8.1 PRJ and CTN Evidence
 | ID | Evidence |
 | --- | --- |
-| PRJ-001 | `src/index.ts` :: `registerPromptCommands` :: `pi.registerCommand(\`req-${promptName}\`, ...)`; `src/core/prompts.ts` :: `renderPrompt` :: `return adaptPromptForInternalTools(applyReplacements(prompt, replacements));` |
+| PRJ-001 | `src/index.ts` :: `registerPromptCommands` plus `registerReqReferencesCommand` :: registers bundled prompt-backed commands and the dedicated `req-references` command; `src/core/prompts.ts` :: `renderPrompt` :: adapts bundled prompt payloads. |
 | PRJ-002 | `src/index.ts` :: `registerAgentTools` :: tool names include `files-tokens`, `summarize`, `compress`, `search`, `files-static-check`, and `static-check`. |
 | PRJ-003 | `src/index.ts` :: `buildPiUsereqMenuChoices`, `configurePiUsereq`, and `configureDebugMenu` :: expose project paths, git automation, static-check, startup tools, notifications, and debug logging controls. |
-| PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution` :: slash-command-owned git validation plus worktree orchestration remain internal to prompt execution. |
+| PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` and `executeReqReferencesCommandExecution` :: keep git orchestration internal to slash-command execution. |
 | PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,templates,guidelines}`. |
 | CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `pi-usereq/docs`, `tests`, and `["src"]`. |
 | CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
@@ -581,8 +592,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | ID | Evidence |
 | --- | --- |
 | DES-001 | `src/cli.ts` :: `parseArgs` and `main` :: parses flags then dispatches with branches such as `runSummarize`, `runCompress`, `runSearch`, `runProjectStaticCheck`, and `runStaticCheck`. |
-| DES-002 | `src/index.ts` :: `piUsereqExtension` :: calls `registerPromptCommands`, `registerToolWrapperCommands`, `registerAgentTools`, `registerConfigCommands`, then installs `pi.on("session_start", ...)`. |
+| DES-002 | `src/index.ts` :: `piUsereqExtension` :: calls `registerReqReferencesCommand`, `registerPromptCommands`, `registerAgentTools`, `registerConfigCommands`, then installs shared lifecycle hooks. |
 | DES-003 | `src/core/source-analyzer.ts` :: `class SourceElement`; `SourceAnalyzer.enrich` :: invokes `extractSignatures`, `detectHierarchy`, `extractVisibility`, `extractInheritance`, `extractBodyAnnotations`, and `extractDoxygenFields`. |
+| DES-013 | `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` and `executeReqReferencesCommandExecution` :: implement the dedicated no-worktree `req-references` git-write workflow. |
 | DES-004 | `src/core/static-check.ts` :: `StaticCheckBase` and `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the modular implementation by module name. |
 | DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runFilesSummarize`, `runSummarize`, `runCompress`, `runSearch`, `runFilesStaticCheck`, and `runProjectStaticCheck`. |
 | DES-006 | `src/core/compress.ts` :: `normalizeRetainedLineIndentation`; `src/core/source-analyzer.ts` :: `normalizeSourceLineForExtraction`; `src/core/compress-files.ts` and `src/core/find-constructs.ts` reuse shared markdown emitters with preserved source tabs. |
@@ -594,7 +606,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-001 | `src/core/resources.ts` :: `copyDirectoryContents` :: skips dotfiles, recurses into directories, and uses `fs.copyFileSync(sourcePath, destinationPath)`. |
 | REQ-002 | `src/core/config.ts` :: `buildPromptReplacementPaths` :: emits `%%TEMPLATE_PATH%%` plus docs/guideline/source/test tokens; `src/core/prompts.ts` :: `renderPrompt` merges them with `"%%ARGS%%": args`. |
 | REQ-003 | `src/core/prompts.ts` :: `TOOL_REFERENCE_REPLACEMENTS` and `adaptPromptForInternalTools` :: replaces ``req --find`` style text with `search tool` style text. |
-| REQ-004 | `src/index.ts` :: `registerPromptCommands` :: each handler runs `ensureHomeResources()`, renders the prompt, then executes `pi.sendUserMessage(content)`. |
+| REQ-004 | `src/index.ts` :: `registerPromptCommands` :: each handler renders the bundled prompt and dispatches it through `deliverPromptCommand(...)`. |
+| REQ-298 | `src/core/prompt-command-catalog.ts` :: `PROMPT_COMMAND_NAMES` omits `references`; `src/index.ts` :: `registerReqReferencesCommand` registers `req-references` with `REQ_REFERENCES_COMMAND_DESCRIPTION`. |
+| REQ-299 | `src/index.ts` :: `registerReqReferencesCommand` :: transitions `checking` then `running`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` reuses `validatePromptGitState(...)` without worktree or session switching. |
+| REQ-300 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution` calls `runReferences(...)`; `src/core/tool-runner.ts` :: `runReferences` overwrites configured `REFERENCES.md`. |
+| REQ-301 | `src/core/req-references-command.ts` :: `REQ_REFERENCES_COMMIT_MESSAGE`, `getGitAddTargetPath(...)`, and `executeReqReferencesCommandExecution(...)` :: stage only `REFERENCES.md` and create the fixed commit. |
+| REQ-302 | `src/index.ts` :: `registerReqReferencesCommand` :: restores workflow state `idle` and emits success notification after direct execution; `src/core/req-references-command.ts` :: `listResidualGitStatusLines(...)` verifies clean repository state. |
+| REQ-303 | `src/index.ts` :: `registerReqReferencesCommand` :: transitions to `error` and notifies on failure; `src/core/req-references-command.ts` :: throws deterministic `ReqError` failures for generation, staging, commit, and cleanliness errors. |
 | REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
 | REQ-006 | `src/index.ts` :: `buildPiUsereqMenuChoices` and `configurePiUsereq` :: expose directories, git automation, static-check, tools, notifications, debug settings, reset, save, and `Show configuration`. |
 | REQ-236 | `src/core/config.ts` :: `getDefaultConfig`, `loadConfig`, and `buildPersistedConfig` :: persist `DEBUG_ENABLED` with default `disable`. |
@@ -659,6 +677,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-092 | `tests/extension-registration.test.ts` :: `stale replacement contexts do not break workflow-state rendering` verifies stale replacement-session render contexts are ignored without throwing. |
 | TST-093 | `tests/extension-registration.test.ts` :: `replacement-session prompt delivery persists running before async sendUserMessage resolves` verifies async prompt-delivery completion does not delay merge-eligible `running` state. |
 | TST-094 | `tests/extension-registration.test.ts` :: `worktree-backed closure merges from base-path when end-of-session timing already moved the persisted context` verifies closure merges successfully without worktree-session reactivation. |
+| TST-102 | `tests/extension-registration.test.ts` :: `req-references registers outside the bundled prompt inventory and keeps its dedicated description` verifies dedicated registration independent from the bundled prompt inventory. |
+| TST-103 | `tests/extension-registration.test.ts` :: `req-references updates REFERENCES.md with a direct commit workflow and no LLM session` verifies overwrite, fixed commit message, clean repo, and idle restoration without worktree or prompt dispatch. |
+| TST-104 | `tests/extension-registration.test.ts` :: `req-references surfaces git-validation and reference-generation failures without session handoff` verifies error reporting without worktree creation, prompt dispatch, or git-history mutation. |
 | TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
 | TST-009 | `package.json` :: `"type": "module"`, `"pi": { "extensions": ["./src/index.ts"] }`, and `"scripts"` entries for `test`, `test:watch`, and `cli`. |
 | TST-010 | `tsconfig.json` :: `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"strict": true`, `"noEmit": true`, and `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |

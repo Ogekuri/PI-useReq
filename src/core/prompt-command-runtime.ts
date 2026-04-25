@@ -1,7 +1,7 @@
 /**
  * @file
- * @brief Implements prompt-command preflight and worktree orchestration.
- * @details Centralizes `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, session-backed cwd switching plus verification, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success stash-assisted fast-forward merge finalization with restored-session transcript preservation, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, stash-stack mutation, and filesystem reads and writes.
+ * @brief Implements bundled prompt-command preflight and worktree orchestration.
+ * @details Centralizes prompt-template-backed `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, session-backed cwd switching plus verification, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success stash-assisted fast-forward merge finalization with restored-session transcript preservation, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, stash-stack mutation, and filesystem reads and writes.
  */
 
 import fs from "node:fs";
@@ -19,10 +19,7 @@ import {
   logDebugPromptWorkflowEvent,
   type DebugWorkflowState,
 } from "./debug-runtime.js";
-import {
-  PROMPT_COMMAND_NAMES,
-  type PromptCommandName,
-} from "./prompt-command-catalog.js";
+import { type PromptCommandName } from "./prompt-command-catalog.js";
 import {
   isSameOrAncestorPath,
   normalizeRelativeDirContract,
@@ -829,9 +826,6 @@ const PROMPT_REQUIRED_DOCS: Record<PromptCommandName, readonly PromptRequiredDoc
     { fileName: "WORKFLOW.md", promptCommand: "/req-workflow" },
     { fileName: "REFERENCES.md", promptCommand: "/req-references" },
   ],
-  references: [
-    { fileName: "REQUIREMENTS.md", promptCommand: "/req-write" },
-  ],
   renumber: [
     { fileName: "REQUIREMENTS.md", promptCommand: "/req-write" },
     { fileName: "WORKFLOW.md", promptCommand: "/req-workflow" },
@@ -1110,15 +1104,15 @@ function throwPromptGitStatusError(): never {
 }
 
 /**
- * @brief Runs prompt-command-owned git validation and returns the runtime git root.
- * @details Validates work-tree membership, porcelain cleanliness, and symbolic or detached `HEAD` presence without invoking extension custom-tool executors. Runtime is dominated by git subprocess execution. Side effects include process spawning.
+ * @brief Runs slash-command-owned git validation and returns the runtime git root.
+ * @details Validates work-tree membership, porcelain cleanliness, and symbolic or detached `HEAD` presence for bundled prompt commands and `req-references` without invoking extension custom-tool executors. Runtime is dominated by git subprocess execution. Side effects include process spawning.
  * @param[in] projectBase {string} Absolute current project base.
  * @param[in] config {UseReqConfig | undefined} Optional effective project configuration used to ignore extension-owned debug-log artifacts.
  * @return {string} Absolute runtime git root.
  * @throws {ReqError} Throws the canonical prompt-command git-preflight error on any validation failure.
  * @satisfies REQ-200, REQ-220
  */
-function validatePromptGitState(projectBase: string, config?: UseReqConfig): string {
+export function validatePromptGitState(projectBase: string, config?: UseReqConfig): string {
   const gitPath = resolveRuntimeGitPath(projectBase);
   if (!gitPath) {
     throwPromptGitStatusError();
