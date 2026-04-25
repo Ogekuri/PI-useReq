@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.12.0](https://github.com/Ogekuri/PI-useReq/compare/v0.11.0..v0.12.0) - 2026-04-25
+### ⛰️  Features
+- add req-reset recovery command and docs [useReq] *(req-reset)*
+  - Add dedicated req-reset recovery without prompt dispatch or worktree creation.
+  - Extend requirements, workflow, and references traceability for req-reset.
+  - Add extension-registration coverage for req-reset registration, success, and failure paths.
+
+### 🐛  Bug Fixes
+- keep toggle rows open and refresh status [useReq] *(settings-menu)*
+  - keep inline menu toggles focused without closing menus
+  - refresh direct status renders from live context usage
+  - show Pushover credential guidance when enablement is locked
+
+### 🚜  Changes
+- BREAKING CHANGE: reject busy req commands and finalize active runs [useReq] *(orchestration)*
+  - update REQUIREMENTS.md for req-reset and non-idle req-command behavior
+  - enforce error-state rejection for req-references and bundled req prompts
+  - preserve successful worktree finalization after busy-command rejection
+  - extend extension-registration tests and refresh WORKFLOW/REFERENCES docs
+- BREAKING CHANGE: specialize direct references workflow [useReq] *(req-references)*
+  - remove the bundled req-references prompt template
+  - add direct references generation, staging, commit, and clean-repo checks
+  - update requirements, workflow, references, and extension tests
+- add status-only REFERENCES writer [useReq] *(references)*
+  - update requirements for references tool registration and output contract
+  - implement the status-only references tool and default enablement
+  - add extension tests and refresh workflow plus references docs
+- derive req descriptions from markdown headings [useReq] *(prompt-command)*
+  - update REQ-004 and TST-080 for heading-based descriptions
+  - remove YAML description extraction from bundled prompts
+  - refresh workflow and references traceability
+- BREAKING CHANGE: rename references tools to summarize [useReq] *(tool-runner)*
+  - Update REQUIREMENTS, WORKFLOW, and REFERENCES for files-summarize and summarize.
+  - Rename CLI flags, tool registrations, startup-tool defaults, and debug harness examples.
+  - Refresh oracle, parity, registration, and archived fixture tests.
+- align low context gauge colors with status field [useReq] *(extension-status)*
+  - update REQ-126, TST-035, and TST-096 for low-band context gauge color\n- render context icons below 90% with the status warning token\n- refresh workflow, references, and status-bar tests for traceability
+- BREAKING CHANGE: stash dirty base-path around merge [useReq] *(prompt-command-runtime)*
+  - update requirements, workflow, and references
+  - add stash-assisted merge warning coverage
+- decouple runtime sound from boot config [useReq] *(notifications)*
+  - update sound requirements and runtime docs
+  - keep hotkey sound changes runtime-only
+  - keep menu edits persisted as boot value only
+  - refresh references and extension tests
+
 ## [0.11.0](https://github.com/Ogekuri/PI-useReq/compare/v0.10.0..v0.11.0) - 2026-04-24
 ### 🚜  Changes
 - BREAKING CHANGE: revise status bar branch gauge and debug defaults [useReq] *(extension-status)*
@@ -260,10 +306,10 @@
   - update requirements, workflow, and references for the structured compression contract
   - add structured compression payload generation with line, symbol, and Doxygen metadata
   - keep CLI markdown compression output while tool responses and debug examples use JSON
-- emit agent-oriented JSON for summary tools [useReq] *(summarize)*
-  - update requirements, workflow, and references docs for structured summary payloads
-  - add structured Doxygen and symbol JSON extraction for files-summarize and summarize
-  - refresh targeted tests and archived summary fixtures
+- emit agent-oriented JSON for reference tools [useReq] *(references)*
+  - update requirements, workflow, and references docs for structured reference payloads
+  - add structured Doxygen and symbol JSON extraction for files-references and references
+  - refresh targeted tests and archived reference fixtures
 - optimize token tool JSON payloads for agents [useReq] *(token-counter)*
   - update requirements for agent-optimized files-tokens and tokens payloads
   - restructure token payloads with direct-access metrics and guidance sections
@@ -312,6 +358,7 @@
 - \[0.7.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.7.0
 - \[0.10.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.10.0
 - \[0.11.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.11.0
+- \[0.12.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.12.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -322,3 +369,4 @@
 [0.7.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.6.0..v0.7.0
 [0.10.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.7.0..v0.10.0
 [0.11.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.10.0..v0.11.0
+[0.12.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.11.0..v0.12.0
