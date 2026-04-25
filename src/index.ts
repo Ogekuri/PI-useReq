@@ -97,6 +97,13 @@ import {
   prepareReqReferencesCommandExecution,
 } from "./core/req-references-command.js";
 import {
+  REQ_RESET_COMMAND_DESCRIPTION,
+  executeReqResetCommandExecution,
+  prepareReqResetCommandExecution,
+  type ReqResetCommandExecutionResult,
+  type ReqResetCommandPlan,
+} from "./core/req-reset-command.js";
+import {
   DEBUG_PROMPT_NAMES,
   DEBUG_WORKFLOW_STATES,
   DEFAULT_DEBUG_LOG_FILE,
@@ -119,6 +126,7 @@ import {
 import { PROMPT_COMMAND_NAMES } from "./core/prompt-command-catalog.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import {
+  clearPersistedPromptCommandRuntimeState,
   readPersistedPromptCommandRuntimeState,
   writePersistedPromptCommandRuntimeState,
 } from "./core/prompt-command-state.js";
@@ -2608,6 +2616,104 @@ function registerPiNotifyShortcut(
 }
 
 /**
+ * @brief Resolves the prompt execution plan targeted by `req-reset` recovery.
+ * @details Prefers the current in-memory active request, then the current in-memory pending request, then the process-scoped persisted prompt runtime state so the dedicated reset command can recover from same-host unclean prompt termination after session replacement. Runtime is O(1). No external state is mutated.
+ * @param[in] statusController {PiUsereqStatusController} Mutable status controller.
+ * @return {PromptCommandExecutionPlan | undefined} Recoverable prompt execution plan when one remains available.
+ */
+function resolveReqResetPromptRequest(
+  statusController: PiUsereqStatusController,
+): PromptCommandExecutionPlan | undefined {
+  const isWorktreeBacked = (request: PromptCommandExecutionPlan | undefined): request is PromptCommandExecutionPlan =>
+    request?.worktreeDir !== undefined
+      && request.worktreeRootPath !== undefined
+      && request.worktreePath !== undefined;
+  const inMemoryActiveRequest = statusController.state.activePromptRequest;
+  if (isWorktreeBacked(inMemoryActiveRequest)) {
+    return inMemoryActiveRequest;
+  }
+  const inMemoryPendingRequest = statusController.state.pendingPromptRequest;
+  if (isWorktreeBacked(inMemoryPendingRequest)) {
+    return inMemoryPendingRequest;
+  }
+  const persistedRuntimeState = readPersistedPromptCommandRuntimeState();
+  if (isWorktreeBacked(persistedRuntimeState.activePromptRequest)) {
+    return persistedRuntimeState.activePromptRequest;
+  }
+  if (isWorktreeBacked(persistedRuntimeState.pendingPromptRequest)) {
+    return persistedRuntimeState.pendingPromptRequest;
+  }
+  return inMemoryActiveRequest
+    ?? inMemoryPendingRequest
+    ?? persistedRuntimeState.activePromptRequest
+    ?? persistedRuntimeState.pendingPromptRequest;
+}
+
+/**
+ * @brief Registers the specialized `req-reset` slash command.
+ * @details Registers the non-agentic prompt-recovery command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, force-removes matching generated worktrees plus branches, clears recoverable prompt state when restoration succeeds, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and user notifications.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @return {void} No return value.
+ * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313
+ */
+function registerReqResetCommand(
+  pi: ExtensionAPI,
+  statusController: PiUsereqStatusController,
+): void {
+  pi.registerCommand("req-reset", {
+    description: REQ_RESET_COMMAND_DESCRIPTION,
+    handler: async (_args, ctx) => {
+      const promptRequest = resolveReqResetPromptRequest(statusController);
+      const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
+      syncContextCwdMirror(ctx, commandCwd);
+      const projectBase = path.resolve(promptRequest?.basePath ?? getProjectBase(commandCwd));
+      bootstrapRuntimePathState(projectBase, {
+        gitPath: resolveRuntimeGitPath(projectBase),
+      });
+      const config = loadProjectConfig(projectBase);
+      let executionPlan: ReqResetCommandPlan;
+      let executionResult: ReqResetCommandExecutionResult;
+      let resetContext = ctx;
+
+      setPiUsereqStatusConfig(statusController, config);
+      setPiUsereqWorkflowState(statusController, "running", ctx);
+
+      try {
+        executionPlan = prepareReqResetCommandExecution(projectBase, config, promptRequest);
+        executionResult = await executeReqResetCommandExecution(executionPlan, ctx);
+        resetContext = (executionResult.activeContext ?? resetContext) as typeof ctx;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setPiUsereqWorkflowState(statusController, "error", resetContext);
+        notifyContextSafely(resetContext, message, "error");
+        throw error;
+      }
+
+      const shouldClearPromptState = executionResult.restoredBasePath
+        || executionPlan.promptRequest === undefined;
+      if (shouldClearPromptState) {
+        statusController.state.pendingPromptRequest = undefined;
+        statusController.state.activePromptRequest = undefined;
+        clearPersistedPromptCommandRuntimeState();
+      }
+
+      if (executionResult.errorMessage) {
+        setPiUsereqWorkflowState(statusController, "error", resetContext);
+        notifyContextSafely(resetContext, executionResult.errorMessage, "error");
+        throw new ReqError(executionResult.errorMessage, 1);
+      }
+
+      setPiUsereqWorkflowState(statusController, "idle", resetContext);
+      const successMessage = executionPlan.promptRequest !== undefined
+        ? `SUCCESS: req-reset restored base-path and removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es).`
+        : `SUCCESS: req-reset removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es) and restored idle state.`;
+      notifyContextSafely(resetContext, successMessage, "info");
+    },
+  });
+}
+
+/**
  * @brief Registers the specialized `req-references` slash command.
  * @details Registers the non-agentic references-maintenance command that reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle|error`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4052,14 +4158,15 @@ function registerConfigCommands(
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Validates installation-owned bundled resources, registers the specialized `req-references` command plus bundled prompt-backed commands and agent tools, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, optional debug-log writes, and timer scheduling.
+ * @details Validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();
   ensureBundledResourcesAccessible();
+  registerReqResetCommand(pi, statusController);
   registerReqReferencesCommand(pi, statusController);
   registerPromptCommands(pi, statusController);
   registerAgentTools(pi);

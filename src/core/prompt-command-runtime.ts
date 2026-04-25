@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Implements bundled prompt-command preflight and worktree orchestration.
- * @details Centralizes prompt-template-backed `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, session-backed cwd switching plus verification, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success stash-assisted fast-forward merge finalization with restored-session transcript preservation, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, stash-stack mutation, and filesystem reads and writes.
+ * @details Centralizes prompt-template-backed `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, reusable transcript-preservation plus session-restoration helpers, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success stash-assisted fast-forward merge finalization, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, stash-stack mutation, and filesystem reads and writes.
  */
 
 import fs from "node:fs";
@@ -480,9 +480,9 @@ function readPromptSessionJsonLines(
  * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose original and execution session files must be synchronized.
  * @return {void} No return value.
  * @throws {ReqError} Throws when either session file is unreadable or when appended execution records are not persisted to the original session file.
- * @satisfies REQ-208
+ * @satisfies REQ-208, REQ-307
  */
-function preservePromptCommandExecutionTranscript(plan: PromptCommandExecutionPlan): void {
+export function preservePromptCommandExecutionTranscript(plan: PromptCommandExecutionPlan): void {
   const normalizedOriginalSessionFile = path.resolve(plan.originalSessionFile);
   const normalizedExecutionSessionFile = path.resolve(plan.executionSessionFile);
   if (normalizedOriginalSessionFile === normalizedExecutionSessionFile) {
@@ -1434,9 +1434,9 @@ function createPromptWorktree(
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
  * @return {void} No return value.
  * @throws {ReqError} Throws when cleanup cannot remove the worktree and branch fully.
- * @satisfies REQ-208, REQ-220, REQ-245
+ * @satisfies REQ-208, REQ-220, REQ-245, REQ-309
  */
-function deletePromptWorktree(
+export function deletePromptWorktree(
   basePath: string,
   worktreeDir: string,
   worktreeRootPath: string,

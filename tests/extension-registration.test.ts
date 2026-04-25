@@ -10,6 +10,9 @@ import {
   REQ_REFERENCES_COMMIT_MESSAGE,
 } from "../src/core/req-references-command.js";
 import {
+  REQ_RESET_COMMAND_DESCRIPTION,
+} from "../src/core/req-reset-command.js";
+import {
   createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
   getDefaultConfig,
@@ -791,6 +794,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "req-recreate",
     "req-refactor",
     "req-references",
+    "req-reset",
     "req-renumber",
     "req-workflow",
     "req-write",
@@ -852,6 +856,26 @@ test("req-references registers outside the bundled prompt inventory and keeps it
   assert.equal(
     pi.commands.get("req-references")?.description,
     REQ_REFERENCES_COMMAND_DESCRIPTION,
+  );
+});
+
+/**
+ * @brief Verifies `req-reset` registration is independent from bundled prompt inventory.
+ * @details Confirms `reset` is absent from `PROMPT_COMMAND_NAMES` while extension activation still registers `req-reset` with the fixed dedicated description. Runtime is O(1). Side effects are limited to extension registration.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when `reset` remains in the bundled prompt inventory or the command description diverges.
+ * @satisfies TST-105
+ */
+test("req-reset registers outside the bundled prompt inventory and keeps its dedicated description", () => {
+  const bundledPromptNames = PROMPT_COMMAND_NAMES as readonly string[];
+  assert.equal(bundledPromptNames.includes("reset"), false);
+
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  assert.equal(
+    pi.commands.get("req-reset")?.description,
+    REQ_RESET_COMMAND_DESCRIPTION,
   );
 });
 
@@ -2455,6 +2479,167 @@ test("req-references surfaces git-validation and reference-generation failures w
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(sourceFailure.projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies successful `req-reset` recovers from a non-`idle` worktree-backed prompt state.
+ * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree with workflow state `running`, appends one unique execution-session record, invokes `req-reset` from that non-`idle` state, and verifies transcript preservation, base-path restoration, generated worktree plus branch deletion, unchanged LLM prompt count, success notification, and final workflow state `idle`. Runtime is dominated by temporary git worktree setup plus session-file inspection. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after recovery-path assertions complete.
+ * @throws {AssertionError} Throws when `req-reset` rejects the non-`idle` state, loses the execution transcript, leaves generated cleanup artifacts behind, or dispatches an additional LLM prompt.
+ * @satisfies TST-106
+ */
+test("req-reset accepts non-idle workflow state, preserves transcript, and removes generated worktrees", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const originalSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(originalSessionFile, "");
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    const sentMessageCountBeforeReset = pi.sentUserMessages.length;
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    const appendedEntryId = "req-reset-transcript-entry";
+
+    assert.notEqual(executionSessionFile, "");
+    assert.notEqual(executionSessionFile, originalSessionFile);
+    assert.equal(ctx.cwd, executionBasePath);
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(fs.existsSync(executionBasePath), true);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>running<\/warning>/,
+    );
+
+    fs.appendFileSync(
+      executionSessionFile,
+      `${JSON.stringify({
+        type: "custom",
+        id: appendedEntryId,
+        parentId: null,
+        timestamp: new Date(0).toISOString(),
+        customType: "req-reset-test",
+        data: { recovered: true },
+      })}\n`,
+      "utf8",
+    );
+
+    await pi.commands.get("req-reset")!.handler("", ctx);
+
+    assert.equal(pi.sentUserMessages.length, sentMessageCountBeforeReset);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.sessionManager.getSessionFile(), originalSessionFile);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      1,
+    );
+    assert.match(fs.readFileSync(originalSessionFile, "utf8"), new RegExp(appendedEntryId));
+    assert.ok(
+      ctx.__state.notifications.some((entry) => /SUCCESS: req-reset/.test(entry.message)),
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "idle",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies failing `req-reset` surfaces restoration errors without starting new worktree or LLM execution.
+ * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree, forces the subsequent base-path restoration switch to return `cancelled`, invokes `req-reset` from that non-`idle` state, and verifies the command reports the restoration failure, leaves the generated worktree plus branch in place for manual recovery, sends no additional LLM prompt, and transitions workflow state to `error`. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after failure-path assertions complete.
+ * @throws {AssertionError} Throws when `req-reset` hides restoration failures, creates new cleanup artifacts, or clears the generated worktree plus branch despite the failed restore.
+ * @satisfies TST-107
+ */
+test("req-reset surfaces restoration failures and transitions workflow state to error", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const originalSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(originalSessionFile, "");
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    const sentMessageCountBeforeReset = pi.sentUserMessages.length;
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>running<\/warning>/,
+    );
+
+    ctx.switchSession = async (_sessionPath: string) => ({ cancelled: true });
+
+    await assert.rejects(
+      pi.commands.get("req-reset")!.handler("", ctx),
+      /Session switch cancelled/,
+    );
+
+    assert.equal(pi.sentUserMessages.length, sentMessageCountBeforeReset);
+    assert.equal(ctx.cwd, executionBasePath);
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(fs.existsSync(executionBasePath), true);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(
+      ctx.__state.notifications.some((entry) => /Session switch cancelled/.test(entry.message)),
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.63"
+version: "0.0.64"
 date: "2026-04-25"
 author: "OpenAI Codex"
 scope:
@@ -48,6 +48,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-005**: MUST install bundled prompts, git execution instructions, documentation templates, and guidelines under the extension installation path and expose them through shared runtime path context.
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
+- **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery, base-path session restoration, and force cleanup of generated worktrees plus branches.
 
 ### 2.2 Project Constraints
 - **CTN-001**: MUST persist project configuration only at `<base-path>/.pi-usereq.json` with default `docs-dir=pi-usereq/docs`, `tests-dir=tests`, `src-dir=["src"]`, `AUTO_GIT_COMMIT=enable`, `GIT_WORKTREE_ENABLED=enable`, and `GIT_WORKTREE_PREFIX=PI-useReq-`.
@@ -76,6 +77,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
 - **DES-012**: MUST implement bundled prompt-command git validation and worktree lifecycle logic in `src/core/prompt-command-runtime.ts` without invoking extension custom-tool executors from `src/core/tool-runner.ts`.
 - **DES-013**: MUST implement dedicated `req-references` git-validation, reference-write, staging, commit, and clean-repository verification logic in `src/core/req-references-command.ts` without starting an LLM session or creating a worktree.
+- **DES-014**: MUST implement dedicated `req-reset` recovery and cleanup orchestration in `src/core/req-reset-command.ts`, reusing shared base-path restoration helpers without starting an LLM session or creating a worktree.
 - **DES-004**: MUST implement modular static-check execution through debug-capable `StaticCheckBase` and user-facing `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token counting, summary generation, reference-file generation, compression, construct search, and static-check execution in `src/core/tool-runner.ts`.
 - **DES-006**: MUST reuse shared markdown and text renderers for CLI and agent-tool compression plus construct-search outputs, preserving source-leading tabs in emitted excerpts instead of dedicated agent-tool JSON payload builders.
@@ -253,6 +255,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]`.
 - **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `idle` before the command handler returns.
 - **REQ-303**: MUST make failing `req-references` execution notify pi CLI, transition workflow state to `error`, and surface git or reference-generation failures without LLM-session initialization.
+- **REQ-304**: MUST register `req-reset` as a dedicated extension command with description `Reset req workflow state, restore base-path, and remove generated worktrees` and MUST NOT depend on a bundled prompt Markdown file.
+- **REQ-305**: MUST make `req-reset` execute without prompt dispatch, LLM-session initialization, or worktree creation.
+- **REQ-306**: MUST allow `req-reset` invocation from any current workflow state and MUST NOT reject it when workflow state is not `idle`.
+- **REQ-307**: MUST make `req-reset` preserve the visible execution transcript while restoring the original session-backed `base-path`.
+- **REQ-308**: MUST make `req-reset` restore the original session-backed `base-path` when persisted prompt-orchestration state targets a worktree-backed execution session.
+- **REQ-309**: MUST make `req-reset` force-remove every sibling worktree under `parent-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
+- **REQ-310**: MUST make `req-reset` force-remove every local branch under `git-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
+- **REQ-311**: MUST derive `req-reset` cleanup matchers from the same prefix, project, and branch-sanitization rules used by prompt-command worktree generation.
+- **REQ-312**: MUST make successful `req-reset` clear persisted prompt-orchestration state, transition workflow state to `idle`, and notify pi success after cleanup completes.
+- **REQ-313**: MUST make failing `req-reset` surface restoration or cleanup failures, transition workflow state to `error`, and preserve already-completed cleanup effects.
 - **REQ-228**: MUST transition workflow state to `merging` immediately before merge and worktree/branch deletion begin during successful orchestrated session closure.
 - **REQ-229**: MUST transition workflow state to `error` and notify the pi CLI when base-path restoration, merge, or worktree/branch deletion verification fails during orchestrated session closure.
 - **REQ-230**: MUST transition workflow state to `idle` before the orchestrated session-closure handler returns.
@@ -421,6 +433,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-102**: MUST verify `req-references` registers outside the bundled prompt inventory and retains description `Write a REFERENCES.md using the project's source code`.
 - **TST-103**: MUST verify successful `req-references` runs create no worktree or LLM message, overwrite configured `REFERENCES.md`, stage only that file, commit exact message, notify success, and restore workflow state `idle`.
 - **TST-104**: MUST verify failing `req-references` runs transition workflow state to `error`, notify pi CLI, create no worktree or LLM message, and surface git or reference-generation failures.
+- **TST-105**: MUST verify extension activation registers `req-reset` outside the bundled prompt inventory with its dedicated fixed description.
+- **TST-106**: MUST verify successful `req-reset` accepts non-`idle` workflow state, preserves execution transcript, restores `base-path`, removes matching generated worktrees plus branches, and returns workflow state `idle` without LLM messages.
+- **TST-107**: MUST verify failing `req-reset` surfaces restoration or cleanup failures, transitions workflow state to `error`, and starts no worktree or LLM session.
 - **TST-024**: MUST verify `files-search` and `search` agent-tool outputs place monolithic search markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
 - **TST-025**: MUST verify harness inspection surfaces `files-search` and `search` descriptions covering parameters, regex semantics, supported tags, monolithic markdown output, and failure details.
 - **TST-026**: MUST verify `files-compress` and `compress` agent-tool outputs place monolithic compression markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.

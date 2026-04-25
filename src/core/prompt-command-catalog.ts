@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Declares the canonical bundled prompt-backed `req-*` command inventory.
- * @details Centralizes only prompt-template-backed command names shared by extension registration, configuration normalization, debug-menu rendering, and prompt-runtime orchestration. Specialized slash commands such as `req-references` are registered outside this inventory. The module is side-effect free. Lookup cost is O(1) per exported constant access.
+ * @details Centralizes only prompt-template-backed command names shared by extension registration, configuration normalization, debug-menu rendering, and prompt-runtime orchestration. Specialized slash commands such as `req-references` and `req-reset` are registered outside this inventory. The module is side-effect free. Lookup cost is O(1) per exported constant access.
  */
 
 /**
