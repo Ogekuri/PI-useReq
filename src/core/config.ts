@@ -1,7 +1,7 @@
 /**
  * @file
- * @brief Loads, normalizes, and persists pi-usereq project configuration.
- * @details Defines the configuration schema, default directory conventions, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq.json`.
+ * @brief Loads, normalizes, merges, and persists pi-usereq configuration.
+ * @details Defines the effective configuration schema, split local/global persistence contracts, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq.json` and `~/.config/pi-usereq/config.json`.
  */
 
 import fs from "node:fs";
@@ -12,6 +12,7 @@ import {
   buildRuntimePathFacts,
   formatRuntimePathForDisplay,
   getConfigPath,
+  getGlobalConfigPath as resolveGlobalConfigPath,
   normalizeRelativeDirContract,
 } from "./path-context.js";
 import {
@@ -73,8 +74,8 @@ export interface StaticCheckLanguageConfig {
 }
 
 /**
- * @brief Defines the persisted pi-usereq project configuration schema.
- * @details Captures documentation paths, source/test directory selection, per-language static-check enablement and checker configuration, prompt-command worktree settings, enabled startup tools, and notification settings while excluding runtime-derived path metadata. The interface is compile-time only and introduces no runtime side effects.
+ * @brief Defines the effective pi-usereq configuration schema.
+ * @details Captures the merged runtime view produced from project-local and cross-project persisted scopes, including documentation paths, source/test directory selection, per-language static-check enablement plus checker configuration, prompt-command worktree settings, enabled startup tools, and notification settings while excluding runtime-derived path metadata. The interface is compile-time only and introduces no runtime side effects.
  */
 export interface UseReqConfig {
   "docs-dir": string;
@@ -92,6 +93,74 @@ export interface UseReqConfig {
   DEBUG_LOG_ON_STATUS: "any" | "idle" | "checking" | "running" | "merging" | "error";
   DEBUG_ENABLED_TOOLS: string[];
   DEBUG_ENABLED_PROMPTS: string[];
+  "notify-enabled": boolean;
+  "notify-on-completed": boolean;
+  "notify-on-interrupted": boolean;
+  "notify-on-failed": boolean;
+  "notify-sound": "none" | "low" | "mid" | "high";
+  "notify-sound-on-completed": boolean;
+  "notify-sound-on-interrupted": boolean;
+  "notify-sound-on-failed": boolean;
+  "notify-sound-toggle-shortcut": string;
+  "notify-pushover-enabled": boolean;
+  "notify-pushover-on-completed": boolean;
+  "notify-pushover-on-interrupted": boolean;
+  "notify-pushover-on-failed": boolean;
+  "notify-pushover-user-key": string;
+  "notify-pushover-api-token": string;
+  "notify-pushover-priority": 0 | 1;
+  "notify-pushover-title": string;
+  "notify-pushover-text": string;
+  PI_NOTIFY_CMD: string;
+  PI_NOTIFY_SOUND_LOW_CMD: string;
+  PI_NOTIFY_SOUND_MID_CMD: string;
+  PI_NOTIFY_SOUND_HIGH_CMD: string;
+}
+
+/**
+ * @brief Defines one persisted local static-check language configuration.
+ * @details Stores only the project-local enable flag so checker command definitions can live exclusively in global configuration. The interface is compile-time only and introduces no runtime cost.
+ */
+interface LocalStaticCheckLanguageConfig {
+  enabled: StaticCheckEnabled;
+}
+
+/**
+ * @brief Defines one persisted global static-check language configuration.
+ * @details Stores only the cross-project checker-entry array so project-local files do not duplicate command definitions. The interface is compile-time only and introduces no runtime cost.
+ */
+interface GlobalStaticCheckLanguageConfig {
+  checkers: StaticCheckEntry[];
+}
+
+/**
+ * @brief Defines the persisted local pi-usereq configuration schema.
+ * @details Captures project-scoped directory, debug, and static-check enablement fields written to `<base-path>/.pi-usereq.json` while excluding global notification, tool, git, and checker-command settings. The interface is compile-time only and introduces no runtime side effects.
+ */
+interface UseReqLocalConfig {
+  "docs-dir": string;
+  "tests-dir": string;
+  "src-dir": string[];
+  "static-check": Record<string, LocalStaticCheckLanguageConfig>;
+  DEBUG_ENABLED: "enable" | "disable";
+  DEBUG_LOG_FILE: string;
+  DEBUG_STATUS_CHANGES: "enable" | "disable";
+  DEBUG_WORKFLOW_EVENTS: "enable" | "disable";
+  DEBUG_LOG_ON_STATUS: "any" | "idle" | "checking" | "running" | "merging" | "error";
+  DEBUG_ENABLED_TOOLS: string[];
+  DEBUG_ENABLED_PROMPTS: string[];
+}
+
+/**
+ * @brief Defines the persisted global pi-usereq configuration schema.
+ * @details Captures cross-project static-check checker commands, enabled tool names, git automation fields, and notification settings written to `~/.config/pi-usereq/config.json` while excluding project-local directory and debug fields. The interface is compile-time only and introduces no runtime side effects.
+ */
+interface UseReqGlobalConfig {
+  "static-check": Record<string, GlobalStaticCheckLanguageConfig>;
+  "enabled-tools": string[];
+  AUTO_GIT_COMMIT: "enable" | "disable";
+  GIT_WORKTREE_ENABLED: "enable" | "disable";
+  GIT_WORKTREE_PREFIX: string;
   "notify-enabled": boolean;
   "notify-on-completed": boolean;
   "notify-on-interrupted": boolean;
@@ -261,16 +330,100 @@ export function createStaticCheckLanguageConfig(
 }
 
 /**
- * @brief Returns the documented default static-check configuration.
- * @details Emits one per-language config object for every supported language, enabling only languages with documented default checker entries and leaving all remaining languages disabled with empty checker lists. Runtime is O(l + c). No external state is mutated.
- * @return {Record<string, StaticCheckLanguageConfig>} Fresh default static-check config.
- * @satisfies REQ-249, REQ-250, REQ-251, REQ-252
+ * @brief Builds one persisted local static-check language configuration object.
+ * @details Stores only the normalized enable flag so local project files do not duplicate checker command definitions. Runtime is O(1). No external state is mutated.
+ * @param[in] enabled {StaticCheckEnabled} Canonical per-language enable flag.
+ * @return {LocalStaticCheckLanguageConfig} Persistable local static-check language config.
  */
-export function getDefaultStaticCheckConfig(): Record<string, StaticCheckLanguageConfig> {
+function createLocalStaticCheckLanguageConfig(
+  enabled: StaticCheckEnabled,
+): LocalStaticCheckLanguageConfig {
+  return { enabled };
+}
+
+/**
+ * @brief Builds one persisted global static-check language configuration object.
+ * @details Clones the supplied checker entries so global configuration retains only stable module, command, and parameter fields. Runtime is O(c + p). No external state is mutated.
+ * @param[in] checkers {StaticCheckEntry[]} Ordered checker entries.
+ * @return {GlobalStaticCheckLanguageConfig} Persistable global static-check language config.
+ */
+function createGlobalStaticCheckLanguageConfig(
+  checkers: StaticCheckEntry[],
+): GlobalStaticCheckLanguageConfig {
+  return {
+    checkers: checkers.map(cloneStaticCheckEntry),
+  };
+}
+
+/**
+ * @brief Returns the documented default global static-check checker map.
+ * @details Emits one checker-array object for every supported language, preserving documented Command entries for default-enabled languages and `[]` for every other language. Runtime is O(l + c). No external state is mutated.
+ * @return {Record<string, GlobalStaticCheckLanguageConfig>} Fresh default global checker map.
+ */
+function getDefaultGlobalStaticCheckConfig(): Record<string, GlobalStaticCheckLanguageConfig> {
   return Object.fromEntries(DEFAULT_STATIC_CHECK_LANGUAGES.map((language) => [
     language,
-    createStaticCheckLanguageConfig(DEFAULT_STATIC_CHECK_CHECKERS[language] ?? []),
+    createGlobalStaticCheckLanguageConfig(DEFAULT_STATIC_CHECK_CHECKERS[language] ?? []),
   ]));
+}
+
+/**
+ * @brief Returns the documented default local static-check enable map.
+ * @details Derives each per-language enable flag from the supplied global checker definitions using the rule `enable` when `checkers` is non-empty and `disable` otherwise. Runtime is O(l). No external state is mutated.
+ * @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker map used to derive default enablement.
+ * @return {Record<string, LocalStaticCheckLanguageConfig>} Fresh default local enable map.
+ */
+function getDefaultLocalStaticCheckConfig(
+  globalStaticCheckConfig: Record<string, GlobalStaticCheckLanguageConfig>,
+): Record<string, LocalStaticCheckLanguageConfig> {
+  return Object.fromEntries(Object.entries(globalStaticCheckConfig).map(([language, languageConfig]) => [
+    language,
+    createLocalStaticCheckLanguageConfig(
+      languageConfig.checkers.length > 0 ? "enable" : "disable",
+    ),
+  ]));
+}
+
+/**
+ * @brief Merges local enable flags with global checker definitions into the effective static-check map.
+ * @details Unifies all language keys present in either persisted scope, applies the default-enable rule when the local scope omits a language, and clones checker entries into the effective runtime config. Runtime is O(l + c + p). No external state is mutated.
+ * @param[in] localStaticCheckConfig {Record<string, LocalStaticCheckLanguageConfig>} Persisted local enable map.
+ * @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Persisted global checker map.
+ * @return {Record<string, StaticCheckLanguageConfig>} Effective per-language static-check config.
+ */
+function mergeStaticCheckConfig(
+  localStaticCheckConfig: Record<string, LocalStaticCheckLanguageConfig>,
+  globalStaticCheckConfig: Record<string, GlobalStaticCheckLanguageConfig>,
+): Record<string, StaticCheckLanguageConfig> {
+  const languages = new Set<string>([
+    ...Object.keys(globalStaticCheckConfig),
+    ...Object.keys(localStaticCheckConfig),
+  ]);
+  return Object.fromEntries([...languages].map((language) => {
+    const globalLanguageConfig = globalStaticCheckConfig[language]
+      ?? createGlobalStaticCheckLanguageConfig([]);
+    const checkers = globalLanguageConfig.checkers.map(cloneStaticCheckEntry);
+    const defaultEnabled = checkers.length > 0 ? "enable" : "disable";
+    const enabled = normalizeStaticCheckEnabled(
+      localStaticCheckConfig[language]?.enabled,
+      defaultEnabled,
+    );
+    return [language, createStaticCheckLanguageConfig(checkers, enabled)];
+  }));
+}
+
+/**
+ * @brief Returns the documented default static-check configuration.
+ * @details Emits one effective per-language config object for every supported language by merging documented global checker defaults with derived local enable defaults. Runtime is O(l + c). No external state is mutated.
+ * @return {Record<string, StaticCheckLanguageConfig>} Fresh default effective static-check config.
+ * @satisfies REQ-249, REQ-250, REQ-251, REQ-252, REQ-316
+ */
+export function getDefaultStaticCheckConfig(): Record<string, StaticCheckLanguageConfig> {
+  const globalStaticCheckConfig = getDefaultGlobalStaticCheckConfig();
+  return mergeStaticCheckConfig(
+    getDefaultLocalStaticCheckConfig(globalStaticCheckConfig),
+    globalStaticCheckConfig,
+  );
 }
 
 /**
@@ -309,8 +462,8 @@ export function getActiveStaticCheckEntries(
 
 /**
  * @brief Defines the default automatic git-commit prompt mode.
- * @details New project configs enable bundled commit-instruction injection unless the persisted project config explicitly disables it. Access complexity is O(1).
- * @satisfies CTN-001, REQ-212
+ * @details New global configs enable bundled commit-instruction injection unless the persisted cross-project config explicitly disables it. Access complexity is O(1).
+ * @satisfies CTN-018, REQ-212
  */
 export const DEFAULT_AUTO_GIT_COMMIT = "enable" as const;
 /**
@@ -325,8 +478,8 @@ export function normalizeAutoGitCommit(value: unknown): "enable" | "disable" {
 }
 /**
  * @brief Defines the default worktree orchestration mode.
- * @details New project configs enable prompt-command worktree orchestration unless the persisted project config explicitly disables it. Access complexity is O(1).
- * @satisfies CTN-001, REQ-204
+ * @details New global configs enable prompt-command worktree orchestration unless the persisted cross-project config explicitly disables it. Access complexity is O(1).
+ * @satisfies CTN-018, REQ-204
  */
 export const DEFAULT_GIT_WORKTREE_ENABLED = "enable" as const;
 /**
@@ -355,8 +508,8 @@ export function resolveEffectiveGitWorktreeEnabled(
 }
 /**
  * @brief Defines the default static prefix used by generated prompt-command worktree names.
- * @details The prefix is concatenated verbatim ahead of the repository basename inside slash-command-owned worktree-name generation. Access complexity is O(1).
- * @satisfies CTN-001, REQ-205
+ * @details The prefix is concatenated verbatim ahead of the repository basename inside slash-command-owned worktree-name generation and is persisted in global configuration. Access complexity is O(1).
+ * @satisfies CTN-018, REQ-205
  */
 export const DEFAULT_GIT_WORKTREE_PREFIX = "PI-useReq-";
 /**
@@ -374,32 +527,38 @@ export function normalizeGitWorktreePrefix(value: unknown): string {
   return trimmedValue === "" ? DEFAULT_GIT_WORKTREE_PREFIX : trimmedValue;
 }
 /**
- * @brief Computes the per-project config file path.
- * @details Joins the project base with `.pi-usereq.json`, producing the canonical persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
+ * @brief Computes the per-project local config file path.
+ * @details Joins the project base with `.pi-usereq.json`, producing the canonical local persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
  * @param[in] projectBase {string} Absolute project root path.
- * @return {string} Absolute config file path.
+ * @return {string} Absolute local config file path.
  */
 export function getProjectConfigPath(projectBase: string): string {
   return getConfigPath(projectBase);
 }
 
 /**
- * @brief Builds the default project configuration.
- * @details Populates canonical docs/test/source directories, documented per-language static-check defaults, default prompt-command worktree settings, default debug fields including dedicated workflow-event logging, the default startup tool set, default command-notify, sound, and Pushover fields, and excludes runtime-derived path metadata. Time complexity is O(n) in default selector count plus default static-check entry count. No filesystem side effects occur.
- * @param[in] projectBase {string} Absolute project root path.
- * @return {UseReqConfig} Fresh default configuration object.
- * @satisfies CTN-001, CTN-012, CTN-013, REQ-066, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-250, REQ-251, REQ-252, REQ-277
+ * @brief Computes the cross-project global config file path.
+ * @details Resolves `~/.config/pi-usereq/config.json` through the shared runtime path helper so CLI and extension code use one canonical global persistence location. Time complexity is O(1). No I/O side effects occur.
+ * @return {string} Absolute global config file path.
  */
-export function getDefaultConfig(_projectBase: string): UseReqConfig {
+export function getGlobalConfigPath(): string {
+  return resolveGlobalConfigPath();
+}
+
+/**
+ * @brief Builds the default persisted local configuration.
+ * @details Populates canonical docs/test/source directories, derives local static-check enable defaults from the supplied global checker definitions, and seeds documented debug defaults without any cross-project fields. Runtime is O(l). No filesystem side effects occur.
+ * @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker definitions used to derive local enable defaults.
+ * @return {UseReqLocalConfig} Fresh default local configuration object.
+ */
+function getDefaultLocalConfig(
+  globalStaticCheckConfig: Record<string, GlobalStaticCheckLanguageConfig>,
+): UseReqLocalConfig {
   return {
     "docs-dir": DEFAULT_DOCS_DIR,
     "tests-dir": DEFAULT_TESTS_DIR,
     "src-dir": [...DEFAULT_SRC_DIRS],
-    "static-check": getDefaultStaticCheckConfig(),
-    "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
-    AUTO_GIT_COMMIT: DEFAULT_AUTO_GIT_COMMIT,
-    GIT_WORKTREE_ENABLED: DEFAULT_GIT_WORKTREE_ENABLED,
-    GIT_WORKTREE_PREFIX: DEFAULT_GIT_WORKTREE_PREFIX,
+    "static-check": getDefaultLocalStaticCheckConfig(globalStaticCheckConfig),
     DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
     DEBUG_LOG_FILE: DEFAULT_DEBUG_LOG_FILE,
     DEBUG_STATUS_CHANGES: DEFAULT_DEBUG_STATUS_CHANGES,
@@ -407,6 +566,21 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     DEBUG_LOG_ON_STATUS: DEFAULT_DEBUG_LOG_ON_STATUS,
     DEBUG_ENABLED_TOOLS: [],
     DEBUG_ENABLED_PROMPTS: [],
+  };
+}
+
+/**
+ * @brief Builds the default persisted global configuration.
+ * @details Populates documented cross-project static-check checker commands, enabled tools, git automation fields, and notification defaults without any project-local directory or debug fields. Runtime is O(l + c). No filesystem side effects occur.
+ * @return {UseReqGlobalConfig} Fresh default global configuration object.
+ */
+function getDefaultGlobalConfig(): UseReqGlobalConfig {
+  return {
+    "static-check": getDefaultGlobalStaticCheckConfig(),
+    "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
+    AUTO_GIT_COMMIT: DEFAULT_AUTO_GIT_COMMIT,
+    GIT_WORKTREE_ENABLED: DEFAULT_GIT_WORKTREE_ENABLED,
+    GIT_WORKTREE_PREFIX: DEFAULT_GIT_WORKTREE_PREFIX,
     "notify-enabled": false,
     "notify-on-completed": true,
     "notify-on-interrupted": false,
@@ -430,6 +604,96 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
     PI_NOTIFY_SOUND_MID_CMD: DEFAULT_PI_NOTIFY_SOUND_MID_CMD,
     PI_NOTIFY_SOUND_HIGH_CMD: DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD,
   };
+}
+
+/**
+ * @brief Merges persisted local and global configuration scopes into the effective runtime config.
+ * @details Normalizes local directories, combines local static-check enable flags with global checker arrays, resolves effective worktree disablement when automatic git commit is off, normalizes debug and notification fields, and disables Pushover until both credentials are populated. Runtime is O(l + c + p). No external state is mutated.
+ * @param[in] localConfig {UseReqLocalConfig} Persisted local configuration.
+ * @param[in] globalConfig {UseReqGlobalConfig} Persisted global configuration.
+ * @return {UseReqConfig} Effective merged configuration.
+ */
+function mergeConfigScopes(
+  localConfig: UseReqLocalConfig,
+  globalConfig: UseReqGlobalConfig,
+): UseReqConfig {
+  const docsDir = normalizeRelativeDirContract(localConfig["docs-dir"]) || DEFAULT_DOCS_DIR;
+  const testsDir = normalizeRelativeDirContract(localConfig["tests-dir"]) || DEFAULT_TESTS_DIR;
+  const srcDir = localConfig["src-dir"]
+    .map((entry) => normalizeRelativeDirContract(entry))
+    .filter((entry) => entry !== "");
+  const autoGitCommit = normalizeAutoGitCommit(globalConfig.AUTO_GIT_COMMIT);
+  const gitWorktreeEnabled = resolveEffectiveGitWorktreeEnabled(
+    autoGitCommit,
+    normalizeGitWorktreeEnabled(globalConfig.GIT_WORKTREE_ENABLED),
+  );
+  const pushoverUserKey = normalizePiNotifyPushoverCredential(globalConfig["notify-pushover-user-key"]);
+  const pushoverApiToken = normalizePiNotifyPushoverCredential(globalConfig["notify-pushover-api-token"]);
+  const pushoverEnabled = globalConfig["notify-pushover-enabled"] === true
+    && hasPiNotifyPushoverCredentials({
+      "notify-pushover-user-key": pushoverUserKey,
+      "notify-pushover-api-token": pushoverApiToken,
+    });
+  return {
+    "docs-dir": docsDir,
+    "tests-dir": testsDir,
+    "src-dir": srcDir.length > 0 ? srcDir : [...DEFAULT_SRC_DIRS],
+    "static-check": mergeStaticCheckConfig(localConfig["static-check"], globalConfig["static-check"]),
+    "enabled-tools": normalizeEnabledPiUsereqTools(globalConfig["enabled-tools"]),
+    AUTO_GIT_COMMIT: autoGitCommit,
+    GIT_WORKTREE_ENABLED: gitWorktreeEnabled,
+    GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(globalConfig.GIT_WORKTREE_PREFIX),
+    DEBUG_ENABLED: normalizeDebugEnabled(localConfig.DEBUG_ENABLED),
+    DEBUG_LOG_FILE: normalizeDebugLogFile(localConfig.DEBUG_LOG_FILE),
+    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(localConfig.DEBUG_STATUS_CHANGES),
+    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(localConfig.DEBUG_WORKFLOW_EVENTS),
+    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(localConfig.DEBUG_LOG_ON_STATUS),
+    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(localConfig.DEBUG_ENABLED_TOOLS),
+    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(localConfig.DEBUG_ENABLED_PROMPTS),
+    "notify-enabled": globalConfig["notify-enabled"] === true,
+    "notify-on-completed": globalConfig["notify-on-completed"] !== false,
+    "notify-on-interrupted": globalConfig["notify-on-interrupted"] === true,
+    "notify-on-failed": globalConfig["notify-on-failed"] === true,
+    "notify-sound": normalizePiNotifySoundLevel(globalConfig["notify-sound"]),
+    "notify-sound-on-completed": globalConfig["notify-sound-on-completed"] !== false,
+    "notify-sound-on-interrupted": globalConfig["notify-sound-on-interrupted"] === true,
+    "notify-sound-on-failed": globalConfig["notify-sound-on-failed"] === true,
+    "notify-sound-toggle-shortcut": normalizePiNotifyShortcut(globalConfig["notify-sound-toggle-shortcut"]),
+    "notify-pushover-enabled": pushoverEnabled,
+    "notify-pushover-on-completed": globalConfig["notify-pushover-on-completed"] !== false,
+    "notify-pushover-on-interrupted": globalConfig["notify-pushover-on-interrupted"] === true,
+    "notify-pushover-on-failed": globalConfig["notify-pushover-on-failed"] === true,
+    "notify-pushover-user-key": pushoverUserKey,
+    "notify-pushover-api-token": pushoverApiToken,
+    "notify-pushover-priority": normalizePiNotifyPushoverPriority(globalConfig["notify-pushover-priority"]),
+    "notify-pushover-title": normalizePiNotifyTemplateValue(
+      globalConfig["notify-pushover-title"],
+      DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
+    ),
+    "notify-pushover-text": normalizePiNotifyTemplateValue(
+      globalConfig["notify-pushover-text"],
+      DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+    ),
+    PI_NOTIFY_CMD: normalizePiNotifyCommand(globalConfig.PI_NOTIFY_CMD, DEFAULT_PI_NOTIFY_CMD),
+    PI_NOTIFY_SOUND_LOW_CMD: normalizePiNotifyCommand(globalConfig.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD),
+    PI_NOTIFY_SOUND_MID_CMD: normalizePiNotifyCommand(globalConfig.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD),
+    PI_NOTIFY_SOUND_HIGH_CMD: normalizePiNotifyCommand(globalConfig.PI_NOTIFY_SOUND_HIGH_CMD, DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD),
+  };
+}
+
+/**
+ * @brief Builds the default effective configuration.
+ * @details Composes documented local and global defaults, then merges them into the effective runtime config consumed by CLI and extension code. Time complexity is O(l + c). No filesystem side effects occur.
+ * @param[in] _projectBase {string} Absolute project root path retained for stable call sites.
+ * @return {UseReqConfig} Fresh default effective configuration object.
+ * @satisfies CTN-001, CTN-012, CTN-013, CTN-018, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-250, REQ-251, REQ-252, REQ-277, REQ-315, REQ-316
+ */
+export function getDefaultConfig(_projectBase: string): UseReqConfig {
+  const globalConfig = getDefaultGlobalConfig();
+  return mergeConfigScopes(
+    getDefaultLocalConfig(globalConfig["static-check"]),
+    globalConfig,
+  );
 }
 
 /**
@@ -461,58 +725,118 @@ function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[] {
 }
 
 /**
- * @brief Normalizes the persisted per-language static-check configuration map.
- * @details Accepts only object-valued language entries using the new `{ enabled, checkers }` schema, normalizes missing or invalid `enabled` values from checker-list presence, and drops malformed or legacy non-object language payloads without migration. Runtime is O(l + c + p). No external state is mutated.
- * @param[in] value {unknown} Candidate persisted static-check payload.
- * @return {Record<string, StaticCheckLanguageConfig>} Normalized per-language static-check map.
- * @satisfies REQ-249
+ * @brief Reads and validates one persisted config payload.
+ * @details Returns `undefined` when the target file does not exist. Otherwise parses UTF-8 JSON, rejects array or primitive payloads, and surfaces deterministic `ReqError` diagnostics keyed by the exact path. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @param[in] configPath {string} Absolute config file path.
+ * @return {Record<string, unknown> | undefined} Parsed object payload or `undefined` when the file is absent.
+ * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
  */
-function normalizeStaticCheckConfig(
-  value: unknown,
-): Record<string, StaticCheckLanguageConfig> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
+function readConfigPayload(configPath: string): Record<string, unknown> | undefined {
+  if (!fs.existsSync(configPath)) {
+    return undefined;
   }
-  const config: Record<string, StaticCheckLanguageConfig> = {};
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch {
+    throw new ReqError(`Error: invalid ${configPath}`, 11);
+  }
+
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new ReqError(`Error: invalid ${configPath}`, 11);
+  }
+  return payload as Record<string, unknown>;
+}
+
+/**
+ * @brief Normalizes the persisted local static-check enable map.
+ * @details Starts from the supplied default enable map, accepts only object-valued language entries, reads only `enabled`, and ignores misplaced checker arrays or legacy non-object payloads without migration. Runtime is O(l). No external state is mutated.
+ * @param[in] value {unknown} Candidate persisted local static-check payload.
+ * @param[in] defaultConfig {Record<string, LocalStaticCheckLanguageConfig>} Default enable map derived from global checker definitions.
+ * @return {Record<string, LocalStaticCheckLanguageConfig>} Normalized local static-check enable map.
+ * @satisfies REQ-249, REQ-316
+ */
+function normalizeLocalStaticCheckConfig(
+  value: unknown,
+  defaultConfig: Record<string, LocalStaticCheckLanguageConfig>,
+): Record<string, LocalStaticCheckLanguageConfig> {
+  const config: Record<string, LocalStaticCheckLanguageConfig> = Object.fromEntries(
+    Object.entries(defaultConfig).map(([language, languageConfig]) => [
+      language,
+      createLocalStaticCheckLanguageConfig(languageConfig.enabled),
+    ]),
+  );
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return config;
+  }
   for (const [language, languageValue] of Object.entries(value as Record<string, unknown>)) {
     if (!languageValue || typeof languageValue !== "object" || Array.isArray(languageValue)) {
       continue;
     }
     const languageRecord = languageValue as Record<string, unknown>;
-    const checkers = normalizeStaticCheckEntries(languageRecord.checkers);
-    config[language] = createStaticCheckLanguageConfig(
-      checkers,
-      normalizeStaticCheckEnabled(languageRecord.enabled, checkers.length > 0 ? "enable" : "disable"),
+    const defaultEnabled = config[language]?.enabled ?? "disable";
+    config[language] = createLocalStaticCheckLanguageConfig(
+      normalizeStaticCheckEnabled(languageRecord.enabled, defaultEnabled),
     );
   }
   return config;
 }
 
 /**
- * @brief Loads and sanitizes the persisted project configuration.
- * @details Returns defaults when the config file does not exist. Otherwise parses JSON, validates directory and per-language static-check object shapes, normalizes enabled tool names plus prompt-command worktree, debug, notify, sound, and Pushover fields including dedicated workflow-event logging, preserves non-empty template text verbatim, forces the effective worktree mode off when automatic git commit is disabled, forces effective Pushover disablement until both credentials are populated, applies documented per-flag defaults for missing payloads, and ignores removed, malformed, or runtime-derived path metadata without legacy schema migration. Runtime is O(n) in config size. Side effects are limited to filesystem reads.
- * @param[in] projectBase {string} Absolute project root path.
- * @return {UseReqConfig} Sanitized effective configuration.
- * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
- * @satisfies CTN-012, CTN-013, REQ-066, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-215, REQ-234, REQ-235, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-277
+ * @brief Normalizes the persisted global static-check checker map.
+ * @details Starts from documented global checker defaults, accepts only object-valued language entries, reads only `checkers`, and ignores misplaced local enable flags or legacy non-object payloads without migration. Runtime is O(l + c + p). No external state is mutated.
+ * @param[in] value {unknown} Candidate persisted global static-check payload.
+ * @return {Record<string, GlobalStaticCheckLanguageConfig>} Normalized global static-check checker map.
+ * @satisfies REQ-249, REQ-250, REQ-251, REQ-252
  */
-export function loadConfig(projectBase: string): UseReqConfig {
+function normalizeGlobalStaticCheckConfig(
+  value: unknown,
+): Record<string, GlobalStaticCheckLanguageConfig> {
+  const config = getDefaultGlobalStaticCheckConfig();
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return config;
+  }
+  for (const [language, languageValue] of Object.entries(value as Record<string, unknown>)) {
+    if (!languageValue || typeof languageValue !== "object" || Array.isArray(languageValue)) {
+      continue;
+    }
+    const languageRecord = languageValue as Record<string, unknown>;
+    config[language] = createGlobalStaticCheckLanguageConfig(
+      normalizeStaticCheckEntries(languageRecord.checkers),
+    );
+  }
+  return config;
+}
+
+/**
+ * @brief Loads and sanitizes the persisted local configuration.
+ * @details Returns defaults when `<base-path>/.pi-usereq.json` is absent. Otherwise parses the local JSON payload, normalizes project-scoped directory, debug, and static-check enable fields, and ignores misplaced global keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Absolute project root path.
+ * @param[in] defaultStaticCheckConfig {Record<string, LocalStaticCheckLanguageConfig>} Local static-check enable defaults derived from the current global checker map.
+ * @return {UseReqLocalConfig} Sanitized local configuration.
+ */
+function loadLocalConfig(
+  projectBase: string,
+  defaultStaticCheckConfig: Record<string, LocalStaticCheckLanguageConfig>,
+): UseReqLocalConfig {
   const configPath = getProjectConfigPath(projectBase);
-  if (!fs.existsSync(configPath)) {
-    return getDefaultConfig(projectBase);
+  const data = readConfigPayload(configPath);
+  if (!data) {
+    return {
+      "docs-dir": DEFAULT_DOCS_DIR,
+      "tests-dir": DEFAULT_TESTS_DIR,
+      "src-dir": [...DEFAULT_SRC_DIRS],
+      "static-check": normalizeLocalStaticCheckConfig(undefined, defaultStaticCheckConfig),
+      DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
+      DEBUG_LOG_FILE: DEFAULT_DEBUG_LOG_FILE,
+      DEBUG_STATUS_CHANGES: DEFAULT_DEBUG_STATUS_CHANGES,
+      DEBUG_WORKFLOW_EVENTS: DEFAULT_DEBUG_WORKFLOW_EVENTS,
+      DEBUG_LOG_ON_STATUS: DEFAULT_DEBUG_LOG_ON_STATUS,
+      DEBUG_ENABLED_TOOLS: [],
+      DEBUG_ENABLED_PROMPTS: [],
+    };
   }
-
-  let payload: unknown;
-  try {
-    payload = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  } catch (error) {
-    throw new ReqError(`Error: invalid ${configPath}`, 11);
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ReqError(`Error: invalid ${configPath}`, 11);
-  }
-  const data = payload as Record<string, unknown>;
   const docsDirCandidate = typeof data["docs-dir"] === "string"
     ? normalizeRelativeDirContract(data["docs-dir"])
     : "";
@@ -525,134 +849,112 @@ export function loadConfig(projectBase: string): UseReqConfig {
         .map((item) => normalizeRelativeDirContract(item))
         .filter((item) => item !== "")
     : [];
-  const docsDir = docsDirCandidate || DEFAULT_DOCS_DIR;
-  const testsDir = testsDirCandidate || DEFAULT_TESTS_DIR;
-  const srcDir = srcDirCandidate.length > 0 ? srcDirCandidate : [...DEFAULT_SRC_DIRS];
-  const staticCheck = normalizeStaticCheckConfig(data["static-check"]);
-  const enabledTools = normalizeEnabledPiUsereqTools(data["enabled-tools"]);
-  const autoGitCommit = normalizeAutoGitCommit(data.AUTO_GIT_COMMIT);
-  const gitWorktreeEnabled = resolveEffectiveGitWorktreeEnabled(
-    autoGitCommit,
-    normalizeGitWorktreeEnabled(data.GIT_WORKTREE_ENABLED),
-  );
-  const gitWorktreePrefix = normalizeGitWorktreePrefix(data.GIT_WORKTREE_PREFIX);
-  const debugEnabled = normalizeDebugEnabled(data.DEBUG_ENABLED);
-  const debugLogFile = normalizeDebugLogFile(data.DEBUG_LOG_FILE);
-  const debugStatusChanges = normalizeDebugStatusChanges(data.DEBUG_STATUS_CHANGES);
-  const debugWorkflowEvents = normalizeDebugWorkflowEvents(data.DEBUG_WORKFLOW_EVENTS);
-  const debugLogOnStatus = normalizeDebugLogOnStatus(data.DEBUG_LOG_ON_STATUS);
-  const debugEnabledTools = normalizeDebugEnabledTools(data.DEBUG_ENABLED_TOOLS);
-  const debugEnabledPrompts = normalizeDebugEnabledPrompts(data.DEBUG_ENABLED_PROMPTS);
-  const notifyEnabled = data["notify-enabled"] === true;
-  const notifyOnCompleted = data["notify-on-completed"] !== false;
-  const notifyOnInterrupted = data["notify-on-interrupted"] === true;
-  const notifyOnFailed = data["notify-on-failed"] === true;
-  const notifySound = normalizePiNotifySoundLevel(data["notify-sound"]);
-  const notifySoundOnCompleted = data["notify-sound-on-completed"] !== false;
-  const notifySoundOnInterrupted = data["notify-sound-on-interrupted"] === true;
-  const notifySoundOnFailed = data["notify-sound-on-failed"] === true;
-  const notifySoundToggleShortcut = normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]);
-  const pushoverOnCompleted = data["notify-pushover-on-completed"] !== false;
-  const pushoverOnInterrupted = data["notify-pushover-on-interrupted"] === true;
-  const pushoverOnFailed = data["notify-pushover-on-failed"] === true;
-  const pushoverUserKey = normalizePiNotifyPushoverCredential(data["notify-pushover-user-key"]);
-  const pushoverApiToken = normalizePiNotifyPushoverCredential(data["notify-pushover-api-token"]);
-  const pushoverEnabled = data["notify-pushover-enabled"] === true
-    && hasPiNotifyPushoverCredentials({
-      "notify-pushover-user-key": pushoverUserKey,
-      "notify-pushover-api-token": pushoverApiToken,
-    });
-  const pushoverPriority = normalizePiNotifyPushoverPriority(data["notify-pushover-priority"]);
-  const pushoverTitle = normalizePiNotifyTemplateValue(
-    data["notify-pushover-title"],
-    DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
-  );
-  const pushoverText = normalizePiNotifyTemplateValue(
-    data["notify-pushover-text"],
-    DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
-  );
-  const notifyCommand = normalizePiNotifyCommand(data.PI_NOTIFY_CMD, DEFAULT_PI_NOTIFY_CMD);
-  const lowSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD);
-  const midSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD);
-  const highSoundCommand = normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_HIGH_CMD, DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD);
-
   return {
-    "docs-dir": docsDir,
-    "tests-dir": testsDir,
-    "src-dir": srcDir,
-    "static-check": staticCheck,
-    "enabled-tools": enabledTools,
-    AUTO_GIT_COMMIT: autoGitCommit,
-    GIT_WORKTREE_ENABLED: gitWorktreeEnabled,
-    GIT_WORKTREE_PREFIX: gitWorktreePrefix,
-    DEBUG_ENABLED: debugEnabled,
-    DEBUG_LOG_FILE: debugLogFile,
-    DEBUG_STATUS_CHANGES: debugStatusChanges,
-    DEBUG_WORKFLOW_EVENTS: debugWorkflowEvents,
-    DEBUG_LOG_ON_STATUS: debugLogOnStatus,
-    DEBUG_ENABLED_TOOLS: debugEnabledTools,
-    DEBUG_ENABLED_PROMPTS: debugEnabledPrompts,
-    "notify-enabled": notifyEnabled,
-    "notify-on-completed": notifyOnCompleted,
-    "notify-on-interrupted": notifyOnInterrupted,
-    "notify-on-failed": notifyOnFailed,
-    "notify-sound": notifySound,
-    "notify-sound-on-completed": notifySoundOnCompleted,
-    "notify-sound-on-interrupted": notifySoundOnInterrupted,
-    "notify-sound-on-failed": notifySoundOnFailed,
-    "notify-sound-toggle-shortcut": notifySoundToggleShortcut,
-    "notify-pushover-enabled": pushoverEnabled,
-    "notify-pushover-on-completed": pushoverOnCompleted,
-    "notify-pushover-on-interrupted": pushoverOnInterrupted,
-    "notify-pushover-on-failed": pushoverOnFailed,
-    "notify-pushover-user-key": pushoverUserKey,
-    "notify-pushover-api-token": pushoverApiToken,
-    "notify-pushover-priority": pushoverPriority,
-    "notify-pushover-title": pushoverTitle,
-    "notify-pushover-text": pushoverText,
-    PI_NOTIFY_CMD: notifyCommand,
-    PI_NOTIFY_SOUND_LOW_CMD: lowSoundCommand,
-    PI_NOTIFY_SOUND_MID_CMD: midSoundCommand,
-    PI_NOTIFY_SOUND_HIGH_CMD: highSoundCommand,
+    "docs-dir": docsDirCandidate || DEFAULT_DOCS_DIR,
+    "tests-dir": testsDirCandidate || DEFAULT_TESTS_DIR,
+    "src-dir": srcDirCandidate.length > 0 ? srcDirCandidate : [...DEFAULT_SRC_DIRS],
+    "static-check": normalizeLocalStaticCheckConfig(data["static-check"], defaultStaticCheckConfig),
+    DEBUG_ENABLED: normalizeDebugEnabled(data.DEBUG_ENABLED),
+    DEBUG_LOG_FILE: normalizeDebugLogFile(data.DEBUG_LOG_FILE),
+    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(data.DEBUG_STATUS_CHANGES),
+    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(data.DEBUG_WORKFLOW_EVENTS),
+    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(data.DEBUG_LOG_ON_STATUS),
+    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(data.DEBUG_ENABLED_TOOLS),
+    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(data.DEBUG_ENABLED_PROMPTS),
   };
 }
 
 /**
- * @brief Builds the persisted configuration payload that excludes runtime-derived fields.
- * @details Copies only the canonical persisted configuration keys into a fresh object so runtime-derived metadata such as `base-path` and `git-path` can never be written to disk, serializes per-language static-check objects with key order `enabled` then `checkers`, normalizes `GIT_WORKTREE_PREFIX` plus debug fields including dedicated workflow-event logging, forces persisted worktree disablement when automatic git commit is disabled, forces persisted Pushover disablement until both credentials are populated, and preserves the remaining notification and Pushover settings. Runtime is O(n) in config size. No external state is mutated.
- * @param[in] config {UseReqConfig} Effective configuration object.
- * @return {UseReqConfig} Persistable configuration payload.
- * @satisfies CTN-012, CTN-013, REQ-146, REQ-163, REQ-204, REQ-205, REQ-212, REQ-215, REQ-234, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-277
+ * @brief Loads and sanitizes the persisted global configuration.
+ * @details Returns defaults when `~/.config/pi-usereq/config.json` is absent. Otherwise parses the global JSON payload, normalizes cross-project checker, tool, git, and notification fields, and ignores misplaced local keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @return {UseReqGlobalConfig} Sanitized global configuration.
  */
-function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
+function loadGlobalConfig(): UseReqGlobalConfig {
+  const configPath = getGlobalConfigPath();
+  const data = readConfigPayload(configPath);
+  if (!data) {
+    return getDefaultGlobalConfig();
+  }
+  return {
+    "static-check": normalizeGlobalStaticCheckConfig(data["static-check"]),
+    "enabled-tools": normalizeEnabledPiUsereqTools(data["enabled-tools"]),
+    AUTO_GIT_COMMIT: normalizeAutoGitCommit(data.AUTO_GIT_COMMIT),
+    GIT_WORKTREE_ENABLED: normalizeGitWorktreeEnabled(data.GIT_WORKTREE_ENABLED),
+    GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(data.GIT_WORKTREE_PREFIX),
+    "notify-enabled": data["notify-enabled"] === true,
+    "notify-on-completed": data["notify-on-completed"] !== false,
+    "notify-on-interrupted": data["notify-on-interrupted"] === true,
+    "notify-on-failed": data["notify-on-failed"] === true,
+    "notify-sound": normalizePiNotifySoundLevel(data["notify-sound"]),
+    "notify-sound-on-completed": data["notify-sound-on-completed"] !== false,
+    "notify-sound-on-interrupted": data["notify-sound-on-interrupted"] === true,
+    "notify-sound-on-failed": data["notify-sound-on-failed"] === true,
+    "notify-sound-toggle-shortcut": normalizePiNotifyShortcut(data["notify-sound-toggle-shortcut"]),
+    "notify-pushover-enabled": data["notify-pushover-enabled"] === true,
+    "notify-pushover-on-completed": data["notify-pushover-on-completed"] !== false,
+    "notify-pushover-on-interrupted": data["notify-pushover-on-interrupted"] === true,
+    "notify-pushover-on-failed": data["notify-pushover-on-failed"] === true,
+    "notify-pushover-user-key": normalizePiNotifyPushoverCredential(data["notify-pushover-user-key"]),
+    "notify-pushover-api-token": normalizePiNotifyPushoverCredential(data["notify-pushover-api-token"]),
+    "notify-pushover-priority": normalizePiNotifyPushoverPriority(data["notify-pushover-priority"]),
+    "notify-pushover-title": normalizePiNotifyTemplateValue(
+      data["notify-pushover-title"],
+      DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
+    ),
+    "notify-pushover-text": normalizePiNotifyTemplateValue(
+      data["notify-pushover-text"],
+      DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
+    ),
+    PI_NOTIFY_CMD: normalizePiNotifyCommand(data.PI_NOTIFY_CMD, DEFAULT_PI_NOTIFY_CMD),
+    PI_NOTIFY_SOUND_LOW_CMD: normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD),
+    PI_NOTIFY_SOUND_MID_CMD: normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD),
+    PI_NOTIFY_SOUND_HIGH_CMD: normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_HIGH_CMD, DEFAULT_PI_NOTIFY_SOUND_HIGH_CMD),
+  };
+}
+
+/**
+ * @brief Loads and sanitizes the effective merged configuration.
+ * @details Loads global configuration first so local static-check enable defaults can be derived from the active global checker map, then merges both scopes into the effective runtime config without applying legacy single-file migrations. Runtime is O(n) in combined local and global config size. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Absolute project root path.
+ * @return {UseReqConfig} Sanitized effective configuration.
+ * @throws {ReqError} Throws with exit code `11` when either persisted config file contains invalid JSON or a non-object payload.
+ * @satisfies CTN-012, CTN-013, CTN-018, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-215, REQ-234, REQ-235, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-277, REQ-315, REQ-316
+ */
+export function loadConfig(projectBase: string): UseReqConfig {
+  const globalConfig = loadGlobalConfig();
+  const localConfig = loadLocalConfig(
+    projectBase,
+    getDefaultLocalStaticCheckConfig(globalConfig["static-check"]),
+  );
+  return mergeConfigScopes(localConfig, globalConfig);
+}
+
+/**
+ * @brief Builds the persisted local configuration payload.
+ * @details Copies only project-scoped keys into a fresh object so runtime-derived metadata plus global checker, tool, git, and notification fields never reach `.pi-usereq.json`. Runtime is O(n) in config size. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective configuration object.
+ * @return {UseReqLocalConfig} Persistable local configuration payload.
+ * @satisfies CTN-012, CTN-013, REQ-104, REQ-146, REQ-249, REQ-316, REQ-277
+ */
+function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig {
+  const normalizedSrcDir = config["src-dir"]
+    .map((entry) => normalizeRelativeDirContract(entry))
+    .filter((entry) => entry !== "");
   return {
     "docs-dir": normalizeRelativeDirContract(config["docs-dir"]) || DEFAULT_DOCS_DIR,
     "tests-dir": normalizeRelativeDirContract(config["tests-dir"]) || DEFAULT_TESTS_DIR,
-    "src-dir": (() => {
-      const normalizedSrcDir = config["src-dir"]
-        .map((entry) => normalizeRelativeDirContract(entry))
-        .filter((entry) => entry !== "");
-      return normalizedSrcDir.length > 0 ? normalizedSrcDir : [...DEFAULT_SRC_DIRS];
-    })(),
+    "src-dir": normalizedSrcDir.length > 0 ? normalizedSrcDir : [...DEFAULT_SRC_DIRS],
     "static-check": Object.fromEntries(
       Object.entries(config["static-check"]).map(([language, languageConfig]) => [
         language,
-        {
-          enabled: normalizeStaticCheckEnabled(
+        createLocalStaticCheckLanguageConfig(
+          normalizeStaticCheckEnabled(
             languageConfig.enabled,
             languageConfig.checkers.length > 0 ? "enable" : "disable",
           ),
-          checkers: languageConfig.checkers.map(cloneStaticCheckEntry),
-        },
+        ),
       ]),
     ),
-    "enabled-tools": [...config["enabled-tools"]],
-    AUTO_GIT_COMMIT: normalizeAutoGitCommit(config.AUTO_GIT_COMMIT),
-    GIT_WORKTREE_ENABLED: resolveEffectiveGitWorktreeEnabled(
-      normalizeAutoGitCommit(config.AUTO_GIT_COMMIT),
-      config.GIT_WORKTREE_ENABLED,
-    ),
-    GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(config.GIT_WORKTREE_PREFIX),
     DEBUG_ENABLED: normalizeDebugEnabled(config.DEBUG_ENABLED),
     DEBUG_LOG_FILE: normalizeDebugLogFile(config.DEBUG_LOG_FILE),
     DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES),
@@ -660,6 +962,32 @@ function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
     DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(config.DEBUG_LOG_ON_STATUS),
     DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS),
     DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS),
+  };
+}
+
+/**
+ * @brief Builds the persisted global configuration payload.
+ * @details Copies only cross-project keys into a fresh object so local directory and debug fields never reach `~/.config/pi-usereq/config.json`, while forcing persisted worktree disablement when automatic git commit is disabled and forcing persisted Pushover disablement until both credentials are populated. Runtime is O(n) in config size. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective configuration object.
+ * @return {UseReqGlobalConfig} Persistable global configuration payload.
+ * @satisfies REQ-137, REQ-163, REQ-174, REQ-178, REQ-184, REQ-196, REQ-204, REQ-205, REQ-212, REQ-234, REQ-249, REQ-315
+ */
+function buildPersistedGlobalConfig(config: UseReqConfig): UseReqGlobalConfig {
+  const autoGitCommit = normalizeAutoGitCommit(config.AUTO_GIT_COMMIT);
+  return {
+    "static-check": Object.fromEntries(
+      Object.entries(config["static-check"]).map(([language, languageConfig]) => [
+        language,
+        createGlobalStaticCheckLanguageConfig(languageConfig.checkers),
+      ]),
+    ),
+    "enabled-tools": normalizeEnabledPiUsereqTools(config["enabled-tools"]),
+    AUTO_GIT_COMMIT: autoGitCommit,
+    GIT_WORKTREE_ENABLED: resolveEffectiveGitWorktreeEnabled(
+      autoGitCommit,
+      config.GIT_WORKTREE_ENABLED,
+    ),
+    GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(config.GIT_WORKTREE_PREFIX),
     "notify-enabled": config["notify-enabled"],
     "notify-on-completed": config["notify-on-completed"],
     "notify-on-interrupted": config["notify-on-interrupted"],
@@ -669,8 +997,7 @@ function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
     "notify-sound-on-interrupted": config["notify-sound-on-interrupted"],
     "notify-sound-on-failed": config["notify-sound-on-failed"],
     "notify-sound-toggle-shortcut": config["notify-sound-toggle-shortcut"],
-    "notify-pushover-enabled": config["notify-pushover-enabled"]
-      && hasPiNotifyPushoverCredentials(config),
+    "notify-pushover-enabled": config["notify-pushover-enabled"] && hasPiNotifyPushoverCredentials(config),
     "notify-pushover-on-completed": config["notify-pushover-on-completed"],
     "notify-pushover-on-interrupted": config["notify-pushover-on-interrupted"],
     "notify-pushover-on-failed": config["notify-pushover-on-failed"],
@@ -687,17 +1014,51 @@ function buildPersistedConfig(config: UseReqConfig): UseReqConfig {
 }
 
 /**
- * @brief Persists the project configuration to disk.
- * @details Creates the base directory path when necessary, strips runtime-derived fields from the serialized payload, and writes formatted JSON terminated by a newline to `.pi-usereq.json`. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
- * @param[in] projectBase {string} Absolute project root path.
- * @param[in] config {UseReqConfig} Configuration object to persist.
+ * @brief Writes one normalized config payload to disk.
+ * @details Creates the parent directory when required, formats JSON with two-space indentation, and terminates the file with a newline. Runtime is O(n) in serialized payload size. Side effects include directory creation and file overwrite.
+ * @param[in] configPath {string} Absolute destination config path.
+ * @param[in] payload {object} Persistable config payload.
  * @return {void} No return value.
- * @satisfies CTN-012, REQ-146
+ */
+function writeConfigFile(configPath: string, payload: object): void {
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+/**
+ * @brief Persists the local configuration scope to disk.
+ * @details Serializes only project-scoped fields into `<base-path>/.pi-usereq.json`, excluding runtime-derived metadata and every global-scope configuration key. Runtime is O(n) in serialized local config size. Side effects include directory creation and file overwrite.
+ * @param[in] projectBase {string} Absolute project root path.
+ * @param[in] config {UseReqConfig} Effective configuration object to persist.
+ * @return {void} No return value.
+ * @satisfies CTN-012, REQ-104, REQ-146
+ */
+export function saveLocalConfig(projectBase: string, config: UseReqConfig): void {
+  writeConfigFile(getProjectConfigPath(projectBase), buildPersistedLocalConfig(config));
+}
+
+/**
+ * @brief Persists the global configuration scope to disk.
+ * @details Serializes only cross-project fields into `~/.config/pi-usereq/config.json`, excluding every project-local directory and debug setting. Runtime is O(n) in serialized global config size. Side effects include directory creation and file overwrite.
+ * @param[in] config {UseReqConfig} Effective configuration object to persist.
+ * @return {void} No return value.
+ * @satisfies CTN-012, CTN-018, REQ-137, REQ-146, REQ-315
+ */
+export function saveGlobalConfig(config: UseReqConfig): void {
+  writeConfigFile(getGlobalConfigPath(), buildPersistedGlobalConfig(config));
+}
+
+/**
+ * @brief Persists the effective configuration to local and global config files.
+ * @details Splits the effective runtime config into project-scoped and cross-project payloads, then writes both files with normalized JSON formatting. Runtime is O(n) in combined serialized config size. Side effects include directory creation and file overwrite in both persistence locations.
+ * @param[in] projectBase {string} Absolute project root path.
+ * @param[in] config {UseReqConfig} Effective configuration object to persist.
+ * @return {void} No return value.
+ * @satisfies CTN-012, CTN-018, REQ-137, REQ-146, REQ-315
  */
 export function saveConfig(projectBase: string, config: UseReqConfig): void {
-  const configPath = getProjectConfigPath(projectBase);
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, `${JSON.stringify(buildPersistedConfig(config), null, 2)}\n`, "utf8");
+  saveLocalConfig(projectBase, config);
+  saveGlobalConfig(config);
 }
 
 /**

@@ -14,11 +14,13 @@ import { detectLanguage } from "../src/core/generate-markdown.js";
 import { LANGUAGE_TAGS } from "../src/core/find-constructs.js";
 import {
   createStaticCheckLanguageConfig,
-  getProjectConfigPath,
+  getDefaultConfig,
   type UseReqConfig,
 } from "../src/core/config.js";
 import {
   initFixtureRepo,
+  readGlobalConfigJson,
+  readProjectConfigJson,
   runNodeCli,
   runPythonCli,
   runPythonInline,
@@ -450,10 +452,14 @@ function buildProjectScenarios(): AttendedScenario[] {
           normalize: createProjectNormalizer(projectBase),
           cleanup: () => removePath(projectBase),
           postAssert: () => {
-            const payload = JSON.parse(fs.readFileSync(getProjectConfigPath(projectBase), "utf8")) as UseReqConfig;
-            assert.deepEqual(payload["static-check"].Python, createStaticCheckLanguageConfig([
+            const defaultConfig = getDefaultConfig(projectBase);
+            const localPayload = readProjectConfigJson(projectBase) as unknown as Record<string, unknown>;
+            const globalPayload = readGlobalConfigJson() as unknown as Record<string, unknown>;
+            assert.equal((localPayload["static-check"] as Record<string, any>).Python.enabled, "enable");
+            assert.deepEqual((globalPayload["static-check"] as Record<string, any>).Python.checkers, [
+              ...defaultConfig["static-check"].Python.checkers,
               { module: "Command", cmd: "git", params: ["--version"] },
-            ], "enable"));
+            ]);
           },
         };
       },

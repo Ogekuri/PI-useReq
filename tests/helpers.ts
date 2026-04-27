@@ -8,8 +8,10 @@ import { createRequire } from "node:module";
 import {
   DEFAULT_DOCS_DIR,
   getDefaultConfig,
+  getGlobalConfigPath,
   getProjectConfigPath,
   saveConfig,
+  saveGlobalConfig,
   type StaticCheckLanguageConfig,
   type UseReqConfig,
 } from "../src/core/config.js";
@@ -31,6 +33,10 @@ const ORACLE_NODE_ROOT = fs.existsSync(path.join(ROOT, "node_modules"))
   : path.join(ROOT, "..", "PI-useReq");
 const ORACLE_STUBS_ROOT = path.join(ROOT, "tests", "python_oracle_stubs");
 const FIXTURES_DIR = path.join(ROOT, "tests", "fixtures");
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-home-"));
+process.env.HOME = TEST_HOME;
+process.env.USERPROFILE = TEST_HOME;
+process.env.XDG_CONFIG_HOME = path.join(TEST_HOME, ".config");
 
 export function getFixtureFiles(): string[] {
   return fs
@@ -104,8 +110,16 @@ export function runPythonInline(code: string, cwd = ROOT, envOverrides?: NodeJS.
   });
 }
 
+/**
+ * @brief Creates one temporary working directory and resets the isolated test global config.
+ * @details Allocates a unique directory under the system temp root, rewrites the process-scoped test global config file to documented defaults derived from the new project base, and returns the directory path. Runtime is O(n) in serialized config size. Side effects include directory creation and global-config file overwrite under the isolated test home.
+ * @param[in] prefix {string} Prefix forwarded to `fs.mkdtempSync(...)`.
+ * @return {string} Absolute temporary directory path.
+ */
 export function createTempDir(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  saveGlobalConfig(getDefaultConfig(tempDir));
+  return tempDir;
 }
 
 /**
@@ -126,8 +140,8 @@ function writeOracleReqConfig(projectBase: string, config: UseReqConfig): void {
 }
 
 /**
- * @brief Persists both Node and Python-oracle project configs for parity tests.
- * @details Writes `.pi-usereq.json` for the TypeScript CLI and `.req/config.json` for the Python oracle using the same logical payload. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
+ * @brief Persists Node local/global configs plus the Python-oracle mirror for parity tests.
+ * @details Writes split `.pi-usereq.json` and `~/.config/pi-usereq/config.json` files for the TypeScript runtime, then writes `.req/config.json` for the Python oracle using the same effective payload. Runtime is O(n) in serialized config size. Side effects include directory creation and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] config {UseReqConfig} Effective project configuration to persist.
  * @return {void} No return value.
@@ -138,13 +152,22 @@ export function saveFixtureConfigs(projectBase: string, config: UseReqConfig): v
 }
 
 /**
- * @brief Reads the raw persisted TypeScript project config JSON.
- * @details Loads `.pi-usereq.json` without normalization so tests can inspect merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @brief Reads the raw persisted TypeScript local project config JSON.
+ * @details Loads `.pi-usereq.json` without normalization so tests can inspect local-scope merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Fixture project root.
- * @return {Record<string, unknown>} Parsed raw configuration object.
+ * @return {Record<string, unknown>} Parsed raw local configuration object.
  */
 export function readProjectConfigJson(projectBase: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(getProjectConfigPath(projectBase), "utf8")) as Record<string, unknown>;
+}
+
+/**
+ * @brief Reads the raw persisted TypeScript global config JSON.
+ * @details Loads `~/.config/pi-usereq/config.json` without normalization so tests can inspect global-scope merge order and unknown metadata preservation exactly as written. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @return {Record<string, unknown>} Parsed raw global configuration object.
+ */
+export function readGlobalConfigJson(): Record<string, unknown> {
+  return JSON.parse(fs.readFileSync(getGlobalConfigPath(), "utf8")) as Record<string, unknown>;
 }
 
 /**

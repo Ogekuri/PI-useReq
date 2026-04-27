@@ -12,6 +12,7 @@ import { spawnSync } from "node:child_process";
 import {
   createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
+  getDefaultConfig,
   getProjectConfigPath,
   type UseReqConfig,
 } from "../src/core/config.js";
@@ -21,6 +22,7 @@ import {
   createTempDir,
   getFixtureFiles,
   initFixtureRepo,
+  readGlobalConfigJson,
   readProjectConfigJson,
   runNodeCli,
   runPythonCli,
@@ -115,11 +117,11 @@ function getFixtureTagFilter(filePath: string): string {
 }
 
 /**
- * @brief Returns the persisted per-language static-check config for one language.
- * @details Reads the raw project config JSON so tests can assert entry order, duplicate suppression, enable-flag persistence, and metadata preservation exactly as written. Runtime is O(n) in config file size. Side effects are limited to filesystem reads.
+ * @brief Returns the persisted local static-check config for one language.
+ * @details Reads the raw local project config JSON so tests can assert enable-flag persistence and local-scope shape exactly as written. Runtime is O(n) in config file size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] language {string} Canonical language key.
- * @return {Record<string, unknown> | undefined} Persisted language config object when present.
+ * @return {Record<string, unknown> | undefined} Persisted local language config object when present.
  */
 function getStaticCheckLanguageConfig(projectBase: string, language: string): Record<string, unknown> | undefined {
   const payload = readProjectConfigJson(projectBase);
@@ -128,14 +130,17 @@ function getStaticCheckLanguageConfig(projectBase: string, language: string): Re
 }
 
 /**
- * @brief Returns the persisted static-check entries for one language.
- * @details Reads the raw project config JSON and extracts the `checkers` array so tests can assert entry order and duplicate suppression exactly as written. Runtime is O(n) in config file size. Side effects are limited to filesystem reads.
- * @param[in] projectBase {string} Fixture project root.
+ * @brief Returns the persisted global static-check entries for one language.
+ * @details Reads the raw global config JSON and extracts the `checkers` array so tests can assert entry order and duplicate suppression exactly as written. Runtime is O(n) in config file size. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Fixture project root retained for stable call-site shape.
  * @param[in] language {string} Canonical language key.
- * @return {Array<Record<string, unknown>>} Persisted checker-entry array or an empty array.
+ * @return {Array<Record<string, unknown>>} Persisted global checker-entry array or an empty array.
  */
 function getStaticCheckEntries(projectBase: string, language: string): Array<Record<string, unknown>> {
-  const languageConfig = getStaticCheckLanguageConfig(projectBase, language);
+  void projectBase;
+  const payload = readGlobalConfigJson();
+  const staticCheck = (payload["static-check"] ?? {}) as Record<string, Record<string, unknown>>;
+  const languageConfig = staticCheck[language];
   return Array.isArray(languageConfig?.checkers)
     ? languageConfig.checkers as Array<Record<string, unknown>>
     : [];
@@ -594,6 +599,7 @@ const TARGET_CASES: TargetParityCase[] = [
       fs.mkdirSync(path.join(projectBase, "src"), { recursive: true });
       fs.mkdirSync(path.join(projectBase, "tests"), { recursive: true });
       fs.mkdirSync(path.join(projectBase, ...DEFAULT_DOCS_DIR.split("/")), { recursive: true });
+      const originalGlobalConfig = structuredClone(readGlobalConfigJson());
       const result = runNodeCli(
         ["--base", projectBase, "--enable-static-check", "C=Command,nonexistent_tool_xyz_12345"],
         projectBase,
@@ -601,6 +607,7 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.equal(result.status, 1);
       assert.match(result.stderr, /not an executable program/);
       assert.ok(!fs.existsSync(getProjectConfigPath(projectBase)));
+      assert.deepEqual(readGlobalConfigJson(), originalGlobalConfig);
 
       const removedModule = runNodeCli(
         ["--base", projectBase, "--enable-static-check", "Python=Ruff"],
@@ -609,6 +616,7 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.equal(removedModule.status, 1);
       assert.match(removedModule.stderr, /unknown module/i);
       assert.ok(!fs.existsSync(getProjectConfigPath(projectBase)));
+      assert.deepEqual(readGlobalConfigJson(), originalGlobalConfig);
     },
   },
   {
@@ -629,13 +637,18 @@ const TARGET_CASES: TargetParityCase[] = [
         projectBase,
       );
       assert.equal(persisted.status, 0, persisted.stderr);
+      const defaultConfig = getDefaultConfig(projectBase);
       assert.equal(getStaticCheckLanguageConfig(projectBase, "Python")?.enabled, "enable");
       assert.equal(getStaticCheckLanguageConfig(projectBase, "C")?.enabled, "enable");
       assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [
+        ...defaultConfig["static-check"].Python.checkers,
         { module: "Command", cmd: "git", params: ["--version"] },
         { module: "Command", cmd: "git", params: ["--help"] },
       ]);
-      assert.deepEqual(getStaticCheckEntries(projectBase, "C"), [{ module: "Command", cmd: "git", params: ["--version"] }]);
+      assert.deepEqual(getStaticCheckEntries(projectBase, "C"), [
+        ...defaultConfig["static-check"].C.checkers,
+        { module: "Command", cmd: "git", params: ["--version"] },
+      ]);
     },
   },
   {
@@ -658,10 +671,15 @@ const TARGET_CASES: TargetParityCase[] = [
         projectBase,
       );
       assert.equal(result.status, 0, result.stderr);
+      const defaultConfig = getDefaultConfig(projectBase);
       assert.equal(getStaticCheckLanguageConfig(projectBase, "Python")?.enabled, "enable");
       assert.equal(getStaticCheckLanguageConfig(projectBase, "C")?.enabled, "enable");
-      assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [{ module: "Command", cmd: "git", params: ["--version"] }]);
+      assert.deepEqual(getStaticCheckEntries(projectBase, "Python"), [
+        ...defaultConfig["static-check"].Python.checkers,
+        { module: "Command", cmd: "git", params: ["--version"] },
+      ]);
       assert.deepEqual(getStaticCheckEntries(projectBase, "C"), [
+        ...defaultConfig["static-check"].C.checkers,
         { module: "Command", cmd: "git", params: ["--version"] },
         { module: "Command", cmd: "git", params: ["--help"] },
       ]);

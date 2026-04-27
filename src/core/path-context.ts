@@ -11,10 +11,16 @@ import { fileURLToPath } from "node:url";
 import type { UseReqConfig } from "./config.js";
 
 /**
- * @brief Defines the per-project configuration file name.
- * @details The file lives directly under `base-path` and stores only persisted project configuration. Access complexity is O(1).
+ * @brief Defines the per-project local configuration file name.
+ * @details The file lives directly under `base-path` and stores only persisted project-scoped configuration. Access complexity is O(1).
  */
 export const PROJECT_CONFIG_FILENAME = ".pi-usereq.json";
+
+/**
+ * @brief Defines the home-relative global configuration file path.
+ * @details The path is resolved against the current user home directory and stores persisted cross-project configuration. Access complexity is O(1).
+ */
+export const GLOBAL_CONFIG_RELATIVE_PATH = ".config/pi-usereq/config.json";
 
 /**
  * @brief Defines the bundled resources directory name under the installation path.
@@ -155,13 +161,22 @@ export function normalizeRelativeDirContract(value: string): string {
 }
 
 /**
- * @brief Computes the absolute project config path for one base path.
+ * @brief Computes the absolute local project config path for one base path.
  * @details Appends `.pi-usereq.json` to the supplied base path using the canonical repository-local configuration layout. Runtime is O(1). No external state is mutated.
  * @param[in] basePath {string} Absolute or relative base path.
- * @return {string} Absolute config-file path.
+ * @return {string} Absolute local config-file path.
  */
 export function getConfigPath(basePath: string): string {
   return path.join(path.resolve(basePath), PROJECT_CONFIG_FILENAME);
+}
+
+/**
+ * @brief Computes the absolute global config path for the current user.
+ * @details Resolves `~/.config/pi-usereq/config.json` from the current user home directory without consulting project state. Runtime is O(1). No external state is mutated.
+ * @return {string} Absolute global config-file path.
+ */
+export function getGlobalConfigPath(): string {
+  return path.join(os.homedir(), GLOBAL_CONFIG_RELATIVE_PATH);
 }
 
 /**

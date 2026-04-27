@@ -689,7 +689,7 @@ export function setPiUsereqStatusConfig(
 
 /**
  * @brief Returns the active runtime sound level tracked by the status controller.
- * @details Exposes the in-memory runtime sound state so shortcut handlers and prompt-end notification dispatch can stay decoupled from the persisted boot value stored in `.pi-usereq.json`. Runtime is O(1). No external state is mutated.
+ * @details Exposes the in-memory runtime sound state so shortcut handlers and prompt-end notification dispatch can stay decoupled from the persisted boot value stored in global configuration. Runtime is O(1). No external state is mutated.
  * @param[in] controller {PiUsereqStatusController} Mutable status controller.
  * @return {PiNotifySoundLevel} Active runtime sound level.
  * @satisfies REQ-180, REQ-285
@@ -702,7 +702,7 @@ export function getPiUsereqRuntimeSoundLevel(
 
 /**
  * @brief Stores one new runtime sound level and refreshes the status bar.
- * @details Mutates only the in-memory runtime sound state so shortcut-driven sound changes do not update `.pi-usereq.json`, then re-renders the footer when an active extension context is available. Runtime is O(1). Side effect: mutates `controller.state.runtimeSoundLevel` and may update `ctx.ui` status.
+ * @details Mutates only the in-memory runtime sound state so shortcut-driven sound changes do not update persisted local or global configuration, then re-renders the footer when an active extension context is available. Runtime is O(1). Side effect: mutates `controller.state.runtimeSoundLevel` and may update `ctx.ui` status.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] runtimeSoundLevel {PiNotifySoundLevel} Next active runtime sound level.
  * @param[in] ctx {ExtensionContext | undefined} Optional active extension context.

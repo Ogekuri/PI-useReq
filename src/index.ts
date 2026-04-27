@@ -32,6 +32,7 @@ import {
   createStaticCheckLanguageConfig,
   getDefaultConfig,
   getDefaultStaticCheckConfig,
+  getGlobalConfigPath,
   getProjectConfigPath,
   loadConfig,
   normalizeConfigPaths,
@@ -268,12 +269,12 @@ function loadProjectConfig(cwd: string): UseReqConfig {
 }
 
 /**
- * @brief Persists project configuration from the extension runtime.
- * @details Resolves the project base, normalizes configured directory paths into project-relative form, and delegates persistence to `saveConfig` without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
+ * @brief Persists effective project configuration from the extension runtime.
+ * @details Resolves the project base, normalizes configured local directory paths into project-relative form, and delegates split local/global persistence to `saveConfig` without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
  * @param[in] cwd {string} Current working directory.
- * @param[in] config {UseReqConfig} Configuration to persist.
+ * @param[in] config {UseReqConfig} Effective configuration to persist.
  * @return {void} No return value.
- * @satisfies REQ-146
+ * @satisfies REQ-146, REQ-315
  */
 function saveProjectConfig(cwd: string, config: UseReqConfig): void {
   const projectBase = getProjectBase(cwd);
@@ -281,16 +282,26 @@ function saveProjectConfig(cwd: string, config: UseReqConfig): void {
 }
 
 /**
- * @brief Formats the current project config path for top-level menu display.
- * @details Resolves `<base-path>/.pi-usereq.json` from the cwd-derived project base, reuses the shared runtime-path formatter, and rewrites a leading POSIX `$HOME` token to `~` for the `Show configuration` row only. Runtime is O(p) in path length. No external state is mutated.
+ * @brief Formats the current local config path for top-level menu display.
+ * @details Resolves `<base-path>/.pi-usereq.json` from the cwd-derived project base and reuses the shared runtime-path formatter so the `Show local configuration` row uses the documented `~`-relative display contract. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] cwd {string} Current working directory.
- * @return {string} `~`-relative or absolute config path display value.
+ * @return {string} `~`-relative or absolute local config-path display value.
  * @satisfies REQ-162
  */
-function formatProjectConfigPathForMenu(cwd: string): string {
+function formatLocalConfigPathForMenu(cwd: string): string {
   return formatRuntimePathForDisplay(
     getProjectConfigPath(getProjectBase(cwd)),
   );
+}
+
+/**
+ * @brief Formats the current global config path for top-level menu display.
+ * @details Resolves `~/.config/pi-usereq/config.json` through the shared runtime-path formatter so the `Show global configuration` row uses the documented `~`-relative display contract. Runtime is O(p) in path length. No external state is mutated.
+ * @return {string} `~`-relative or absolute global config-path display value.
+ * @satisfies REQ-319
+ */
+function formatGlobalConfigPathForMenu(): string {
+  return formatRuntimePathForDisplay(getGlobalConfigPath());
 }
 
 /**
@@ -409,21 +420,46 @@ async function confirmResetChanges(
 }
 
 /**
- * @brief Writes the already-persisted project configuration file text into the editor.
- * @details Reads the current `.pi-usereq.json` file content from disk after the caller has saved any pending configuration changes and forwards that exact persisted text into the editor. Runtime is O(n) in serialized config size. Side effects include filesystem reads and editor-text mutation.
+ * @brief Writes one already-persisted config file text into the editor.
+ * @details Reads the target config file from disk after the caller has saved any pending changes and forwards the exact persisted text into the editor. Runtime is O(n) in serialized config size. Side effects include filesystem reads and editor-text mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] configPath {string} Absolute persisted config path.
+ * @return {void} No return value.
+ */
+function writePersistedConfigToEditor(
+  ctx: ExtensionCommandContext,
+  configPath: string,
+): void {
+  ctx.ui.setEditorText(fs.readFileSync(configPath, "utf8"));
+}
+
+/**
+ * @brief Writes the already-persisted local configuration file text into the editor.
+ * @details Reads `<base-path>/.pi-usereq.json` from disk after the caller has saved any pending local and global configuration changes, then forwards that exact persisted text into the editor. Runtime is O(n) in serialized config size. Side effects include filesystem reads and editor-text mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in] cwd {string} Current working directory.
- * @param[in] _config {UseReqConfig} Unused effective project configuration retained for stable call-site shape.
  * @return {void} No return value.
  * @satisfies REQ-031
  */
-function writePersistedProjectConfigToEditor(
+function writePersistedLocalConfigToEditor(
   ctx: ExtensionCommandContext,
   cwd: string,
-  _config: UseReqConfig,
 ): void {
   const projectBase = getProjectBase(cwd);
-  ctx.ui.setEditorText(fs.readFileSync(getProjectConfigPath(projectBase), "utf8"));
+  writePersistedConfigToEditor(ctx, getProjectConfigPath(projectBase));
+}
+
+/**
+ * @brief Writes the already-persisted global configuration file text into the editor.
+ * @details Reads `~/.config/pi-usereq/config.json` from disk after the caller has saved any pending local and global configuration changes, then forwards that exact persisted text into the editor. Runtime is O(n) in serialized config size. Side effects include filesystem reads and editor-text mutation.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @return {void} No return value.
+ * @satisfies REQ-318
+ */
+function writePersistedGlobalConfigToEditor(
+  ctx: ExtensionCommandContext,
+): void {
+  writePersistedConfigToEditor(ctx, getGlobalConfigPath());
 }
 
 /**
@@ -2314,7 +2350,7 @@ async function selectPiNotifySoundLevel(
 
 /**
  * @brief Runs the interactive notification-configuration menu.
- * @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, delegates completed/interrupted/failed toggles to dedicated event submenus, persists boot-sound changes without altering the active runtime sound level, keeps `Enable pushover` locked until both credentials are populated, decodes escaped control-sequence input for `Pushover text`, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, persists every notification subtree mutation into global configuration, delegates completed/interrupted/failed toggles to dedicated event submenus, preserves boot-sound edits without altering the active runtime sound level, keeps `Enable pushover` locked until both credentials are populated, decodes escaped control-sequence input for `Pushover text`, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
@@ -2610,10 +2646,10 @@ async function configurePiNotifyMenu(
 
 /**
  * @brief Registers the configurable notification-sound shortcut when supported.
- * @details Loads the current project config, registers one raw pi shortcut when
+ * @details Loads the current effective config, registers one raw pi shortcut when
  * the runtime exposes `registerShortcut(...)`, cycles only the active runtime
- * sound level on invocation, leaves `.pi-usereq.json` unchanged, refreshes the
- * status bar, and emits one info notification. Runtime is O(1) for registration
+ * sound level on invocation, leaves persisted local and global configuration
+ * unchanged, refreshes the status bar, and emits one info notification. Runtime is O(1) for registration
  * plus one status update per shortcut use. Side effects include shortcut
  * registration and status updates.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -3325,7 +3361,7 @@ function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig):
 
 /**
  * @brief Runs the interactive active-tool configuration menu.
- * @details Synchronizes runtime active tools with persisted config, renders startup-tool actions through the shared settings-menu UI, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
+ * @details Synchronizes runtime active tools with the effective config, renders startup-tool actions through the shared settings-menu UI, persists enablement changes into global configuration, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
@@ -3599,7 +3635,7 @@ function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUser
 
 /**
  * @brief Runs the interactive static-check configuration menu.
- * @details Lets the user add Command entries by guided prompts, remove configured language entries, toggle direct per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Lets the user add and remove global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
@@ -3755,11 +3791,11 @@ async function configureStaticCheckMenu(
 
 /**
  * @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
- * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and the display-only config path beside `show-config`. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320
  */
 function buildPiUsereqMenuChoices(
   cwd: string,
@@ -3822,32 +3858,39 @@ function buildPiUsereqMenuChoices(
       id: "static-check",
       label: "Language static code checkers",
       value: formatStaticCheckLanguagesSummary(config),
-      description: "Manage guided Command static-check entries and per-language enable flags.",
+      description: "Manage global Command static-check entries and local per-language enable flags.",
     },
     {
       id: "startup-tools",
       label: "Enable tools",
       value: `${getConfiguredEnabledPiUsereqTools(config).length} enabled`,
-      description: "Manage which configurable tools become active during session_start.",
+      description: "Manage the global configurable tool set activated during session_start.",
     },
     {
       id: "notifications",
       label: "Notifications",
       value: `notification:${formatPiNotifyStatus(config)} • sound:${config["notify-sound"]} • pushover:${formatPiNotifyPushoverStatus(config)}`,
-      description: "Manage command-notify, sound, and Pushover settings with dedicated event submenus.",
+      description: "Manage global command-notify, sound, and Pushover settings with dedicated event submenus.",
     },
     {
       id: "debug",
       label: "Debug",
       value: formatDebugMenuSummary(config),
-      description: "Manage debug logging for tools and `req-*` prompt orchestration.",
+      description: "Manage project-local debug logging for tools and `req-*` prompt orchestration.",
     },
     {
-      id: "show-config",
-      label: "Show configuration",
-      value: formatProjectConfigPathForMenu(cwd),
+      id: "show-local-config",
+      label: "Show local configuration",
+      value: formatLocalConfigPathForMenu(cwd),
       valueTone: "dim",
-      description: "Persist the current project configuration file and write its exact text into the editor.",
+      description: "Persist pending configuration changes and write the exact local config file text into the editor.",
+    },
+    {
+      id: "show-global-config",
+      label: "Show global configuration",
+      value: formatGlobalConfigPathForMenu(),
+      valueTone: "dim",
+      description: "Persist pending configuration changes and write the exact global config file text into the editor.",
     },
     ...buildTerminalSettingsMenuChoices({
       resetDefaultsDescription: "Restore the default pi-usereq configuration for the current project base.",
@@ -3905,12 +3948,12 @@ function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuCh
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads project config, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
+ * @details Loads the effective merged config, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320
  */
 async function configurePiUsereq(
   pi: ExtensionAPI,
@@ -4152,12 +4195,16 @@ async function configurePiUsereq(
       ctx.ui.notify("Restored all default configuration values", "info");
       continue;
     }
-    if (choice === "show-config") {
+    if (choice === "show-local-config" || choice === "show-global-config") {
       persistConfigChange();
       if (config["notify-sound-toggle-shortcut"] !== initialShortcut) {
         ctx.ui.notify("Sound toggle hotkey bind updated; run /reload to apply the new binding", "info");
       }
-      writePersistedProjectConfigToEditor(ctx, ctx.cwd, config);
+      if (choice === "show-local-config") {
+        writePersistedLocalConfigToEditor(ctx, ctx.cwd);
+      } else {
+        writePersistedGlobalConfigToEditor(ctx);
+      }
       return;
     }
   }

@@ -12,22 +12,21 @@ import {
   type OfflineContractSnapshot,
 } from "../scripts/lib/extension-debug-harness.js";
 import { buildParityReport, type SdkContractSnapshot } from "../scripts/lib/sdk-smoke.js";
-import { getProjectConfigPath } from "../src/core/config.js";
+import { loadConfig } from "../src/core/config.js";
 import { PI_USEREQ_STATUS_HOOK_NAMES } from "../src/core/extension-status.js";
-import { initFixtureRepo } from "./helpers.js";
+import { initFixtureRepo, saveFixtureConfigs } from "./helpers.js";
 
 /**
  * @brief Persists a targeted enabled-tool list into a fixture project config.
- * @details Loads `.pi-usereq.json`, replaces the `enabled-tools` array with the supplied values, and writes the updated JSON back to disk with a trailing newline. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
+ * @details Loads the effective split config, replaces the global `enabled-tools` array with the supplied values, and rewrites the local/global plus oracle mirror files so offline harness tests observe the same runtime state. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] enabledTools {string[]} Enabled-tool names to persist.
  * @return {void} No return value.
  */
 function writeEnabledTools(projectBase: string, enabledTools: string[]): void {
-  const configPath = getProjectConfigPath(projectBase);
-  const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  const config = loadConfig(projectBase);
   config["enabled-tools"] = enabledTools;
-  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  saveFixtureConfigs(projectBase, config);
 }
 
 /**
@@ -257,10 +256,9 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
 test("replayCommand captures prompt command payloads", async () => {
   const { projectBase } = initFixtureRepo();
   try {
-    const configPath = getProjectConfigPath(projectBase);
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+    const config = loadConfig(projectBase);
     config.GIT_WORKTREE_ENABLED = "disable";
-    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    saveFixtureConfigs(projectBase, config);
     assert.equal(spawnSync("git", ["add", ".pi-usereq.json", ".req/config.json"], {
       cwd: projectBase,
       encoding: "utf8",

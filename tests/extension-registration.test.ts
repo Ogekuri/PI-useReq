@@ -16,6 +16,7 @@ import {
   createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
   getDefaultConfig,
+  getGlobalConfigPath,
   getProjectConfigPath,
   loadConfig,
 } from "../src/core/config.js";
@@ -58,7 +59,13 @@ import {
 } from "../src/core/extension-status.js";
 import { showPiUsereqSettingsMenu } from "../src/core/settings-menu.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
-import { createTempDir, initFixtureRepo } from "./helpers.js";
+import {
+  createTempDir,
+  initFixtureRepo,
+  readGlobalConfigJson,
+  readProjectConfigJson,
+  saveFixtureConfigs,
+} from "./helpers.js";
 
 /**
  * @brief Describes one fake extension command registration captured during tests.
@@ -91,17 +98,16 @@ type RegisteredTool = {
 type RegisteredShortcut = { description?: string; handler: (ctx: any) => Promise<void> | void };
 
 /**
- * @brief Applies targeted `.pi-usereq.json` overrides inside one test project.
- * @details Loads the persisted config JSON, merges the supplied top-level overrides, and writes the updated payload back with a trailing newline so prompt-command tests can script worktree and notification behavior deterministically. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
+ * @brief Applies targeted effective-config overrides inside one test project.
+ * @details Loads the merged local/global config, merges the supplied top-level overrides, rewrites the split Node config files plus the oracle mirror, and commits the repository-local config artifacts when the fixture is a git repo. Runtime is O(n) in config size. Side effects include filesystem reads, file overwrite, and optional git commits.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] overrides {Record<string, unknown>} Top-level config overrides.
  * @return {void} No return value.
  */
 function writeProjectConfigOverrides(projectBase: string, overrides: Record<string, unknown>): void {
-  const configPath = getProjectConfigPath(projectBase);
-  const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  const config = loadConfig(projectBase);
   Object.assign(config, overrides);
-  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  saveFixtureConfigs(projectBase, config);
   if (fs.existsSync(path.join(projectBase, ".git"))) {
     const gitEnv = {
       ...process.env,
@@ -519,13 +525,13 @@ function buildExpectedFakeBasePath(cwd: string): string {
 }
 
 /**
- * @brief Formats one expected home-relative base path for notify-template assertions.
- * @details Resolves the supplied cwd, emits `~` or `~/...` when the path is inside the current user home directory, and otherwise returns the slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
- * @param[in] cwd {string} Runtime working directory.
- * @return {string} Home-relative or absolute base path used by notification templates.
+ * @brief Formats one expected home-relative display path.
+ * @details Resolves the supplied path, emits `~` or `~/...` when the path is inside the current user home directory, and otherwise returns the slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] targetPath {string} Absolute or relative path candidate.
+ * @return {string} Home-relative or absolute display path.
  */
-function buildExpectedNotifyBasePath(cwd: string): string {
-  const resolvedPath = path.resolve(cwd);
+function buildExpectedDisplayPath(targetPath: string): string {
+  const resolvedPath = path.resolve(targetPath);
   const homePath = path.resolve(process.env.HOME ?? os.homedir());
   if (resolvedPath === homePath) {
     return "~";
@@ -538,15 +544,32 @@ function buildExpectedNotifyBasePath(cwd: string): string {
 }
 
 /**
- * @brief Formats the expected `Show configuration` path value.
- * @details Resolves the current project config path and rewrites a leading home-directory prefix to `~` so top-level menu assertions match the documented display-only substitution without changing stored paths. Runtime is O(p) in path length. No external state is mutated.
+ * @brief Formats one expected home-relative base path for notify-template assertions.
+ * @details Delegates to the generic display-path formatter so notify-template assertions match the runtime `~`-relative path contract. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] cwd {string} Runtime working directory.
- * @return {string} `~`-relative or absolute config-path display string.
+ * @return {string} Home-relative or absolute base path used by notification templates.
  */
-function buildExpectedShowConfigPath(cwd: string): string {
-  return buildExpectedNotifyBasePath(path.dirname(getProjectConfigPath(cwd))) === buildExpectedNotifyBasePath(cwd)
-    ? `${buildExpectedNotifyBasePath(cwd)}/.pi-usereq.json`
-    : getProjectConfigPath(cwd).split(path.sep).join("/");
+function buildExpectedNotifyBasePath(cwd: string): string {
+  return buildExpectedDisplayPath(cwd);
+}
+
+/**
+ * @brief Formats the expected `Show local configuration` path value.
+ * @details Resolves the current local project config path and rewrites a leading home-directory prefix to `~` so top-level menu assertions match the documented display-only substitution without changing stored paths. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] cwd {string} Runtime working directory.
+ * @return {string} `~`-relative or absolute local config-path display string.
+ */
+function buildExpectedShowLocalConfigPath(cwd: string): string {
+  return buildExpectedDisplayPath(getProjectConfigPath(cwd));
+}
+
+/**
+ * @brief Formats the expected `Show global configuration` path value.
+ * @details Resolves the current global config path and rewrites a leading home-directory prefix to `~` so top-level menu assertions match the documented display-only substitution without changing stored paths. Runtime is O(p) in path length. No external state is mutated.
+ * @return {string} `~`-relative or absolute global config-path display string.
+ */
+function buildExpectedShowGlobalConfigPath(): string {
+  return buildExpectedDisplayPath(getGlobalConfigPath());
 }
 
 /**
@@ -1505,19 +1528,15 @@ test("static-check tools return monolithic text payloads with minimal execution 
     assert.equal(staticCheckResult.details?.execution.code, 0);
     assert.deepEqual(staticCheckResult.details?.execution.stderr_lines, undefined);
 
-    fs.writeFileSync(
-      getProjectConfigPath(projectBase),
-      `${JSON.stringify({
-        ...getDefaultConfig(projectBase),
-        "docs-dir": DEFAULT_DOCS_DIR,
-        "tests-dir": "tests",
-        "src-dir": ["src"],
-        "static-check": {
-          TypeScript: createStaticCheckLanguageConfig([{ module: "Dummy" }], "disable"),
-        },
-      }, null, 2)}\n`,
-      "utf8",
-    );
+    saveFixtureConfigs(projectBase, {
+      ...getDefaultConfig(projectBase),
+      "docs-dir": DEFAULT_DOCS_DIR,
+      "tests-dir": "tests",
+      "src-dir": ["src"],
+      "static-check": {
+        TypeScript: createStaticCheckLanguageConfig([{ module: "Dummy" }], "disable"),
+      },
+    });
     const disabledFilesStaticCheckResult = await executeRegisteredTool(pi, "files-static-check", projectBase, {
       files: ["src/check.ts"],
     }) as {
@@ -1541,7 +1560,7 @@ test("configuration menu saves updated docs-dir in project config", async () => 
   assert.ok(command);
 
   await command!.handler("", createFakeCtx(cwd, { selects: ["docs-dir", "Save and close"], inputs: ["docs/custom"] }));
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const config = readProjectConfigJson(cwd);
   assert.equal(config["docs-dir"], "docs/custom");
 });
 
@@ -1566,7 +1585,7 @@ test("configuration menu persists trailing-slash-free relative directory values"
 
   await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const config = readProjectConfigJson(cwd);
   assert.equal(config["docs-dir"], "docs/custom");
   assert.equal(config["tests-dir"], "tests/custom");
   assert.deepEqual(config["src-dir"], ["src", "src/custom"]);
@@ -1586,12 +1605,14 @@ test("configuration menu forces worktree rows off and dim when auto git commit i
 
   await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const localConfig = readProjectConfigJson(cwd);
+  const globalConfig = readGlobalConfigJson();
   const defaultConfig = getDefaultConfig(cwd);
   const renderedLockedMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
-  assert.equal(config.AUTO_GIT_COMMIT, "disable");
-  assert.equal(config.GIT_WORKTREE_ENABLED, "disable");
-  assert.equal(config.GIT_WORKTREE_PREFIX, defaultConfig.GIT_WORKTREE_PREFIX);
+  assert.equal(globalConfig.AUTO_GIT_COMMIT, "disable");
+  assert.equal(globalConfig.GIT_WORKTREE_ENABLED, "disable");
+  assert.equal(globalConfig.GIT_WORKTREE_PREFIX, defaultConfig.GIT_WORKTREE_PREFIX);
+  assert.equal(Object.hasOwn(localConfig, "AUTO_GIT_COMMIT"), false);
   assert.match(renderedLockedMenu, /<dim>Git worktree/);
   assert.match(renderedLockedMenu, /<dim>Worktree prefix/);
 });
@@ -1612,7 +1633,7 @@ test("configuration menu omits prompt-delivery controls and persisted config omi
   assert.equal(fs.existsSync(getProjectConfigPath(cwd)), false);
 });
 
-test("configuration menus expose show-config ordering and omit overview or notification-reference rows", async () => {
+test("configuration menus expose local/global config ordering and omit overview or notification-reference rows", async () => {
   const cwd = fs.mkdtempSync(
     path.join(process.env.HOME ?? process.cwd(), "pi-usereq-menu-structure-"),
   );
@@ -1638,10 +1659,18 @@ test("configuration menus expose show-config ordering and omit overview or notif
     "Enable tools",
     "Notifications",
     "Debug",
-    "Show configuration",
+    "Show local configuration",
+    "Show global configuration",
     "Reset defaults",
   ]);
-  assert.ok(renderedMenu.includes(buildExpectedShowConfigPath(cwd)));
+  assert.match(
+    renderedMenu,
+    new RegExp(`<dim>${buildExpectedShowLocalConfigPath(cwd).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</dim>`),
+  );
+  assert.match(
+    renderedMenu,
+    new RegExp(`<dim>${buildExpectedShowGlobalConfigPath().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</dim>`),
+  );
   assert.ok(renderedMenu.includes("notification:off • sound:none • pushover:off"));
   assert.ok(renderedMenu.includes("disable"));
   assert.doesNotMatch(renderedMenu, /beep:/);
@@ -1668,15 +1697,15 @@ test("configuration menus expose show-config ordering and omit overview or notif
   ]);
 });
 
-test("show configuration saves pending config, closes the menu, and writes the persisted project config file text into the editor", async () => {
-  const cwd = createTempDir("pi-usereq-menu-show-config-");
+test("show local configuration saves pending config, closes the menu, and writes the persisted local config file text into the editor", async () => {
+  const cwd = createTempDir("pi-usereq-menu-show-local-config-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
   const ctx = createFakeCtx(cwd, {
-    selects: ["docs-dir", "show-config"],
+    selects: ["docs-dir", "show-local-config"],
     inputs: ["docs/custom"],
   });
 
@@ -1685,6 +1714,28 @@ test("show configuration saves pending config, closes the menu, and writes the p
   const persistedText = fs.readFileSync(getProjectConfigPath(cwd), "utf8");
   assert.equal(ctx.__state.editorText, persistedText);
   assert.match(ctx.__state.editorText, /"docs-dir": "docs\/custom"/);
+  assert.equal(
+    ctx.__state.selectCalls.filter((call) => call.title === "pi-usereq").length,
+    2,
+  );
+});
+
+test("show global configuration saves pending config, closes the menu, and writes the persisted global config file text into the editor", async () => {
+  const cwd = createTempDir("pi-usereq-menu-show-global-config-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["Auto git commit", "show-global-config"],
+  });
+
+  await command!.handler("", ctx);
+
+  const persistedText = fs.readFileSync(getGlobalConfigPath(), "utf8");
+  assert.equal(ctx.__state.editorText, persistedText);
+  assert.match(ctx.__state.editorText, /"AUTO_GIT_COMMIT": "disable"/);
   assert.equal(
     ctx.__state.selectCalls.filter((call) => call.title === "pi-usereq").length,
     2,
@@ -1785,7 +1836,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   await command!.handler("", ctx);
 
   const renderedInitialDebugMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
-  const persistedConfig = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const persistedConfig = readProjectConfigJson(cwd);
   const debugCalls = ctx.__state.selectCalls.filter((call) => call.title === "Debug");
   assert.match(renderedInitialDebugMenu, /<dim>Log file/);
   assert.match(renderedInitialDebugMenu, /<dim>Log on status/);
@@ -1811,7 +1862,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
     selects: ["Debug", "Reset defaults", "Approve reset", "Save and close"],
   });
   await command!.handler("", resetCtx);
-  const resetConfig = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const resetConfig = readProjectConfigJson(cwd);
   assert.equal(resetConfig.DEBUG_ENABLED, "disable");
   assert.equal(resetConfig.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
   assert.equal(resetConfig.DEBUG_STATUS_CHANGES, "disable");
@@ -1856,17 +1907,13 @@ test("debug menu rows derive from canonical tool and prompt inventories", async 
 test("tool debug logging honors global enablement and workflow-status filters", async () => {
   const idleBase = createTempDir("pi-usereq-tool-debug-idle-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(idleBase)), { recursive: true });
-  fs.writeFileSync(
-    getProjectConfigPath(idleBase),
-    `${JSON.stringify({
-      ...getDefaultConfig(idleBase),
-      DEBUG_ENABLED: "enable",
-      DEBUG_LOG_FILE: "tool-debug.json",
-      DEBUG_LOG_ON_STATUS: "any",
-      DEBUG_ENABLED_TOOLS: ["bash"],
-    }, null, 2)}\n`,
-    "utf8",
-  );
+  saveFixtureConfigs(idleBase, {
+    ...getDefaultConfig(idleBase),
+    DEBUG_ENABLED: "enable",
+    DEBUG_LOG_FILE: "tool-debug.json",
+    DEBUG_LOG_ON_STATUS: "any",
+    DEBUG_ENABLED_TOOLS: ["bash"],
+  });
   const idlePi = createFakePi();
   piUsereqExtension(idlePi);
   const idleCtx = createFakeCtx(idleBase);
@@ -1927,17 +1974,13 @@ test("tool debug logging honors global enablement and workflow-status filters", 
 
   const disabledBase = createTempDir("pi-usereq-tool-debug-disabled-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(disabledBase)), { recursive: true });
-  fs.writeFileSync(
-    getProjectConfigPath(disabledBase),
-    `${JSON.stringify({
-      ...getDefaultConfig(disabledBase),
-      DEBUG_ENABLED: "disable",
-      DEBUG_LOG_FILE: "tool-debug.json",
-      DEBUG_LOG_ON_STATUS: "any",
-      DEBUG_ENABLED_TOOLS: ["bash"],
-    }, null, 2)}\n`,
-    "utf8",
-  );
+  saveFixtureConfigs(disabledBase, {
+    ...getDefaultConfig(disabledBase),
+    DEBUG_ENABLED: "disable",
+    DEBUG_LOG_FILE: "tool-debug.json",
+    DEBUG_LOG_ON_STATUS: "any",
+    DEBUG_ENABLED_TOOLS: ["bash"],
+  });
   const disabledPi = createFakePi();
   piUsereqExtension(disabledPi);
   const disabledCtx = createFakeCtx(disabledBase);
@@ -2181,11 +2224,12 @@ test("notifications reset defaults preserves non-notification settings", async (
 
   await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["docs-dir"], "docs/custom");
-  assert.equal(config["notify-enabled"], false);
-  assert.equal(config["notify-sound"], "none");
-  assert.equal(config["notify-pushover-enabled"], false);
+  const localConfig = readProjectConfigJson(cwd);
+  const globalConfig = readGlobalConfigJson();
+  assert.equal(localConfig["docs-dir"], "docs/custom");
+  assert.equal(globalConfig["notify-enabled"], false);
+  assert.equal(globalConfig["notify-sound"], "none");
+  assert.equal(globalConfig["notify-pushover-enabled"], false);
 });
 
 test("top-level reset defaults restores all configuration values", async () => {
@@ -2210,11 +2254,12 @@ test("top-level reset defaults restores all configuration values", async () => {
 
   await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["docs-dir"], DEFAULT_DOCS_DIR);
-  assert.deepEqual(config["src-dir"], ["src"]);
-  assert.equal(config["notify-enabled"], false);
-  assert.equal(config["notify-sound"], "none");
+  const localConfig = readProjectConfigJson(cwd);
+  const globalConfig = readGlobalConfigJson();
+  assert.equal(localConfig["docs-dir"], DEFAULT_DOCS_DIR);
+  assert.deepEqual(localConfig["src-dir"], ["src"]);
+  assert.equal(globalConfig["notify-enabled"], false);
+  assert.equal(globalConfig["notify-sound"], "none");
 });
 
 test("configuration menus reuse CLI settings theme semantics", async () => {
@@ -4795,17 +4840,11 @@ test("prompt commands remain functional when custom tool registrations are remov
 test("session_start applies configured pi-usereq startup tools", async () => {
   const cwd = createTempDir("pi-usereq-tools-startup-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-  fs.writeFileSync(
-    getProjectConfigPath(cwd),
-    `${JSON.stringify({
-      "docs-dir": DEFAULT_DOCS_DIR,
-      "tests-dir": "tests",
-      "src-dir": ["src", "foobar"],
-      "static-check": {},
-      "enabled-tools": ["files-tokens", "static-check"],
-    }, null, 2)}\n`,
-    "utf8",
-  );
+  saveFixtureConfigs(cwd, {
+    ...getDefaultConfig(cwd),
+    "src-dir": ["src", "foobar"],
+    "enabled-tools": ["files-tokens", "static-check"],
+  });
 
   const pi = createFakePi();
   piUsereqExtension(pi);
@@ -4915,7 +4954,7 @@ test("stale replacement contexts do not break workflow-state rendering", () => {
   const cwd = createTempDir("pi-usereq-stale-render-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const controller = createPiUsereqStatusController();
-  setPiUsereqStatusConfig(controller, getDefaultConfig());
+  setPiUsereqStatusConfig(controller, getDefaultConfig(cwd));
   const staleCtx = createFakeCtx(cwd);
   Object.defineProperty(staleCtx, "ui", {
     configurable: true,
@@ -5296,7 +5335,9 @@ test("session_start enables default custom tools and default embedded tools only
 });
 
 test("default configuration applies the documented static-check, debug, notify, sound, and pushover defaults", () => {
-  const config = getDefaultConfig(createTempDir("pi-usereq-default-notify-"));
+  const cwd = createTempDir("pi-usereq-default-notify-");
+  const config = getDefaultConfig(cwd);
+  saveFixtureConfigs(cwd, config);
 
   assert.equal(config.AUTO_GIT_COMMIT, "enable");
   assert.deepEqual(Object.keys(config["static-check"]).length, 20);
@@ -5363,6 +5404,21 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.equal(config["notify-pushover-on-failed"], false);
   assert.equal(config.PI_NOTIFY_CMD, 'notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a "PI-useReq" "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"');
   assert.equal(config["notify-pushover-text"], "%%RESULT%%\n%%ARGS%%");
+
+  const localConfig = readProjectConfigJson(cwd);
+  const globalConfig = readGlobalConfigJson();
+  assert.equal((localConfig["static-check"] as Record<string, any>).Python.enabled, "enable");
+  assert.equal((localConfig["static-check"] as Record<string, any>).Ruby.enabled, "disable");
+  assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
+    { module: "Command", cmd: "pyright", params: ["--outputjson"] },
+    { module: "Command", cmd: "ruff", params: ["check"] },
+  ]);
+  assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Ruby.checkers, []);
+  assert.equal(globalConfig.AUTO_GIT_COMMIT, "enable");
+  assert.equal(globalConfig.GIT_WORKTREE_ENABLED, "enable");
+  assert.equal(globalConfig["notify-enabled"], false);
+  assert.equal(Object.hasOwn(localConfig, "notify-enabled"), false);
+  assert.equal(Object.hasOwn(localConfig, "enabled-tools"), false);
 });
 
 test("configuration menu orders tool toggles and can enable embedded builtin tools", async () => {
@@ -5378,7 +5434,7 @@ test("configuration menu orders tool toggles and can enable embedded builtin too
 
   await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const config = readGlobalConfigJson();
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "compress",
     "references",
@@ -5419,7 +5475,7 @@ test("configuration menu can disable configurable active tools", async () => {
     }),
   );
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const config = readGlobalConfigJson();
   assert.deepEqual(config["enabled-tools"], []);
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
@@ -5463,7 +5519,7 @@ test("configuration menu can persist notify and boot-sound settings without chan
   await pi.emit("session_start", { reason: "startup" }, ctx);
   await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const config = readGlobalConfigJson();
   assert.equal(config["notify-enabled"], true);
   assert.equal(config["notify-on-completed"], true);
   assert.equal(config["notify-on-interrupted"], false);
@@ -5524,7 +5580,7 @@ test("configuration menu can persist pushover settings", async () => {
 
   await command!.handler("", ctx);
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const config = readGlobalConfigJson();
   assert.equal(config["notify-pushover-enabled"], true);
   assert.equal(config["notify-pushover-on-completed"], true);
   assert.equal(config["notify-pushover-on-interrupted"], false);
@@ -5551,14 +5607,10 @@ test("configuration menu can persist pushover settings", async () => {
 test("notifications menu escapes pushover text and locks pushover enablement until credentials exist", async () => {
   const cwd = createTempDir("pi-usereq-menu-pushover-display-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-  fs.writeFileSync(
-    getProjectConfigPath(cwd),
-    `${JSON.stringify({
-      ...getDefaultConfig(cwd),
-      "notify-pushover-text": "first line\nsecond line",
-    }, null, 2)}\n`,
-    "utf8",
-  );
+  saveFixtureConfigs(cwd, {
+    ...getDefaultConfig(cwd),
+    "notify-pushover-text": "first line\nsecond line",
+  });
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
@@ -5784,7 +5836,7 @@ test("pushover global enable controls status and suppresses delivery when disabl
   await command!.handler("", ctx);
   writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
+  const config = readGlobalConfigJson();
   assert.equal(config["notify-pushover-enabled"], false);
   assert.equal(config["notify-pushover-on-completed"], true);
   assert.equal(
@@ -6038,8 +6090,9 @@ test("sound routing honors the selected sound state and per-event toggles", asyn
 test("sound toggle shortcut cycles active runtime pi-notify sound levels without persisting boot config", async () => {
   const cwd = createTempDir("pi-usereq-shortcut-notify-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-  const persistedConfigText = `${JSON.stringify(getDefaultConfig(cwd), null, 2)}\n`;
-  fs.writeFileSync(getProjectConfigPath(cwd), persistedConfigText, "utf8");
+  const persistedConfig = getDefaultConfig(cwd);
+  saveFixtureConfigs(cwd, persistedConfig);
+  const persistedGlobalConfigText = fs.readFileSync(getGlobalConfigPath(), "utf8");
   const previousCwd = process.cwd();
   const pi = createFakePi();
   process.chdir(cwd);
@@ -6056,7 +6109,7 @@ test("sound toggle shortcut cycles active runtime pi-notify sound levels without
 
   for (const expectedSound of ["low", "mid", "high", "none"]) {
     await shortcut!.handler(ctx);
-    assert.equal(fs.readFileSync(getProjectConfigPath(cwd), "utf8"), persistedConfigText);
+    assert.equal(fs.readFileSync(getGlobalConfigPath(), "utf8"), persistedGlobalConfigText);
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
@@ -6077,11 +6130,7 @@ test("session_start loads the active runtime sound from persisted boot config", 
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const persistedConfig = getDefaultConfig(cwd);
   persistedConfig["notify-sound"] = "mid";
-  fs.writeFileSync(
-    getProjectConfigPath(cwd),
-    `${JSON.stringify(persistedConfig, null, 2)}\n`,
-    "utf8",
-  );
+  saveFixtureConfigs(cwd, persistedConfig);
   const previousCwd = process.cwd();
   const pi = createFakePi();
   process.chdir(cwd);
@@ -6180,9 +6229,10 @@ test("configuration menu can toggle per-language static-check enablement", async
     }),
   );
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.equal(config["static-check"].Python.enabled, "disable");
-  assert.deepEqual(config["static-check"].Python.checkers, [
+  const localConfig = readProjectConfigJson(cwd);
+  const globalConfig = readGlobalConfigJson();
+  assert.equal((localConfig["static-check"] as Record<string, any>).Python.enabled, "disable");
+  assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"] },
   ]);
@@ -6210,8 +6260,10 @@ test("configuration menu can add guided static-check entries for explicit suppor
     }),
   );
 
-  const config = JSON.parse(fs.readFileSync(getProjectConfigPath(cwd), "utf8"));
-  assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([
+  const localConfig = readProjectConfigJson(cwd);
+  const globalConfig = readGlobalConfigJson();
+  assert.equal((localConfig["static-check"] as Record<string, any>).Ruby.enabled, "enable");
+  assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Ruby.checkers, [
     { module: "Command", cmd: "true" },
-  ], "enable"));
+  ]);
 });
