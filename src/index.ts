@@ -8,7 +8,7 @@
  * @brief Declares the extension version string.
  * @details The value is exported for external inspection and packaging metadata alignment. Access complexity is O(1).
  */
-export const VERSION = "0.12.0";
+export const VERSION = "0.13.0";
 
 import fs from "node:fs";
 import path from "node:path";

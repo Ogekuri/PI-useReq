@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.13.0](https://github.com/Ogekuri/PI-useReq/compare/v0.12.0..v0.13.0) - 2026-04-27
+### 🚜  Changes
+- BREAKING CHANGE: split local and global configuration [useReq] *(config)*
+  - update REQUIREMENTS, WORKFLOW, and REFERENCES for the split config model
+  - persist tool, notification, git, and checker-command settings globally
+  - keep project paths, debug, and static-check enable flags locally
+  - rename Show configuration to Show local configuration and add Show global configuration
+  - refresh tests for local/global persistence and CLI static-check behavior
+
 ## [0.12.0](https://github.com/Ogekuri/PI-useReq/compare/v0.11.0..v0.12.0) - 2026-04-25
 ### ⛰️  Features
 - add req-reset recovery command and docs [useReq] *(req-reset)*
@@ -359,6 +368,7 @@
 - \[0.10.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.10.0
 - \[0.11.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.11.0
 - \[0.12.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.12.0
+- \[0.13.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.13.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -370,3 +380,4 @@
 [0.10.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.7.0..v0.10.0
 [0.11.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.10.0..v0.11.0
 [0.12.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.11.0..v0.12.0
+[0.13.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.12.0..v0.13.0
