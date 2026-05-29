@@ -1,13 +1,10 @@
 {
   "name": "pi-usereq",
   "private": true,
-  "version": "0.18.0",
+  "version": "0.14.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Ogekuri/PI-useReq.git"
-  },
-  "publishConfig": {
-    "access": "public"
+    "url": "git+https://github.com/Ogekuri/PI-useReq.git"
   },
   "bugs": {
     "url": "https://github.com/Ogekuri/PI-useReq/issues"

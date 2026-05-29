@@ -16,8 +16,6 @@ env:
 jobs:
   # 1. Controlla se siamo sul branch corretto
   check-branch:
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     outputs:
       is_master: ${{ steps.check.outputs.is_master }}
@@ -45,9 +43,6 @@ jobs:
     # Esegue questo job SOLO se l'output del job precedente è 'true'
     if: needs.check-branch.outputs.is_master == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
 
     steps:
       - name: Checkout
@@ -59,8 +54,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: npm ci
