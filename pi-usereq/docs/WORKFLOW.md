@@ -44,7 +44,7 @@
   - Threads: no explicit threads detected
 - ID: `PROC:gh-release-build`
   - Type: Process
-  - Role: GitHub Actions release runner that trusted-publishes the npm package on Node.js 24, builds changelog text, and creates the GitHub Release after branch gating succeeds.
+  - Role: GitHub Actions release runner that trusted-publishes the npm package on Node.js 22, builds changelog text, and creates the GitHub Release after branch gating succeeds.
   - Entrypoints:
     - `build-release(...)` [`.github/workflows/release-npm.yml`]
   - Parent Process: none
@@ -1250,7 +1250,7 @@
   - Looping model: single-pass job with sequential step execution.
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
-  - `build-release(...)`: checkout repository content, configure Node.js 24 for trusted publishing, install dependencies, remove manifest `private`, publish the package with provenance, build changelog text, and create the GitHub Release [`.github/workflows/release-npm.yml`]
+  - `build-release(...)`: checkout repository content, configure Node.js 22 for trusted publishing, install dependencies, remove manifest `private`, publish the package with provenance, build changelog text, and create the GitHub Release [`.github/workflows/release-npm.yml`]
     - External boundaries: `actions/checkout@v5`, `actions/setup-node@v4`, npm CLI, npm registry, GitHub OIDC token issuance, `mikepenz/release-changelog-builder-action@v6`, `softprops/action-gh-release@v2`, and `secrets.GITHUB_TOKEN`.
 - External Boundaries:
   - GitHub Actions event routing, hosted-runner lifecycle, checkout action, setup-node action, npm CLI, npm registry, GitHub OIDC token issuance, changelog-builder action, GitHub Releases API, and repository secrets.

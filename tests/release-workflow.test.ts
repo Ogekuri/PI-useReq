@@ -121,7 +121,7 @@ test(
 );
 
 test(
-  "release workflow uses Node.js 24 trusted publishing and creates the GitHub release",
+  "release workflow uses Node.js 22 trusted publishing and creates the GitHub release",
   () => {
     const workflow = readReleaseWorkflow();
 
