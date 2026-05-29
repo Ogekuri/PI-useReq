@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/Ogekuri/PI-useReq/compare/v0.33.0..v0.34.0) - 2026-05-29
+### 🚜  Changes
+- add debug-summarize and YAML check [useReq] *(debug-menu)*
+  - Update the SRS for debug-menu ordering and debug wrapper coverage.
+  - Implement debug-summarize, move the tool-wrapper row before Log file, and refresh runtime docs.
+  - Add release-workflow YAML syntax coverage and align npm publish steps with the documented release contract.
+
 ## [0.33.0](https://github.com/Ogekuri/PI-useReq/compare/v0.32.0..v0.33.0) - 2026-05-29
 ### 🐛  Bug Fixes
 - Clean workflow file after all tests and bug fixes.
@@ -489,6 +496,7 @@
 - \[0.31.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.31.0
 - \[0.32.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.32.0
 - \[0.33.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.33.0
+- \[0.34.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.34.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -521,3 +529,4 @@
 [0.31.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.30.0..v0.31.0
 [0.32.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.31.0..v0.32.0
 [0.33.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.32.0..v0.33.0
+[0.34.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.33.0..v0.34.0
