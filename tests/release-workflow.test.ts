@@ -94,11 +94,12 @@ test(
 );
 
 test(
-  "release workflow installs dependencies, publishes to npm, and creates the GitHub release",
+  "release workflow pins Node.js 24.15.0, publishes to npm, and creates the GitHub release",
   () => {
     const workflow = readReleaseWorkflow();
 
-    assert.ok(workflow.includes("uses: actions/setup-node@v4"));
+    assert.match(workflow, /NODE_VERSION:\s+'24\.15\.0'/);
+    assert.ok(workflow.includes("uses: actions/setup-node@v5"));
     assert.ok(workflow.includes("registry-url: 'https://registry.npmjs.org'"));
     assert.ok(workflow.includes("run: npm ci"));
     assert.ok(workflow.includes("run: npm pkg delete private"));

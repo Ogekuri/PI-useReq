@@ -11,7 +11,7 @@ permissions:
   attestations: write
 
 env:
-  NODE_VERSION: '22.22.2'
+  NODE_VERSION: '24.15.0'
 
 jobs:
   # 1. Controlla se siamo sul branch corretto
@@ -54,6 +54,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false  # never use caching in release builds
 
       - name: Imposta il registro npm esplicitamente per OIDC
@@ -70,7 +71,9 @@ jobs:
 
       - name: Publish package to npm
         # run: npm publish # Or: npm stage publish
-        run: npm publish --provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build Changelog
         id: build_changelog

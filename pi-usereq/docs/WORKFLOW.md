@@ -44,7 +44,7 @@
   - Threads: no explicit threads detected
 - ID: `PROC:gh-release-build`
   - Type: Process
-  - Role: GitHub Actions release runner that publishes the npm package, builds changelog text, and creates the GitHub Release after branch gating succeeds.
+  - Role: GitHub Actions release runner that configures Node.js `24.15.0`, publishes the npm package, builds changelog text, and creates the GitHub Release after branch gating succeeds.
   - Entrypoints:
     - `build-release(...)` [`.github/workflows/release-npm.yml`]
   - Parent Process: none
@@ -1237,7 +1237,7 @@
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
   - `check-branch(...)`: fetch `origin/master`, evaluate tagged-commit containment, and export the downstream gate flag [`.github/workflows/release-npm.yml`]
-    - External boundaries: `actions/checkout@v4`, GitHub Actions runner shell, `git` CLI, `grep`, and `$GITHUB_OUTPUT`.
+    - External boundaries: `actions/checkout@v5`, GitHub Actions runner shell, `git` CLI, `grep`, and `$GITHUB_OUTPUT`.
 - External Boundaries:
   - GitHub Actions event routing, hosted-runner lifecycle, checkout action, git subprocesses, and runner output channels.
 
@@ -1250,8 +1250,8 @@
   - Looping model: single-pass job with sequential step execution.
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
-  - `build-release(...)`: checkout repository content, configure Node.js for npm, install dependencies, remove manifest `private`, publish the package, build changelog text, and create the GitHub Release [`.github/workflows/release-npm.yml`]
-    - External boundaries: `actions/checkout@v4`, `actions/setup-node@v4`, npm CLI, npm registry, OIDC token issuance, `mikepenz/release-changelog-builder-action@v6`, `softprops/action-gh-release@v2`, `secrets.NPM_TOKEN`, and `secrets.GITHUB_TOKEN`.
+  - `build-release(...)`: checkout repository content, configure Node.js `24.15.0` for npm publication, install dependencies, remove manifest `private`, publish the package, build changelog text, and create the GitHub Release [`.github/workflows/release-npm.yml`]
+    - External boundaries: `actions/checkout@v5`, `actions/setup-node@v5`, npm CLI, npm registry, OIDC token issuance, `mikepenz/release-changelog-builder-action@v6`, `softprops/action-gh-release@v2`, `secrets.NPM_TOKEN`, and `secrets.GITHUB_TOKEN`.
 - External Boundaries:
   - GitHub Actions event routing, hosted-runner lifecycle, checkout action, setup-node action, npm CLI, npm registry, changelog-builder action, GitHub Releases API, and repository secrets.
 
