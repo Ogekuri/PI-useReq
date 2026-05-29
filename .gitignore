@@ -23,6 +23,7 @@
 !LICENSE.txt
 !setup.py
 !pyproject.toml
+!pyrightconfig.json
 !uv.lock
 !.g.conf
 !package-lock.json
@@ -78,8 +79,6 @@ downloads/
 eggs/
 .eggs/
 lib/
-!scripts/lib/
-!scripts/lib/**/*.ts
 lib64/
 parts/
 sdist/
