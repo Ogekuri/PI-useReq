@@ -64,6 +64,9 @@ jobs:
 
       - name: Publish package to npm
         run: npm publish --provenance
+	env:
+    	    # npm leggerà automaticamente questa variabile d'ambiente
+    	    NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build Changelog
         id: build_changelog
