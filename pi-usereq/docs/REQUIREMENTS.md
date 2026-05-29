@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.66"
-date: "2026-04-27"
+version: "0.0.67"
+date: "2026-05-29"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -69,6 +69,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-015**: MUST reserve `*-path` names for absolute paths and `*-dir` names for relative paths.
 - **CTN-016**: MUST NOT modify any path under `docs/` during analysis, implementation, verification, or bug fixing.
 - **CTN-017**: MUST NOT modify any path under `pi.dev-src/` during analysis, implementation, verification, or bug fixing.
+- **CTN-019**: MUST persist local `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
 
 ## 3. Requirements
 
@@ -87,6 +88,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-009**: MUST treat `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json` as the authoritative read-only contract for new or modified software that interfaces with the pi.dev CLI.
 - **DES-010**: MUST centralize event-driven context snapshots, run-timing state, prompt-orchestration workflow state, and status-bar rendering through shared extension-status helpers.
 - **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates `build-release`, preserving changelog-driven GitHub Release creation while adding npm publication.
+- **DES-015**: MUST implement config-gated `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` slash-command wrappers in `src/index.ts` that reuse existing tool-runner execution paths.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -381,6 +383,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-152**: MUST render a persistent bottom-line description for the currently selected configuration entry.
 - **REQ-153**: MUST use scrollable configuration menus when entry count exceeds the visible row budget.
 - **REQ-154**: MUST wrap configuration-menu selection from last-to-first and first-to-last entries.
+- **REQ-321**: MUST render `Enable debug commands for tools` in `Debug` after `Log file` and before `Log on status`.
+- **REQ-322**: MUST persist `DEBUG_TOOL_COMMANDS_ENABLED` through the `Debug` submenu with immediate-save, reset, and focus-preserving re-render behavior.
+- **REQ-323**: MUST register `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
+- **REQ-324**: MUST make `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` reuse the `compress`, `references`, `static-check`, and `tokens` runner outputs and write `content[0].text` to the editor.
+- **REQ-325**: MUST reject `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` execution when `DEBUG_TOOL_COMMANDS_ENABLED=disable`.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -493,6 +500,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-066**: MUST verify `req-<prompt>` commands keep working when extension custom-tool registrations are removed from the runtime inventory.
 - **TST-059**: MUST verify every agent-tool registration defines custom `renderResult` and that compact rendering shows essential invocation parameters while expanded rendering avoids fallback raw-content display.
 - **TST-086**: MUST verify bundled prompt-backed `req-<prompt>` commands abort before prompt dispatch when the persisted execution-session header cwd or `process.cwd()` differs from the expected execution path, and abort before merge when persisted execution-session header metadata or verified worktree artifacts diverge, while stale pre-switch context probes alone do not abort.
+- **TST-113**: MUST verify default local configuration persists `DEBUG_TOOL_COMMANDS_ENABLED=disable`, and the `Debug` submenu renders `Enable debug commands for tools` before `Log on status`.
+- **TST-114**: MUST verify the `Debug` submenu persists `DEBUG_TOOL_COMMANDS_ENABLED` through immediate-save, reset, and focus-preserving re-render flows.
+- **TST-115**: MUST verify extension activation registers `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
+- **TST-116**: MUST verify `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` write the same `content[0].text` as `compress`, `references`, `static-check`, and `tokens`, and reject execution when disabled.
 
 ## 5. Observed Component Model
 

@@ -46,6 +46,13 @@ export const DEFAULT_DEBUG_STATUS_CHANGES = "disable" as const;
 export const DEFAULT_DEBUG_WORKFLOW_EVENTS = "disable" as const;
 
 /**
+ * @brief Defines the default debug-tool command-wrapper mode.
+ * @details New configs suppress debug slash-command wrappers for selected built-in tools until the user explicitly enables them from the `Debug` submenu. Access complexity is O(1).
+ * @satisfies CTN-019, REQ-322
+ */
+export const DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED = "disable" as const;
+
+/**
  * @brief Defines the default workflow-status filter used by debug logging.
  * @details New configs log only entries whose workflow state equals `running` until the user selects a broader or different workflow-state filter. Access complexity is O(1).
  * @satisfies CTN-013, REQ-238
@@ -97,6 +104,12 @@ export type DebugStatusChanges = "enable" | "disable";
  * @details Restricts session-activation, restoration, closure, and shutdown workflow-event emission to the documented `enable|disable` domain. The alias is compile-time only and introduces no runtime cost.
  */
 export type DebugWorkflowEvents = "enable" | "disable";
+
+/**
+ * @brief Represents one persisted debug-tool command-wrapper flag.
+ * @details Restricts debug slash-command wrapper registration to the documented `enable|disable` domain. The alias is compile-time only and introduces no runtime cost.
+ */
+export type DebugToolCommandsEnabled = "enable" | "disable";
 
 /**
  * @brief Represents one persisted workflow-status filter value.
@@ -189,6 +202,17 @@ export function normalizeDebugStatusChanges(value: unknown): DebugStatusChanges 
  */
 export function normalizeDebugWorkflowEvents(value: unknown): DebugWorkflowEvents {
   return value === "enable" ? "enable" : DEFAULT_DEBUG_WORKFLOW_EVENTS;
+}
+
+/**
+ * @brief Normalizes one persisted debug-tool command-wrapper flag.
+ * @details Accepts only the documented `enable|disable` values and falls back to `DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED` for all other payloads. Runtime is O(1). No external state is mutated.
+ * @param[in] value {unknown} Candidate persisted debug-tool command-wrapper payload.
+ * @return {DebugToolCommandsEnabled} Canonical debug-tool command-wrapper flag.
+ * @satisfies CTN-019, REQ-322
+ */
+export function normalizeDebugToolCommandsEnabled(value: unknown): DebugToolCommandsEnabled {
+  return value === "enable" ? "enable" : DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED;
 }
 
 /**

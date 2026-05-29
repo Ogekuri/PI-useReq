@@ -24,6 +24,7 @@ import {
   DEBUG_PROMPT_NAMES,
   DEFAULT_DEBUG_LOG_FILE,
   DEFAULT_DEBUG_LOG_ON_STATUS,
+  DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
 } from "../src/core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "../src/core/prompt-command-catalog.js";
@@ -838,6 +839,10 @@ test("extension registers prompt and config commands while exposing tool capabil
     "tokens",
     "files-static-check",
     "static-check",
+    "debug-compress",
+    "debug-references",
+    "debug-static-check",
+    "debug-tokens",
     "pi-usereq-show-config",
     "test-static-check",
   ]) {
@@ -859,6 +864,54 @@ test("extension registers prompt and config commands while exposing tool capabil
     "static-check",
   ]) {
     assert.ok(toolNames.includes(name), `missing tool ${name}`);
+  }
+});
+
+/**
+ * @brief Verifies debug tool wrapper commands register only when the local debug flag is enabled.
+ * @details Activates the extension once from a default-disabled fixture and once from a fixture whose local config enables debug tool wrapper commands, then asserts the four debug slash commands appear only in the enabled runtime. Runtime is dominated by fixture setup and extension registration. Side effects are limited to temporary filesystem mutation and process cwd changes.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when command registration ignores the local debug tool wrapper flag.
+ * @satisfies TST-115
+ */
+test("debug tool commands register only when enabled in local config", () => {
+  const disabledFixture = initFixtureRepo({ fixtures: [] });
+  const enabledFixture = initFixtureRepo({ fixtures: [] });
+  const debugCommandNames = [
+    "debug-compress",
+    "debug-references",
+    "debug-static-check",
+    "debug-tokens",
+  ];
+
+  try {
+    writeProjectConfigOverrides(enabledFixture.projectBase, {
+      DEBUG_TOOL_COMMANDS_ENABLED: "enable",
+    });
+
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(disabledFixture.projectBase);
+      const disabledPi = createFakePi();
+      piUsereqExtension(disabledPi);
+      const disabledCommandNames = [...disabledPi.commands.keys()];
+      for (const commandName of debugCommandNames) {
+        assert.equal(disabledCommandNames.includes(commandName), false, `unexpected command ${commandName}`);
+      }
+
+      process.chdir(enabledFixture.projectBase);
+      const enabledPi = createFakePi();
+      piUsereqExtension(enabledPi);
+      const enabledCommandNames = [...enabledPi.commands.keys()];
+      for (const commandName of debugCommandNames) {
+        assert.ok(enabledCommandNames.includes(commandName), `missing command ${commandName}`);
+      }
+    } finally {
+      process.chdir(previousCwd);
+    }
+  } finally {
+    fs.rmSync(disabledFixture.projectBase, { recursive: true, force: true });
+    fs.rmSync(enabledFixture.projectBase, { recursive: true, force: true });
   }
 });
 
@@ -1551,6 +1604,80 @@ test("static-check tools return monolithic text payloads with minimal execution 
   }
 });
 
+/**
+ * @brief Verifies debug tool wrapper commands mirror tool content and reject when disabled.
+ * @details Enables debug tool wrapper commands for one fixture project, compares each debug slash-command editor payload against the matching tool `content[0].text`, then disables the flag and verifies the already-registered wrapper rejects further execution. Runtime is dominated by tool execution plus temporary git fixture setup. Side effects are limited to temporary filesystem mutation, editor-text capture, and process cwd changes.
+ * @return {Promise<void>} Promise resolved when the verification completes.
+ * @throws {AssertionError} Throws when a debug wrapper output diverges from the wrapped tool text or disabled execution is accepted.
+ * @satisfies TST-116
+ */
+test("debug tool wrapper commands mirror tool content and reject when disabled", async () => {
+  const { projectBase } = initFixtureRepo({
+    fixtures: [],
+    staticCheck: {
+      TypeScript: createStaticCheckLanguageConfig([{ module: "Dummy" }], "enable"),
+    },
+  });
+  fs.writeFileSync(path.join(projectBase, "src", "check.ts"), "export const VALUE = 1;\n", "utf8");
+  const add = spawnSync("git", ["add", "."], { cwd: projectBase, encoding: "utf8" });
+  assert.equal(add.status, 0, add.stderr);
+  const commit = spawnSync("git", ["commit", "-m", "add debug tool inputs"], { cwd: projectBase, encoding: "utf8" });
+  assert.equal(commit.status, 0, commit.stderr);
+
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_TOOL_COMMANDS_ENABLED: "enable",
+    });
+
+    process.chdir(projectBase);
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+
+    const compressToolResult = await executeRegisteredTool(pi, "compress", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+    const referencesToolResult = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+    const staticCheckToolResult = await executeRegisteredTool(pi, "static-check", projectBase) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+    const tokensToolResult = await executeRegisteredTool(pi, "tokens", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+
+    const compressCtx = createFakeCtx(projectBase);
+    await pi.commands.get("debug-compress")!.handler("", compressCtx);
+    assert.equal(compressCtx.__state.editorText, compressToolResult.content?.[0]?.text ?? "");
+
+    const referencesCtx = createFakeCtx(projectBase);
+    await pi.commands.get("debug-references")!.handler("", referencesCtx);
+    assert.equal(referencesCtx.__state.editorText, referencesToolResult.content?.[0]?.text ?? "");
+
+    const staticCheckCtx = createFakeCtx(projectBase);
+    await pi.commands.get("debug-static-check")!.handler("", staticCheckCtx);
+    assert.equal(staticCheckCtx.__state.editorText, staticCheckToolResult.content?.[0]?.text ?? "");
+
+    const tokensCtx = createFakeCtx(projectBase);
+    await pi.commands.get("debug-tokens")!.handler("", tokensCtx);
+    assert.equal(tokensCtx.__state.editorText, tokensToolResult.content?.[0]?.text ?? "");
+
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_TOOL_COMMANDS_ENABLED: "disable",
+    });
+    const disabledCtx = createFakeCtx(projectBase);
+    await assert.rejects(
+      async () => pi.commands.get("debug-tokens")!.handler("", disabledCtx),
+      /disabled by Debug > Enable debug commands for tools/u,
+    );
+    assert.equal(disabledCtx.__state.editorText, "");
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("configuration menu saves updated docs-dir in project config", async () => {
   const cwd = createTempDir("pi-usereq-menu-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
@@ -1821,6 +1948,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
       "Debug",
       "Debug",
       "Log file",
+      "Enable debug commands for tools",
       "Log on status",
       "any",
       "Status changes",
@@ -1839,24 +1967,31 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   const persistedConfig = readProjectConfigJson(cwd);
   const debugCalls = ctx.__state.selectCalls.filter((call) => call.title === "Debug");
   assert.match(renderedInitialDebugMenu, /<dim>Log file/);
+  assert.match(renderedInitialDebugMenu, /<dim>Enable debug commands for tools/);
   assert.match(renderedInitialDebugMenu, /<dim>Log on status/);
   assert.match(renderedInitialDebugMenu, /<dim>Status changes/);
   assert.match(renderedInitialDebugMenu, /<dim>Workflow events/);
   assert.match(renderedInitialDebugMenu, /<dim>compress/);
   assert.equal(persistedConfig.DEBUG_ENABLED, "enable");
   assert.equal(persistedConfig.DEBUG_LOG_FILE, "logs/debug-output.json");
+  assert.equal(persistedConfig.DEBUG_TOOL_COMMANDS_ENABLED, "enable");
   assert.equal(persistedConfig.DEBUG_STATUS_CHANGES, "enable");
   assert.equal(persistedConfig.DEBUG_WORKFLOW_EVENTS, "enable");
   assert.equal(persistedConfig.DEBUG_LOG_ON_STATUS, "any");
+  assert.ok(pi.commands.get("debug-compress"));
+  assert.ok(pi.commands.get("debug-references"));
+  assert.ok(pi.commands.get("debug-static-check"));
+  assert.ok(pi.commands.get("debug-tokens"));
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_TOOLS, ["files-tokens"]);
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_PROMPTS, ["req-analyze"]);
   assert.equal(debugCalls[1]?.selectedChoiceId, "debug-enabled");
   assert.equal(debugCalls[2]?.selectedChoiceId, "debug-log-file");
-  assert.equal(debugCalls[3]?.selectedChoiceId, "debug-log-on-status");
-  assert.equal(debugCalls[4]?.selectedChoiceId, "debug-status-changes");
-  assert.equal(debugCalls[5]?.selectedChoiceId, "debug-workflow-events");
-  assert.equal(debugCalls[6]?.selectedChoiceId, "debug-tool:files-tokens");
-  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-prompt:req-analyze");
+  assert.equal(debugCalls[3]?.selectedChoiceId, "debug-tool-commands-enabled");
+  assert.equal(debugCalls[4]?.selectedChoiceId, "debug-log-on-status");
+  assert.equal(debugCalls[5]?.selectedChoiceId, "debug-status-changes");
+  assert.equal(debugCalls[6]?.selectedChoiceId, "debug-workflow-events");
+  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-tool:files-tokens");
+  assert.equal(debugCalls[8]?.selectedChoiceId, "debug-prompt:req-analyze");
 
   const resetCtx = createFakeCtx(cwd, {
     selects: ["Debug", "Reset defaults", "Approve reset", "Save and close"],
@@ -1865,6 +2000,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   const resetConfig = readProjectConfigJson(cwd);
   assert.equal(resetConfig.DEBUG_ENABLED, "disable");
   assert.equal(resetConfig.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
+  assert.equal(resetConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.equal(resetConfig.DEBUG_STATUS_CHANGES, "disable");
   assert.equal(resetConfig.DEBUG_WORKFLOW_EVENTS, DEFAULT_DEBUG_WORKFLOW_EVENTS);
   assert.equal(resetConfig.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
@@ -1888,6 +2024,7 @@ test("debug menu rows derive from canonical tool and prompt inventories", async 
   assert.deepEqual(ctx.__state.selectCalls[1]?.items ?? [], [
     "Debug",
     "Log file",
+    "Enable debug commands for tools",
     "Log on status",
     "Status changes",
     "Workflow events",
@@ -5386,6 +5523,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([], "disable"));
   assert.equal(config.DEBUG_ENABLED, "disable");
   assert.equal(config.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
+  assert.equal(config.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.equal(config.DEBUG_WORKFLOW_EVENTS, DEFAULT_DEBUG_WORKFLOW_EVENTS);
   assert.equal(config.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
   assert.deepEqual(config.DEBUG_ENABLED_TOOLS, []);
@@ -5409,6 +5547,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   const globalConfig = readGlobalConfigJson();
   assert.equal((localConfig["static-check"] as Record<string, any>).Python.enabled, "enable");
   assert.equal((localConfig["static-check"] as Record<string, any>).Ruby.enabled, "disable");
+  assert.equal(localConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"] },

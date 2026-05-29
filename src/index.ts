@@ -110,6 +110,7 @@ import {
   DEFAULT_DEBUG_LOG_FILE,
   DEFAULT_DEBUG_LOG_ON_STATUS,
   DEFAULT_DEBUG_STATUS_CHANGES,
+  DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
   logDebugPromptEvent,
   logDebugPromptWorkflowEvent,
@@ -119,6 +120,7 @@ import {
   normalizeDebugLogFile,
   normalizeDebugLogOnStatus,
   normalizeDebugStatusChanges,
+  normalizeDebugToolCommandsEnabled,
   normalizeDebugWorkflowEvents,
   shouldLogDebugPromptWorkflowState,
   type DebugLogOnStatus,
@@ -266,6 +268,125 @@ function syncContextCwdMirror(ctx: { cwd?: string }, cwd: string): void {
 function loadProjectConfig(cwd: string): UseReqConfig {
   const projectBase = getProjectBase(cwd);
   return normalizeConfigPaths(projectBase, loadConfig(projectBase));
+}
+
+/**
+ * @brief Describes the execute-result surface reused by debug tool wrapper commands.
+ * @details Narrows debug slash-command handlers to the same monolithic content-plus-execution wrapper returned by agent tools so editor output and notifications can reuse shared extraction helpers. The alias is compile-time only and introduces no runtime cost.
+ */
+type DebugToolCommandExecuteResult = ReturnType<typeof buildMonolithicToolExecuteResult>;
+
+/**
+ * @brief Tests whether debug tool wrapper commands should be registered for one runtime cwd.
+ * @details Loads the effective project configuration for the supplied cwd and returns `true` only when `DEBUG_TOOL_COMMANDS_ENABLED` resolves to `enable`. Malformed or unreadable config payloads degrade to `false` so extension activation never aborts while deciding whether to register optional debug commands. Runtime is dominated by config I/O. Side effects are limited to filesystem reads.
+ * @param[in] cwd {string} Candidate runtime working directory.
+ * @return {boolean} `true` when debug tool wrapper commands should be registered.
+ * @satisfies REQ-323
+ */
+function shouldRegisterDebugToolCommands(cwd: string): boolean {
+  try {
+    return normalizeDebugToolCommandsEnabled(loadProjectConfig(cwd).DEBUG_TOOL_COMMANDS_ENABLED) === "enable";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @brief Writes one debug tool-wrapper result into the editor and emits a status notification.
+ * @details Extracts the primary monolithic content text from the wrapped tool result, forwards that exact text to the editor, and emits an informational or error notification keyed by the tool exit code. Runtime is O(n) in output length. Side effects include editor-text mutation and UI notifications.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] commandName {string} Invoked debug slash-command name without the leading `/`.
+ * @param[in] result {DebugToolCommandExecuteResult} Wrapped tool execution result.
+ * @return {void} No return value.
+ * @satisfies REQ-324
+ */
+function writeDebugToolCommandResultToEditor(
+  ctx: ExtensionCommandContext,
+  commandName: string,
+  result: DebugToolCommandExecuteResult,
+): void {
+  const outputText = getMonolithicToolText(result);
+  ctx.ui.setEditorText(outputText);
+  const succeeded = result.details.execution.code === 0;
+  ctx.ui.notify(
+    succeeded
+      ? `Wrote /${commandName} output to the editor.`
+      : `FAILED: Wrote /${commandName} output to the editor.`,
+    succeeded ? "info" : "error",
+  );
+}
+
+/**
+ * @brief Executes one config-gated debug tool wrapper slash command.
+ * @details Resolves a live cwd for the invoking command context, refreshes runtime path state, loads the effective project configuration, rejects execution when debug tool wrapper commands are disabled, and otherwise writes the selected wrapped tool output into the editor. Runtime is dominated by the delegated tool runner. Side effects include runtime-path bootstrap, filesystem reads, optional tool side effects, editor-text mutation, and UI notifications.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] commandName {string} Invoked debug slash-command name without the leading `/`.
+ * @param[in] operation {(projectBase: string, config: UseReqConfig) => DebugToolCommandExecuteResult} Wrapped tool executor.
+ * @return {void} No return value.
+ * @throws {ReqError} Throws when debug tool wrapper commands are disabled for the active project.
+ * @satisfies REQ-324, REQ-325
+ */
+function executeDebugToolCommand(
+  ctx: ExtensionCommandContext,
+  commandName: string,
+  operation: (projectBase: string, config: UseReqConfig) => DebugToolCommandExecuteResult,
+): void {
+  const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
+  syncContextCwdMirror(ctx, commandCwd);
+  bootstrapRuntimePathState(commandCwd, {
+    gitPath: resolveRuntimeGitPath(commandCwd),
+  });
+  const projectBase = getProjectBase(commandCwd);
+  const config = loadProjectConfig(commandCwd);
+  if (normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED) !== "enable") {
+    const message = `ERROR: /${commandName} is disabled by Debug > Enable debug commands for tools.`;
+    ctx.ui.notify(message, "error");
+    throw new ReqError(message, 1);
+  }
+  writeDebugToolCommandResultToEditor(ctx, commandName, operation(projectBase, config));
+}
+
+/**
+ * @brief Registers config-gated debug slash-command wrappers for selected built-in analysis tools.
+ * @details Registers `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` as extension commands that reuse the same runner paths as the corresponding agent tools and write the resulting monolithic text into the editor instead of the LLM content channel. Re-registering the same commands is idempotent because pi keeps the latest same-extension command definition per name. Runtime is O(1) for registration; handler cost depends on the selected runner. Side effects include command registration.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {void} No return value.
+ * @satisfies DES-015, REQ-323, REQ-324, REQ-325
+ */
+function registerDebugToolCommands(pi: ExtensionAPI): void {
+  const registerDebugToolCommand = (
+    commandName: string,
+    description: string,
+    operation: (projectBase: string, config: UseReqConfig) => DebugToolCommandExecuteResult,
+  ): void => {
+    pi.registerCommand(commandName, {
+      description,
+      handler: async (_args, ctx) => {
+        executeDebugToolCommand(ctx, commandName, operation);
+      },
+    });
+  };
+
+  registerDebugToolCommand(
+    "debug-compress",
+    "Run compress and write the tool output into the editor",
+    (projectBase, config) => executeMonolithicTool(() => runCompress(projectBase, config)),
+  );
+  registerDebugToolCommand(
+    "debug-references",
+    "Run references and write the tool output into the editor",
+    (projectBase, config) => executeStatusTool(() => runReferences(projectBase, config)),
+  );
+  registerDebugToolCommand(
+    "debug-static-check",
+    "Run static-check and write the tool output into the editor",
+    (projectBase, config) => executeMonolithicTool(() => runProjectStaticCheck(projectBase, config)),
+  );
+  registerDebugToolCommand(
+    "debug-tokens",
+    "Run tokens and write the tool output into the editor",
+    (projectBase, config) => executeMonolithicTool(() => runTokens(projectBase, config)),
+  );
 }
 
 /**
@@ -1411,16 +1532,17 @@ function getDebugToolToggleNames(): PiUsereqStartupToolName[] {
 
 /**
  * @brief Restores the debug configuration subtree to its documented defaults.
- * @details Resets global debug enablement, log path, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config`.
+ * @details Resets global debug enablement, log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config`.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {void} No return value.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322
  */
 function resetDebugConfigToDefaults(config: UseReqConfig): void {
   config.DEBUG_ENABLED = "disable";
   config.DEBUG_LOG_FILE = DEFAULT_DEBUG_LOG_FILE;
   config.DEBUG_STATUS_CHANGES = DEFAULT_DEBUG_STATUS_CHANGES;
   config.DEBUG_WORKFLOW_EVENTS = DEFAULT_DEBUG_WORKFLOW_EVENTS;
+  config.DEBUG_TOOL_COMMANDS_ENABLED = DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED;
   config.DEBUG_LOG_ON_STATUS = DEFAULT_DEBUG_LOG_ON_STATUS;
   config.DEBUG_ENABLED_TOOLS = [];
   config.DEBUG_ENABLED_PROMPTS = [];
@@ -1502,10 +1624,10 @@ async function selectDebugLogOnStatus(
 
 /**
  * @brief Builds the shared settings-menu choices for debug logging configuration.
- * @details Serializes global debug controls plus workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists and dimming locked rows while debug is disabled. Runtime is O(t + p). No external state is mutated.
+ * @details Serializes global debug controls plus tool-wrapper command registration, workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists and dimming locked rows while debug is disabled. Runtime is O(t + p). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered debug-menu choices.
- * @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277
+ * @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277, REQ-321, REQ-322
  */
 function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const debugEnabled = config.DEBUG_ENABLED === "enable";
@@ -1525,6 +1647,16 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         label: "Log file",
         value: config.DEBUG_LOG_FILE,
         description: "Edit the JSON debug log file path. Relative paths resolve against the original project base.",
+      },
+      debugEnabled,
+    ),
+    buildDebugMenuChoice(
+      {
+        id: "debug-tool-commands-enabled",
+        label: "Enable debug commands for tools",
+        value: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED),
+        values: ["enable", "disable"],
+        description: "Enable or disable slash-command wrappers for `compress`, `references`, `static-check`, and `tokens`.",
       },
       debugEnabled,
     ),
@@ -1587,17 +1719,28 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
 
 /**
  * @brief Runs the interactive Debug submenu.
- * @details Lets the user toggle global debug enablement, edit debug file and workflow filters, toggle dedicated workflow-event logging, mutate per-tool and per-prompt debug selectors, and restore subtree defaults while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Lets the user toggle global debug enablement, tool-wrapper command registration, debug file and workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates, config mutation, and optional debug command registration.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the submenu closes.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323
  */
 async function configureDebugMenu(
+  pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
   config: UseReqConfig,
   onConfigChange: () => void,
 ): Promise<void> {
+  const updateDebugToolCommandsEnabled = (nextValue: unknown): void => {
+    config.DEBUG_TOOL_COMMANDS_ENABLED = normalizeDebugToolCommandsEnabled(nextValue);
+    onConfigChange();
+    if (config.DEBUG_TOOL_COMMANDS_ENABLED === "enable") {
+      registerDebugToolCommands(pi);
+    }
+    ctx.ui.notify(`Debug tool commands ${config.DEBUG_TOOL_COMMANDS_ENABLED}`, "info");
+  };
+
   let focusedChoiceId: string | undefined;
   while (true) {
     const choice = await showPiUsereqSettingsMenu(ctx, "Debug", buildDebugMenuChoices(config), {
@@ -1608,6 +1751,10 @@ async function configureDebugMenu(
           config.DEBUG_ENABLED = newValue === "enable" ? "enable" : "disable";
           onConfigChange();
           ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
+          return;
+        }
+        if (choiceId === "debug-tool-commands-enabled") {
+          updateDebugToolCommandsEnabled(newValue);
           return;
         }
         if (choiceId === "debug-status-changes") {
@@ -1670,6 +1817,7 @@ async function configureDebugMenu(
       const resetPreview: ResetConfirmationChange[] = [
         { label: "Debug", previousValue: config.DEBUG_ENABLED, nextValue: "disable" },
         { label: "Log file", previousValue: config.DEBUG_LOG_FILE, nextValue: DEFAULT_DEBUG_LOG_FILE },
+        { label: "Enable debug commands for tools", previousValue: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED), nextValue: DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED },
         { label: "Status changes", previousValue: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES), nextValue: DEFAULT_DEBUG_STATUS_CHANGES },
         { label: "Workflow events", previousValue: normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS), nextValue: DEFAULT_DEBUG_WORKFLOW_EVENTS },
         { label: "Log on status", previousValue: config.DEBUG_LOG_ON_STATUS, nextValue: DEFAULT_DEBUG_LOG_ON_STATUS },
@@ -1703,6 +1851,12 @@ async function configureDebugMenu(
         onConfigChange();
         ctx.ui.notify(`Debug log file set to ${config.DEBUG_LOG_FILE}`, "info");
       }
+      continue;
+    }
+    if (choice === "debug-tool-commands-enabled") {
+      updateDebugToolCommandsEnabled(
+        config.DEBUG_TOOL_COMMANDS_ENABLED === "enable" ? "disable" : "enable",
+      );
       continue;
     }
     if (choice === "debug-status-changes") {
@@ -4163,7 +4317,7 @@ async function configurePiUsereq(
       continue;
     }
     if (choice === "debug") {
-      await configureDebugMenu(ctx, config, persistConfigChange);
+      await configureDebugMenu(pi, ctx, config, persistConfigChange);
       continue;
     }
     if (choice === "reset-defaults") {
@@ -4232,10 +4386,10 @@ function registerConfigCommands(
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, optional debug-log writes, and timer scheduling.
+ * @details Validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313
+ * @satisfies DES-002, DES-015, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();
@@ -4243,6 +4397,9 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
   registerReqResetCommand(pi, statusController);
   registerReqReferencesCommand(pi, statusController);
   registerPromptCommands(pi, statusController);
+  if (shouldRegisterDebugToolCommands(getProcessCwdSafe())) {
+    registerDebugToolCommands(pi);
+  }
   registerAgentTools(pi);
   registerConfigCommands(pi, statusController);
   registerPiNotifyShortcut(pi, statusController);
