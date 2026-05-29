@@ -51,7 +51,7 @@ jobs:
           fetch-depth: 0 
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: 'https://registry.npmjs.org'
@@ -67,7 +67,9 @@ jobs:
         run: npm pkg delete private
 
       - name: Publish package to npm
-        run: npm publish # Or: npm stage publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build Changelog
         id: build_changelog

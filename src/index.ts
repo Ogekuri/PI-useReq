@@ -347,8 +347,8 @@ function executeDebugToolCommand(
 }
 
 /**
- * @brief Registers config-gated debug slash-command wrappers for selected built-in analysis tools.
- * @details Registers `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` as extension commands that reuse the same runner paths as the corresponding agent tools and write the resulting monolithic text into the editor instead of the LLM content channel. Re-registering the same commands is idempotent because pi keeps the latest same-extension command definition per name. Runtime is O(1) for registration; handler cost depends on the selected runner. Side effects include command registration.
+ * @brief Registers config-gated debug slash-command wrappers for selected project analysis tools.
+ * @details Registers `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` as extension commands that reuse the same runner paths as the corresponding agent tools and write the resulting monolithic text into the editor instead of the LLM content channel. Re-registering the same commands is idempotent because pi keeps the latest same-extension command definition per name. Runtime is O(1) for registration; handler cost depends on the selected runner. Side effects include command registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-015, REQ-323, REQ-324, REQ-325
@@ -381,6 +381,11 @@ function registerDebugToolCommands(pi: ExtensionAPI): void {
     "debug-static-check",
     "Run static-check and write the tool output into the editor",
     (projectBase, config) => executeMonolithicTool(() => runProjectStaticCheck(projectBase, config)),
+  );
+  registerDebugToolCommand(
+    "debug-summarize",
+    "Run summarize and write the tool output into the editor",
+    (projectBase, config) => executeMonolithicTool(() => runSummarize(projectBase, config)),
   );
   registerDebugToolCommand(
     "debug-tokens",
@@ -1643,20 +1648,20 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
     },
     buildDebugMenuChoice(
       {
-        id: "debug-log-file",
-        label: "Log file",
-        value: config.DEBUG_LOG_FILE,
-        description: "Edit the JSON debug log file path. Relative paths resolve against the original project base.",
+        id: "debug-tool-commands-enabled",
+        label: "Enable debug commands for tools",
+        value: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED),
+        values: ["enable", "disable"],
+        description: "Enable or disable slash-command wrappers for `compress`, `references`, `static-check`, `summarize`, and `tokens`.",
       },
       debugEnabled,
     ),
     buildDebugMenuChoice(
       {
-        id: "debug-tool-commands-enabled",
-        label: "Enable debug commands for tools",
-        value: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED),
-        values: ["enable", "disable"],
-        description: "Enable or disable slash-command wrappers for `compress`, `references`, `static-check`, and `tokens`.",
+        id: "debug-log-file",
+        label: "Log file",
+        value: config.DEBUG_LOG_FILE,
+        description: "Edit the JSON debug log file path. Relative paths resolve against the original project base.",
       },
       debugEnabled,
     ),

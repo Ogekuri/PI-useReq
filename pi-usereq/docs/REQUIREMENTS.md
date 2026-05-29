@@ -383,11 +383,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-152**: MUST render a persistent bottom-line description for the currently selected configuration entry.
 - **REQ-153**: MUST use scrollable configuration menus when entry count exceeds the visible row budget.
 - **REQ-154**: MUST wrap configuration-menu selection from last-to-first and first-to-last entries.
-- **REQ-321**: MUST render `Enable debug commands for tools` in `Debug` after `Log file` and before `Log on status`.
+- **REQ-321**: MUST render `Enable debug commands for tools` in `Debug` after `Debug`, before `Log file`, and before `Log on status`.
 - **REQ-322**: MUST persist `DEBUG_TOOL_COMMANDS_ENABLED` through the `Debug` submenu with immediate-save, reset, and focus-preserving re-render behavior.
-- **REQ-323**: MUST register `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
-- **REQ-324**: MUST make `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` reuse the `compress`, `references`, `static-check`, and `tokens` runner outputs and write `content[0].text` to the editor.
-- **REQ-325**: MUST reject `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` execution when `DEBUG_TOOL_COMMANDS_ENABLED=disable`.
+- **REQ-323**: MUST register `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
+- **REQ-324**: MUST make `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` reuse the `compress`, `references`, `static-check`, `summarize`, and `tokens` runner outputs and write `content[0].text` to the editor.
+- **REQ-325**: MUST reject `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` execution when `DEBUG_TOOL_COMMANDS_ENABLED=disable`.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -461,7 +461,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-027**: MUST verify harness inspection surfaces `files-compress` and `compress` descriptions covering parameters, line-number behavior, monolithic markdown output, and failure details.
 - **TST-028**: MUST verify `files-static-check` and `static-check` agent-tool outputs place the monolithic static-check report in `content[0].text` and restrict `details` to execution metadata.
 - **TST-029**: MUST verify harness inspection surfaces `files-static-check` and `static-check` descriptions covering parameters, monolithic output, selection rules, and failure details.
-- **TST-039**: MUST verify `.github/workflows/release-npm.yml` keeps the existing tag filter, gates downstream release work on `origin/master`, uses Node.js `24.15.0`, runs npm publication, and creates the GitHub Release from generated changelog text.
+- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML when `PyYAML` is available, keeps the existing tag filter, gates downstream release work on `origin/master`, uses Node.js `24.15.0`, runs npm publication, and creates the GitHub Release.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify local and global configuration files omit derived static and dynamic path fields while runtime path context and status rendering still derive them correctly.
@@ -500,10 +500,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-066**: MUST verify `req-<prompt>` commands keep working when extension custom-tool registrations are removed from the runtime inventory.
 - **TST-059**: MUST verify every agent-tool registration defines custom `renderResult` and that compact rendering shows essential invocation parameters while expanded rendering avoids fallback raw-content display.
 - **TST-086**: MUST verify bundled prompt-backed `req-<prompt>` commands abort before prompt dispatch when the persisted execution-session header cwd or `process.cwd()` differs from the expected execution path, and abort before merge when persisted execution-session header metadata or verified worktree artifacts diverge, while stale pre-switch context probes alone do not abort.
-- **TST-113**: MUST verify default local configuration persists `DEBUG_TOOL_COMMANDS_ENABLED=disable`, and the `Debug` submenu renders `Enable debug commands for tools` before `Log on status`.
+- **TST-113**: MUST verify default local configuration persists `DEBUG_TOOL_COMMANDS_ENABLED=disable`, and the `Debug` submenu renders `Enable debug commands for tools` before `Log file`.
 - **TST-114**: MUST verify the `Debug` submenu persists `DEBUG_TOOL_COMMANDS_ENABLED` through immediate-save, reset, and focus-preserving re-render flows.
-- **TST-115**: MUST verify extension activation registers `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
-- **TST-116**: MUST verify `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` write the same `content[0].text` as `compress`, `references`, `static-check`, and `tokens`, and reject execution when disabled.
+- **TST-115**: MUST verify extension activation registers `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
+- **TST-116**: MUST verify `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` write the same `content[0].text` as `compress`, `references`, `static-check`, `summarize`, and `tokens`, and reject execution when disabled.
 
 ## 5. Observed Component Model
 

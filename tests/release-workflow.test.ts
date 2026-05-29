@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +15,61 @@ function readReleaseWorkflow(): string {
     path.join(process.cwd(), ".github", "workflows", "release-npm.yml"),
     "utf8",
   );
+}
+
+/**
+ * @brief Verifies the release workflow YAML parses successfully via Python.
+ * @details Resolves a project-local `.venv/bin/python` first, then falls back to `python` and `python3`, executes an inline `yaml.safe_load(...)` check against `.github/workflows/release-npm.yml`, accepts the `PyYAML not available` skip path, and fails on non-zero exit status or `YAML ERROR` output. Runtime is dominated by subprocess probing and one Python execution. Side effects are limited to subprocess creation and filesystem reads performed by the Python snippet.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when no usable Python interpreter exists or the workflow YAML fails to parse.
+ * @satisfies TST-039
+ */
+function assertReleaseWorkflowYamlSyntax(): void {
+  const workflowPath = path.join(
+    process.cwd(),
+    ".github",
+    "workflows",
+    "release-npm.yml",
+  );
+  const pythonCandidates = [
+    path.join(process.cwd(), ".venv", "bin", "python"),
+    "python",
+    "python3",
+  ];
+  const pythonCommand = pythonCandidates.find((candidate) => {
+    if (candidate.includes(path.sep) && !fs.existsSync(candidate)) {
+      return false;
+    }
+    const probe = spawnSync(candidate, ["--version"], { encoding: "utf8" });
+    return !probe.error && probe.status === 0;
+  });
+  assert.ok(pythonCommand, "python executable not found for release workflow validation");
+
+  const pythonCode = [
+    "from pathlib import Path",
+    "import sys",
+    `p = Path(${JSON.stringify(workflowPath)})`,
+    "text = p.read_text()",
+    "try:",
+    "    import yaml",
+    "except Exception as error:",
+    "    print(f'PyYAML not available: {error}')",
+    "    sys.exit(0)",
+    "try:",
+    "    yaml.safe_load(text)",
+    "    print('YAML OK')",
+    "except Exception as error:",
+    "    print(f'YAML ERROR: {error}')",
+    "    sys.exit(1)",
+  ].join("\n");
+  const result = spawnSync(pythonCommand, ["-c", pythonCode], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  const output = `${result.stdout}${result.stderr}`;
+
+  assert.equal(result.status, 0, output || result.error?.message || "unknown python execution failure");
+  assert.doesNotMatch(output, /YAML ERROR:/u);
 }
 
 /**
@@ -74,6 +130,11 @@ function assertCanonicalPackageProvenanceMetadata(): void {
   });
   assert.equal(manifest.homepage, "https://github.com/Ogekuri/PI-useReq#readme");
 }
+
+test(
+  "release workflow remains valid YAML when parsed by Python",
+  assertReleaseWorkflowYamlSyntax,
+);
 
 test(
   "release workflow keeps the current tag trigger and gates release work on origin/master ancestry",

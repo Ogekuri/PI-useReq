@@ -842,6 +842,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "debug-compress",
     "debug-references",
     "debug-static-check",
+    "debug-summarize",
     "debug-tokens",
     "pi-usereq-show-config",
     "test-static-check",
@@ -869,7 +870,7 @@ test("extension registers prompt and config commands while exposing tool capabil
 
 /**
  * @brief Verifies debug tool wrapper commands register only when the local debug flag is enabled.
- * @details Activates the extension once from a default-disabled fixture and once from a fixture whose local config enables debug tool wrapper commands, then asserts the four debug slash commands appear only in the enabled runtime. Runtime is dominated by fixture setup and extension registration. Side effects are limited to temporary filesystem mutation and process cwd changes.
+ * @details Activates the extension once from a default-disabled fixture and once from a fixture whose local config enables debug tool wrapper commands, then asserts the five debug slash commands appear only in the enabled runtime. Runtime is dominated by fixture setup and extension registration. Side effects are limited to temporary filesystem mutation and process cwd changes.
  * @return {void} No return value.
  * @throws {AssertionError} Throws when command registration ignores the local debug tool wrapper flag.
  * @satisfies TST-115
@@ -881,6 +882,7 @@ test("debug tool commands register only when enabled in local config", () => {
     "debug-compress",
     "debug-references",
     "debug-static-check",
+    "debug-summarize",
     "debug-tokens",
   ];
 
@@ -1606,7 +1608,7 @@ test("static-check tools return monolithic text payloads with minimal execution 
 
 /**
  * @brief Verifies debug tool wrapper commands mirror tool content and reject when disabled.
- * @details Enables debug tool wrapper commands for one fixture project, compares each debug slash-command editor payload against the matching tool `content[0].text`, then disables the flag and verifies the already-registered wrapper rejects further execution. Runtime is dominated by tool execution plus temporary git fixture setup. Side effects are limited to temporary filesystem mutation, editor-text capture, and process cwd changes.
+ * @details Enables debug tool wrapper commands for one fixture project, compares the five debug slash-command editor payloads against the matching tool `content[0].text`, then disables the flag and verifies the already-registered wrappers reject further execution. Runtime is dominated by tool execution plus temporary git fixture setup. Side effects are limited to temporary filesystem mutation, editor-text capture, and process cwd changes.
  * @return {Promise<void>} Promise resolved when the verification completes.
  * @throws {AssertionError} Throws when a debug wrapper output diverges from the wrapped tool text or disabled execution is accepted.
  * @satisfies TST-116
@@ -1643,6 +1645,9 @@ test("debug tool wrapper commands mirror tool content and reject when disabled",
     const staticCheckToolResult = await executeRegisteredTool(pi, "static-check", projectBase) as {
       content?: Array<{ type: string; text?: string }>;
     };
+    const summarizeToolResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
     const tokensToolResult = await executeRegisteredTool(pi, "tokens", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
     };
@@ -1659,6 +1664,10 @@ test("debug tool wrapper commands mirror tool content and reject when disabled",
     await pi.commands.get("debug-static-check")!.handler("", staticCheckCtx);
     assert.equal(staticCheckCtx.__state.editorText, staticCheckToolResult.content?.[0]?.text ?? "");
 
+    const summarizeCtx = createFakeCtx(projectBase);
+    await pi.commands.get("debug-summarize")!.handler("", summarizeCtx);
+    assert.equal(summarizeCtx.__state.editorText, summarizeToolResult.content?.[0]?.text ?? "");
+
     const tokensCtx = createFakeCtx(projectBase);
     await pi.commands.get("debug-tokens")!.handler("", tokensCtx);
     assert.equal(tokensCtx.__state.editorText, tokensToolResult.content?.[0]?.text ?? "");
@@ -1666,12 +1675,20 @@ test("debug tool wrapper commands mirror tool content and reject when disabled",
     writeProjectConfigOverrides(projectBase, {
       DEBUG_TOOL_COMMANDS_ENABLED: "disable",
     });
-    const disabledCtx = createFakeCtx(projectBase);
-    await assert.rejects(
-      async () => pi.commands.get("debug-tokens")!.handler("", disabledCtx),
-      /disabled by Debug > Enable debug commands for tools/u,
-    );
-    assert.equal(disabledCtx.__state.editorText, "");
+    for (const commandName of [
+      "debug-compress",
+      "debug-references",
+      "debug-static-check",
+      "debug-summarize",
+      "debug-tokens",
+    ]) {
+      const disabledCtx = createFakeCtx(projectBase);
+      await assert.rejects(
+        async () => pi.commands.get(commandName)!.handler("", disabledCtx),
+        /disabled by Debug > Enable debug commands for tools/u,
+      );
+      assert.equal(disabledCtx.__state.editorText, "");
+    }
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -1968,6 +1985,10 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   const debugCalls = ctx.__state.selectCalls.filter((call) => call.title === "Debug");
   assert.match(renderedInitialDebugMenu, /<dim>Log file/);
   assert.match(renderedInitialDebugMenu, /<dim>Enable debug commands for tools/);
+  assert.ok(
+    renderedInitialDebugMenu.indexOf("<dim>Enable debug commands for tools")
+      < renderedInitialDebugMenu.indexOf("<dim>Log file"),
+  );
   assert.match(renderedInitialDebugMenu, /<dim>Log on status/);
   assert.match(renderedInitialDebugMenu, /<dim>Status changes/);
   assert.match(renderedInitialDebugMenu, /<dim>Workflow events/);
@@ -1981,6 +2002,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.ok(pi.commands.get("debug-compress"));
   assert.ok(pi.commands.get("debug-references"));
   assert.ok(pi.commands.get("debug-static-check"));
+  assert.ok(pi.commands.get("debug-summarize"));
   assert.ok(pi.commands.get("debug-tokens"));
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_TOOLS, ["files-tokens"]);
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_PROMPTS, ["req-analyze"]);
@@ -2023,8 +2045,8 @@ test("debug menu rows derive from canonical tool and prompt inventories", async 
 
   assert.deepEqual(ctx.__state.selectCalls[1]?.items ?? [], [
     "Debug",
-    "Log file",
     "Enable debug commands for tools",
+    "Log file",
     "Log on status",
     "Status changes",
     "Workflow events",
