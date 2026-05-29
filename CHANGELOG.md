@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.32.0](https://github.com/Ogekuri/PI-useReq/compare/v0.31.0..v0.32.0) - 2026-05-29
+### 🐛  Bug Fixes
+- Revert workflow.
+
+### 🚜  Changes
+- update Node.js 24.15.0 release flow [useReq] *(release-workflow)*
+  - update REQUIREMENTS.md and WORKFLOW.md traceability for the release runtime
+  - pin .github/workflows/release-npm.yml to Node.js 24.15.0 and restore npm publish auth
+  - align tests/release-workflow.test.ts with the pinned runtime and publish contract
+
 ## [0.31.0](https://github.com/Ogekuri/PI-useReq/compare/v0.30.0..v0.31.0) - 2026-05-29
 ### 🐛  Bug Fixes
 - Try another workaround, again, and again.
@@ -473,6 +483,7 @@
 - \[0.29.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.29.0
 - \[0.30.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.30.0
 - \[0.31.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.31.0
+- \[0.32.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.32.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -503,3 +514,4 @@
 [0.29.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.28.0..v0.29.0
 [0.30.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.29.0..v0.30.0
 [0.31.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.30.0..v0.31.0
+[0.32.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.31.0..v0.32.0
