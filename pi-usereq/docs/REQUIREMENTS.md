@@ -177,7 +177,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
-- **REQ-120**: MUST render single-line status fields in this order: `status`, `branch`, `context`, `elapsed`, `sound`.
+- **REQ-120**: MUST render single-line status fields in this order: `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, `sound`, deriving `<extension>` and `<version>` from runtime extension package metadata.
 - **REQ-121**: MUST render `branch` immediately after `status` with separator ` • ` and the active git branch name.
 - **REQ-283**: MUST resolve `branch` from the current `context-path` git HEAD during every status-bar rebuild so worktree switches and base-path restoration update immediately.
 - **REQ-284**: MUST render `context` immediately after `branch` with separator ` • ` and one fixed-width gauge icon.
@@ -404,9 +404,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-112**: MUST verify `--enable-static-check` stores checker commands in global configuration and preserves local enablement according to the documented defaulting rules.
 - **TST-079**: MUST verify `files-static-check` and `static-check` execute zero checkers and expose empty configured-checker lists when the target language `enabled=disable`.
 - **TST-006**: MUST verify `session_start` activates configured startup tools, resets workflow state to `idle` for `startup|new|reload`, and updates the single-line `pi-usereq` status bar.
-- **TST-031**: MUST verify the status bar renders `status` before `branch`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
+- **TST-031**: MUST verify the status bar renders runtime `<extension>:v<version>` before `status`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
-- **TST-033**: MUST verify the status bar renders ordered `status`, `branch`, `context`, `elapsed`, and `sound` fields plus the documented icon-based `context` gauge thresholds.
+- **TST-033**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, and `sound` plus the documented icon-based `context` gauge thresholds.
 - **TST-037**: MUST verify the `Notifications` menu persists notification and boot-sound settings only in global configuration through `Notification events` and `Sound events` submenus using the documented labels and order.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles only the active runtime sound level, leaves local and global configuration unchanged, and refreshes the status bar with the updated `sound` field.
 - **TST-097**: MUST verify `session_start` loads the active runtime sound level from persisted `notify-sound`.
@@ -414,7 +414,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-047**: MUST verify the `Notifications` menu exposes `Pushover events` before direct Pushover settings, keeps `Enable pushover` dimmed and locked until both credential fields are non-empty, and persists Pushover event and credential values only in global configuration.
 - **TST-072**: MUST verify `Pushover text` displays escaped control sequences in menus and decodes the documented escape sequences from input before persistence.
 - **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` for enabled prompt-end outcomes.
-- **TST-049**: MUST verify the status bar renders ordered `status`, `branch`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
+- **TST-049**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
 - **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
 - **TST-062**: MUST verify `Show local configuration` saves pending local and global config, closes the active configuration menu tree, and writes persisted `<base-path>/.pi-usereq.json` text into the editor.

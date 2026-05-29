@@ -5,10 +5,10 @@
  */
 
 /**
- * @brief Declares the extension version string.
- * @details The value is exported for external inspection and packaging metadata alignment. Access complexity is O(1).
+ * @brief Declares the runtime extension version string.
+ * @details Reads the installed package metadata during module evaluation so exported version consumers stay aligned with the extension payload loaded by pi. Access complexity is O(1) after the cached metadata is initialized.
  */
-export const VERSION = "0.34.0";
+export const VERSION = getInstallationPackageMetadata().version;
 
 import fs from "node:fs";
 import path from "node:path";
@@ -67,6 +67,7 @@ import {
 import {
   bootstrapRuntimePathState,
   formatRuntimePathForDisplay,
+  getInstallationPackageMetadata,
   getRuntimeBasePath,
   getRuntimeContextPath,
   setRuntimeGitPath,

@@ -29,6 +29,30 @@ export const GLOBAL_CONFIG_RELATIVE_PATH = ".config/pi-usereq/config.json";
 export const RESOURCE_ROOT_DIRNAME = "resources";
 
 /**
+ * @brief Describes the installation package metadata used by runtime status rendering.
+ * @details Stores the resolved extension package name and semantic version read from the installation-owned `package.json`. The interface is compile-time only and introduces no runtime side effects.
+ */
+export interface InstallationPackageMetadata {
+  name: string;
+  version: string;
+}
+
+/**
+ * @brief Defines the fallback installation package metadata used when `package.json` is unavailable.
+ * @details Preserves deterministic footer rendering if the installation-owned package manifest is missing or malformed at runtime. Access complexity is O(1).
+ */
+const DEFAULT_INSTALLATION_PACKAGE_METADATA: InstallationPackageMetadata = {
+  name: "pi-usereq",
+  version: "unknown",
+};
+
+/**
+ * @brief Caches the parsed installation package metadata for the current process.
+ * @details Avoids repeated `package.json` reads while the footer ticker refreshes once per second during active prompt execution. Mutable module-local cache with O(1) access after first resolution.
+ */
+let installationPackageMetadataCache: InstallationPackageMetadata | undefined;
+
+/**
  * @brief Stores the mutable runtime path state shared across extension callbacks.
  * @details Persists the static bootstrap `base-path`, the dynamic `context-path`, the optional repository-derived `git-path`, the derived `parent-path` and `base-dir`, and the optional active worktree facts. The interface is compile-time only and introduces no runtime cost.
  */
@@ -103,6 +127,41 @@ const runtimePathState: Partial<RuntimePathState> & { baseDir: string } = {
  */
 export function getInstallationPath(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+}
+
+/**
+ * @brief Resolves the installation-owned extension package metadata.
+ * @details Reads `<installation-path>/../package.json` once per process, caches the parsed `name` and `version`, trims surrounding whitespace, and falls back to deterministic defaults when the manifest is missing, malformed, or incomplete. Runtime is O(n) on the first call in manifest size and O(1) on later calls. Side effects are limited to one filesystem read and module-local cache mutation.
+ * @return {InstallationPackageMetadata} Cached package name and version used by runtime status rendering.
+ */
+export function getInstallationPackageMetadata(): InstallationPackageMetadata {
+  if (installationPackageMetadataCache !== undefined) {
+    return installationPackageMetadataCache;
+  }
+  const packageJsonPath = path.resolve(
+    getInstallationPath(),
+    "..",
+    "package.json",
+  );
+  try {
+    const packageJson = JSON.parse(
+      fs.readFileSync(packageJsonPath, "utf8"),
+    ) as { name?: unknown; version?: unknown };
+    const name = typeof packageJson.name === "string"
+      ? packageJson.name.trim()
+      : "";
+    const version = typeof packageJson.version === "string"
+      ? packageJson.version.trim()
+      : "";
+    if (name !== "" && version !== "") {
+      installationPackageMetadataCache = { name, version };
+      return installationPackageMetadataCache;
+    }
+  } catch {
+    // Fallback handled below.
+  }
+  installationPackageMetadataCache = { ...DEFAULT_INSTALLATION_PACKAGE_METADATA };
+  return installationPackageMetadataCache;
 }
 
 /**

@@ -476,9 +476,38 @@ function buildExpectedFakeContextBar(options: {
 }
 
 /**
+ * @brief Reads the repository package manifest fields used by status-bar tests.
+ * @details Loads `../package.json` relative to this test module so status-bar assertions derive the expected runtime extension name and version from repository metadata instead of hard-coded literals. Runtime is O(n) in file size. Side effects are limited to one filesystem read.
+ * @return {{ name: string; version: string }} Expected runtime extension package metadata.
+ */
+function readExpectedRuntimeExtensionMetadata(): { name: string; version: string } {
+  const packageJson = JSON.parse(
+    fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { name?: unknown; version?: unknown };
+  return {
+    name: typeof packageJson.name === "string" && packageJson.name.trim() !== ""
+      ? packageJson.name.trim()
+      : "pi-usereq",
+    version: typeof packageJson.version === "string" && packageJson.version.trim() !== ""
+      ? packageJson.version.trim()
+      : "unknown",
+  };
+}
+
+/**
+ * @brief Builds the expected fake runtime extension identity prefix for status assertions.
+ * @details Renders `<extension>:v<version>` using the same accent-label and warning-value markers consumed by the fake status theme so prefix assertions remain aligned with runtime package metadata. Runtime is O(n) in rendered text length. No external state is mutated.
+ * @return {string} Encoded extension identity prefix.
+ */
+function buildExpectedFakeExtensionIdentityStatusField(): string {
+  const metadata = readExpectedRuntimeExtensionMetadata();
+  return `${formatFakeThemeForeground("accent", `${metadata.name}:`)}${formatFakeThemeForeground("warning", `v${metadata.version}`)}`;
+}
+
+/**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the field order, workflow-state highlighting, branch field, icon-based context gauge, consolidated elapsed field, and sound field emitted by the extension using deterministic fake theme markers. Runtime is O(1) plus optional git execution for branch discovery. No external state is mutated.
- * @param[in] options {{ workflowState?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered `status`, `branch`, `context`, `elapsed`, and `sound` fields.
+ * @details Reconstructs the runtime extension identity prefix, workflow-state highlighting, branch field, icon-based context gauge, consolidated elapsed field, and sound field emitted by the extension using deterministic fake theme markers. Runtime is O(1) plus optional git execution for branch discovery. No external state is mutated.
+ * @param[in] options {{ workflowState?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered runtime extension prefix, `status`, `branch`, `context`, `elapsed`, and `sound` fields.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -504,6 +533,7 @@ function buildExpectedFakeStatusText(options: {
     percent: options.contextPercent,
   });
   return [
+    buildExpectedFakeExtensionIdentityStatusField(),
     `${formatFakeThemeForeground("accent", "status:")}${workflowStateValue}`,
     buildField("branch", branchValue),
     `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
@@ -5023,6 +5053,27 @@ test("session_start applies configured pi-usereq startup tools", async () => {
       et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
     }),
   );
+});
+
+/**
+ * @brief Verifies the status bar prepends runtime extension identity before the `status` field.
+ * @details Emits `session_start`, reads the rendered footer text, and asserts the prefix starts with the runtime package name plus `v<version>` before `status:` using the same accent-label and warning-value markers used by other non-error status fields. Runtime is O(1). Side effects are limited to temporary filesystem mutation and in-memory status capture.
+ * @return {Promise<void>} Promise resolved after the status-prefix assertion completes.
+ * @throws {AssertionError} Throws when the footer omits or misorders the runtime extension identity prefix.
+ * @satisfies TST-031, TST-033, TST-049
+ */
+test("session_start status bar prepends runtime extension identity before status", async () => {
+  const cwd = createTempDir("pi-usereq-extension-identity-status-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+
+  const statusText = ctx.__state.statuses.get("pi-usereq") ?? "";
+  const expectedPrefix = `${buildExpectedFakeExtensionIdentityStatusField()}${formatFakeThemeForeground("dim", " • ")}${formatFakeThemeForeground("accent", "status:")}`;
+  assert.ok(statusText.startsWith(expectedPrefix));
 });
 
 test("session_start renders the 0-percent context icon when context usage is empty", async () => {
