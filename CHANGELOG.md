@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.24.0](https://github.com/Ogekuri/PI-useReq/compare/v0.23.0..v0.24.0) - 2026-05-29
+### 🐛  Bug Fixes
+- Remove install -g npm@latest from workflow.
+
 ## [0.23.0](https://github.com/Ogekuri/PI-useReq/compare/v0.22.0..v0.23.0) - 2026-05-29
 ### 🐛  Bug Fixes
 - Workaround actions/setup-node OIDC bug.
@@ -433,6 +437,7 @@
 - \[0.21.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.21.0
 - \[0.22.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.22.0
 - \[0.23.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.23.0
+- \[0.24.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.24.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -455,3 +460,4 @@
 [0.21.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.20.0..v0.21.0
 [0.22.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.21.0..v0.22.0
 [0.23.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.22.0..v0.23.0
+[0.24.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.23.0..v0.24.0
