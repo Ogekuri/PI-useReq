@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/Ogekuri/PI-useReq/compare/v0.13.0..v0.14.0) - 2026-05-29
+### ⛰️  Features
+- add debug tool slash commands [useReq] *(debug)*
+  - Add DEBUG_TOOL_COMMANDS_ENABLED local config and Debug submenu row.
+  - Register config-gated debug-compress, debug-references,
+  - debug-static-check, and debug-tokens wrappers.
+  - Update requirements, workflow, references, and tests for traceability.
+- Update .gitignore file.
+- Remove REFERENCES.md.
+
+### 📚  Documentation
+- Update REFERENCES.md document. [useReq] *(references)*
+
 ## [0.13.0](https://github.com/Ogekuri/PI-useReq/compare/v0.12.0..v0.13.0) - 2026-04-27
 ### 🚜  Changes
 - BREAKING CHANGE: split local and global configuration [useReq] *(config)*
@@ -369,6 +382,7 @@
 - \[0.11.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.11.0
 - \[0.12.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.12.0
 - \[0.13.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.13.0
+- \[0.14.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.14.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -381,3 +395,4 @@
 [0.11.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.10.0..v0.11.0
 [0.12.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.11.0..v0.12.0
 [0.13.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.12.0..v0.13.0
+[0.14.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.13.0..v0.14.0
