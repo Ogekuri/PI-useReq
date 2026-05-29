@@ -69,7 +69,7 @@ jobs:
         run: npm pkg delete private
 
       - name: Publish package to npm
-         run: npm publish # Or: npm stage publish
+        run: npm publish # Or: npm stage publish
 
       - name: Build Changelog
         id: build_changelog
