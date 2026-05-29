@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.17.0](https://github.com/Ogekuri/PI-useReq/compare/v0.16.0..v0.17.0) - 2026-05-29
+### ⛰️  Features
+- Re-add tocken.
+
 ## [0.16.0](https://github.com/Ogekuri/PI-useReq/compare/v0.15.0..v0.16.0) - 2026-05-29
 ### 🐛  Bug Fixes
 - Fix workflow.
@@ -395,6 +399,7 @@
 - \[0.14.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.14.0
 - \[0.15.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.15.0
 - \[0.16.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.16.0
+- \[0.17.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.17.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -410,3 +415,4 @@
 [0.14.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.13.0..v0.14.0
 [0.15.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.14.0..v0.15.0
 [0.16.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.15.0..v0.16.0
+[0.17.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.16.0..v0.17.0
