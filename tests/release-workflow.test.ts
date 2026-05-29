@@ -18,13 +18,19 @@ function readReleaseWorkflow(): string {
 
 /**
  * @brief Describes the package manifest fields asserted by npm release tests.
- * @details Constrains the parsed `package.json` shape to the publication identity and provenance metadata required by the release workflow tests. The interface is compile-time only and introduces no runtime side effects.
+ * @details Constrains the parsed `package.json` shape to the publication
+ * identity, trusted-publishing metadata, and public-access publish
+ * configuration required by the release workflow tests. The interface is
+ * compile-time only and introduces no runtime side effects.
  */
 interface PackageManifest {
   name?: unknown;
   repository?: {
     type?: unknown;
     url?: unknown;
+  };
+  publishConfig?: {
+    access?: unknown;
   };
   bugs?: {
     url?: unknown;
@@ -34,9 +40,13 @@ interface PackageManifest {
 
 /**
  * @brief Loads the repository package manifest for npm publication assertions.
- * @details Resolves `package.json` from the current process working directory, parses the UTF-8 JSON document, and returns the manifest object so tests can assert publication identity and provenance metadata deterministically. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Resolves `package.json` from the current process working directory,
+ * parses the UTF-8 JSON document, and returns the manifest object so tests can
+ * assert publication identity, provenance metadata, and public publish access
+ * deterministically. Runtime is O(n) in file size. Side effects are limited to
+ * filesystem reads.
  * @return {PackageManifest} Parsed package manifest.
- * @satisfies TST-042, TST-044
+ * @satisfies TST-042, TST-044, TST-117
  */
 function readPackageManifest(): PackageManifest {
   return JSON.parse(
@@ -67,12 +77,29 @@ function assertCanonicalPackageProvenanceMetadata(): void {
 
   assert.deepEqual(manifest.repository, {
     type: "git",
-    url: "git+https://github.com/Ogekuri/PI-useReq.git",
+    url: "https://github.com/Ogekuri/PI-useReq.git",
   });
   assert.deepEqual(manifest.bugs, {
     url: "https://github.com/Ogekuri/PI-useReq/issues",
   });
   assert.equal(manifest.homepage, "https://github.com/Ogekuri/PI-useReq#readme");
+}
+
+/**
+ * @brief Asserts the public npm publish-access configuration in `package.json`.
+ * @details Loads `package.json` and verifies that `publishConfig.access`
+ * remains `public` so steady-state trusted publishing emits the public package
+ * access level without CLI `--access` flags. Runtime is O(n) in file size.
+ * Side effects are limited to filesystem reads through `readPackageManifest`.
+ * @return {void} No return value.
+ * @satisfies TST-117
+ */
+function assertPublicPublishAccess(): void {
+  const manifest = readPackageManifest();
+
+  assert.deepEqual(manifest.publishConfig, {
+    access: "public",
+  });
 }
 
 test(
@@ -94,18 +121,24 @@ test(
 );
 
 test(
-  "release workflow installs dependencies, publishes to npm, and creates the GitHub release",
+  "release workflow uses Node.js 24 trusted publishing and creates the GitHub release",
   () => {
     const workflow = readReleaseWorkflow();
 
+    assert.match(workflow, /NODE_VERSION:\s*'24'/);
     assert.ok(workflow.includes("uses: actions/setup-node@v4"));
-    assert.ok(workflow.includes("registry-url: 'https://registry.npmjs.org'"));
+    assert.match(
+      workflow,
+      /build-release:[\s\S]*?permissions:\s*\n\s+contents:\s+write\s*\n\s+id-token:\s+write/,
+    );
     assert.ok(workflow.includes("run: npm ci"));
     assert.ok(workflow.includes("run: npm pkg delete private"));
-    assert.ok(
-      workflow.includes("run: npm publish --provenance --access public"),
-    );
-    assert.ok(workflow.includes("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}"));
+    assert.ok(workflow.includes("run: npm publish --provenance"));
+    assert.ok(!workflow.includes("--access public"));
+    assert.ok(!workflow.includes("registry-url:"));
+    assert.ok(!workflow.includes("always-auth:"));
+    assert.ok(!workflow.includes("NODE_AUTH_TOKEN"));
+    assert.ok(!workflow.includes("NPM_TOKEN"));
     assert.ok(
       workflow.includes(
         "uses: mikepenz/release-changelog-builder-action@v6",
@@ -130,4 +163,9 @@ test(
 test(
   "package manifest keeps canonical repository, bugs, and homepage metadata for npm provenance",
   assertCanonicalPackageProvenanceMetadata,
+);
+
+test(
+  "package manifest keeps publishConfig access public for trusted publishing",
+  assertPublicPublishAccess,
 );

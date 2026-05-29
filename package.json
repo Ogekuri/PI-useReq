@@ -4,7 +4,10 @@
   "version": "0.15.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Ogekuri/PI-useReq.git"
+    "url": "https://github.com/Ogekuri/PI-useReq.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "bugs": {
     "url": "https://github.com/Ogekuri/PI-useReq/issues"
