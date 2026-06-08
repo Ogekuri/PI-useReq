@@ -1,4 +1,4 @@
-# PI-useReq/pi-usereq (0.35.0)
+# PI-useReq/pi-usereq (0.36.0)
 
 <p align="center">
   <img src="https://img.shields.io/badge/node-24.15%2B-5FA04E?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 24.15+">
