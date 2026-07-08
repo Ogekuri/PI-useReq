@@ -508,6 +508,7 @@
 - \[0.33.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.33.0
 - \[0.34.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.34.0
 - \[0.35.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.35.0
+- \[0.36.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.36.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -542,3 +543,4 @@
 [0.33.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.32.0..v0.33.0
 [0.34.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.33.0..v0.34.0
 [0.35.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.34.0..v0.35.0
+[0.36.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.35.0..v0.36.0
