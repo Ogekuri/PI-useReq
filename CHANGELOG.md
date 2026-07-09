@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.39.0](https://github.com/Ogekuri/PI-useReq/compare/v0.38.0..v0.39.0) - 2026-07-09
+### ⛰️  Features
+- Add Context Files menu and %%CONTEXT_FILES%% prompt injection [useReq] *(context-files)*
+  - Add top-level `Context Files` menu between `Unit tests directory` and `Auto git commit` with per-file toggles for REQUIREMENTS.md, REFERENCES.md, WORKFLOW.md
+  - Persist context-files-requirements/references/workflow boolean flags in local config, defaulting enabled
+  - Replace %%CONTEXT_FILES%% with per-file markdown sections (file-name heading, pre-substituted HTML file reference, four-backtick fences) in documented order
+  - Update REQ-190/191 ordering, add REQ-326..333/TST-117..120, and refresh WORKFLOW/REFERENCES
+- Update prompts.
+
+### 🚜  Changes
+- Align stale tests with Context Files menu and verbatim injection [useReq] *(tests)*
+  - Add Context Files to expected top-level menu list in extension-registration test
+  - Disable context-file injection in prompt-rendering placeholder/read-only tests so template-body assertions hold per REQ-332
+  - Refine TST-060 to exclude the verbatim %%CONTEXT_FILES%% block from placeholder-absence assertions
+
 ## [0.38.0](https://github.com/Ogekuri/PI-useReq/compare/v0.37.0..v0.38.0) - 2026-07-09
 ### ⛰️  Features
 - Add Google_TypeScript_Style_Guide.md and RFC2119.md.
@@ -519,6 +534,7 @@
 - \[0.36.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.36.0
 - \[0.37.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.37.0
 - \[0.38.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.38.0
+- \[0.39.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.39.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -556,3 +572,4 @@
 [0.36.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.35.0..v0.36.0
 [0.37.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.36.0..v0.37.0
 [0.38.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.37.0..v0.38.0
+[0.39.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.38.0..v0.39.0
