@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.38.0](https://github.com/Ogekuri/PI-useReq/compare/v0.37.0..v0.38.0) - 2026-07-09
+### ⛰️  Features
+- Add Google_TypeScript_Style_Guide.md and RFC2119.md.
+
 ## [0.37.0](https://github.com/Ogekuri/PI-useReq/compare/v0.36.0..v0.37.0) - 2026-07-08
 ### 🐛  Bug Fixes
 - Update README.md file.
@@ -514,6 +518,7 @@
 - \[0.35.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.35.0
 - \[0.36.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.36.0
 - \[0.37.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.37.0
+- \[0.38.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.38.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -550,3 +555,4 @@
 [0.35.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.34.0..v0.35.0
 [0.36.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.35.0..v0.36.0
 [0.37.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.36.0..v0.37.0
+[0.38.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.37.0..v0.38.0
