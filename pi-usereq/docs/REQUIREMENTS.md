@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.68"
-date: "2026-05-29"
+version: "0.0.69"
+date: "2026-07-09"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -222,8 +222,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
 - **REQ-187**: MUST render `%%BASE%%` as static `base-path` relative to user home using `~/...` form and `%%TIME%%` as final elapsed `M:SS`.
 - **REQ-188**: MUST label notification-event rows as `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
-- **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, `Debug`, `Show local configuration`, and `Show global configuration`.
-- **REQ-191**: MUST order top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, and `Debug`.
+- **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Context Files`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, `Debug`, `Show local configuration`, and `Show global configuration`.
+- **REQ-191**: MUST order top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Context Files`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, and `Debug`.
 - **REQ-320**: MUST order `Show local configuration` after `Debug`, `Show global configuration` after `Show local configuration`, and `Reset defaults` last.
 - **REQ-192**: MUST preserve the selected settings-menu row after toggling or editing a setting value.
 - **REQ-193**: MUST append `Reset defaults` as a final row without right-aligned value text in every configuration menu and descendant selector menu, and MUST NOT render `Save and close`.
@@ -388,6 +388,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-323**: MUST register `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
 - **REQ-324**: MUST make `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` reuse the `compress`, `references`, `static-check`, `summarize`, and `tokens` runner outputs and write `content[0].text` to the editor.
 - **REQ-325**: MUST reject `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` execution when `DEBUG_TOOL_COMMANDS_ENABLED=disable`.
+- **REQ-326**: MUST add a top-level `Context Files` row to the `pi-usereq` menu between `Unit tests directory` and `Auto git commit`.
+- **REQ-327**: MUST expose a `Context Files` submenu with separate enable toggles for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` in that order.
+- **REQ-328**: MUST persist `context-files-requirements`, `context-files-references`, and `context-files-workflow` as boolean flags in local configuration, each defaulting to enabled.
+- **REQ-329**: MUST replace the `%%CONTEXT_FILES%%` prompt token with one markdown section per enabled context file in the order `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md`.
+- **REQ-330**: MUST render each `%%CONTEXT_FILES%%` section as the file-name heading, an HTML `<file name="<docs-dir>/<filename>">` reference with `%%DOC_PATH%%` pre-substituted, and the raw file content inside four-backtick `markdown` fences.
+- **REQ-331**: MUST omit the `%%CONTEXT_FILES%%` section for any disabled flag or missing context file without surfacing an error.
+- **REQ-332**: MUST inject `%%CONTEXT_FILES%%` content verbatim after every other prompt replacement so literal `%%...%%` tokens inside context files are not substituted.
+- **REQ-333**: MUST restore all three `Context Files` flags to enabled when the `Context Files` subtree `Reset defaults` is approved.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -504,6 +512,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-114**: MUST verify the `Debug` submenu persists `DEBUG_TOOL_COMMANDS_ENABLED` through immediate-save, reset, and focus-preserving re-render flows.
 - **TST-115**: MUST verify extension activation registers `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
 - **TST-116**: MUST verify `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` write the same `content[0].text` as `compress`, `references`, `static-check`, `summarize`, and `tokens`, and reject execution when disabled.
+- **TST-117**: MUST verify the `pi-usereq` menu renders `Context Files` between `Unit tests directory` and `Auto git commit`.
+- **TST-118**: MUST verify the `Context Files` submenu persists the three context-file flags in local configuration with immediate-save, reset, and focus-preserving re-render behavior.
+- **TST-119**: MUST verify `%%CONTEXT_FILES%%` replacement emits one section per enabled existing file in the documented order and omits disabled or missing files.
+- **TST-120**: MUST verify `%%CONTEXT_FILES%%` sections use the file-name heading, the pre-substituted HTML file reference, and four-backtick `markdown` fences around raw content.
 
 ## 5. Observed Component Model
 

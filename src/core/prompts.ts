@@ -6,8 +6,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { buildPromptReplacementPaths, type UseReqConfig } from "./config.js";
-import { formatRuntimePathForDisplay } from "./path-context.js";
+import { buildPromptReplacementPaths, DEFAULT_DOCS_DIR, type UseReqConfig } from "./config.js";
+import { formatRuntimePathForDisplay, normalizeRelativeDirContract } from "./path-context.js";
 import type {
   PromptCommandExecutionPlan,
   PromptCommandName,
@@ -133,6 +133,44 @@ function injectPiDevConformanceBlock(text: string, promptName: string, projectBa
     return text;
   }
   return text.replace(behaviorHeading, `${behaviorHeading}${block}\n`);
+}
+
+/**
+ * @brief Defines the ordered context-file injection descriptors used by `%%CONTEXT_FILES%%`.
+ * @details Each entry binds the configured flag key to its canonical document file name so the renderer can iterate the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order in one stable vector. Lookup complexity is O(1).
+ * @satisfies REQ-329
+ */
+const CONTEXT_FILE_DESCRIPTORS: ReadonlyArray<{ flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow"; fileName: string }> = [
+  { flagKey: "context-files-requirements", fileName: "REQUIREMENTS.md" },
+  { flagKey: "context-files-references", fileName: "REFERENCES.md" },
+  { flagKey: "context-files-workflow", fileName: "WORKFLOW.md" },
+];
+
+/**
+ * @brief Builds the markdown block that replaces the `%%CONTEXT_FILES%%` prompt token.
+ * @details Iterates the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order, skips disabled flags and missing files without error, and renders each remaining file as a file-name heading, an HTML `<file name="<docs-dir>/<filename>">` reference with `%%DOC_PATH%%` pre-substituted, and the raw file content inside four-backtick `markdown` fences. Runtime is O(n) in aggregate context-file size. Side effects are limited to filesystem reads.
+ * @param[in] projectBase {string} Absolute project root used to resolve the configured docs directory.
+ * @param[in] config {UseReqConfig} Effective project configuration supplying the docs directory and context-file flags.
+ * @return {string} Rendered markdown block, or the empty string when no enabled context file exists.
+ * @satisfies REQ-329, REQ-330, REQ-331, REQ-332
+ */
+function buildContextFilesBlock(projectBase: string, config: UseReqConfig): string {
+  const normalizedDocsDir = normalizeRelativeDirContract(config["docs-dir"]) || DEFAULT_DOCS_DIR;
+  const sections: string[] = [];
+  for (const { flagKey, fileName } of CONTEXT_FILE_DESCRIPTORS) {
+    if (!config[flagKey]) {
+      continue;
+    }
+    const filePath = path.join(projectBase, normalizedDocsDir, fileName);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      continue;
+    }
+    const content = fs.readFileSync(filePath, "utf8");
+    sections.push(
+      `### ${fileName}\n\n<file name="${normalizedDocsDir}/${fileName}">\n\`\`\`\`markdown\n${content}\n\`\`\`\``,
+    );
+  }
+  return sections.join("\n\n");
 }
 
 /**
@@ -278,7 +316,7 @@ function renderBundledCommitInstruction(
  * @param[in] config {UseReqConfig} Effective project configuration used for path substitutions.
  * @param[in] executionPlan {PromptCommandExecutionPlan | undefined} Optional prompt-command execution plan used for injected runtime guidance.
  * @return {string} Fully rendered prompt markdown ready for `pi.sendUserMessage(...)`.
- * @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108, REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209, REQ-211, REQ-213, REQ-214, REQ-273, REQ-274, REQ-275
+ * @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108, REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209, REQ-211, REQ-213, REQ-214, REQ-273, REQ-274, REQ-275, REQ-329, REQ-330, REQ-331, REQ-332
  */
 export function renderPrompt(
   promptName: string,
@@ -310,5 +348,10 @@ export function renderPrompt(
     promptName,
     projectBase,
   );
-  return adaptPromptForInternalTools(withPiDevConformance);
+  const adapted = adaptPromptForInternalTools(withPiDevConformance);
+  const contextFilesBlock = buildContextFilesBlock(projectBase, config);
+  if (contextFilesBlock) {
+    return adapted.split("%%CONTEXT_FILES%%").join(contextFilesBlock);
+  }
+  return adapted.split("%%CONTEXT_FILES%%").join("");
 }

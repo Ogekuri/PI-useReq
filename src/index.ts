@@ -27,6 +27,7 @@ import {
 } from "./core/agent-tool-json.js";
 import type { FindToolScope } from "./core/find-payload.js";
 import {
+  DEFAULT_CONTEXT_FILES_FLAG,
   DEFAULT_GIT_WORKTREE_PREFIX,
   DEFAULT_SRC_DIRS,
   createStaticCheckLanguageConfig,
@@ -3950,12 +3951,128 @@ async function configureStaticCheckMenu(
 }
 
 /**
+ * @brief Summarizes the `Context Files` flag state for the top-level menu value column.
+ * @details Renders the three context-file flags as compact `name:on|off` segments in the documented order so the top-level row reflects the current injection configuration. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Compact `Context Files` summary string.
+ * @satisfies REQ-327
+ */
+function formatContextFilesSummary(config: UseReqConfig): string {
+  return `requirements:${config["context-files-requirements"] ? "on" : "off"} \u2022 references:${config["context-files-references"] ? "on" : "off"} \u2022 workflow:${config["context-files-workflow"] ? "on" : "off"}`;
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for the `Context Files` submenu.
+ * @details Exposes one inline on|off toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order plus a value-less subtree-local `Reset defaults` row. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
+ * @satisfies REQ-327, REQ-328, REQ-333
+ */
+function buildContextFilesMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  return [
+    {
+      id: "context-files-requirements",
+      label: "REQUIREMENTS.md",
+      value: config["context-files-requirements"] ? "on" : "off",
+      values: ["on", "off"],
+      description: "Toggle injection of REQUIREMENTS.md into the prompt context through `%%CONTEXT_FILES%%`.",
+    },
+    {
+      id: "context-files-references",
+      label: "REFERENCES.md",
+      value: config["context-files-references"] ? "on" : "off",
+      values: ["on", "off"],
+      description: "Toggle injection of REFERENCES.md into the prompt context through `%%CONTEXT_FILES%%`.",
+    },
+    {
+      id: "context-files-workflow",
+      label: "WORKFLOW.md",
+      value: config["context-files-workflow"] ? "on" : "off",
+      values: ["on", "off"],
+      description: "Toggle injection of WORKFLOW.md into the prompt context through `%%CONTEXT_FILES%%`.",
+    },
+    ...buildTerminalSettingsMenuChoices({
+      resetDefaultsDescription: "Restore the default Context Files configuration (all three files enabled).",
+    }),
+  ];
+}
+
+/**
+ * @brief Runs the `Context Files` configuration submenu.
+ * @details Loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in,out] config {UseReqConfig} Mutable effective project configuration.
+ * @param[in] onConfigChange {() => void} Shared persistence-plus-status callback.
+ * @return {Promise<void>} Promise resolved when the submenu closes.
+ * @satisfies REQ-327, REQ-328, REQ-333
+ */
+async function configureContextFilesMenu(
+  ctx: ExtensionCommandContext,
+  config: UseReqConfig,
+  onConfigChange: () => void,
+): Promise<void> {
+  const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void => {
+    config[flagKey] = enabled;
+    onConfigChange();
+    ctx.ui.notify(`${flagKey.replace("context-files-", "").replace("-", " ")} context file ${enabled ? "enabled" : "disabled"}`, "info");
+  };
+  let focusedChoiceId: string | undefined;
+  while (true) {
+    const choice = await showPiUsereqSettingsMenu(ctx, "Context Files", buildContextFilesMenuChoices(config), {
+      initialSelectedId: focusedChoiceId,
+      getChoices: () => buildContextFilesMenuChoices(config),
+      onChange: (choiceId, newValue) => {
+        if (choiceId === "context-files-requirements") {
+          setFlag("context-files-requirements", newValue === "on");
+          return;
+        }
+        if (choiceId === "context-files-references") {
+          setFlag("context-files-references", newValue === "on");
+          return;
+        }
+        if (choiceId === "context-files-workflow") {
+          setFlag("context-files-workflow", newValue === "on");
+        }
+      },
+    });
+    if (!choice) {
+      return;
+    }
+    focusedChoiceId = choice;
+    if (choice === "reset-defaults") {
+      const resetPreview: ResetConfirmationChange[] = [
+        { label: "REQUIREMENTS.md", previousValue: config["context-files-requirements"] ? "on" : "off", nextValue: DEFAULT_CONTEXT_FILES_FLAG ? "on" : "off" },
+        { label: "REFERENCES.md", previousValue: config["context-files-references"] ? "on" : "off", nextValue: DEFAULT_CONTEXT_FILES_FLAG ? "on" : "off" },
+        { label: "WORKFLOW.md", previousValue: config["context-files-workflow"] ? "on" : "off", nextValue: DEFAULT_CONTEXT_FILES_FLAG ? "on" : "off" },
+      ].filter((change) => change.previousValue !== change.nextValue);
+      const approved = await confirmResetChanges(
+        ctx,
+        "Confirm Context Files reset",
+        resetPreview,
+        "Approve restoring the default Context Files configuration (all three files enabled).",
+        "Abort the Context Files reset and keep the current values.",
+      );
+      if (!approved) {
+        ctx.ui.notify("Aborted Context Files reset", "info");
+        continue;
+      }
+      config["context-files-requirements"] = DEFAULT_CONTEXT_FILES_FLAG;
+      config["context-files-references"] = DEFAULT_CONTEXT_FILES_FLAG;
+      config["context-files-workflow"] = DEFAULT_CONTEXT_FILES_FLAG;
+      onConfigChange();
+      ctx.ui.notify("Restored default Context Files configuration", "info");
+      continue;
+    }
+  }
+}
+
+/**
  * @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
- * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
+ * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326
  */
 function buildPiUsereqMenuChoices(
   cwd: string,
@@ -3984,6 +4101,12 @@ function buildPiUsereqMenuChoices(
       label: "Unit tests directory",
       value: config["tests-dir"],
       description: "Edit the repository-relative directory used for project test assets and static-check selection.",
+    },
+    {
+      id: "context-files",
+      label: "Context Files",
+      value: formatContextFilesSummary(config),
+      description: "Toggle injection of REQUIREMENTS.md, REFERENCES.md, and WORKFLOW.md into prompt context through `%%CONTEXT_FILES%%`.",
     },
     {
       id: "auto-git-commit",
@@ -4113,7 +4236,7 @@ function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuCh
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-327, REQ-328, REQ-333
  */
 async function configurePiUsereq(
   pi: ExtensionAPI,
@@ -4191,6 +4314,10 @@ async function configurePiUsereq(
         config["tests-dir"] = value.trim();
         persistConfigChange();
       }
+      continue;
+    }
+    if (choice === "context-files") {
+      await configureContextFilesMenu(ctx, config, persistConfigChange);
       continue;
     }
     if (choice === "auto-git-commit") {
@@ -4335,6 +4462,7 @@ async function configurePiUsereq(
           { label: "Document directory", previousValue: config["docs-dir"], nextValue: defaultConfig["docs-dir"] },
           { label: "Source-code directories", previousValue: config["src-dir"].join(", "), nextValue: defaultConfig["src-dir"].join(", ") },
           { label: "Unit tests directory", previousValue: config["tests-dir"], nextValue: defaultConfig["tests-dir"] },
+          { label: "Context Files", previousValue: formatContextFilesSummary(config), nextValue: formatContextFilesSummary(defaultConfig) },
           { label: "Auto git commit", previousValue: config.AUTO_GIT_COMMIT, nextValue: defaultConfig.AUTO_GIT_COMMIT },
           { label: "Git worktree", previousValue: config.GIT_WORKTREE_ENABLED, nextValue: defaultConfig.GIT_WORKTREE_ENABLED },
           { label: "Worktree prefix", previousValue: config.GIT_WORKTREE_PREFIX, nextValue: defaultConfig.GIT_WORKTREE_PREFIX },
@@ -4395,7 +4523,7 @@ function registerConfigCommands(
  * @details Validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, DES-015, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325
+ * @satisfies DES-002, DES-015, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   const statusController = createPiUsereqStatusController();

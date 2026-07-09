@@ -84,6 +84,9 @@ export interface UseReqConfig {
   "docs-dir": string;
   "tests-dir": string;
   "src-dir": string[];
+  "context-files-requirements": boolean;
+  "context-files-references": boolean;
+  "context-files-workflow": boolean;
   "static-check": Record<string, StaticCheckLanguageConfig>;
   "enabled-tools": string[];
   AUTO_GIT_COMMIT: "enable" | "disable";
@@ -145,6 +148,9 @@ interface UseReqLocalConfig {
   "docs-dir": string;
   "tests-dir": string;
   "src-dir": string[];
+  "context-files-requirements": boolean;
+  "context-files-references": boolean;
+  "context-files-workflow": boolean;
   "static-check": Record<string, LocalStaticCheckLanguageConfig>;
   DEBUG_ENABLED: "enable" | "disable";
   DEBUG_LOG_FILE: string;
@@ -206,6 +212,23 @@ export const DEFAULT_TESTS_DIR = "tests";
  * @details The array seeds newly created configs and repairs invalid persisted source selections. Access complexity is O(1).
  */
 export const DEFAULT_SRC_DIRS = ["src"];
+/**
+ * @brief Defines the default value for every persisted context-file injection flag.
+ * @details Each `%%CONTEXT_FILES%%` injection toggle defaults to enabled so the bundled canonical documents remain part of the prompt context unless the user explicitly disables one. Lookup complexity is O(1).
+ * @satisfies REQ-328
+ */
+export const DEFAULT_CONTEXT_FILES_FLAG = true;
+
+/**
+ * @brief Normalizes one persisted context-file injection flag.
+ * @details Returns the documented default (`true`) for missing or non-boolean values and preserves only explicit boolean input, so any malformed persisted entry keeps context-file injection enabled. Runtime is O(1). No external state is mutated.
+ * @param[in] value {unknown} Candidate persisted context-file flag.
+ * @return {boolean} Normalized context-file injection flag.
+ * @satisfies REQ-328
+ */
+export function normalizeContextFilesFlag(value: unknown): boolean {
+  return typeof value === "boolean" ? value : DEFAULT_CONTEXT_FILES_FLAG;
+}
 /**
  * @brief Defines the canonical supported static-check language order used by default config serialization.
  * @details The array lists every supported user-configurable language exactly once so default config builders and config serializers can emit deterministic per-language records. Access complexity is O(1).
@@ -555,7 +578,7 @@ export function getGlobalConfigPath(): string {
  * @details Populates canonical docs/test/source directories, derives local static-check enable defaults from the supplied global checker definitions, and seeds documented debug defaults including tool-wrapper command registration without any cross-project fields. Runtime is O(l). No filesystem side effects occur.
  * @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker definitions used to derive local enable defaults.
  * @return {UseReqLocalConfig} Fresh default local configuration object.
- * @satisfies CTN-019
+ * @satisfies CTN-019, REQ-328
  */
 function getDefaultLocalConfig(
   globalStaticCheckConfig: Record<string, GlobalStaticCheckLanguageConfig>,
@@ -564,6 +587,9 @@ function getDefaultLocalConfig(
     "docs-dir": DEFAULT_DOCS_DIR,
     "tests-dir": DEFAULT_TESTS_DIR,
     "src-dir": [...DEFAULT_SRC_DIRS],
+    "context-files-requirements": DEFAULT_CONTEXT_FILES_FLAG,
+    "context-files-references": DEFAULT_CONTEXT_FILES_FLAG,
+    "context-files-workflow": DEFAULT_CONTEXT_FILES_FLAG,
     "static-check": getDefaultLocalStaticCheckConfig(globalStaticCheckConfig),
     DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
     DEBUG_LOG_FILE: DEFAULT_DEBUG_LOG_FILE,
@@ -619,6 +645,7 @@ function getDefaultGlobalConfig(): UseReqGlobalConfig {
  * @param[in] localConfig {UseReqLocalConfig} Persisted local configuration.
  * @param[in] globalConfig {UseReqGlobalConfig} Persisted global configuration.
  * @return {UseReqConfig} Effective merged configuration.
+ * @satisfies REQ-328
  */
 function mergeConfigScopes(
   localConfig: UseReqLocalConfig,
@@ -645,6 +672,9 @@ function mergeConfigScopes(
     "docs-dir": docsDir,
     "tests-dir": testsDir,
     "src-dir": srcDir.length > 0 ? srcDir : [...DEFAULT_SRC_DIRS],
+    "context-files-requirements": localConfig["context-files-requirements"],
+    "context-files-references": localConfig["context-files-references"],
+    "context-files-workflow": localConfig["context-files-workflow"],
     "static-check": mergeStaticCheckConfig(localConfig["static-check"], globalConfig["static-check"]),
     "enabled-tools": normalizeEnabledPiUsereqTools(globalConfig["enabled-tools"]),
     AUTO_GIT_COMMIT: autoGitCommit,
@@ -823,7 +853,7 @@ function normalizeGlobalStaticCheckConfig(
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] defaultStaticCheckConfig {Record<string, LocalStaticCheckLanguageConfig>} Local static-check enable defaults derived from the current global checker map.
  * @return {UseReqLocalConfig} Sanitized local configuration.
- * @satisfies CTN-019
+ * @satisfies CTN-019, REQ-328
  */
 function loadLocalConfig(
   projectBase: string,
@@ -836,6 +866,9 @@ function loadLocalConfig(
       "docs-dir": DEFAULT_DOCS_DIR,
       "tests-dir": DEFAULT_TESTS_DIR,
       "src-dir": [...DEFAULT_SRC_DIRS],
+      "context-files-requirements": DEFAULT_CONTEXT_FILES_FLAG,
+      "context-files-references": DEFAULT_CONTEXT_FILES_FLAG,
+      "context-files-workflow": DEFAULT_CONTEXT_FILES_FLAG,
       "static-check": normalizeLocalStaticCheckConfig(undefined, defaultStaticCheckConfig),
       DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
       DEBUG_LOG_FILE: DEFAULT_DEBUG_LOG_FILE,
@@ -863,6 +896,9 @@ function loadLocalConfig(
     "docs-dir": docsDirCandidate || DEFAULT_DOCS_DIR,
     "tests-dir": testsDirCandidate || DEFAULT_TESTS_DIR,
     "src-dir": srcDirCandidate.length > 0 ? srcDirCandidate : [...DEFAULT_SRC_DIRS],
+    "context-files-requirements": normalizeContextFilesFlag(data["context-files-requirements"]),
+    "context-files-references": normalizeContextFilesFlag(data["context-files-references"]),
+    "context-files-workflow": normalizeContextFilesFlag(data["context-files-workflow"]),
     "static-check": normalizeLocalStaticCheckConfig(data["static-check"], defaultStaticCheckConfig),
     DEBUG_ENABLED: normalizeDebugEnabled(data.DEBUG_ENABLED),
     DEBUG_LOG_FILE: normalizeDebugLogFile(data.DEBUG_LOG_FILE),
@@ -945,7 +981,7 @@ export function loadConfig(projectBase: string): UseReqConfig {
  * @details Copies only project-scoped keys into a fresh object so runtime-derived metadata plus global checker, tool, git, and notification fields never reach `.pi-usereq.json`, while preserving the debug tool-wrapper command flag beside other local debug settings. Runtime is O(n) in config size. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective configuration object.
  * @return {UseReqLocalConfig} Persistable local configuration payload.
- * @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-249, REQ-316, REQ-277
+ * @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-249, REQ-316, REQ-277, REQ-328
  */
 function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig {
   const normalizedSrcDir = config["src-dir"]
@@ -955,6 +991,9 @@ function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig {
     "docs-dir": normalizeRelativeDirContract(config["docs-dir"]) || DEFAULT_DOCS_DIR,
     "tests-dir": normalizeRelativeDirContract(config["tests-dir"]) || DEFAULT_TESTS_DIR,
     "src-dir": normalizedSrcDir.length > 0 ? normalizedSrcDir : [...DEFAULT_SRC_DIRS],
+    "context-files-requirements": normalizeContextFilesFlag(config["context-files-requirements"]),
+    "context-files-references": normalizeContextFilesFlag(config["context-files-references"]),
+    "context-files-workflow": normalizeContextFilesFlag(config["context-files-workflow"]),
     "static-check": Object.fromEntries(
       Object.entries(config["static-check"]).map(([language, languageConfig]) => [
         language,
