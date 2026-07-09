@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.69"
+version: "0.0.70"
 date: "2026-07-09"
 author: "OpenAI Codex"
 scope:
@@ -400,7 +400,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
 - **TST-002**: MUST verify installed bundled prompt, commit-instruction, template, and guideline resources remain readable from `installation-path`.
-- **TST-060**: MUST verify prompt rendering replaces `%%PROMPT%%` and expands `%%COMMIT%%` from rendered `git_commit.md` or `git_read-only.md` according to `AUTO_GIT_COMMIT`.
+- **TST-060**: MUST verify prompt rendering replaces `%%PROMPT%%` and expands `%%COMMIT%%` from rendered `git_commit.md` or `git_read-only.md` according to `AUTO_GIT_COMMIT`, excluding the verbatim `%%CONTEXT_FILES%%` block from placeholder-absence assertions.
 - **TST-003**: MUST verify standalone `files-tokens` outputs match the Python oracle, `--test-static-check` dummy or command outputs match archived fixtures, and `files-summarize`, `files-compress`, plus `files-find` preserve leading source tabs.
 - **TST-004**: MUST verify project `tokens` outputs match the Python oracle, verify `files-static-check` plus `static-check` against archived fixtures, and verify `summarize`, `compress`, plus `find` preserve leading source tabs.
 - **TST-005**: MUST verify the configuration menu saves `docs-dir` locally and `AUTO_GIT_COMMIT`, `GIT_WORKTREE_ENABLED`, plus `GIT_WORKTREE_PREFIX` globally immediately after each change.

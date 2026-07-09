@@ -33,6 +33,9 @@ test("prompt rendering replaces dynamic placeholders, expands commit instruction
   const config = getDefaultConfig(projectBase);
   config["src-dir"] = ["src", "scripts", ".github/workflows"];
   config["tests-dir"] = "tests";
+  config["context-files-requirements"] = false;
+  config["context-files-references"] = false;
+  config["context-files-workflow"] = false;
   const runtimePathFacts = buildRuntimePathFacts(
     buildRuntimePathContext(projectBase, projectBase, config),
   );
@@ -50,6 +53,9 @@ test("prompt rendering injects the bundled read-only git instruction when auto g
   const projectBase = process.cwd();
   const config = getDefaultConfig(projectBase);
   config.AUTO_GIT_COMMIT = "disable";
+  config["context-files-requirements"] = false;
+  config["context-files-references"] = false;
+  config["context-files-workflow"] = false;
   const rendered = renderPrompt("write", "Build a CLI parser", projectBase, config);
   assert.match(rendered, /Git Read-Only Restriction/);
   assert.doesNotMatch(rendered, /git commit -m/);

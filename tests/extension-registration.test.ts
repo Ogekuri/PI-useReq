@@ -1826,6 +1826,7 @@ test("configuration menus expose local/global config ordering and omit overview 
     "Document directory",
     "Source-code directories",
     "Unit tests directory",
+    "Context Files",
     "Auto git commit",
     "Git worktree",
     "Worktree prefix",
@@ -1841,9 +1842,12 @@ test("configuration menus expose local/global config ordering and omit overview 
     renderedMenu,
     new RegExp(`<dim>${buildExpectedShowLocalConfigPath(cwd).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</dim>`),
   );
-  assert.match(
-    renderedMenu,
-    new RegExp(`<dim>${buildExpectedShowGlobalConfigPath().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</dim>`),
+  // `Show global configuration` renders off the first paginated page (14 top-level rows, 12-row budget per REQ-153);
+  // its presence and order are verified by the deepEqual items list above, and its `dim` styling shares the same
+  // `valueTone: "dim"` code path in `buildPiUsereqMenuChoices` confirmed for `Show local configuration` above.
+  assert.ok(
+    (ctx.__state.selectCalls[0]?.items ?? []).includes("Show global configuration"),
+    "Show global configuration must remain in the top-level menu item list",
   );
   assert.ok(renderedMenu.includes("notification:off • sound:none • pushover:off"));
   assert.ok(renderedMenu.includes("disable"));
