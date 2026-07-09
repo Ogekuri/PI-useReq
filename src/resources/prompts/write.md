@@ -1,10 +1,3 @@
----
-description: "Produce a Software Requirements Specification draft based on the User Request description"
-argument-hint: "Description of the application to be drafted from scratch (English only)"
-usage: >
-  Select this prompt to draft/author %%DOC_PATH%%/REQUIREMENTS.md ONLY from the user’s textual request (greenfield/kickoff, no authoritative implementation to analyze). Use when you must capture intent, fill gaps via explicit Assumptions, and produce an SRS suitable for SRS-driven development, without touching code/tests/%%DOC_PATH%%/WORKFLOW.md/%%DOC_PATH%%/REFERENCES.md. Do NOT select if an implementation already exists and you need requirements grounded in repo evidence (use /req-create or /req-recreate), if you need to change existing requirements and implement (use /req-change or /req-new), or for audit/triage or implementation work (use /req-analyze, /req-check, /req-fix, /req-refactor, /req-cover, /req-implement).
----
-
 # Produce a Software Requirements Specification draft based on the User Request description
 
 ## Purpose
@@ -22,8 +15,19 @@ In scope: author/update only `%%DOC_PATH%%/REQUIREMENTS.md` from [User Request](
 - **Act as a Senior System Architect** when describing components or relationships: ensure the technical descriptions reflect a modular, scalable, and robust architecture consistent with industry best practices.
 
 
+## Iteration and Context Economy
+- **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
+- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected `%%CONTEXT_FILES%%` context or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
+- **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
+- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `search`/`files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
+- **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
+- **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
+
+
 ## Absolute Rules, Non-Negotiable
-- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
+- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
 - **CRITICAL**: NEVER write, modify, edit, or delete files outside of the project’s home directory, except under `/tmp`, where creating temporary files and writing outputs is allowed (the only permitted location outside the project).
 - You can read, write, or edit `%%DOC_PATH%%/REQUIREMENTS.md`.
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
@@ -98,3 +102,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%
+
+
+## Context Files
+The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `search`, `files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+
+%%CONTEXT_FILES%%

@@ -1,10 +1,3 @@
----
-description: "Perform a refactor without changing the requirements"
-argument-hint: "Description of the refactor goal"
-usage: >
-  Select this prompt when the primary intent is internal code improvement under %%SRC_PATHS%% (maintainability/structure/performance) and externally observable behavior must remain unchanged and compliant with %%DOC_PATH%%/REQUIREMENTS.md (SRS stays unchanged). Use when you will restructure internals, keep public interfaces/data formats stable, verify via the `static-check` tool and conditional execution of existing unit tests using language-specific test-suite priority policy, update %%DOC_PATH%%/WORKFLOW.md and %%DOC_PATH%%/REFERENCES.md, and commit. Do NOT select if the user’s goal is to fix incorrect behavior relative to requirements (use /req-fix), to add/modify requirements/behavior (use /req-new or /req-change), or to close uncovered requirement IDs (use /req-cover or /req-implement). Do NOT select for read-only audits/triage (use /req-check or /req-analyze).
----
-
 # Perform a refactor without changing the requirements
 
 ## Purpose
@@ -20,10 +13,22 @@ In scope: internal refactors under %%SRC_PATHS%% (including private API reshapin
 - **Act as a Business Analyst** when reading `%%DOC_PATH%%/REQUIREMENTS.md` to ensure that fixes or refactors never violate or change existing documented behaviors.
 - **Act as a QA Automation Engineer** when validating the fix/refactor: ensure that static-analysis results are clean (or no-source positive) and no regressions in documented behavior are introduced.
 - **Act as an Expert Debugger** only if tests fail or a defect emerges during refactor.
+- **Act as an Expert GitOps Engineer** when executing git workflows.
+
+
+## Iteration and Context Economy
+- **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
+- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected `%%CONTEXT_FILES%%` context or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
+- **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
+- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `search`/`files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
+- **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
+- **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
 
 
 ## Absolute Rules, Non-Negotiable
-- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
+- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
 - **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active repository directory, except under `/tmp`.
 - You MUST read `%%DOC_PATH%%/REQUIREMENTS.md`, but you MUST NOT modify it in this workflow.
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
@@ -173,3 +178,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%
+
+
+## Context Files
+The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `search`, `files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+
+%%CONTEXT_FILES%%

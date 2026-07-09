@@ -1,10 +1,3 @@
----
-description: "Produce an analysis report"
-argument-hint: "Description of the analysis/investigation to perform"
-usage: >
-  Select this prompt if you need a read-only, evidence-backed investigation/triage of the current state (SRS in %%DOC_PATH%%/REQUIREMENTS.md, runtime model in %%DOC_PATH%%/WORKFLOW.md, references in %%DOC_PATH%%/REFERENCES.md, and code under %%SRC_PATHS%%) to answer a question or decide which follow-up workflow to run. Use when you must NOT change any files and the deliverable is an analysis report with concrete evidence pointers. Do NOT select if you must, (a) produce an OK/FAIL verdict for every requirement ID (use /req-check), (b) modify requirements (use /req-new or /req-change), (c) implement code/tests (use /req-fix, /req-refactor, /req-cover, /req-implement), or (d) regenerate only WORKFLOW/REFERENCES docs (use /req-workflow or /req-references).
----
-
 # Produce an analysis report
 
 ## Purpose
@@ -23,19 +16,32 @@ In scope: read-only analysis of the above documents plus source under %%SRC_PATH
 - **Act as an Expert Debugger** when you identify a failure symptom with concrete evidence (failure evidence, stack trace, reproducible output). Only explain the root cause, not propose or implement fixes.
 
 
+## Iteration and Context Economy
+- **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
+- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected `%%CONTEXT_FILES%%` context or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
+- **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
+- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `search`/`files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
+- **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
+- **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
+
+
 ## Absolute Rules, Non-Negotiable
-- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
+- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
 - **CRITICAL**: NEVER write, modify, edit, or delete files outside of the project’s home directory, except under `/tmp`, where creating temporary files and writing outputs is allowed (the only permitted location outside the project).
 - You MUST read `%%DOC_PATH%%/REQUIREMENTS.md`, but you MUST NOT modify it in this workflow.
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
 - **CRITICAL**: Do not modify any git tracked files (i.e., returned by `git ls-files`). You may run commands that create untracked artifacts ONLY if: (a) they are confined to standard disposable locations (e.g., `tmp/`, `temp/`, `.cache/`, `.pytest_cache/`, `node_modules/.cache`, `/tmp`), (b) they do not change any tracked file contents, and (c) you do NOT rely on those artifacts as permanent outputs. If unsure, run tools in a temporary directory (e.g., `tmp/`, `temp/`, `/tmp`) or use tool flags that disable caches.
-- **CRITICAL**: Only read-only access to the git repository is allowed. You may inspect files, history, diffs, status, and other repository metadata, but you MUST NOT execute any command or action that modifies the repository state, the index, refs, history, branches, tags, remotes, or the `.git` directory. Any repository write or state-changing action is forbidden.
+**CRITICAL**: Git Read-Only Restriction
+   - Only read-only access to the git repository is allowed. You may inspect files, history, diffs, status, and other repository metadata, but you MUST NOT execute any command or action that modifies the repository state, the index, refs, history, branches, tags, remotes, or the .git directory. Any repository write or state-changing action is forbidden.
+   - Allowed git commands in this workflow (read-only only): `git status`, `git diff`, `git ls-files`, `grep`, `git rev-parse`, `git branch --show-current`. Do NOT run any other git commands.
 
 ## Behavior
 - Only analyze the code and present the results; make no changes.
 - Do NOT create or modify tests in this workflow.
 - Report facts: for each finding include file paths and, when useful, line numbers or short code excerpts.
-- Allowed git commands in this workflow (read-only only): `git status`, `git diff`, `git ls-files`, `grep`, `git rev-parse`, `git branch --show-current`. Do NOT run any other git commands.
+- Allowed git commands in this workflow (read-only only): `git status`, `git diff`, `git ls-files`, `git grep`, `git rev-parse`, `git branch --show-current`. Do NOT run any other git commands.
 - If `.venv/bin/python` exists in the project root, use it for Python executions (eg, `PYTHONPATH=src .venv/bin/python -m <program name>`).
 - Non-Python tooling should use the project's standard commands.
 - Use filesystem/shell tools to read files as needed (read-only only; e.g., `cat`, `sed -n`, `head`, `tail`, `rg`, `less`). Do NOT use in-place editing flags (e.g., `-i`, `perl -pi`) in this workflow.
@@ -127,3 +133,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%
+
+
+## Context Files
+The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `search`, `files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+
+%%CONTEXT_FILES%%

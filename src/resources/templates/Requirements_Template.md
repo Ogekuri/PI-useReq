@@ -1,24 +1,4 @@
----
-title: "{{project name}} Requirements"
-description: Software requirements specification
-version: "{{version}}"
-date: "{{date_modified}}"
-author: "{{author}}"
-scope:
-  paths:
-    - "**/*.py"
-    - "**/*.ipynb"
-    - "**/*.c"
-    - "**/*.h"
-    - "**/*.cpp"
-  excludes:
-    - ".*/**"
-visibility: "draft"
-tags: ["markdown", "requirements", "example"]
----
-
 # {{project name}} Requirements
-<!-- Metadata is in the YAML front matter; do not duplicate it in the body. -->
 
 <!-- Optional: omit a Table of Contents to reduce token footprint for LLM agents. If a TOC is included, it MUST be auto-generated and kept minimal. -->
 
@@ -35,8 +15,8 @@ This document MUST follow these authoring rules (LLM-first, normative SRS):
 - Each requirement MUST be atomic, single-sentence, and testable; target <= 35 words per requirement; split any compound behavior into separate IDs.
 - Write for other LLM Agents and automated parsers (high semantic density; no filler).
 - On every change to this document:
-  - Update `date` and `version` in the YAML front matter only (avoid duplicating metadata in the body).
-  - Do NOT maintain an in-document revision history; use git history / CHANGELOG.md for change tracking.
+  - Keep the first line as a level-1 title beginning with `# `.
+  - Do NOT add YAML front matter or in-document revision history; use git history / CHANGELOG.md for change tracking.
 
 ### 1.2 Project Scope
 <!-- The project (name/version), primary purpose, key capabilities, and boundaries. Keep brief and focus on the "what" and "why", not the "how". Avoid detailed requirements here. -->

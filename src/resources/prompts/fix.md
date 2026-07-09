@@ -1,10 +1,3 @@
----
-description: "Fix a defect without changing the requirements"
-argument-hint: "Description of the defect/bug to fix"
-usage: >
-  Select this prompt when behavior is wrong relative to already-existing requirement IDs in %%DOC_PATH%%/REQUIREMENTS.md (a defect), and the intent is to restore compliance without changing the SRS. Use a test-first evidence-oriented flow when relevant unit-test suites exist, analyze defect -> create one failing reproducer unit test -> implement the smallest safe fix -> verify reproducer success with requirement evidence, static analysis, and conditional execution of existing unit tests via language-specific test-suite priority policy. Then update %%DOC_PATH%%/WORKFLOW.md and %%DOC_PATH%%/REFERENCES.md, and commit. Do NOT select if the requested outcome changes requirements/behavior (use /req-change or /req-new), if the goal is structural/performance improvement with no behavioral change (use /req-refactor), or if the primary task is satisfying a set of uncovered requirement IDs (use /req-cover or /req-implement).
----
-
 # Fix a defect without changing the requirements
 
 ## Purpose
@@ -20,10 +13,22 @@ In scope: reproduce/triage the defect with concrete evidence and prefer an evide
 - **Act as a Senior Software Developer** when implementing a defect fix: apply the smallest safe change that restores required behavior while preserving public interfaces.
 - **Act as a Business Analyst** when reading `%%DOC_PATH%%/REQUIREMENTS.md` to ensure that fixes or refactors never violate or change existing documented behaviors.
 - **Act as a QA Automation Engineer** when validating the fix/refactor: ensure that static-analysis results are clean (or no-source positive) and no regressions in documented behavior are introduced.
+- **Act as an Expert GitOps Engineer** when executing git workflows.
+
+
+## Iteration and Context Economy
+- **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
+- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected `%%CONTEXT_FILES%%` context or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
+- **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
+- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `search`/`files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
+- **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
+- **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
 
 
 ## Absolute Rules, Non-Negotiable
-- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
+- **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
 - **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active repository directory, except under `/tmp`.
 - You MUST read `%%DOC_PATH%%/REQUIREMENTS.md`, but you MUST NOT modify it in this workflow.
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
@@ -130,7 +135,7 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
       - **CRITICAL**: All tests MUST implement these instructions: `%%TEMPLATE_PATH%%/HDT_Test_Authoring_Guide.md`.
       - Read %%GUIDELINES_FILES%% files and apply those **guidelines**; ensure the proposed code changes conform to those **guidelines**, and adjust the **Implementation Delta** if needed. Do not apply unrelated **guidelines**.
    - A change is allowed ONLY if it corrects behavior that is: (a) explicitly required by `%%DOC_PATH%%/REQUIREMENTS.md` (cite requirement ID/section) OR (b) a defect with concrete evidence (crash, security flaw, data corruption, failure evidence, or incorrect output that contradicts a specific documented behavior). If the request implies new requirements or changing documented behavior, recommend `/req-new` or `/req-change`; before terminating, OUTPUT a Markdown table with exactly three columns in this order: `Requirement ID`, `Conflicting Excerpt`, `Conflict Reason + Interrupted Implementation Intent`; each row MUST map one conflicting requirement to the implementation-contrast rationale and intended interrupted modification; then OUTPUT exactly "ERROR: Defect fix failed due to incompatible requirements!", and then terminate the execution.
-   - Preferred execution order for Step 4 when relevant suites exist: analyze and identify defect -> create one failing reproducer unit test -> design and implement source fix -> verify reproducer and full selected suites.
+   - Preferred execution order for Step 1 when relevant suites exist: analyze and identify defect -> create one failing reproducer unit test -> design and implement source fix -> verify reproducer and full selected suites.
    - IMPLEMENT the **Implementation Delta** in the source code (creating new files/directories if necessary). You may make minimal mechanical adjustments needed to fit the actual codebase (file paths, symbol names), but you MUST NOT add new features or scope beyond the **Implementation Delta**.
 2. Generate **Verification Delta** by verifying static-analysis results and implementing needed bug fixes
    - Read `%%DOC_PATH%%/REQUIREMENTS.md` and cross-reference with the source code from %%SRC_PATHS%%, %%TEST_PATH%% to check ALL requirements, but use progressive disclosure: provide full evidence only for `FAIL` items and a compact pointer-only index for `OK` items. For each requirement, prefer the `search` and `files-search` tools to locate named symbols, declarations, constructs, and already-known files used as evidence. Use `rg` / `grep` only for supplementary free-text/body-content searches, fallback cases that construct extraction cannot express, or confirmation inside already targeted files. Read only the identified files to verify compliance and do not assume compliance without locating the specific code implementation.
@@ -140,9 +145,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Perform a static analysis check by executing the `static-check` tool.
       - Review the produced output and fix every reported issue in source code.
       - Re-run the `static-check` tool until it produces no issues. If output is exactly `Error: no source files found in configured directories.`, treat it as successful no-source completion and continue without retries.
-   - If relevant unit tests already exist in the repository, run them during verification using language-specific test-suite priority policy: project-defined test command first, language-default unit-test command second; if a reproducer unit test was created in Step 4, require explicit evidence that it now passes; if no relevant tests exist, record test execution as N/A and continue.
+   - If relevant unit tests already exist in the repository, run them during verification using language-specific test-suite priority policy: project-defined test command first, language-default unit-test command second; if a reproducer unit test was created in Step 1, require explicit evidence that it now passes; if no relevant tests exist, record test execution as N/A and continue.
       - Verify that the implemented changes satisfy requirements evidence, static-analysis output, and unit-test outputs when tests are executed.
-      - For Step 4, include before/after evidence that links the observed defect to the applied source fix.
+      - For Step 1, include before/after evidence that links the observed defect to the applied source fix.
       - Provide explicit concrete verification evidence that the defect is resolved, using requirement evidence and static-analysis output.
       - If static analysis reports issues or executed unit tests fail, analyze whether they are caused by source defects or requirement-implementation mismatch. Assume requirement evidence is authoritative; when static analysis reports issues, fix source code unless requirements explicitly justify alternative handling.
       - Fix the source code to resolve valid verification findings autonomously without asking for user intervention. Execute a strict fix loop: 1) analyze static-check output and unit-test failures (when tests ran), 2) determine root cause from evidence, 3) fix code, 4) re-run the `static-check` tool and re-run the selected unit-test suites when applicable. Repeat up to 2 times. If static analysis still reports issues after the second attempt, report the failure, OUTPUT exactly "ERROR: Defect fix failed due to inability to complete static analysis!", and then terminate the execution.
@@ -181,3 +186,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%
+
+
+## Context Files
+The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `search`, `files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+
+%%CONTEXT_FILES%%
