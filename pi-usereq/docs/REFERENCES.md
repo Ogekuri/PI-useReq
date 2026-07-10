@@ -3444,12 +3444,12 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 
 ### fn `export function renderPromptCommandSummary(` (L385-425)
 - @brief Builds the on-screen command invocation summary for one bundled prompt-backed `req-<prompt>` command.
-- @details Renders the command name without the `req-` prefix in uppercase, the user request arguments, and the active configuration fields (`docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools`) so the TUI shows only a compact summary while the full rendered prompt is delivered hidden to the LLM agent. Static-check languages are emitted in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order; enabled tools are emitted in documented menu order via `comparePiUsereqStartupToolNames`. Runtime is O(l + t log t) where l is language count and t is enabled-tool count. No external state is mutated.
+- @details Renders the command name without the `req-` prefix in uppercase, the user request arguments, and the active configuration fields (`docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools`) so the TUI shows only a compact summary while the full rendered prompt is delivered hidden to the LLM agent. Static-check languages are emitted in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order; enabled tools are emitted in documented menu order via `comparePiUsereqStartupToolNames`. The `context files`, `static code checks`, and `enabled tools` fields render the literal `none` placeholder whenever their respective enabled-item list is empty so the summary never shows a blank value. Runtime is O(l + t log t) where l is language count and t is enabled-tool count. No external state is mutated.
 - @param[in] promptName {string} Bundled prompt name without the `req-` prefix.
 - @param[in] args {string} User request arguments passed to the slash command.
 - @param[in] config {UseReqConfig} Effective project configuration supplying directory, git, static-check, and tool fields.
 - @return {string} Multi-line command invocation summary text.
-- @satisfies REQ-335, REQ-336, REQ-337
+- @satisfies REQ-335, REQ-336, REQ-337, REQ-338
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|

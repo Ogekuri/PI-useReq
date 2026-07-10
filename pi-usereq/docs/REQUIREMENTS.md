@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.72"
+version: "0.0.73"
 date: "2026-07-10"
 author: "OpenAI Codex"
 scope:
@@ -162,6 +162,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-335**: MUST display a command invocation summary on screen for every bundled prompt-backed `req-<prompt>` command containing the command name, passed arguments, and active configuration.
 - **REQ-336**: MUST render the command invocation summary with the command name without the `req-` prefix in uppercase and the user request arguments.
 - **REQ-337**: MUST include `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools` in the command invocation summary.
+- **REQ-338**: MUST render `none` for the command invocation summary `context files`, `static code checks`, and `enabled tools` fields whenever their respective enabled-item list is empty.
 - **REQ-008**: MUST provide a `Language static code checkers` submenu that adds global Command entries by guided language flow, removes configured global checker entries, toggles local per-language enablement, and resets static-check configuration.
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
@@ -522,6 +523,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-118**: MUST verify the `Context Files` submenu persists the three context-file flags in local configuration with immediate-save, reset, and focus-preserving re-render behavior.
 - **TST-119**: MUST verify `%%CONTEXT_FILES%%` replacement emits one section per enabled existing file in the documented order and omits disabled or missing files.
 - **TST-120**: MUST verify `%%CONTEXT_FILES%%` sections use the file-name heading, the pre-substituted HTML file reference, and four-backtick `markdown` fences around raw content.
+- **TST-122**: MUST verify the command invocation summary renders `none` for `context files`, `static code checks`, and `enabled tools` when no items are enabled in each respective category.
 
 ## 5. Observed Component Model
 
