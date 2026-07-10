@@ -1072,7 +1072,7 @@ function logPromptWorkflowEvent(
  * @param[in] projectBase {string} Absolute original project base path.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
- * @param[in] nextState {DebugWorkflowState} Next workflow state.
+ * @param[in] nextState {import("./core/extension-status.js").PiUsereqWorkflowState} Next workflow state.
  * @return {void} No return value.
  */
 function transitionPromptWorkflowState(
@@ -1081,7 +1081,7 @@ function transitionPromptWorkflowState(
   projectBase: string,
   config: UseReqConfig,
   promptName: import("./core/prompt-command-catalog.js").PromptCommandName,
-  nextState: DebugWorkflowState,
+  nextState: import("./core/extension-status.js").PiUsereqWorkflowState,
 ): void {
   const previousState = statusController.state.workflowState;
   setPiUsereqWorkflowState(statusController, nextState, ctx);

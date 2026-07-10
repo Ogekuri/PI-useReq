@@ -4,7 +4,7 @@
  * @details Performs slash-command-owned git validation reuse, reference-file generation, targeted staging, fixed-message commit creation, and post-commit cleanliness verification without creating a worktree or starting an LLM session. Runtime is dominated by git subprocess execution plus source-summary generation and one documentation write. Side effects include filesystem writes and git index/history mutation.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
 import type { UseReqConfig } from "./config.js";
 import { ReqError } from "./errors.js";
@@ -39,9 +39,9 @@ export interface ReqReferencesCommandPlan {
  * @details Delegates to `spawnSync(...)`, preserves the supplied working directory, and returns the raw result so callers can interpret git exit status plus diagnostics deterministically. Runtime is dominated by external process execution. Side effects include subprocess creation.
  * @param[in] command {string[]} Executable plus argument vector.
  * @param[in] cwd {string} Working directory for the subprocess.
- * @return {ReturnType<typeof spawnSync>} Captured subprocess result.
+ * @return {SpawnSyncReturns<string>} Captured subprocess result with UTF-8 stdout and stderr.
  */
-function runCapture(command: string[], cwd: string): ReturnType<typeof spawnSync> {
+function runCapture(command: string[], cwd: string): SpawnSyncReturns<string> {
   return spawnSync(command[0]!, command.slice(1), {
     cwd,
     encoding: "utf8",

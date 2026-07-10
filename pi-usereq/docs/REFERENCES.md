@@ -2754,7 +2754,7 @@ import type { UseReqConfig } from "./config.js";
 
 ---
 
-# prompt-command-runtime.ts | TypeScript | 1956L | 56 symbols | 12 imports | 60 comments
+# prompt-command-runtime.ts | TypeScript | 1955L | 56 symbols | 12 imports | 60 comments
 > Path: `src/core/prompt-command-runtime.ts`
 - @brief Implements bundled prompt-command preflight and worktree orchestration.
 - @details Centralizes prompt-template-backed `req-<prompt>` repository validation, prompt-specific required-document checks, slash-command-owned worktree naming and lifecycle handling, reusable transcript-preservation plus session-restoration helpers, persisted replacement-session context reuse for non-command lifecycle handlers, matched-success stash-assisted fast-forward merge finalization, and command-side abort cleanup. Runtime is dominated by git subprocess execution plus bounded filesystem and session-file metadata checks. Side effects include active-session replacement, worktree creation and deletion, branch merges, stash-stack mutation, and filesystem reads and writes.
@@ -2808,26 +2808,26 @@ import {
 - @brief Describes the minimal session-bound surface available after session replacement.
 - @details Extends the shared prompt-command context with `sendUserMessage(...)` so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface PromptCommandSessionEntry` (L125-131)
+### iface `interface PromptCommandSessionEntry` (L125-130)
 - @brief Describes one serializable session entry copied into a materialized execution-session file.
-- @details Captures the stable tree-entry fields needed to write a JSONL session snapshot for cross-cwd session replacement when the origin session file has not been flushed yet. The interface is compile-time only and introduces no runtime cost.
+- @details Captures the stable tree-entry fields needed to write a JSONL session snapshot for cross-cwd session replacement when the origin session file has not been flushed yet. Mirrors the SDK `SessionEntryBase` shape without an index signature so the SDK `SessionEntry` union remains structurally assignable for passthrough serialization. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface PromptCommandSessionContext` (L137-149)
+### iface `interface PromptCommandSessionContext` (L136-148)
 - @brief Describes the minimal command-context session surface used by prompt orchestration.
 - @details Narrows extension command contexts to the `switchSession(...)` hook, the mutable `cwd` mirror, and the session metadata probes required for cwd verification and session snapshot materialization. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface PromptCommandContextError extends Error` : Error (L155-157)
+### iface `interface PromptCommandContextError extends Error` : Error (L154-156)
 - @brief Describes one error object enriched with a replacement-session context.
 - @details Allows prompt orchestration helpers to preserve the last valid session-bound context across replacement boundaries so callers can continue notifications and status updates after switch-triggered failures. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function isUsablePromptSessionFile(` (L172-190)
+### fn `function isUsablePromptSessionFile(` (L171-189)
 - @brief Tests whether the current session file remains reusable for prompt-command bootstrap.
 - @details Accepts only persisted session files whose header cwd is readable, still exists on disk, and remains inside the active project base. This rejects stale execution-session files that still point at deleted or sibling worktrees from earlier prompt runs. Runtime is O(p) plus one session-header read. No external state is mutated.
 - @param[in] sessionFile {string | undefined} Candidate current session file.
 - @param[in] projectBase {string} Active project base path.
 - @return {sessionFile is string} `true` when the session file remains reusable for prompt bootstrap.
 
-### fn `function resolvePromptSessionFile(sessionFile: string | undefined, cwd: string): string` (L200-210)
+### fn `function resolvePromptSessionFile(sessionFile: string | undefined, cwd: string): string` (L199-209)
 - @brief Resolves the session file path used as the origin for prompt-command session switching.
 - @details Reuses the current session file only when its persisted header cwd is still readable, exists on disk, and remains inside the active project base. Otherwise allocates a fresh session file path rooted at the supplied cwd so later worktree switching and restoration never inherit stale deleted-worktree session metadata. Runtime is dominated by one optional session-header read plus optional session-file allocation. Side effects include session-file path allocation when the active session metadata is stale or ephemeral.
 - @param[in] sessionFile {string | undefined} Current active session file when available.
@@ -2835,7 +2835,7 @@ import {
 - @return {string} Session file path reserved for prompt orchestration.
 - @throws {ReqError} Throws when a session file path cannot be resolved.
 
-### fn `function writePromptExecutionSessionSnapshot(` (L224-250)
+### fn `function writePromptExecutionSessionSnapshot(` (L223-249)
 - @brief Writes one execution-session snapshot file with the target worktree cwd.
 - @details Persists a version-3 JSONL session header whose `cwd` equals the supplied target worktree path, then appends the supplied current-session branch entries unchanged so pi can reopen the replacement session in the correct cwd even when the origin session file has not been flushed yet. Runtime is O(n) in branch-entry count plus serialized byte size. Side effects include directory creation and file overwrite.
 - @param[in] sessionFile {string} Target execution-session file path.
@@ -2847,7 +2847,7 @@ import {
 - @throws {ReqError} Throws when the execution-session snapshot cannot be written.
 - @satisfies REQ-271
 
-### fn `function createPromptExecutionSessionFile(` (L263-286)
+### fn `function createPromptExecutionSessionFile(` (L262-285)
 - @brief Creates the persisted session file used for worktree-backed prompt execution.
 - @details Forks the resolved origin session into the target cwd when the origin session file is already persisted. Otherwise allocates a new execution-session path, materializes a JSONL header whose `cwd` equals the target worktree path, and copies the current in-memory session branch so pi can switch into the worktree session with the correct runtime cwd. Runtime is dominated by session-file copy or snapshot-write cost. Side effects include session-file creation under the target cwd session directory.
 - @param[in] sourceSessionFile {string} Origin session file path.
@@ -2858,25 +2858,25 @@ import {
 - @throws {ReqError} Throws when the execution-session file cannot be created.
 - @satisfies REQ-271
 
-### fn `function getPromptSessionCwd(ctx?: PromptCommandSessionContext): string | undefined` (L294-302)
+### fn `function getPromptSessionCwd(ctx?: PromptCommandSessionContext): string | undefined` (L293-301)
 - @brief Reads the current active session cwd from a prompt-command context.
 - @details Returns the session-manager cwd only when the supplied context exposes the documented `getCwd()` probe and the probe remains valid after any prior session replacement. Stale or missing probes degrade to `undefined` so verification paths never reuse invalidated pre-switch session objects. Runtime is O(1). No external state is mutated.
 - @param[in] ctx {PromptCommandSessionContext | undefined} Candidate prompt-command context.
 - @return {string | undefined} Active session cwd when available.
 
-### fn `function getPromptSessionFile(ctx?: PromptCommandSessionContext): string | undefined` (L310-318)
+### fn `function getPromptSessionFile(ctx?: PromptCommandSessionContext): string | undefined` (L309-317)
 - @brief Reads the current active session file from a prompt-command context.
 - @details Returns the session-manager file path only when the supplied context exposes the documented `getSessionFile()` probe and the probe remains valid after any prior session replacement. Stale or missing probes degrade to `undefined` so verification paths never reuse invalidated pre-switch session objects. Runtime is O(1). No external state is mutated.
 - @param[in] ctx {PromptCommandSessionContext | undefined} Candidate prompt-command context.
 - @return {string | undefined} Active session file when available.
 
-### fn `function getPromptContextCwd(ctx?: PromptCommandSessionContext): string | undefined` (L326-332)
+### fn `function getPromptContextCwd(ctx?: PromptCommandSessionContext): string | undefined` (L325-331)
 - @brief Reads the current context cwd from a prompt-command context.
 - @details Returns the context `cwd` only when the supplied getter remains valid after any prior session replacement. Stale getters degrade to `undefined` so verification paths never depend on invalidated pre-switch command objects. Runtime is O(1). No external state is mutated.
 - @param[in] ctx {PromptCommandSessionContext | undefined} Candidate prompt-command context.
 - @return {string | undefined} Context cwd when available.
 
-### fn `function resolvePromptCommandSwitchContext(` (L342-357)
+### fn `function resolvePromptCommandSwitchContext(` (L341-356)
 - @brief Resolves the best available command-capable context for prompt session switching.
 - @details Prefers the caller-supplied context when it still exposes `switchSession(...)`, otherwise falls back to the persisted replacement-session context associated with the execution-session file so lifecycle handlers can complete closure when pi emits non-command event contexts. Runtime is O(1). No external state is mutated.
 - @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose execution-session file keys the persisted context.
@@ -2884,7 +2884,7 @@ import {
 - @return {{ context: PromptCommandSessionContext | undefined; source: "provided" | "persisted" | "missing" }} Preferred switch context plus its provenance.
 - @satisfies REQ-272, REQ-276
 
-### fn `function syncPromptCommandProcessCwd(expectedPath: string, stageLabel: string): void` (L368-388)
+### fn `function syncPromptCommandProcessCwd(expectedPath: string, stageLabel: string): void` (L367-387)
 - @brief Aligns the host process cwd to one expected prompt-orchestration path.
 - @details Applies `process.chdir(...)` only when the host process is still anchored to a different directory than the active prompt session, then re-reads `process.cwd()` and throws a deterministic error when the mutation fails or does not take effect. Runtime is O(p) in path length plus one optional cwd mutation. Side effect: mutates the host process cwd.
 - @param[in] expectedPath {string} Path that `process.cwd()` must match.
@@ -2893,20 +2893,20 @@ import {
 - @throws {ReqError} Throws when `process.chdir(...)` fails or leaves `process.cwd()` misaligned.
 - @satisfies REQ-257, REQ-272
 
-### fn `function readPromptSessionFileCwd(sessionFile: string): string | undefined` (L396-420)
+### fn `function readPromptSessionFileCwd(sessionFile: string): string | undefined` (L395-419)
 - @brief Reads the persisted working directory recorded in one prompt-command session file header.
 - @details Opens the JSONL session file, parses the first non-empty line as JSON, and returns the `cwd` field when present as a string so session-target verification can rely on live on-disk session state instead of stale handler-scoped `ctx` references. Runtime is O(n) in header size. No external state is mutated.
 - @param[in] sessionFile {string} Absolute session-file path.
 - @return {string | undefined} Persisted session cwd when readable; otherwise undefined.
 
-### fn `function readPromptSessionJsonLines(` (L429-476)
+### fn `function readPromptSessionJsonLines(` (L428-475)
 - @brief Reads one persisted session file as ordered parsed JSONL records.
 - @details Loads the raw session file, preserves every non-empty serialized line verbatim, parses each line as one JSON object, and rejects unreadable or structurally invalid files so prompt-closure helpers can replay exact execution-session transcript records into the restored base session without reserialization drift. Runtime is O(n) in session-file size. No external state is mutated.
 - @param[in] sessionFile {string} Absolute session-file path.
 - @return {Array<{ rawLine: string; parsed: Record<string, unknown> }>} Parsed non-empty JSONL lines in file order.
 - @throws {ReqError} Throws when the file cannot be read, when it contains no JSONL records, when any record is not a JSON object, or when the header record is missing.
 
-### fn `export function preservePromptCommandExecutionTranscript(plan: PromptCommandExecutionPlan): void` (L486-583)
+### fn `export function preservePromptCommandExecutionTranscript(plan: PromptCommandExecutionPlan): void` (L485-582)
 - @brief Copies successful execution-session transcript records into the restored base session file.
 - @details Reads the execution session JSONL file, preserves the original base-session header when it already exists, materializes a restored base-session header when the reserved original session file is still pending persistence, appends any execution-session records missing from the original session in original execution order, and re-reads the restored file to verify both `base-path` cwd and copied entry identifiers. Runtime is O(n) in combined session-file size. Side effects include session-file creation or append operations for the restored base session.
 - @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose original and execution session files must be synchronized.
@@ -2914,7 +2914,7 @@ import {
 - @throws {ReqError} Throws when either session file is unreadable or when appended execution records are not persisted to the original session file.
 - @satisfies REQ-208, REQ-307
 
-### fn `function verifyPromptCommandSessionTarget(` (L596-640)
+### fn `function verifyPromptCommandSessionTarget(` (L595-639)
 - @brief Verifies that the active session file and cwd surfaces match one expected prompt-orchestration target.
 - @details Re-reads the persisted session-file header when present plus the host `process.cwd()` and throws on the first mismatch so prompt commands abort before prompt dispatch or prompt-end handling whenever session switching leaves execution attached to the wrong cwd. A missing persisted session file is treated as a non-fatal lazy-persistence state because pi's `SessionManager` writes session files on first assistant flush rather than eagerly during `ctx.switchSession(sessionPath)`; when the file is absent, pi aligns its internal session cwd to the live `process.cwd()`, so verifying `process.cwd()` alone is authoritative in that state. Reads of `ctx.cwd`, `ctx.sessionManager.getCwd()`, and `ctx.sessionManager.getSessionFile()` are advisory only because the pi `ctx.switchSession(sessionPath)` SDK contract does not mutate the handler-scoped `ctx` object, so those probes stay bound to the pre-switch session and a divergent value alone never triggers abort; they only surface a mismatch when they disagree with both the persisted header cwd and the live `process.cwd()`. Runtime is O(p) in aggregate path length plus one session-file header read. No external state is mutated.
 - @param[in] expectedSessionFile {string} Session file that must remain active.
@@ -2925,7 +2925,7 @@ import {
 - @throws {ReqError} Throws when the persisted session-file header cwd diverges from the expected target or when `process.cwd()` diverges from the expected target.
 - @satisfies REQ-257, REQ-272
 
-### fn `function verifyPromptCommandClosureArtifacts(` (L650-685)
+### fn `function verifyPromptCommandClosureArtifacts(` (L649-684)
 - @brief Verifies persisted prompt execution artifacts before successful closure merge.
 - @details Re-reads the persisted execution-session header, verifies the worktree path still exists, confirms the sibling worktree remains registered, and confirms the linked branch is still present before prompt-end closure attempts to restore `base-path` and merge from the original repository. Unlike prompt-start activation checks, this helper intentionally does not require the live process cwd or current session-bound context to remain on `worktree-path`, because pi CLI may already have started end-of-session session replacement or other post-run housekeeping before the extension finishes closure handling. Runtime is dominated by one session-file read, two git subprocess checks, and bounded filesystem probes. No external state is mutated.
 - @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan.
@@ -2933,7 +2933,7 @@ import {
 - @throws {ReqError} Throws when persisted execution-session metadata or worktree artifacts no longer match the expected worktree target.
 - @satisfies REQ-208, REQ-219, REQ-258, REQ-282
 
-### fn `async function switchPromptCommandSession(` (L696-725)
+### fn `async function switchPromptCommandSession(` (L695-724)
 - @brief Switches the active prompt session to one persisted session file when required.
 - @details Calls `ctx.switchSession(sessionPath, { withSession })` so current pi runtimes can expose a fresh replacement-session context for every post-switch session-bound operation. When a runtime ignores the callback, the helper falls back to the caller-supplied context and downstream verification continues to rely on the persisted session-file header plus `process.cwd()`. If pi surfaces only the documented stale-extension-context error while invalidating the old execution-session closure, the helper treats that side effect as non-fatal and lets downstream verification confirm whether the target session actually became active. Runtime is dominated by the session switch. Side effects include active-session replacement and cwd mutation by the host runtime.
 - @param[in] sessionFile {string} Target persisted session file.
@@ -2942,34 +2942,34 @@ import {
 - @throws {ReqError} Throws when the context cannot switch sessions, when the host cancels the switch, or when later verification proves the target session never became active.
 - @satisfies REQ-068, REQ-271, REQ-272
 
-### fn `function isPromptCommandStaleContextError(error: unknown): boolean` (L734-737)
+### fn `function isPromptCommandStaleContextError(error: unknown): boolean` (L733-736)
 - @brief Detects the documented stale-extension-context runtime error during prompt-command session switching.
 - @details Matches the guarded pi runtime error emitted when the old execution-session closure is invalidated during a session replacement or reload. Prompt-command session-switch helpers use this detector to distinguish a late stale-context side effect from genuine switch failures, then rely on post-switch verification to confirm whether the target session actually became active. Runtime is O(n) in message length only when an error is supplied. No external state is mutated.
 - @param[in] error {unknown} Candidate thrown value.
 - @return {boolean} `true` when the value matches the stale-extension-context runtime error.
 - @satisfies REQ-280
 
-### fn `function attachPromptCommandErrorContext(` (L746-754)
+### fn `function attachPromptCommandErrorContext(` (L745-753)
 - @brief Attaches the last valid prompt-command context to one thrown error.
 - @details Preserves the replacement-session context discovered after `ctx.switchSession(...)` so outer callers can continue UI notifications and cleanup without reusing stale pre-switch command objects. Runtime is O(1). Side effect: mutates the error object when it is an `Error` instance.
 - @param[in] error {unknown} Thrown value.
 - @param[in] ctx {PromptCommandSessionContext | undefined} Last valid prompt-command context.
 - @return {unknown} Original thrown value with optional attached prompt context.
 
-### fn `export function getPromptCommandErrorContext(` (L762-768)
+### fn `export function getPromptCommandErrorContext(` (L761-767)
 - @brief Reads an attached prompt-command context from one thrown error.
 - @details Returns the replacement-session context captured by prompt orchestration helpers when a switch-triggered failure occurs after the original command context became stale. Runtime is O(1). No external state is mutated.
 - @param[in] error {unknown} Thrown value.
 - @return {PromptCommandSessionContext | undefined} Attached prompt-command context when available.
 
-### fn `function runCapture(command: string[], cwd: string): SpawnSyncReturns<string>` (L846-851)
+### fn `function runCapture(command: string[], cwd: string): SpawnSyncReturns<string>` (L845-850)
 - @brief Executes one git subprocess synchronously and captures UTF-8 output.
 - @details Delegates to `spawnSync`, preserves the supplied working directory, and returns the raw subprocess result used by prompt-command orchestration. Runtime is dominated by external process execution. Side effects include process spawning.
 - @param[in] command {string[]} Executable plus argument vector.
 - @param[in] cwd {string} Working directory for the subprocess.
 - @return {SpawnSyncReturns<string>} Captured subprocess result with UTF-8 decoded stdout and stderr.
 
-### fn `function listPromptTrackedBasePathChanges(basePath: string): string[]` (L861-879)
+### fn `function listPromptTrackedBasePathChanges(basePath: string): string[]` (L860-878)
 - @brief Lists tracked `base-path` status rows that require stash-assisted merge handling.
 - @details Executes `git status --porcelain`, retains only tracked rows whose index or worktree slot reports a change, and excludes untracked or ignored rows because the required `git stash` command does not preserve them. Runtime is dominated by one git subprocess plus O(n) parsing in status-line count. Side effects include process spawning.
 - @param[in] basePath {string} Restored project base path.
@@ -2977,7 +2977,7 @@ import {
 - @throws {ReqError} Throws when git status cannot be read from `basePath`.
 - @satisfies REQ-291
 
-### fn `function finalizePromptCommandMerge(` (L889-1011)
+### fn `function finalizePromptCommandMerge(` (L888-1010)
 - @brief Executes the successful-closure merge sequence from restored `base-path`.
 - @details Detects tracked staged or unstaged `base-path` changes, wraps the existing fast-forward merge in `git stash` and `git stash pop` when required, preserves the direct merge path when no tracked changes exist, emits a warning-only result after successful local-change restoration, and writes one merge-finalization debug entry when enabled. Runtime is dominated by up to four git subprocesses plus O(n) status parsing. Side effects include stash-stack mutation, branch merge attempts, and optional debug-log writes.
 - @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose branch should be merged.
@@ -2985,20 +2985,20 @@ import {
 - @return {{ mergeAttempted: boolean; mergeSucceeded: boolean; errorMessage?: string; warningMessage?: string }} Merge-attempt facts plus optional warning text.
 - @satisfies REQ-208, REQ-245, REQ-291, REQ-292
 
-### fn `export function setPromptCommandPostCreateHookForTests(` (L1019-1023)
+### fn `export function setPromptCommandPostCreateHookForTests(` (L1018-1022)
 - @brief Stores or clears the prompt-command post-create test hook.
 - @details Enables deterministic simulation of post-create worktree verification failures without altering production control flow. Runtime is O(1). Side effect: mutates module-local test state.
 - @param[in] hook {PromptCommandPostCreateHook | undefined} Optional replacement hook.
 - @return {void} No return value.
 
-### fn `function resolvePromptDocsRoot(projectBase: string, config: UseReqConfig): string` (L1032-1035)
+### fn `function resolvePromptDocsRoot(projectBase: string, config: UseReqConfig): string` (L1031-1034)
 - @brief Resolves the configured docs root for one project base.
 - @details Joins the project base with the normalized `docs-dir` value while stripping trailing separators from the persisted config field. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] projectBase {string} Absolute project root.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Absolute canonical docs root path.
 
-### fn `function resolveWorktreePaths(` (L1045-1072)
+### fn `function resolveWorktreePaths(` (L1044-1071)
 - @brief Resolves the effective worktree project base relative to the git root.
 - @details Reuses the original project-base location relative to the git root so nested repository subdirectories remain aligned inside the sibling worktree. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] projectBase {string} Original absolute project base path.
@@ -3006,25 +3006,25 @@ import {
 - @param[in] worktreeName {string} Created worktree name.
 - @return {{ worktreePath: string; worktreeBasePath: string }} Derived worktree paths.
 
-### fn `function sanitizePromptWorktreeBranchName(branch: string): string` (L1080-1082)
+### fn `function sanitizePromptWorktreeBranchName(branch: string): string` (L1079-1081)
 - @brief Rewrites a branch name into a filesystem-safe token for prompt worktrees.
 - @details Replaces characters invalid for worktree directory and branch-name generation with `-`. Runtime is O(n). No external state is mutated.
 - @param[in] branch {string} Raw branch name.
 - @return {string} Sanitized token.
 
-### fn `function validatePromptWorktreeName(wtName: string): boolean` (L1090-1095)
+### fn `function validatePromptWorktreeName(wtName: string): boolean` (L1089-1094)
 - @brief Validates a prompt-command-generated worktree or branch name.
 - @details Rejects empty names, dot-path markers, whitespace, and filesystem-invalid characters. Runtime is O(n). No external state is mutated.
 - @param[in] wtName {string} Candidate worktree name.
 - @return {boolean} `true` when the name is acceptable for worktree creation.
 
-### fn `function throwPromptGitStatusError(): never` (L1103-1105)
+### fn `function throwPromptGitStatusError(): never` (L1102-1104)
 - @brief Throws the canonical prompt-command git-preflight failure.
 - @details Normalizes all repository-validation failures to the contractually stable prompt-command error string consumed by tests and downstream prompt workflows. Runtime is O(1). No external state is mutated.
 - @return {never} Always throws.
 - @throws {ReqError} Always throws with exit code `1`.
 
-### fn `export function validatePromptGitState(projectBase: string, config?: UseReqConfig): string` (L1116-1160)
+### fn `export function validatePromptGitState(projectBase: string, config?: UseReqConfig): string` (L1115-1159)
 - @brief Runs slash-command-owned git validation and returns the runtime git root.
 - @details Validates work-tree membership, porcelain cleanliness, and symbolic or detached `HEAD` presence for bundled prompt commands and `req-references` without invoking extension custom-tool executors. Runtime is dominated by git subprocess execution. Side effects include process spawning.
 - @param[in] projectBase {string} Absolute current project base.
@@ -3033,24 +3033,24 @@ import {
 - @throws {ReqError} Throws the canonical prompt-command git-preflight error on any validation failure.
 - @satisfies REQ-200, REQ-220
 
-### fn `function resolveCurrentPromptBranchName(gitRoot: string): string` (L1168-1173)
+### fn `function resolveCurrentPromptBranchName(gitRoot: string): string` (L1167-1172)
 - @brief Resolves the current local branch name used by prompt-command orchestration.
 - @details Reads `git branch --show-current`, falls back to `unknown` when git cannot provide a branch name, and preserves the raw branch token for later worktree-name generation and state tracking. Runtime is dominated by one git subprocess. Side effects include process spawning.
 - @param[in] gitRoot {string} Absolute runtime git root.
 - @return {string} Current branch name or `unknown` when unavailable.
 
-### fn `function formatPromptWorktreeExecutionId(timestamp: Date): string` (L1187-1189)
+### fn `function formatPromptWorktreeExecutionId(timestamp: Date): string` (L1186-1188)
 - @brief Formats one prompt-worktree execution identifier.
 - @details Serializes the supplied timestamp as `YYYYMMDDHHMMSS` with zero-padded calendar and clock fields so generated worktree names remain stable, lexicographically sortable, and requirement-compatible. Runtime is O(1). No external state is mutated.
 - @param[in] timestamp {Date} Timestamp to encode.
 - @return {string} Formatted execution identifier.
 
-### fn `function getNextPromptWorktreeExecutionId(): string` (L1196-1209)
+### fn `function getNextPromptWorktreeExecutionId(): string` (L1195-1208)
 - @brief Resolves the next unique prompt-worktree execution identifier.
 - @details Formats the current wall-clock second as `YYYYMMDDHHMMSS`, then monotonically advances by one-second steps until the identifier is strictly greater than the last value emitted in the current host process. This preserves the documented timestamp-only name shape while preventing immediate same-process worktree-name reuse after fast back-to-back prompt starts. Runtime is O(1) in the common case and O(k) in repeated same-second collisions. Side effect: mutates process-scoped execution-id persistence.
 - @return {string} Unique execution identifier for worktree naming.
 
-### fn `function buildPromptWorktreeName(gitRoot: string, config: UseReqConfig): string` (L1220-1231)
+### fn `function buildPromptWorktreeName(gitRoot: string, config: UseReqConfig): string` (L1219-1230)
 - @brief Builds the prompt-command worktree name without invoking agent-tool executors.
 - @details Combines the normalized persisted worktree prefix, repository basename, sanitized current branch, and timestamp execution identifier into the dedicated prompt-command worktree name. Runtime is O(1) plus git execution cost. Side effects include process spawning.
 - @param[in] gitRoot {string} Absolute runtime git root.
@@ -3059,21 +3059,21 @@ import {
 - @throws {ReqError} Throws when the generated name is invalid.
 - @satisfies REQ-206, REQ-220
 
-### fn `function promptWorktreeBranchExists(gitRoot: string, branchName: string): boolean` (L1240-1249)
+### fn `function promptWorktreeBranchExists(gitRoot: string, branchName: string): boolean` (L1239-1248)
 - @brief Tests whether the exact prompt-command branch is present in the local branch list.
 - @details Queries `git branch --list --format=%(refname:short)` and returns a boolean without mutating repository state. Runtime is dominated by one git subprocess plus O(n) parsing in listed branch count. Side effects include process spawning.
 - @param[in] gitRoot {string} Absolute runtime git root.
 - @param[in] branchName {string} Candidate local branch name.
 - @return {boolean} `true` when the exact local branch is listed.
 
-### fn `function promptWorktreeRegistered(gitRoot: string, worktreePath: string): boolean` (L1258-1269)
+### fn `function promptWorktreeRegistered(gitRoot: string, worktreePath: string): boolean` (L1257-1268)
 - @brief Tests whether the exact prompt-command worktree is registered.
 - @details Scans `git worktree list --porcelain` for the resolved target path so cleanup and verification can distinguish registered worktrees from unrelated sibling directories. Runtime is dominated by one git subprocess plus O(n) parsing in listed worktree count. Side effects include process spawning.
 - @param[in] gitRoot {string} Absolute runtime git root.
 - @param[in] worktreePath {string} Absolute sibling worktree path.
 - @return {boolean} `true` when the exact path is registered as a git worktree.
 
-### fn `function cleanupPromptWorktreeCreation(` (L1279-1293)
+### fn `function cleanupPromptWorktreeCreation(` (L1278-1292)
 - @brief Removes partially created prompt-command worktree resources.
 - @details Force-removes the registered sibling worktree when present, deletes the matching local branch, and falls back to filesystem removal for leftover directories so failed prompt preflight leaves no reusable worktree residue. Runtime is dominated by git subprocess execution. Side effects include branch deletion and directory removal.
 - @param[in] gitRoot {string} Absolute runtime git root.
@@ -3081,7 +3081,7 @@ import {
 - @param[in] worktreeName {string} Exact worktree and branch name.
 - @return {void} No return value.
 
-### fn `function createPromptWorktree(` (L1307-1427)
+### fn `function createPromptWorktree(` (L1306-1426)
 - @brief Creates and verifies the prompt-command worktree and branch.
 - @details Creates the sibling worktree, mirrors project config when present, runs the optional post-create test hook, verifies git worktree registration, verifies git branch listing, verifies filesystem paths before prompt dispatch, and appends selected debug entries for worktree creation. Failed verification triggers immediate rollback. Runtime is dominated by git subprocess execution and filesystem metadata checks. Side effects include worktree creation, branch creation, directory creation, file copying, optional debug-log writes, and rollback on failure.
 - @param[in] projectBase {string} Absolute original project base.
@@ -3093,7 +3093,7 @@ import {
 - @throws {ReqError} Throws when worktree creation, verification, or rollback finalization fails.
 - @satisfies REQ-206, REQ-219, REQ-220, REQ-245
 
-### fn `export function deletePromptWorktree(` (L1440-1500)
+### fn `export function deletePromptWorktree(` (L1439-1499)
 - @brief Deletes prompt-command worktree resources without invoking custom-tool executors.
 - @details Force-removes the sibling worktree and matching branch, verifies both are absent so prompt finalization remains independent from agent-tool implementations, and appends selected debug entries for worktree deletion. Runtime is dominated by git subprocess execution plus filesystem probes. Side effects include worktree deletion, branch deletion, and optional debug-log writes.
 - @param[in] projectBase {string} Absolute original project base.
@@ -3104,14 +3104,14 @@ import {
 - @throws {ReqError} Throws when cleanup cannot remove the worktree and branch fully.
 - @satisfies REQ-208, REQ-220, REQ-245, REQ-309
 
-### fn `export function getPromptRequiredDocs(promptName: PromptCommandName): readonly PromptRequiredDocSpec[]` (L1509-1511)
+### fn `export function getPromptRequiredDocs(promptName: PromptCommandName): readonly PromptRequiredDocSpec[]` (L1508-1510)
 - @brief Returns the canonical required-document probes for one prompt command.
 - @details Performs a constant-time lookup in the prompt-doc matrix used by command preflight validation. No filesystem access occurs.
 - @param[in] promptName {PromptCommandName} Bundled prompt identifier.
 - @return {readonly PromptRequiredDocSpec[]} Required-doc definitions in probe order.
 - @satisfies REQ-201, REQ-202
 
-### fn `export function validatePromptRequiredDocs(` (L1524-1575)
+### fn `export function validatePromptRequiredDocs(` (L1523-1574)
 - @brief Runs prompt-specific required-document validation.
 - @details Resolves the configured docs root, verifies the prompt-mapped canonical docs exist as files, throws a deterministic remediation error for the first missing document, and appends selected debug entries for required-doc checks. Runtime is O(d) in required-doc count plus filesystem metadata cost. Side effects are limited to filesystem reads and optional debug-log writes.
 - @param[in] promptName {PromptCommandName} Bundled prompt identifier.
@@ -3122,7 +3122,7 @@ import {
 - @throws {ReqError} Throws when a required canonical doc is missing.
 - @satisfies REQ-201, REQ-202, REQ-203, REQ-245
 
-### fn `export function preparePromptCommandExecution(` (L1592-1668)
+### fn `export function preparePromptCommandExecution(` (L1591-1667)
 - @brief Prepares prompt-command execution for one bundled prompt.
 - @details Runs slash-command-owned git validation, enforces the prompt-specific required-doc matrix, resolves persisted origin and execution session files, applies the effective worktree policy, generates and verifies a dedicated worktree when enabled, and returns the execution plan consumed by prompt rendering plus lifecycle hooks. Worktree-backed execution reuses the active session directory for the forked session file. Runtime is dominated by git subprocesses, worktree creation, and optional session-file cloning. Side effects include worktree creation, session-file creation, filesystem reads, and optional prompt debug-log writes.
 - @param[in] promptName {PromptCommandName} Bundled prompt identifier.
@@ -3137,7 +3137,7 @@ import {
 - @throws {ReqError} Throws when repository validation, required-doc validation, worktree creation, or session preparation fails.
 - @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271
 
-### fn `export async function activatePromptCommandExecution(` (L1679-1712)
+### fn `export async function activatePromptCommandExecution(` (L1678-1711)
 - @brief Activates the prepared prompt execution path before prompt dispatch or agent start.
 - @details Switches the active session to the execution-session file when worktree routing changed the cwd, re-aligns `process.cwd()` to the execution path, verifies active-session cwd plus cwd mirrors after the switch completes, and stores the verified command-capable replacement-session context for later closure handling. Runtime is dominated by the optional session switch and one optional cwd mutation. Side effects include active-session replacement, host-process cwd mutation, runtime-path state mutation, and process-scoped command-context persistence.
 - @param[in] plan {PromptCommandExecutionPlan} Prepared prompt execution plan.
@@ -3146,7 +3146,7 @@ import {
 - @throws {ReqError} Throws when the session switch or cwd verification fails.
 - @satisfies REQ-206, REQ-207, REQ-257, REQ-272, REQ-276
 
-### fn `export async function restorePromptCommandExecution(` (L1724-1788)
+### fn `export async function restorePromptCommandExecution(` (L1723-1787)
 - @brief Restores the original project base path before merge or session-closure return.
 - @details Switches the active session back to the original session file when worktree routing changed the cwd, re-aligns `process.cwd()` to `base-path`, verifies the restored session target, reuses the persisted replacement-session context when lifecycle handlers receive non-command contexts, tolerates the documented stale-extension-context error when the old replacement-session closure becomes invalid immediately after a successful restore, emits optional workflow restoration debug entries, and clears active worktree path facts before session closure continues. Runtime is dominated by the optional session switch and one optional cwd mutation. Side effects include active-session replacement, host-process cwd mutation, runtime-path state mutation, and optional workflow-debug writes.
 - @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose original base should be restored.
@@ -3156,7 +3156,7 @@ import {
 - @throws {ReqError} Throws when the session switch or cwd verification fails.
 - @satisfies REQ-208, REQ-209, REQ-245, REQ-257, REQ-272, REQ-276
 
-### fn `export async function abortPromptCommandExecution(` (L1799-1845)
+### fn `export async function abortPromptCommandExecution(` (L1798-1844)
 - @brief Aborts one prepared prompt-command execution before pi CLI takes ownership.
 - @details Restores the original session-backed cwd and deletes any created worktree plus branch when command-side preflight, prompt rendering, or prompt handoff fails before agent completion. Restoration failures are returned as structured cleanup errors so the original preflight failure is not masked. Runtime is dominated by the optional session switch plus git subprocess execution. Side effects include active-session replacement, optional worktree deletion, and optional debug-log writes.
 - @param[in] plan {PromptCommandExecutionPlan} Prepared prompt execution plan.
@@ -3165,7 +3165,7 @@ import {
 - @return {Promise<{ cleanupSucceeded: boolean; errorMessage?: string; activeContext?: PromptCommandSessionContext }>} Abort-cleanup facts plus the last valid active prompt-command context.
 - @satisfies REQ-226, REQ-220, REQ-245
 
-### fn `export async function finalizePromptCommandExecution(` (L1856-1944)
+### fn `export async function finalizePromptCommandExecution(` (L1855-1943)
 - @brief Finalizes one matched successful worktree-backed prompt execution.
 - @details Re-verifies persisted execution-session metadata plus worktree artifacts, copies any execution-session transcript records missing from the original session file, restores the original session-backed `base-path`, executes the stash-assisted fast-forward merge sequence from `base-path`, deletes the worktree after merge success, and preserves the restored base session across closure failures. Closure intentionally treats `base-path` restoration as authoritative even when pi CLI has already started end-of-session session replacement or other housekeeping that moved the live runtime away from `worktree-path`. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file appends, active-session replacement, branch merges, stash-stack mutation, worktree deletion, and optional debug-log writes.
 - @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan.
@@ -3174,7 +3174,7 @@ import {
 - @return {Promise<{ mergeAttempted: boolean; mergeSucceeded: boolean; cleanupSucceeded: boolean; errorMessage?: string; warningMessage?: string; activeContext?: PromptCommandSessionContext }>} Finalization facts plus the last valid active prompt-command context.
 - @satisfies REQ-208, REQ-209, REQ-220, REQ-245, REQ-282, REQ-291, REQ-292
 
-### fn `export function classifyPromptCommandOutcome(` (L1952-1956)
+### fn `export function classifyPromptCommandOutcome(` (L1951-1955)
 - @brief Maps one `agent_end` payload into the canonical prompt-worktree finalization outcome.
 - @details Delegates to the shared notification outcome classifier so worktree merge and fork-session retention decisions stay aligned with prompt-end notification routing. Runtime is O(m) in assistant message count. No external state is mutated.
 - @param[in] event {Pick<import("@mariozechner/pi-coding-agent").AgentEndEvent, "messages">} Agent-end payload subset.
@@ -3191,54 +3191,54 @@ import {
 |`PromptCommandSessionMessageOptions`|iface||98-100|interface PromptCommandSessionMessageOptions|
 |`PromptCommandSessionSwitchOptions`|iface||106-108|interface PromptCommandSessionSwitchOptions|
 |`PromptCommandActiveContext`|iface||114-119|interface PromptCommandActiveContext extends PromptComman...|
-|`PromptCommandSessionEntry`|iface||125-131|interface PromptCommandSessionEntry|
-|`PromptCommandSessionContext`|iface||137-149|interface PromptCommandSessionContext|
-|`PromptCommandContextError`|iface||155-157|interface PromptCommandContextError extends Error|
-|`isUsablePromptSessionFile`|fn||172-190|function isUsablePromptSessionFile(|
-|`resolvePromptSessionFile`|fn||200-210|function resolvePromptSessionFile(sessionFile: string | u...|
-|`writePromptExecutionSessionSnapshot`|fn||224-250|function writePromptExecutionSessionSnapshot(|
-|`createPromptExecutionSessionFile`|fn||263-286|function createPromptExecutionSessionFile(|
-|`getPromptSessionCwd`|fn||294-302|function getPromptSessionCwd(ctx?: PromptCommandSessionCo...|
-|`getPromptSessionFile`|fn||310-318|function getPromptSessionFile(ctx?: PromptCommandSessionC...|
-|`getPromptContextCwd`|fn||326-332|function getPromptContextCwd(ctx?: PromptCommandSessionCo...|
-|`resolvePromptCommandSwitchContext`|fn||342-357|function resolvePromptCommandSwitchContext(|
-|`syncPromptCommandProcessCwd`|fn||368-388|function syncPromptCommandProcessCwd(expectedPath: string...|
-|`readPromptSessionFileCwd`|fn||396-420|function readPromptSessionFileCwd(sessionFile: string): s...|
-|`readPromptSessionJsonLines`|fn||429-476|function readPromptSessionJsonLines(|
-|`preservePromptCommandExecutionTranscript`|fn||486-583|export function preservePromptCommandExecutionTranscript(...|
-|`verifyPromptCommandSessionTarget`|fn||596-640|function verifyPromptCommandSessionTarget(|
-|`verifyPromptCommandClosureArtifacts`|fn||650-685|function verifyPromptCommandClosureArtifacts(|
-|`switchPromptCommandSession`|fn||696-725|async function switchPromptCommandSession(|
-|`isPromptCommandStaleContextError`|fn||734-737|function isPromptCommandStaleContextError(error: unknown)...|
-|`attachPromptCommandErrorContext`|fn||746-754|function attachPromptCommandErrorContext(|
-|`getPromptCommandErrorContext`|fn||762-768|export function getPromptCommandErrorContext(|
-|`runCapture`|fn||846-851|function runCapture(command: string[], cwd: string): Spaw...|
-|`listPromptTrackedBasePathChanges`|fn||861-879|function listPromptTrackedBasePathChanges(basePath: strin...|
-|`finalizePromptCommandMerge`|fn||889-1011|function finalizePromptCommandMerge(|
-|`setPromptCommandPostCreateHookForTests`|fn||1019-1023|export function setPromptCommandPostCreateHookForTests(|
-|`resolvePromptDocsRoot`|fn||1032-1035|function resolvePromptDocsRoot(projectBase: string, confi...|
-|`resolveWorktreePaths`|fn||1045-1072|function resolveWorktreePaths(|
-|`sanitizePromptWorktreeBranchName`|fn||1080-1082|function sanitizePromptWorktreeBranchName(branch: string)...|
-|`validatePromptWorktreeName`|fn||1090-1095|function validatePromptWorktreeName(wtName: string): boolean|
-|`throwPromptGitStatusError`|fn||1103-1105|function throwPromptGitStatusError(): never|
-|`validatePromptGitState`|fn||1116-1160|export function validatePromptGitState(projectBase: strin...|
-|`resolveCurrentPromptBranchName`|fn||1168-1173|function resolveCurrentPromptBranchName(gitRoot: string):...|
-|`formatPromptWorktreeExecutionId`|fn||1187-1189|function formatPromptWorktreeExecutionId(timestamp: Date)...|
-|`getNextPromptWorktreeExecutionId`|fn||1196-1209|function getNextPromptWorktreeExecutionId(): string|
-|`buildPromptWorktreeName`|fn||1220-1231|function buildPromptWorktreeName(gitRoot: string, config:...|
-|`promptWorktreeBranchExists`|fn||1240-1249|function promptWorktreeBranchExists(gitRoot: string, bran...|
-|`promptWorktreeRegistered`|fn||1258-1269|function promptWorktreeRegistered(gitRoot: string, worktr...|
-|`cleanupPromptWorktreeCreation`|fn||1279-1293|function cleanupPromptWorktreeCreation(|
-|`createPromptWorktree`|fn||1307-1427|function createPromptWorktree(|
-|`deletePromptWorktree`|fn||1440-1500|export function deletePromptWorktree(|
-|`getPromptRequiredDocs`|fn||1509-1511|export function getPromptRequiredDocs(promptName: PromptC...|
-|`validatePromptRequiredDocs`|fn||1524-1575|export function validatePromptRequiredDocs(|
-|`preparePromptCommandExecution`|fn||1592-1668|export function preparePromptCommandExecution(|
-|`activatePromptCommandExecution`|fn||1679-1712|export async function activatePromptCommandExecution(|
-|`restorePromptCommandExecution`|fn||1724-1788|export async function restorePromptCommandExecution(|
-|`abortPromptCommandExecution`|fn||1799-1845|export async function abortPromptCommandExecution(|
-|`finalizePromptCommandExecution`|fn||1856-1944|export async function finalizePromptCommandExecution(|
-|`classifyPromptCommandOutcome`|fn||1952-1956|export function classifyPromptCommandOutcome(|
+|`PromptCommandSessionEntry`|iface||125-130|interface PromptCommandSessionEntry|
+|`PromptCommandSessionContext`|iface||136-148|interface PromptCommandSessionContext|
+|`PromptCommandContextError`|iface||154-156|interface PromptCommandContextError extends Error|
+|`isUsablePromptSessionFile`|fn||171-189|function isUsablePromptSessionFile(|
+|`resolvePromptSessionFile`|fn||199-209|function resolvePromptSessionFile(sessionFile: string | u...|
+|`writePromptExecutionSessionSnapshot`|fn||223-249|function writePromptExecutionSessionSnapshot(|
+|`createPromptExecutionSessionFile`|fn||262-285|function createPromptExecutionSessionFile(|
+|`getPromptSessionCwd`|fn||293-301|function getPromptSessionCwd(ctx?: PromptCommandSessionCo...|
+|`getPromptSessionFile`|fn||309-317|function getPromptSessionFile(ctx?: PromptCommandSessionC...|
+|`getPromptContextCwd`|fn||325-331|function getPromptContextCwd(ctx?: PromptCommandSessionCo...|
+|`resolvePromptCommandSwitchContext`|fn||341-356|function resolvePromptCommandSwitchContext(|
+|`syncPromptCommandProcessCwd`|fn||367-387|function syncPromptCommandProcessCwd(expectedPath: string...|
+|`readPromptSessionFileCwd`|fn||395-419|function readPromptSessionFileCwd(sessionFile: string): s...|
+|`readPromptSessionJsonLines`|fn||428-475|function readPromptSessionJsonLines(|
+|`preservePromptCommandExecutionTranscript`|fn||485-582|export function preservePromptCommandExecutionTranscript(...|
+|`verifyPromptCommandSessionTarget`|fn||595-639|function verifyPromptCommandSessionTarget(|
+|`verifyPromptCommandClosureArtifacts`|fn||649-684|function verifyPromptCommandClosureArtifacts(|
+|`switchPromptCommandSession`|fn||695-724|async function switchPromptCommandSession(|
+|`isPromptCommandStaleContextError`|fn||733-736|function isPromptCommandStaleContextError(error: unknown)...|
+|`attachPromptCommandErrorContext`|fn||745-753|function attachPromptCommandErrorContext(|
+|`getPromptCommandErrorContext`|fn||761-767|export function getPromptCommandErrorContext(|
+|`runCapture`|fn||845-850|function runCapture(command: string[], cwd: string): Spaw...|
+|`listPromptTrackedBasePathChanges`|fn||860-878|function listPromptTrackedBasePathChanges(basePath: strin...|
+|`finalizePromptCommandMerge`|fn||888-1010|function finalizePromptCommandMerge(|
+|`setPromptCommandPostCreateHookForTests`|fn||1018-1022|export function setPromptCommandPostCreateHookForTests(|
+|`resolvePromptDocsRoot`|fn||1031-1034|function resolvePromptDocsRoot(projectBase: string, confi...|
+|`resolveWorktreePaths`|fn||1044-1071|function resolveWorktreePaths(|
+|`sanitizePromptWorktreeBranchName`|fn||1079-1081|function sanitizePromptWorktreeBranchName(branch: string)...|
+|`validatePromptWorktreeName`|fn||1089-1094|function validatePromptWorktreeName(wtName: string): boolean|
+|`throwPromptGitStatusError`|fn||1102-1104|function throwPromptGitStatusError(): never|
+|`validatePromptGitState`|fn||1115-1159|export function validatePromptGitState(projectBase: strin...|
+|`resolveCurrentPromptBranchName`|fn||1167-1172|function resolveCurrentPromptBranchName(gitRoot: string):...|
+|`formatPromptWorktreeExecutionId`|fn||1186-1188|function formatPromptWorktreeExecutionId(timestamp: Date)...|
+|`getNextPromptWorktreeExecutionId`|fn||1195-1208|function getNextPromptWorktreeExecutionId(): string|
+|`buildPromptWorktreeName`|fn||1219-1230|function buildPromptWorktreeName(gitRoot: string, config:...|
+|`promptWorktreeBranchExists`|fn||1239-1248|function promptWorktreeBranchExists(gitRoot: string, bran...|
+|`promptWorktreeRegistered`|fn||1257-1268|function promptWorktreeRegistered(gitRoot: string, worktr...|
+|`cleanupPromptWorktreeCreation`|fn||1278-1292|function cleanupPromptWorktreeCreation(|
+|`createPromptWorktree`|fn||1306-1426|function createPromptWorktree(|
+|`deletePromptWorktree`|fn||1439-1499|export function deletePromptWorktree(|
+|`getPromptRequiredDocs`|fn||1508-1510|export function getPromptRequiredDocs(promptName: PromptC...|
+|`validatePromptRequiredDocs`|fn||1523-1574|export function validatePromptRequiredDocs(|
+|`preparePromptCommandExecution`|fn||1591-1667|export function preparePromptCommandExecution(|
+|`activatePromptCommandExecution`|fn||1678-1711|export async function activatePromptCommandExecution(|
+|`restorePromptCommandExecution`|fn||1723-1787|export async function restorePromptCommandExecution(|
+|`abortPromptCommandExecution`|fn||1798-1844|export async function abortPromptCommandExecution(|
+|`finalizePromptCommandExecution`|fn||1855-1943|export async function finalizePromptCommandExecution(|
+|`classifyPromptCommandOutcome`|fn||1951-1955|export function classifyPromptCommandOutcome(|
 
 
 ---
@@ -3476,7 +3476,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 
 ## Imports
 ```
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
 import type { UseReqConfig } from "./config.js";
 import { ReqError } from "./errors.js";
@@ -3490,12 +3490,12 @@ import { runReferences } from "./tool-runner.js";
 - @brief Describes the prepared execution facts for one `req-references` run.
 - @details Stores the validated project base, resolved git root, target references path, and fixed commit message needed by the specialized direct-write workflow. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function runCapture(command: string[], cwd: string): ReturnType<typeof spawnSync>` (L44-49)
+### fn `function runCapture(command: string[], cwd: string): SpawnSyncReturns<string>` (L44-49)
 - @brief Executes one synchronous subprocess and captures UTF-8 output.
 - @details Delegates to `spawnSync(...)`, preserves the supplied working directory, and returns the raw result so callers can interpret git exit status plus diagnostics deterministically. Runtime is dominated by external process execution. Side effects include subprocess creation.
 - @param[in] command {string[]} Executable plus argument vector.
 - @param[in] cwd {string} Working directory for the subprocess.
-- @return {ReturnType<typeof spawnSync>} Captured subprocess result.
+- @return {SpawnSyncReturns<string>} Captured subprocess result with UTF-8 stdout and stderr.
 
 ### fn `function buildIgnoredGitStatusPaths(` (L59-73)
 - @brief Builds the set of git-status paths ignored for cleanliness checks.
@@ -3543,7 +3543,7 @@ import { runReferences } from "./tool-runner.js";
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
 |`ReqReferencesCommandPlan`|iface||30-35|export interface ReqReferencesCommandPlan|
-|`runCapture`|fn||44-49|function runCapture(command: string[], cwd: string): Retu...|
+|`runCapture`|fn||44-49|function runCapture(command: string[], cwd: string): Spaw...|
 |`buildIgnoredGitStatusPaths`|fn||59-73|function buildIgnoredGitStatusPaths(|
 |`listResidualGitStatusLines`|fn||84-102|function listResidualGitStatusLines(|
 |`getGitAddTargetPath`|fn||111-117|function getGitAddTargetPath(gitRoot: string, absolutePat...|
@@ -3562,7 +3562,7 @@ import { runReferences } from "./tool-runner.js";
 ```
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import {
 import { ReqError } from "./errors.js";
 import {
@@ -3582,12 +3582,12 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 - type `type ReqResetCommandContext = Parameters<typeof restorePromptCommandExecution>[1];` (L59)
 - @brief Describes the session-bound context surface reused during `req-reset` recovery.
 - @details Reuses the session-switching contract already accepted by `restorePromptCommandExecution(...)` so the dedicated reset command can restore the original session without depending on concrete pi runtime classes. The alias is compile-time only and introduces no runtime cost.
-### fn `function runCapture(command: string[], cwd: string): ReturnType<typeof spawnSync>` (L68-73)
+### fn `function runCapture(command: string[], cwd: string): SpawnSyncReturns<string>` (L68-73)
 - @brief Executes one synchronous subprocess and captures UTF-8 output.
 - @details Delegates to `spawnSync(...)`, preserves the supplied working directory, and returns the raw result so callers can interpret git exit status plus diagnostics deterministically. Runtime is dominated by external process execution. Side effects include subprocess creation.
 - @param[in] command {string[]} Executable plus argument vector.
 - @param[in] cwd {string} Working directory for the subprocess.
-- @return {ReturnType<typeof spawnSync>} Captured subprocess result.
+- @return {SpawnSyncReturns<string>} Captured subprocess result with UTF-8 stdout and stderr.
 
 ### fn `function escapeReqResetRegExpLiteral(text: string): string` (L81-83)
 - @brief Escapes one literal string for safe JavaScript regular-expression reuse.
@@ -3659,7 +3659,7 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 |`ReqResetCommandPlan`|iface||34-40|export interface ReqResetCommandPlan|
 |`ReqResetCommandExecutionResult`|iface||46-53|export interface ReqResetCommandExecutionResult|
 |`ReqResetCommandContext`|type||59||
-|`runCapture`|fn||68-73|function runCapture(command: string[], cwd: string): Retu...|
+|`runCapture`|fn||68-73|function runCapture(command: string[], cwd: string): Spaw...|
 |`escapeReqResetRegExpLiteral`|fn||81-83|function escapeReqResetRegExpLiteral(text: string): string|
 |`buildReqResetWorktreeNamePattern`|fn||93-100|function buildReqResetWorktreeNamePattern(gitRoot: string...|
 |`listReqResetRegisteredWorktreeRoots`|fn||109-118|function listReqResetRegisteredWorktreeRoots(gitRoot: str...|
@@ -3752,19 +3752,19 @@ import { getInstallationPath, RESOURCE_ROOT_DIRNAME } from "./path-context.js";
 ## Imports
 ```
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { ReqError } from "./errors.js";
 import { isSameOrAncestorPath } from "./path-context.js";
 ```
 
 ## Definitions
 
-### fn `function runGitCapture(command: string[], cwd?: string): ReturnType<typeof spawnSync>` (L19-24)
+### fn `function runGitCapture(command: string[], cwd?: string): SpawnSyncReturns<string>` (L19-24)
 - @brief Executes one git subprocess and captures UTF-8 output.
 - @details Delegates to `spawnSync`, keeps execution synchronous for deterministic command flows, and supports an optional working directory. Runtime is dominated by the spawned git process. Side effects include subprocess creation.
 - @param[in] command {string[]} Git executable plus argument vector.
 - @param[in] cwd {string | undefined} Optional working directory.
-- @return {ReturnType<typeof spawnSync>} Captured subprocess result.
+- @return {SpawnSyncReturns<string>} Captured subprocess result with UTF-8 stdout and stderr.
 
 ### fn `export function isInsideGitRepo(targetPath: string): boolean` (L33-36)
 - @brief Tests whether one path is inside a git work tree.
@@ -5066,7 +5066,7 @@ cost.
 - @param[in] projectBase {string} Absolute original project base path.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName} Bundled prompt name.
-- @param[in] nextState {DebugWorkflowState} Next workflow state.
+- @param[in] nextState {import("./core/extension-status.js").PiUsereqWorkflowState} Next workflow state.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
 

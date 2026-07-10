@@ -120,14 +120,13 @@ interface PromptCommandActiveContext extends PromptCommandSessionContext {
 
 /**
  * @brief Describes one serializable session entry copied into a materialized execution-session file.
- * @details Captures the stable tree-entry fields needed to write a JSONL session snapshot for cross-cwd session replacement when the origin session file has not been flushed yet. The interface is compile-time only and introduces no runtime cost.
+ * @details Captures the stable tree-entry fields needed to write a JSONL session snapshot for cross-cwd session replacement when the origin session file has not been flushed yet. Mirrors the SDK `SessionEntryBase` shape without an index signature so the SDK `SessionEntry` union remains structurally assignable for passthrough serialization. The interface is compile-time only and introduces no runtime cost.
  */
 interface PromptCommandSessionEntry {
   type: string;
   id: string;
   parentId: string | null;
   timestamp: string;
-  [key: string]: unknown;
 }
 
 /**

@@ -5,7 +5,7 @@
  */
 
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { ReqError } from "./errors.js";
 import { isSameOrAncestorPath } from "./path-context.js";
 
@@ -14,9 +14,9 @@ import { isSameOrAncestorPath } from "./path-context.js";
  * @details Delegates to `spawnSync`, keeps execution synchronous for deterministic command flows, and supports an optional working directory. Runtime is dominated by the spawned git process. Side effects include subprocess creation.
  * @param[in] command {string[]} Git executable plus argument vector.
  * @param[in] cwd {string | undefined} Optional working directory.
- * @return {ReturnType<typeof spawnSync>} Captured subprocess result.
+ * @return {SpawnSyncReturns<string>} Captured subprocess result with UTF-8 stdout and stderr.
  */
-function runGitCapture(command: string[], cwd?: string): ReturnType<typeof spawnSync> {
+function runGitCapture(command: string[], cwd?: string): SpawnSyncReturns<string> {
   return spawnSync(command[0]!, command.slice(1), {
     cwd,
     encoding: "utf8",
