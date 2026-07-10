@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.41.0](https://github.com/Ogekuri/PI-useReq/compare/v0.40.0..v0.41.0) - 2026-07-10
+### 🐛  Bug Fixes
+- await and suppress summary sendMessage to prevent unhandled rejection breaking worktree merge [useReq] *(prompt-delivery)*
+  - deliverPromptCommand now awaits the non-critical display:true summary sendMessage and suppresses its failures before dispatching the authoritative hidden display:false prompt turn with triggerTurn:true
+  - a rejecting fire-and-forget summary sendMessage previously surfaced as an unhandled rejection (Node default --unhandled-rejections=throw) that could terminate the process before prompt-end closure ran the worktree merge, branch deletion, and worktree deletion
+  - add regression tests covering the production sendMessage triggerTurn path, the pi.sendMessage fallback, and a rejecting summary that must not interrupt the merge
+  - update WORKFLOW.md call-traces and regenerate REFERENCES.md
+- resolve tsc errors in req command and session-entry types [useReq] *(types)*
+  - Narrow runCapture/runGitCapture return types to SpawnSyncReturns<string>
+  - so UTF-8 stdout/stderr string methods are type-safe in
+  - req-references-command, req-reset-command, runtime-project-paths.
+  - Remove index signature from PromptCommandSessionEntry so the SDK
+  - SessionEntry union is structurally assignable, resolving all
+  - SessionEntry/ExtensionContext -> PromptCommandSessionContext mismatches.
+  - Narrow transitionPromptWorkflowState nextState parameter from
+  - DebugWorkflowState to PiUsereqWorkflowState to match setPiUsereqWorkflowState.
+  - Regenerate REFERENCES.md.
+- add TST-122 summary test and resolve tsc errors [useReq] *(prompt-command)*
+  - Add prompt-command-summary unit test verifying renderPromptCommandSummary renders none for empty context files, static code checks, and enabled tools (TST-122, REQ-338).
+  - Narrow runCapture return type to SpawnSyncReturns<string> and initialize switchResult to resolve tsc errors in src/core/prompt-command-runtime.ts; re-export PromptCommandName for prompts.ts.
+  - Fix getAllTools type predicate in scripts/lib/recording-extension-api.ts to include required promptGuidelines: string[].
+  - Regenerate REFERENCES.md.
+
+### 🚜  Changes
+- render none for empty summary lists [useReq] *(prompts)*
+  - Add REQ-338 and TST-122 requiring the command invocation summary to
+  - render 'none' for context files, static code checks, and enabled
+  - tools fields when their enabled-item list is empty.
+  - Update renderPromptCommandSummary to fall back to 'none' for the
+  - context-files, static-check-languages, and enabled-tools lists.
+  - Update WORKFLOW.md node descriptions and regenerate REFERENCES.md.
+- default context files to disabled [useReq] *(config)*
+  - Update REQ-328 default to disabled and REQ-333 reset-to-disabled
+  - Change DEFAULT_CONTEXT_FILES_FLAG from true to false
+  - Update Doxygen docs on normalizeContextFilesFlag and constant
+  - Bump SRS version to 0.0.72
+
 ## [0.40.0](https://github.com/Ogekuri/PI-useReq/compare/v0.39.0..v0.40.0) - 2026-07-10
 ### 🚜  Changes
 - hide full prompt on screen, show command summary [useReq] *(prompt-delivery)*
@@ -547,6 +584,7 @@
 - \[0.38.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.38.0
 - \[0.39.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.39.0
 - \[0.40.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.40.0
+- \[0.41.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.41.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -586,3 +624,4 @@
 [0.38.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.37.0..v0.38.0
 [0.39.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.38.0..v0.39.0
 [0.40.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.39.0..v0.40.0
+[0.41.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.40.0..v0.41.0
