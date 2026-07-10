@@ -5885,7 +5885,7 @@ test("default configuration applies the documented static-check, debug, notify, 
     { module: "Command", cmd: "node", params: ["--check"] },
   ], "enable"));
   assert.deepEqual(config["static-check"].TypeScript, createStaticCheckLanguageConfig([
-    { module: "Command", cmd: "npx", params: ["eslint"] },
+    { module: "Command", cmd: "eslint", params: [] },
   ], "enable"));
   assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([], "disable"));
   assert.equal(config.DEBUG_ENABLED, "disable");

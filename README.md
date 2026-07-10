@@ -100,8 +100,6 @@ TODO: update/rewrite the project tree
 
 ### Install
 
-TODO: complete installation istructions
-
 Install:
 ```bash
 pi install npm:pi-usereq
@@ -114,6 +112,14 @@ pi install git:github.com/Ogekuri/PI-useReq
 
 Reload Pi.
 
+Bundled static checkers (`pyright`, `ruff`, `eslint`) install automatically via the
+`postinstall` script. Native checkers (`cppcheck`, `clang-format`) require a one-line
+system install:
+
+- Debian/Ubuntu: `sudo apt install cppcheck clang-format`
+- macOS: `brew install cppcheck clang-format`
+- Arch: `sudo pacman -S cppcheck clang`
+- Windows: `choco install cppcheck llvm` or `scoop install cppcheck llvm`
 
 ### Uninstall
 

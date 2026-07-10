@@ -316,8 +316,8 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
   TypeScript: [
     {
       module: "Command",
-      cmd: "npx",
-      params: ["eslint"],
+      cmd: "eslint",
+      params: [],
     },
   ],
 };

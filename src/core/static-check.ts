@@ -9,8 +9,9 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import fg from "fast-glob";
-import type { StaticCheckEntry } from "./config.js";
+import type { StaticCheckEntry, UseReqConfig } from "./config.js";
 import { ReqError } from "./errors.js";
+import { getInstallationPath } from "./path-context.js";
 
 /**
  * @brief Maps user-facing language aliases to canonical static-check language names.
@@ -264,7 +265,7 @@ export function validateStaticCheckEntry(entry: StaticCheckEntry): void {
   if (!cmd) {
     throw new ReqError("Error: Command module requires a cmd argument in --enable-static-check. Format: LANG=Command,CMD[,PARAM...]", 1);
   }
-  if (!findExecutable(cmd)) {
+  if (!resolveCheckerExecutable(cmd)) {
     throw new ReqError(`Error: --enable-static-check Command cmd '${cmd}' is not an executable program on this system.`, 1);
   }
 }
@@ -398,7 +399,7 @@ export class StaticCheckCommand extends StaticCheckBase {
    * @throws {ReqError} Throws when the executable cannot be found on PATH.
    */
   constructor(cmd: string, inputs: string[], extraArgs?: string[], failOnly = false) {
-    if (!findExecutable(cmd)) {
+    if (!resolveCheckerExecutable(cmd)) {
       throw new ReqError(`Error: external command '${cmd}' not found on PATH.`, 1);
     }
     super(inputs, extraArgs, failOnly);
@@ -460,7 +461,7 @@ function isExecutableFile(candidate: string): boolean {
  * @param[in] cmd {string} Executable name to locate.
  * @return {string | undefined} Absolute executable path, or `undefined` when not found.
  */
-function findExecutable(cmd: string): string | undefined {
+export function findExecutable(cmd: string): string | undefined {
   if (cmd.includes(path.sep)) {
     return isExecutableFile(cmd) ? path.resolve(cmd) : undefined;
   }
@@ -471,6 +472,59 @@ function findExecutable(cmd: string): string | undefined {
     if (isExecutableFile(candidate)) return candidate;
   }
   return undefined;
+}
+
+/**
+ * @brief Resolves one checker executable across bundled `node_modules/.bin` locations and PATH.
+ * @details Probes the installation-owned `node_modules/.bin` directory, the project-scope parent `node_modules/.bin` directory used by `--prefix` layouts, and finally the system PATH scan, returning the first executable match. Runtime is O(p) in PATH entry count plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
+ * @param[in] cmd {string} Executable name or relative path to resolve.
+ * @return {string | undefined} Absolute executable path, or `undefined` when not found in any probed location.
+ * @satisfies REQ-023, REQ-037, DES-018
+ */
+export function resolveCheckerExecutable(cmd: string): string | undefined {
+  if (cmd.includes(path.sep)) {
+    return isExecutableFile(cmd) ? path.resolve(cmd) : undefined;
+  }
+  const installationPath = getInstallationPath();
+  const bundledBinCandidates = [
+    path.join(installationPath, "..", "node_modules", ".bin", cmd),
+    path.join(installationPath, "..", "..", "node_modules", ".bin", cmd),
+  ];
+  for (const candidate of bundledBinCandidates) {
+    if (isExecutableFile(candidate)) {
+      return candidate;
+    }
+  }
+  return findExecutable(cmd);
+}
+
+/**
+ * @brief Determines which enabled static-check executables are missing from the runtime environment.
+ * @details Iterates every enabled language checker entry in the effective config, resolves each `Command` entry executable through `resolveCheckerExecutable`, and collects the missing command names so the caller can surface one consolidated warning. Runtime is O(l * c * p) where l is language count, c is checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
+ * @param[in] config {UseReqConfig} Effective merged configuration.
+ * @return {string[]} Unique command names that are enabled but unresolvable.
+ * @satisfies REQ-341, REQ-343, REQ-344
+ */
+export function checkDefaultCheckersAvailability(config: UseReqConfig): string[] {
+  const missing = new Set<string>();
+  for (const languageConfig of Object.values(config["static-check"] ?? {})) {
+    if (languageConfig.enabled !== "enable") {
+      continue;
+    }
+    for (const entry of languageConfig.checkers) {
+      if (String(entry.module ?? "").trim().toLowerCase() !== "command") {
+        continue;
+      }
+      const cmd = typeof entry.cmd === "string" ? entry.cmd.trim() : "";
+      if (!cmd) {
+        continue;
+      }
+      if (!resolveCheckerExecutable(cmd)) {
+        missing.add(cmd);
+      }
+    }
+  }
+  return [...missing];
 }
 
 /**
@@ -527,6 +581,9 @@ export function runStaticCheck(argv: string[]): number {
         throw new ReqError("Error: --test-static-check command requires a <cmd> argument.", 1);
       }
       const [cmd, ...files] = rest;
+      if (!resolveCheckerExecutable(cmd!)) {
+        throw new ReqError(`Error: external command '${cmd}' not found on PATH.`, 1);
+      }
       return new StaticCheckCommand(cmd!, files).run();
     }
     default:

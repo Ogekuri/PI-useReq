@@ -49,6 +49,13 @@
     - `build-release(...)` [`.github/workflows/release-npm.yml`]
   - Parent Process: none
   - Threads: no explicit threads detected
+- ID: `PROC:install-static-checkers`
+  - Type: Process
+  - Role: Best-effort npm `postinstall` installer that probes bundled static-checker executables, attempts `npm install` on miss, and prints platform guidance for native checkers.
+  - Entrypoints:
+    - `main(...)` [`scripts/install-static-checkers.ts`]
+  - Parent Process: none
+  - Threads: no explicit threads detected
 
 ## Execution Units
 ### `PROC:main`
@@ -83,8 +90,9 @@
       - `buildStaticCheckEntryIdentity(...)`: normalize entry duplicate identity [`src/core/static-check.ts`]
       - `parseEnableStaticCheck(...)`: parse one static-check enable specification [`src/core/static-check.ts`]
       - `validateStaticCheckEntry(...)`: validate command-backed entry before config write [`src/core/static-check.ts`]
-        - `findExecutable(...)`: resolve executable on PATH or explicit path [`src/core/static-check.ts`]
-          - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
+        - `resolveCheckerExecutable(...)`: resolve executable via bundled `node_modules/.bin` or PATH scan [`src/core/static-check.ts`]
+          - `findExecutable(...)`: resolve executable on PATH or explicit path [`src/core/static-check.ts`]
+            - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
       - `saveConfig(...)`: persist split local/global config JSON [`src/core/config.ts`]
         - `saveLocalConfig(...)`: write the local config file [`src/core/config.ts`]
           - `getProjectConfigPath(...)`: resolve local config file path [`src/core/config.ts`]
@@ -208,8 +216,9 @@
           - `StaticCheckBase.headerLine(...)`: format checker header [`src/core/static-check.ts`]
           - `StaticCheckBase.emitLine(...)`: write checker output [`src/core/static-check.ts`]
       - `StaticCheckCommand.run(...)`: iterate resolved files for external command path [`src/core/static-check.ts`]
-        - `findExecutable(...)`: resolve executable on `PATH` or explicit path [`src/core/static-check.ts`]
-          - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
+        - `resolveCheckerExecutable(...)`: resolve executable via bundled `node_modules/.bin` or `PATH` scan [`src/core/static-check.ts`]
+          - `findExecutable(...)`: resolve executable on `PATH` or explicit path [`src/core/static-check.ts`]
+            - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
         - `StaticCheckCommand.checkFile(...)`: run external executable against one file [`src/core/static-check.ts`]
           - `StaticCheckBase.headerLine(...)`: format checker header [`src/core/static-check.ts`]
           - `StaticCheckBase.emitLine(...)`: write checker output [`src/core/static-check.ts`]
@@ -227,8 +236,9 @@
             - `StaticCheckBase.headerLine(...)`: format checker header [`src/core/static-check.ts`]
             - `StaticCheckBase.emitLine(...)`: write checker output [`src/core/static-check.ts`]
         - `StaticCheckCommand.run(...)`: execute external command checker [`src/core/static-check.ts`]
-          - `findExecutable(...)`: resolve executable on `PATH` or explicit path [`src/core/static-check.ts`]
-            - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
+          - `resolveCheckerExecutable(...)`: resolve executable via bundled `node_modules/.bin` or `PATH` scan [`src/core/static-check.ts`]
+            - `findExecutable(...)`: resolve executable on `PATH` or explicit path [`src/core/static-check.ts`]
+              - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
           - `StaticCheckCommand.checkFile(...)`: run external executable against one file [`src/core/static-check.ts`]
             - `StaticCheckBase.headerLine(...)`: format checker header [`src/core/static-check.ts`]
             - `StaticCheckBase.emitLine(...)`: write checker output [`src/core/static-check.ts`]
@@ -366,8 +376,9 @@
               - `StaticCheckBase.headerLine(...)`: format checker header [`src/core/static-check.ts`]
               - `StaticCheckBase.emitLine(...)`: write checker output [`src/core/static-check.ts`]
           - `StaticCheckCommand.run(...)`: execute external command checker [`src/core/static-check.ts`]
-            - `findExecutable(...)`: resolve executable on `PATH` or explicit path [`src/core/static-check.ts`]
-              - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
+            - `resolveCheckerExecutable(...)`: resolve executable via bundled `node_modules/.bin` or `PATH` scan [`src/core/static-check.ts`]
+              - `findExecutable(...)`: resolve executable on `PATH` or explicit path [`src/core/static-check.ts`]
+                - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
             - `StaticCheckCommand.checkFile(...)`: run external executable against one file [`src/core/static-check.ts`]
               - `StaticCheckBase.headerLine(...)`: format checker header [`src/core/static-check.ts`]
               - `StaticCheckBase.emitLine(...)`: write checker output [`src/core/static-check.ts`]
@@ -494,6 +505,7 @@
             - `RecordingExtensionAPI.setActiveTools(...)`: replace active-tool set with runtime-visible names [`scripts/lib/recording-extension-api.ts`]
               - `RecordingExtensionAPI.getAllTools(...)`: expose supported builtin plus extension tool inventory [`scripts/lib/recording-extension-api.ts`]
           - `setPiUsereqStatusConfig(...)`: cache docs/tests/src and pi-notify values for later status renders [`src/core/extension-status.ts`]
+          - `checkDefaultCheckersAvailability(...)`: enumerate missing enabled static-check executables and emit one warning notification without aborting [`src/core/static-check.ts`]
           - `updateExtensionStatus(...)`: refresh stored context usage, reset or restore elapsed timers, load the active runtime sound level from persisted config during `session_start`, reset workflow state for startup/new/reload, and render status text [`src/core/extension-status.ts`]
             - `refreshContextUsage(...)`: sync the latest context-usage snapshot [`src/core/extension-status.ts`]
               - `RecordingCommandContext.getContextUsage(...)`: return the offline context-usage placeholder [`scripts/lib/recording-extension-api.ts`]
@@ -992,6 +1004,7 @@
             - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
           - `getPiUsereqStartupTools(...)`: enumerate configurable tools from runtime inventory in documented menu order [`src/index.ts`]
         - `setPiUsereqStatusConfig(...)`: cache docs/tests/src and pi-notify values for later status renders [`src/core/extension-status.ts`]
+        - `checkDefaultCheckersAvailability(...)`: enumerate missing enabled static-check executables and emit one warning notification without aborting [`src/core/static-check.ts`]
         - `activatePromptCommandExecution(...)`: re-verify the prepared execution session through replacement-session-aware `ctx.switchSession(sessionPath, { withSession })` handling, reuse persisted replacement-session contexts when lifecycle hooks omit `switchSession()`, re-align `process.cwd()` to the execution path, confirm `process.cwd()` plus the persisted execution-session file header cwd when the file is already persisted before agent start, and refresh reusable command-context persistence [`src/core/prompt-command-runtime.ts`]
         - `resolveDebugProjectBase(...)`: prefer static `base-path` for debug-log writes during worktree-backed prompt runs and recover a live bootstrap cwd when no prompt plan is active [`src/index.ts`]
         - `notifyContextSafely(...)`: suppress stale replacement-context notification failures after session replacement while preserving closure progress [`src/index.ts`]
@@ -1280,6 +1293,27 @@
 - External Boundaries:
   - GitHub Actions event routing, hosted-runner lifecycle, checkout action, setup-node action, npm CLI, npm registry, changelog-builder action, GitHub Releases API, and repository secrets.
 
+### `PROC:install-static-checkers`
+- Entrypoints:
+  - `main(...)`: best-effort bundled-checker installer root [`scripts/install-static-checkers.ts`]
+- Lifecycle/trigger:
+  - Start trigger: npm invokes the `postinstall` script declared in `package.json` after dependency installation.
+  - Stop trigger: returns numeric exit code `0` unconditionally after probing, optional best-effort installs, and native-checker guidance output.
+  - Looping model: single-pass probe plus optional install with no persistent loop.
+  - Threads: no explicit threads detected.
+- Internal Call-Trace Tree:
+  - `main(...)`: probe each bundled npm checker, attempt best-effort install on miss, print native-checker guidance, and return `0` [`scripts/install-static-checkers.ts`]
+    - `resolveCheckerExecutable(...)`: resolve one checker across bundled `node_modules/.bin` locations and PATH scan [`src/core/static-check.ts`]
+      - `findExecutable(...)`: resolve executable on PATH or explicit path [`src/core/static-check.ts`]
+        - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
+    - `attemptBundledInstall(...)`: best-effort `npm install <pkg>@<range> --no-save --prefix <install-root>` swallowing all errors [`scripts/install-static-checkers.ts`]
+      - `getInstallationPath(...)`: resolve the installed extension root that owns `scripts/` and `src/` [`src/core/path-context.ts`]
+    - `printNativeCheckerGuidance(...)`: emit platform-specific install guidance for native checkers [`scripts/install-static-checkers.ts`]
+- External Boundaries:
+  - Node process APIs for argv, stdout, stderr, and exit code.
+  - Filesystem access for executable probing under the installation path.
+  - npm CLI subprocess spawned best-effort for missing bundled checkers.
+
 ## Communication Edges
 - `PROC:req-debug` -> `PROC:tool-args-to-params`
   - Mechanism: child-process spawn through resolved `tsx` executable.
@@ -1294,4 +1328,4 @@
   - Endpoint/channel: `is_master` job output and shared tag-run context.
   - Payload/data-shape: boolean branch-gate flag derived from `origin/master` containment for the tagged commit [`.github/workflows/release-npm.yml`]
 - Internal thread communication edges: none.
-- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, `PROC:pi-host`, `PROC:gh-release-check`, and `PROC:gh-release-build` are distinct runtime entry modes; only `PROC:req-debug` directly spawns child processes, while the GitHub Actions units coordinate through workflow job dependencies.
+- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, `PROC:pi-host`, `PROC:install-static-checkers`, `PROC:gh-release-check`, and `PROC:gh-release-build` are distinct runtime entry modes; only `PROC:req-debug` and `PROC:install-static-checkers` directly spawn child processes, while the GitHub Actions units coordinate through workflow job dependencies.

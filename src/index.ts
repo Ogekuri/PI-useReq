@@ -172,6 +172,7 @@ import {
 } from "./core/tool-runner.js";
 import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
+  checkDefaultCheckersAvailability,
   getSupportedStaticCheckLanguageSupport,
 } from "./core/static-check.js";
 import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";
@@ -1282,6 +1283,13 @@ async function handleExtensionStatusEvent(
     const config = loadProjectConfig(startupCwd);
     applyConfiguredPiUsereqTools(pi, config);
     setPiUsereqStatusConfig(statusController, config);
+    const missingCheckers = checkDefaultCheckersAvailability(config);
+    if (missingCheckers.length > 0) {
+      ctx.ui.notify(
+        `Missing static checkers: ${missingCheckers.join(", ")}\nInstall: run 'npm install' or install each missing checker via your system package manager.`,
+        "warning",
+      );
+    }
   }
   if (hookName === "before_agent_start") {
     const requestForActivation = activePromptRequest ?? pendingPromptRequest;

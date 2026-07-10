@@ -20,7 +20,8 @@
     "debug:ext:session": "node --import tsx ./scripts/debug-extension.ts session-start",
     "debug:ext:command": "node --import tsx ./scripts/debug-extension.ts command",
     "debug:ext:tool": "node --import tsx ./scripts/debug-extension.ts tool",
-    "debug:ext:sdk": "node --import tsx ./scripts/debug-extension.ts sdk-smoke"
+    "debug:ext:sdk": "node --import tsx ./scripts/debug-extension.ts sdk-smoke",
+    "postinstall": "node --import tsx ./scripts/install-static-checkers.ts"
   },
   "pi": {
     "extensions": [
@@ -35,11 +36,13 @@
   },
   "dependencies": {
     "fast-glob": "^3.3.3",
-    "js-tiktoken": "^1.0.21"
+    "js-tiktoken": "^1.0.21",
+    "pyright": "^1.1.411",
+    "ruff": "^1.5.4",
+    "eslint": "^10.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.2"

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.73"
+version: "0.0.74"
 date: "2026-07-10"
 author: "OpenAI Codex"
 scope:
@@ -90,6 +90,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates `build-release`, preserving changelog-driven GitHub Release creation while adding npm publication.
 - **DES-015**: MUST implement config-gated `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` slash-command wrappers in `src/index.ts` that reuse existing tool-runner execution paths.
 - **DES-016**: MUST deliver rendered bundled-prompt content to the LLM through `sendMessage` as a `display:false` custom message with `triggerTurn:true` and MUST NOT use `sendUserMessage` when `sendMessage` is available.
+- **DES-017**: MUST declare `pyright`, `ruff`, and `eslint` as pinned caret-range npm dependencies and register a `postinstall` script that installs bundled static checkers.
+- **DES-018**: MUST resolve checker executables by probing bundled `node_modules/.bin` paths relative to the installation path before falling back to `PATH` scan.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -338,7 +340,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-020**: MUST parse user `--enable-static-check` specs in `LANG=Command,CMD[,PARAM...]` format and normalize supported language names plus `Command` case-insensitively.
 - **REQ-021**: MUST reject user `--enable-static-check` specs with missing `=`, missing `Command`, missing `cmd`, unknown language, or any module other than `Command`.
 - **REQ-022**: MUST preserve persisted `Dummy` static-check entries during config loading and execute them only when present in configuration or `--test-static-check dummy` input.
-- **REQ-023**: MUST require `Command`-module executables to exist on `PATH` before static-check execution.
+- **REQ-023**: MUST require `Command`-module executables to resolve via bundled `node_modules/.bin` or `PATH` before static-check execution.
 - **REQ-030**: MUST set static `base-path` from the bootstrap cwd and static `local-config-path` to `<base-path>/.pi-usereq.json`.
 - **REQ-317**: MUST set static `global-config-path` to `~/.config/pi-usereq/config.json`.
 - **REQ-259**: MUST set dynamic `context-path` from the bootstrap cwd and keep it aligned with `ctx.cwd`.
@@ -363,7 +365,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-035**: MUST parse repeatable `--enable-static-check LANG=Command,CMD[,PARAM...]` CLI options before command dispatch and merge resulting entries into persisted global checker lists.
 - **REQ-253**: MUST set `static-check.<language>.enabled=enable` whenever guided or CLI `--enable-static-check` entry creation targets that language.
 - **REQ-036**: MUST preserve existing global `static-check` checker entries, append non-duplicate `--enable-static-check` entries in argument order, and treat canonical language, module, cmd, and params as the duplicate identity.
-- **REQ-037**: MUST reject `--enable-static-check` `Command` entries whose executable is unavailable on `PATH` and MUST NOT modify persisted local or global configuration when validation fails.
+- **REQ-037**: MUST reject `--enable-static-check` `Command` entries whose executable is unresolvable via bundled `node_modules/.bin` or `PATH` and MUST NOT modify persisted local or global configuration when validation fails.
 - **REQ-038**: MUST honor `--verbose` only for `files-summarize`, `files-compress`, `files-find`, `summarize`, `compress`, and `find`, emitting command progress to stderr while leaving stdout payload format unchanged.
 - **REQ-039**: MUST support `--enable-line-numbers` only for `files-compress`, `compress`, `files-find`, and `find`, and MUST leave corresponding outputs unnumbered when the flag is absent.
 - **REQ-040**: MUST store canonical expected CLI result fixtures as UTF-8 text files under `tests/fixtures_attended_results/`, preserving normalized exit code, stdout, and stderr for each archived scenario.
@@ -402,6 +404,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-331**: MUST omit the `%%CONTEXT_FILES%%` section for any disabled flag or missing context file without surfacing an error.
 - **REQ-332**: MUST inject `%%CONTEXT_FILES%%` content verbatim after every other prompt replacement so literal `%%...%%` tokens inside context files are not substituted.
 - **REQ-333**: MUST restore all three `Context Files` flags to disabled when the `Context Files` subtree `Reset defaults` is approved.
+- **REQ-339**: MUST run `scripts/install-static-checkers.ts` as a best-effort exit-code-0 `postinstall` installer that probes bundled npm checkers, attempts `npm install` on miss, prints platform guidance for native checkers, and never modifies git-tracked files.
+- **REQ-340**: MUST default the `TypeScript` static-check `Command` entry to `cmd: "eslint"` with empty `params`.
+- **REQ-341**: MUST emit one warning notification during `session_start` listing missing enabled static checkers without transitioning workflow state or aborting.
+- **REQ-342**: MUST keep `STATIC_CHECK_MODULES`, `dispatchStaticCheckForFile` signature, and `StaticCheckEntry` shape unchanged when adding bundled executable resolution.
+- **REQ-343**: MUST NOT transition workflow state or abort `session_start` when one or more enabled static checkers are missing.
+- **REQ-344**: MUST place the `session_start` missing-checker helper in `src/core/static-check.ts` so `src/index.ts` remains thin.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -524,6 +532,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-119**: MUST verify `%%CONTEXT_FILES%%` replacement emits one section per enabled existing file in the documented order and omits disabled or missing files.
 - **TST-120**: MUST verify `%%CONTEXT_FILES%%` sections use the file-name heading, the pre-substituted HTML file reference, and four-backtick `markdown` fences around raw content.
 - **TST-122**: MUST verify the command invocation summary renders `none` for `context files`, `static code checks`, and `enabled tools` when no items are enabled in each respective category.
+- **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
+- **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
+- **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.
 
 ## 5. Observed Component Model
 
