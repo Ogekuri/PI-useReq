@@ -723,7 +723,7 @@ export class RecordingExtensionAPI {
           sourceInfo: { ...snapshot.sourceInfo },
         };
       })
-      .filter((tool): tool is RecordingToolDefinition & { sourceInfo: RecordingSourceInfo } => tool !== undefined);
+      .filter((tool): tool is RecordingToolDefinition & { sourceInfo: RecordingSourceInfo; promptGuidelines: string[] } => tool !== undefined);
     return [...this.getBuiltinTools(), ...registeredTools];
   }
 
