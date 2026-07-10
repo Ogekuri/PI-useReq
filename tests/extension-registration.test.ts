@@ -3781,6 +3781,296 @@ test("worktree-backed prompt commands use replacement-session callbacks for prom
 });
 
 /**
+ * @brief Verifies worktree-backed prompt closure still merges and deletes the worktree when prompt delivery uses the production `sendMessage` custom-message path.
+ * @details Simulates the pi runtime `sendMessage(message, { triggerTurn: true })` contract documented for `ReplacedSessionContext`: a `triggerTurn` custom message runs the agent loop which emits `agent_start` then `agent_end` (without a separate `before_agent_start`), and the `sendMessage` promise resolves only after the agent turn completes. The test proves that when the replacement session exposes `sendMessage`, prompt delivery must still drive the prompt-end closure so the worktree branch is merged into `base-path`, the worktree plus branch are deleted, and the workflow state returns to `idle`. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after `sendMessage`-driven prompt delivery, merge handling, and restored-base assertions complete.
+ * @throws {AssertionError} Throws when `sendMessage`-driven prompt delivery leaves the worktree unmerged, the worktree or branch retained, or the workflow state not `idle`.
+ * @satisfies REQ-068, REQ-208, REQ-228, REQ-230, REQ-258, REQ-282, DES-016
+ */
+test("worktree-backed prompt commands merge and delete the worktree when prompt delivery uses sendMessage triggerTurn", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const originalSessionFile = ctx.sessionManager.getSessionFile();
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    const sentMessages: Array<{ message: unknown; options?: unknown }> = [];
+    let activeSessionCtx: any = ctx;
+    ctx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const result = await originalSwitchSession(sessionPath);
+      const replacementCwd = readFakeSessionFileCwd(sessionPath, projectBase);
+      const replacementCtx = {
+        ...ctx,
+        cwd: replacementCwd,
+        sessionManager: {
+          ...ctx.sessionManager,
+          getCwd: () => replacementCwd,
+          getSessionFile: () => sessionPath,
+        },
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          pi.sentUserMessages.push({ content, options: sendOptions });
+        },
+        async sendMessage(message: unknown, sendOptions?: unknown) {
+          sentMessages.push({ message, options: sendOptions });
+          if ((sendOptions as { triggerTurn?: boolean } | undefined)?.triggerTurn === true) {
+            await Promise.resolve();
+            await pi.emit("agent_start", {}, activeSessionCtx);
+            await pi.emit("agent_end", {
+              messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+            }, activeSessionCtx);
+          }
+        },
+      };
+      activeSessionCtx = replacementCtx;
+      if (options?.withSession) {
+        process.chdir(replacementCwd);
+        await options.withSession(replacementCtx);
+        ctx.cwd = projectBase;
+        ctx.sessionManager.getSessionFile = () => originalSessionFile;
+        ctx.sessionManager.getCwd = () => projectBase;
+        return result;
+      }
+      ctx.cwd = projectBase;
+      ctx.sessionManager.getSessionFile = () => originalSessionFile;
+      ctx.sessionManager.getCwd = () => projectBase;
+      process.chdir(projectBase);
+      return result;
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    assert.ok(
+      sentMessages.some((entry) => (entry.options as { triggerTurn?: boolean } | undefined)?.triggerTurn === true),
+      "prompt delivery must use sendMessage with triggerTurn",
+    );
+    const promptMessage = sentMessages.find((entry) =>
+      typeof (entry.message as { content?: unknown } | undefined)?.content === "string"
+      && String((entry.message as { content?: unknown }).content).includes("created worktree-dir"));
+    const promptText = String((promptMessage?.message as { content?: string } | undefined)?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false, "worktree directory must be deleted after successful closure");
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+      "worktree branch must be deleted after successful closure",
+    );
+    const logResult = spawnSync("git", ["log", "--oneline", "-1"], { cwd: projectBase, encoding: "utf8" });
+    assert.match(logResult.stdout, /init/, "base-path must remain on the original head after a no-commit ff-only merge");
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies a rejecting on-screen summary delivery never surfaces as an unhandled rejection and never interrupts the worktree merge.
+ * @details Simulates the pi runtime `sendMessage` contract where the non-critical `display:true` summary delivery rejects (for example because the session is torn down mid-emit during prompt-end closure) while the authoritative `display:false` hidden prompt message with `triggerTurn:true` still drives the agent turn. The test proves `deliverPromptCommand` must await and suppress summary delivery failures so the rejection cannot terminate the process (Node default `--unhandled-rejections=throw`) before prompt-end closure runs the worktree merge, branch deletion, and worktree deletion. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after summary-rejection-tolerant prompt delivery, merge handling, and restored-base assertions complete.
+ * @throws {AssertionError} Throws when a rejecting summary surfaces as an unhandled rejection or leaves the worktree unmerged.
+ * @satisfies REQ-068, REQ-208, REQ-228, REQ-230, REQ-258, REQ-282, REQ-334, DES-016
+ */
+test("worktree-backed prompt commands tolerate a rejecting summary sendMessage without interrupting the merge", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  let unhandledRejections: unknown[] = [];
+  const rejectionHandler = (reason: unknown): void => { unhandledRejections.push(reason); };
+  process.on("unhandledRejection", rejectionHandler);
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const originalSessionFile = ctx.sessionManager.getSessionFile();
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    const sentMessages: Array<{ message: unknown; options?: unknown }> = [];
+    let activeSessionCtx: any = ctx;
+    ctx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const result = await originalSwitchSession(sessionPath);
+      const replacementCwd = readFakeSessionFileCwd(sessionPath, projectBase);
+      const replacementCtx = {
+        ...ctx,
+        cwd: replacementCwd,
+        sessionManager: {
+          ...ctx.sessionManager,
+          getCwd: () => replacementCwd,
+          getSessionFile: () => sessionPath,
+        },
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          pi.sentUserMessages.push({ content, options: sendOptions });
+        },
+        async sendMessage(message: unknown, sendOptions?: unknown) {
+          const isTrigger = (sendOptions as { triggerTurn?: boolean } | undefined)?.triggerTurn === true;
+          sentMessages.push({ message, options: sendOptions });
+          if (!isTrigger) {
+            throw new Error("summary sendMessage rejected");
+          }
+          await Promise.resolve();
+          await pi.emit("agent_start", {}, activeSessionCtx);
+          await pi.emit("agent_end", {
+            messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+          }, activeSessionCtx);
+        },
+      };
+      activeSessionCtx = replacementCtx;
+      if (options?.withSession) {
+        process.chdir(replacementCwd);
+        await options.withSession(replacementCtx);
+        ctx.cwd = projectBase;
+        ctx.sessionManager.getSessionFile = () => originalSessionFile;
+        ctx.sessionManager.getCwd = () => projectBase;
+        return result;
+      }
+      ctx.cwd = projectBase;
+      ctx.sessionManager.getSessionFile = () => originalSessionFile;
+      ctx.sessionManager.getCwd = () => projectBase;
+      process.chdir(projectBase);
+      return result;
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(
+      sentMessages.some((entry) => (entry.options as { triggerTurn?: boolean } | undefined)?.triggerTurn === true),
+      "prompt delivery must still dispatch the hidden prompt message with triggerTurn",
+    );
+    assert.equal(process.cwd(), projectBase, "base-path must be restored after successful closure");
+    assert.equal(unhandledRejections.length, 0, "rejecting summary delivery must not surface as an unhandled rejection");
+    const promptMessage = sentMessages.find((entry) =>
+      typeof (entry.message as { content?: unknown } | undefined)?.content === "string"
+      && String((entry.message as { content?: unknown }).content).includes("created worktree-dir"));
+    const promptText = String((promptMessage?.message as { content?: string } | undefined)?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    assert.ok(worktreeMatch, promptText);
+    assert.equal(fs.existsSync(executionBasePath), false, "worktree directory must be deleted after successful closure");
+  } finally {
+    process.off("unhandledRejection", rejectionHandler);
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies worktree-backed prompt closure still merges and deletes the worktree when prompt delivery falls back to `pi.sendMessage` because the replacement session omits `sendMessage`.
+ * @details Simulates the pi runtime where `ctx.switchSession(...)` exposes a replacement context without `sendMessage` while the top-level `pi.sendMessage` is available as a fire-and-forget custom-message dispatcher. The test proves that even in this fallback path, prompt delivery must drive the prompt-end closure so the worktree branch is merged into `base-path`, the worktree plus branch are deleted, and the workflow state returns to `idle`. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after `sendMessage`-fallback prompt delivery, merge handling, and restored-base assertions complete.
+ * @throws {AssertionError} Throws when `pi.sendMessage`-fallback prompt delivery leaves the worktree unmerged, the worktree or branch retained, or the workflow state not `idle`.
+ * @satisfies REQ-068, REQ-208, REQ-228, REQ-230, REQ-258, REQ-282, DES-016
+ */
+test("worktree-backed prompt commands merge and delete the worktree when prompt delivery falls back to pi.sendMessage", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    const sentMessages: Array<{ message: unknown; options?: unknown }> = [];
+    (pi as any).sendMessage = (message: unknown, options?: unknown) => {
+      sentMessages.push({ message, options });
+      // Simulate the real SDK fire-and-forget dispatcher: trigger the agent turn asynchronously.
+      if ((options as { triggerTurn?: boolean } | undefined)?.triggerTurn === true) {
+        Promise.resolve().then(async () => {
+          await pi.emit("agent_start", {}, activeSessionCtx);
+          await pi.emit("agent_end", {
+            messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+          }, activeSessionCtx);
+        });
+      }
+    };
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const originalSessionFile = ctx.sessionManager.getSessionFile();
+    const originalSwitchSession = ctx.switchSession.bind(ctx);
+    let activeSessionCtx: any = ctx;
+    ctx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const result = await originalSwitchSession(sessionPath);
+      const replacementCwd = readFakeSessionFileCwd(sessionPath, projectBase);
+      const replacementCtx = {
+        ...ctx,
+        cwd: replacementCwd,
+        sessionManager: {
+          ...ctx.sessionManager,
+          getCwd: () => replacementCwd,
+          getSessionFile: () => sessionPath,
+        },
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          pi.sentUserMessages.push({ content, options: sendOptions });
+        },
+      };
+      activeSessionCtx = replacementCtx;
+      if (options?.withSession) {
+        process.chdir(replacementCwd);
+        await options.withSession(replacementCtx);
+        ctx.cwd = projectBase;
+        ctx.sessionManager.getSessionFile = () => originalSessionFile;
+        ctx.sessionManager.getCwd = () => projectBase;
+        return result;
+      }
+      ctx.cwd = projectBase;
+      ctx.sessionManager.getSessionFile = () => originalSessionFile;
+      ctx.sessionManager.getCwd = () => projectBase;
+      process.chdir(projectBase);
+      return result;
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    // The real SDK `pi.sendMessage` dispatcher is fire-and-forget; let the simulated agent turn drain.
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(
+      sentMessages.some((entry) => (entry.options as { triggerTurn?: boolean } | undefined)?.triggerTurn === true),
+      "prompt delivery must use pi.sendMessage with triggerTurn",
+    );
+    const promptMessage = sentMessages.find((entry) =>
+      typeof (entry.message as { content?: unknown } | undefined)?.content === "string"
+      && String((entry.message as { content?: unknown }).content).includes("created worktree-dir"));
+    const promptText = String((promptMessage?.message as { content?: string } | undefined)?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(fs.existsSync(executionBasePath), false, "worktree directory must be deleted after successful closure");
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+      "worktree branch must be deleted after successful closure",
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies worktree-backed prompt orchestration against the pi runtime session-switch contract.
  * @details Simulates the current pi runtime behavior discovered in `/tmp/pi-mono`: `ctx.switchSession(...)` exposes the replacement session through `withSession(...)` and replacement-session contexts while the host process cwd stays anchored to the original project directory until the extension updates it explicitly. The test proves prompt delivery and prompt-end closure must synchronize `process.cwd()` with the active worktree session during execution and restore `base-path` plus remove the worktree after successful merge even when the pi host leaves cwd unchanged. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after prompt delivery, merge handling, and restored-base assertions complete.

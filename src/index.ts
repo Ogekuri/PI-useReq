@@ -910,7 +910,7 @@ function executeStatusTool(operation: () => ToolResult): ReturnType<typeof build
 
 /**
  * @brief Starts delivery of one rendered prompt into the current active session.
- * @details Prefers the replacement-session `sendMessage(...)` helper exposed by `withSession(...)` callbacks after session replacement so post-switch prompt delivery never reuses stale pre-switch session-bound extension objects. Delivers the rendered prompt as a `display:false` custom message with `triggerTurn:true` so the full content reaches the LLM agent without appearing on screen, and emits a `display:true` command invocation summary so the TUI shows only the compact summary. Returns the underlying hidden-delivery promise without awaiting it so callers can record the `running` workflow transition as soon as prompt handoff is accepted instead of waiting for the full agent turn to complete on runtimes whose async replacement-session helpers resolve only after `agent_end`. When pi later invalidates that replacement-session context during successful prompt-end restoration, the helper suppresses the documented stale-extension-context rejection because the prompt was already accepted and late rethrow would surface a false orchestration failure. Falls back to `sendUserMessage(...)` only for non-replacement flows or runtimes that do not expose `sendMessage`. Runtime is O(n) in prompt length. Side effects are limited to hidden prompt delivery plus on-screen summary display.
+ * @details Prefers the replacement-session `sendMessage(...)` helper exposed by `withSession(...)` callbacks after session replacement so post-switch prompt delivery never reuses stale pre-switch session-bound extension objects. Delivers the rendered prompt as a `display:false` custom message with `triggerTurn:true` so the full content reaches the LLM agent without appearing on screen, and emits a `display:true` command invocation summary so the TUI shows only the compact summary. Awaits the non-critical summary delivery and suppresses its failures before dispatching the authoritative hidden prompt turn so a rejecting summary never surfaces as an unhandled rejection that could terminate the process before prompt-end closure runs the worktree merge. Returns the underlying hidden-delivery promise without awaiting the full agent turn so callers can record the `running` workflow transition as soon as prompt handoff is accepted; the returned promise resolves after the hidden prompt message is accepted, which on runtimes whose async replacement-session helpers resolve only after `agent_end` lets prompt-end closure finalize the worktree merge during the awaited delivery. When pi later invalidates that replacement-session context during successful prompt-end restoration, the helper suppresses the documented stale-extension-context rejection because the prompt was already accepted and late rethrow would surface a false orchestration failure. Falls back to `sendUserMessage(...)` only for non-replacement flows or runtimes that do not expose `sendMessage`. Runtime is O(n) in prompt length. Side effects are limited to hidden prompt delivery plus on-screen summary display.
  * @param[in] pi {ExtensionAPI} Handler-scoped extension API instance retained as the fallback dispatcher.
  * @param[in] content {string} Rendered prompt markdown.
  * @param[in] summary {string} Command invocation summary text displayed on screen.
@@ -942,9 +942,16 @@ function deliverPromptCommand(
     display: false,
   };
   if (typeof replacementContext?.sendMessage === "function") {
-    replacementContext.sendMessage(summaryMessage);
-    return Promise.resolve(
-      replacementContext.sendMessage(hiddenPromptMessage, { triggerTurn: true }),
+    // The on-screen summary is non-critical; await it and suppress its delivery failures so a
+    // rejecting summary never surfaces as an unhandled rejection that could terminate the
+    // process before the authoritative hidden prompt turn drives prompt-end closure.
+    const summaryDelivery = Promise.resolve(
+      replacementContext.sendMessage(summaryMessage),
+    ).catch(() => {
+      // Intentionally suppressed: the hidden prompt message below is the authoritative turn trigger.
+    });
+    return summaryDelivery.then(() =>
+      replacementContext!.sendMessage!(hiddenPromptMessage, { triggerTurn: true }),
     ).catch((error) => {
       if (isStaleExtensionContextError(error)) {
         return;
@@ -953,9 +960,17 @@ function deliverPromptCommand(
     });
   }
   if (typeof pi.sendMessage === "function") {
-    pi.sendMessage(summaryMessage);
-    pi.sendMessage(hiddenPromptMessage, { triggerTurn: true });
-    return Promise.resolve();
+    // `pi.sendMessage` is a fire-and-forget dispatcher in the pi runtime; chain both deliveries
+    // through one suppressed summary promise so a rejecting summary cannot terminate the process
+    // before the hidden prompt turn drives prompt-end closure.
+    const fallbackSummary = Promise.resolve(
+      pi.sendMessage(summaryMessage),
+    ).catch(() => {
+      // Intentionally suppressed: the hidden prompt message below is the authoritative turn trigger.
+    });
+    return fallbackSummary.then(() => {
+      pi.sendMessage(hiddenPromptMessage, { triggerTurn: true });
+    });
   }
   if (typeof replacementContext?.sendUserMessage === "function") {
     return Promise.resolve(replacementContext.sendUserMessage(content)).catch((error) => {
