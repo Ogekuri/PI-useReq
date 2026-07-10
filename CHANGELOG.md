@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0](https://github.com/Ogekuri/PI-useReq/compare/v0.42.0..v0.43.0) - 2026-07-10
+### 🚜  Changes
+- make tsx a runtime dependency so postinstall resolves [useReq] *(packaging)*
+  - Move tsx from devDependencies to dependencies in package.json and the root entry of package-lock.json. The package ships .ts source with noEmit and no dist build, so node --import tsx is required for package scripts, the postinstall checker installer, and the .ts extension entry. tsx was only a devDependency, hence absent on consumer installs, causing ERR_MODULE_NOT_FOUND during pi update --extensions.
+  - Requirements: add CTN-020; update Section 5.2 note; bump front-matter to 0.0.75
+  - Verified: npm install --legacy-peer-deps runs postinstall with exit 0
+
 ## [0.42.0](https://github.com/Ogekuri/PI-useReq/compare/v0.41.0..v0.42.0) - 2026-07-10
 ### 🚜  Changes
 - bundle pyright/ruff/eslint and add bundled-bin resolution [useReq] *(static-check)*
@@ -593,6 +600,7 @@
 - \[0.40.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.40.0
 - \[0.41.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.41.0
 - \[0.42.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.42.0
+- \[0.43.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.43.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -634,3 +642,4 @@
 [0.40.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.39.0..v0.40.0
 [0.41.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.40.0..v0.41.0
 [0.42.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.41.0..v0.42.0
+[0.43.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.42.0..v0.43.0
