@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.74"
+version: "0.0.75"
 date: "2026-07-10"
 author: "OpenAI Codex"
 scope:
@@ -70,6 +70,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-016**: MUST NOT modify any path under `docs/` during analysis, implementation, verification, or bug fixing.
 - **CTN-017**: MUST NOT modify any path under `pi.dev-src/` during analysis, implementation, verification, or bug fixing.
 - **CTN-019**: MUST persist local `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
+- **CTN-020**: MUST declare `tsx` as a runtime `package.json` dependency so `node --import tsx` package scripts, the `postinstall` checker installer, and the `.ts` extension entry resolve on clean consumer installs.
 
 ## 3. Requirements
 
@@ -556,7 +557,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `@sinclair/typebox` provides runtime tool parameter schemas and is declared as a peer dependency evidenced by `src/index.ts`, `package.json`, and `package-lock.json`.
 - `js-tiktoken` provides token counting evidence in `src/core/token-counter.ts`, `package.json`, and `package-lock.json`.
 - `fast-glob` provides wildcard expansion for static-check inputs evidence in `src/core/static-check.ts`, `package.json`, and `package-lock.json`.
-- `tsx` is the manifest-declared TypeScript execution runner for tests and CLI scripts evidenced by `package.json` and `package-lock.json`.
+- `tsx` is the manifest-declared runtime dependency and TypeScript execution runner for package scripts, the `postinstall` checker installer, and the `.ts` extension entry, evidenced by `package.json` and `package-lock.json`.
 - `typescript` is the manifest-declared compiler and type-checker evidenced by `package.json`, `package-lock.json`, and `tsconfig.json`.
 - `git` CLI is a runtime dependency for repository discovery, source-file collection, bundled prompt-command worktree orchestration, and direct `req-references` commit orchestration evidenced in `src/core/tool-runner.ts`, `src/core/prompt-command-runtime.ts`, and `src/core/req-references-command.ts`.
 
