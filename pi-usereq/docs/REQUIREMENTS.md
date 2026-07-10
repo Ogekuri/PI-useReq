@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.75"
+version: "0.0.76"
 date: "2026-07-10"
 author: "OpenAI Codex"
 scope:
@@ -258,7 +258,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-290**: MUST preserve the successful worktree execution transcript in the restored client-visible session after successful closure.
 - **REQ-291**: MUST detect staged or unstaged `base-path` changes before successful closure merge and execute `git stash`, merge, and `git stash pop` in that order when changes exist.
 - **REQ-292**: MUST complete successful stash-assisted closure without surfacing an error and MUST emit a warning that the restored `base-path` is not clean after merge.
-- **REQ-209**: MUST restore the original session-backed `base-path`, notify the pi CLI of closure failure, and retain the worktree plus branch when orchestrated session closure is interrupted, failed, aborted, or incomplete.
+- **REQ-209**: MUST retain the worktree execution session, worktree, and branch, notify the pi CLI of closure failure, park workflow state in `error`, and leave the original base-path session unresumed when orchestrated session closure is interrupted, failed, aborted, or incomplete.
 - **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, and `error`.
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
@@ -283,7 +283,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-313**: MUST make failing `req-reset` surface restoration or cleanup failures, transition workflow state to `error`, and preserve already-completed cleanup effects.
 - **REQ-228**: MUST transition workflow state to `merging` immediately before merge and worktree/branch deletion begin during successful orchestrated session closure.
 - **REQ-229**: MUST transition workflow state to `error` and notify the pi CLI when base-path restoration, merge, or worktree/branch deletion verification fails during orchestrated session closure.
-- **REQ-230**: MUST transition workflow state to `idle` before the orchestrated session-closure handler returns.
+- **REQ-230**: MUST transition workflow state to `idle` before the orchestrated session-closure handler returns for completed runs.
 - **REQ-219**: MUST verify created worktree registration via `git worktree list`, branch presence via `git branch` list, and filesystem path existence before changing the prompt execution path or dispatching a prompt message.
 - **REQ-256**: MUST store `base-path`, `context-path`, `git-path`, `parent-path`, `base-dir`, `worktree-dir`, `worktree-path`, branch name, original session file, and execution session file inside prompt-orchestration runtime state.
 - **REQ-272**: MUST verify post-switch execution targets before agent start using replacement-session context when available, the persisted execution-session header cwd, and `process.cwd()`, and MUST NOT rely on stale pre-switch session-bound objects.
@@ -510,7 +510,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-055**: MUST verify bundled prompt-backed `req-<prompt>` commands enforce the documented required-doc matrix, create no worktree, and dispatch no prompt when a required doc is missing.
 - **TST-056**: MUST verify worktree-backed `req-<prompt>` commands derive `worktree-dir` from persisted `GIT_WORKTREE_PREFIX` for both default and override values.
 - **TST-057**: MUST verify `req-<prompt>` commands create `worktree-path`, dispatch prompts through the replacement-session context of the switched execution session, and run tool executions against prepared `context-path`.
-- **TST-058**: MUST verify worktree-backed `req-<prompt>` commands skip merge plus worktree/branch deletion, restore `base-path`, and notify pi CLI of closure failure when the matched run ends interrupted, failed, or aborted.
+- **TST-058**: MUST verify worktree-backed `req-<prompt>` commands skip merge plus worktree/branch deletion, retain the worktree execution session, notify closure failure, and park workflow state `error` when the matched run ends interrupted, failed, or aborted.
 - **TST-061**: MUST verify `req-<prompt>` commands skip worktree creation when `AUTO_GIT_COMMIT=disable`, even if persisted `GIT_WORKTREE_ENABLED=enable`.
 - **TST-064**: MUST verify worktree-backed `req-<prompt>` commands confirm created worktree directory plus branch existence before prompt dispatch and abort without dispatch when verification fails.
 - **TST-067**: MUST verify `status:error` renders with blinking error styling and non-error `status` values follow the documented status-bar theme convention.

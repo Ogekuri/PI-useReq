@@ -3633,7 +3633,7 @@ test("worktree-enabled prompt commands honor overridden worktree prefixes", asyn
   }
 });
 
-test("worktree-backed prompt failures skip merge, restore base-path, and retain worktree", async () => {
+test("worktree-backed prompt failures keep the worktree session, retain worktree, and park in error", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
@@ -3658,8 +3658,11 @@ test("worktree-backed prompt failures skip merge, restore base-path, and retain 
       messages: [{ role: "assistant", stopReason: "error", content: [] }],
     }, ctx);
 
-    assert.equal(process.cwd(), projectBase);
-    assert.equal(ctx.cwd, projectBase);
+    // The original base-path session MUST NOT be resumed on failure; the
+    // client stays on the worktree execution session so the failure stays
+    // visible until req-reset restores base-path and removes the worktree.
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(ctx.cwd, executionBasePath);
     assert.equal(fs.existsSync(executionBasePath), true);
     assert.equal(fs.existsSync(path.join(projectBase, "src", "failed.ts")), false);
     assert.equal(
@@ -3674,8 +3677,8 @@ test("worktree-backed prompt failures skip merge, restore base-path, and retain 
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
-        workflowState: "idle",
-        basePath: buildExpectedFakeBasePath(projectBase),
+        workflowState: "error",
+        basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
         srcDir: ["src"],

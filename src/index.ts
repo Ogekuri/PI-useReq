@@ -1454,6 +1454,26 @@ async function handleExtensionStatusEvent(
         ) {
           notifyContextSafely(promptContext, finalization.warningMessage, "info");
         }
+      } else if (closureFailureMessage !== undefined) {
+        // Worktree-backed run that ended interrupted, failed, aborted, or
+        // incomplete (REQ-209): keep the worktree execution session visible,
+        // surface the closure-failure error, park the workflow in `error`, and
+        // retain the active request so `req-reset` can restore `base-path` and
+        // remove the retained worktree plus branch. The original base-path
+        // session MUST NOT be resumed here so the failure stays visible.
+        notifyContextSafely(promptContext, closureFailureMessage, "error");
+        if (debugConfig) {
+          transitionPromptWorkflowState(
+            statusController,
+            promptContext,
+            activePromptRequest.basePath,
+            debugConfig,
+            activePromptRequest.promptName,
+            "error",
+          );
+        } else {
+          setPiUsereqWorkflowState(statusController, "error", promptContext);
+        }
       } else {
         try {
           promptContext = (await restorePromptCommandExecution(
@@ -1463,9 +1483,6 @@ async function handleExtensionStatusEvent(
               ? { config: debugConfig, workflowState: statusController.state.workflowState }
               : undefined,
           ) ?? promptContext) as typeof ctx;
-          if (closureFailureMessage !== undefined) {
-            notifyContextSafely(promptContext, closureFailureMessage, "error");
-          }
         } catch (error) {
           promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
           if (debugConfig) {
@@ -1483,19 +1500,21 @@ async function handleExtensionStatusEvent(
           notifyContextSafely(promptContext, error instanceof Error ? error.message : String(error), "error");
         }
       }
-      statusController.state.pendingPromptRequest = undefined;
-      statusController.state.activePromptRequest = undefined;
-      if (debugConfig) {
-        transitionPromptWorkflowState(
-          statusController,
-          promptContext,
-          activePromptRequest.basePath,
-          debugConfig,
-          activePromptRequest.promptName,
-          "idle",
-        );
-      } else {
-        setPiUsereqWorkflowState(statusController, "idle", promptContext);
+      if (closureFailureMessage === undefined) {
+        statusController.state.pendingPromptRequest = undefined;
+        statusController.state.activePromptRequest = undefined;
+        if (debugConfig) {
+          transitionPromptWorkflowState(
+            statusController,
+            promptContext,
+            activePromptRequest.basePath,
+            debugConfig,
+            activePromptRequest.promptName,
+            "idle",
+          );
+        } else {
+          setPiUsereqWorkflowState(statusController, "idle", promptContext);
+        }
       }
     }
   }
