@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.71"
+version: "0.0.72"
 date: "2026-07-10"
 author: "OpenAI Codex"
 scope:
@@ -395,12 +395,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-325**: MUST reject `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` execution when `DEBUG_TOOL_COMMANDS_ENABLED=disable`.
 - **REQ-326**: MUST add a top-level `Context Files` row to the `pi-usereq` menu between `Unit tests directory` and `Auto git commit`.
 - **REQ-327**: MUST expose a `Context Files` submenu with separate enable toggles for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` in that order.
-- **REQ-328**: MUST persist `context-files-requirements`, `context-files-references`, and `context-files-workflow` as boolean flags in local configuration, each defaulting to enabled.
+- **REQ-328**: MUST persist `context-files-requirements`, `context-files-references`, and `context-files-workflow` as boolean flags in local configuration, each defaulting to disabled.
 - **REQ-329**: MUST replace the `%%CONTEXT_FILES%%` prompt token with one markdown section per enabled context file in the order `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md`.
 - **REQ-330**: MUST render each `%%CONTEXT_FILES%%` section as the file-name heading, an HTML `<file name="<docs-dir>/<filename>">` reference with `%%DOC_PATH%%` pre-substituted, and the raw file content inside four-backtick `markdown` fences.
 - **REQ-331**: MUST omit the `%%CONTEXT_FILES%%` section for any disabled flag or missing context file without surfacing an error.
 - **REQ-332**: MUST inject `%%CONTEXT_FILES%%` content verbatim after every other prompt replacement so literal `%%...%%` tokens inside context files are not substituted.
-- **REQ-333**: MUST restore all three `Context Files` flags to enabled when the `Context Files` subtree `Reset defaults` is approved.
+- **REQ-333**: MUST restore all three `Context Files` flags to disabled when the `Context Files` subtree `Reset defaults` is approved.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.

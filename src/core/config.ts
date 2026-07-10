@@ -214,14 +214,14 @@ export const DEFAULT_TESTS_DIR = "tests";
 export const DEFAULT_SRC_DIRS = ["src"];
 /**
  * @brief Defines the default value for every persisted context-file injection flag.
- * @details Each `%%CONTEXT_FILES%%` injection toggle defaults to enabled so the bundled canonical documents remain part of the prompt context unless the user explicitly disables one. Lookup complexity is O(1).
+ * @details Each `%%CONTEXT_FILES%%` injection toggle defaults to disabled so the bundled canonical documents are excluded from the prompt context unless the user explicitly enables one. Lookup complexity is O(1).
  * @satisfies REQ-328
  */
-export const DEFAULT_CONTEXT_FILES_FLAG = true;
+export const DEFAULT_CONTEXT_FILES_FLAG = false;
 
 /**
  * @brief Normalizes one persisted context-file injection flag.
- * @details Returns the documented default (`true`) for missing or non-boolean values and preserves only explicit boolean input, so any malformed persisted entry keeps context-file injection enabled. Runtime is O(1). No external state is mutated.
+ * @details Returns the documented default (`false`) for missing or non-boolean values and preserves only explicit boolean input, so any malformed persisted entry keeps context-file injection disabled. Runtime is O(1). No external state is mutated.
  * @param[in] value {unknown} Candidate persisted context-file flag.
  * @return {boolean} Normalized context-file injection flag.
  * @satisfies REQ-328

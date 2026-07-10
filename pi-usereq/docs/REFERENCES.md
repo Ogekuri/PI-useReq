@@ -633,7 +633,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 
 ### fn `export function normalizeContextFilesFlag(value: unknown): boolean` (L229-231)
 - @brief Normalizes one persisted context-file injection flag.
-- @details Returns the documented default (`true`) for missing or non-boolean values and preserves only explicit boolean input, so any malformed persisted entry keeps context-file injection enabled. Runtime is O(1). No external state is mutated.
+- @details Returns the documented default (`false`) for missing or non-boolean values and preserves only explicit boolean input, so any malformed persisted entry keeps context-file injection disabled. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted context-file flag.
 - @return {boolean} Normalized context-file injection flag.
 - @satisfies REQ-328
