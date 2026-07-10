@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0](https://github.com/Ogekuri/PI-useReq/compare/v0.41.0..v0.42.0) - 2026-07-10
+### 🚜  Changes
+- bundle pyright/ruff/eslint and add bundled-bin resolution [useReq] *(static-check)*
+  - Add pyright, ruff, and eslint as pinned npm dependencies with a best-effort postinstall installer (scripts/install-static-checkers.ts) that probes bundled node_modules/.bin, attempts npm install on miss, prints native-checker guidance, and always returns 0.
+  - Add resolveCheckerExecutable bundled-bin-plus-PATH resolver and checkDefaultCheckersAvailability session_start helper. Change TypeScript default static-check entry from npx+eslint to eslint. Emit one warning notification during session_start for missing enabled checkers without aborting.
+  - Add tests/static-check-bundled.test.ts covering resolveCheckerExecutable precedence, postinstall exit-code-0 invariant, and session_start missing-checker reporting. Update REQUIREMENTS.md (REQ-339..REQ-344, DES-017/018, TST-123..125), WORKFLOW.md, README.md, and REFERENCES.md.
+
 ## [0.41.0](https://github.com/Ogekuri/PI-useReq/compare/v0.40.0..v0.41.0) - 2026-07-10
 ### 🐛  Bug Fixes
 - await and suppress summary sendMessage to prevent unhandled rejection breaking worktree merge [useReq] *(prompt-delivery)*
@@ -585,6 +592,7 @@
 - \[0.39.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.39.0
 - \[0.40.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.40.0
 - \[0.41.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.41.0
+- \[0.42.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.42.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -625,3 +633,4 @@
 [0.39.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.38.0..v0.39.0
 [0.40.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.39.0..v0.40.0
 [0.41.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.40.0..v0.41.0
+[0.42.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.41.0..v0.42.0
