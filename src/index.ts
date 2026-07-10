@@ -83,7 +83,11 @@ import {
   normalizeEnabledPiUsereqTools,
   type PiUsereqStartupToolName,
 } from "./core/pi-usereq-tools.js";
-import { renderPrompt } from "./core/prompts.js";
+import {
+  PROMPT_COMMAND_SUMMARY_CUSTOM_TYPE,
+  renderPrompt,
+  renderPromptCommandSummary,
+} from "./core/prompts.js";
 import {
   abortPromptCommandExecution,
   activatePromptCommandExecution,
@@ -906,21 +910,53 @@ function executeStatusTool(operation: () => ToolResult): ReturnType<typeof build
 
 /**
  * @brief Starts delivery of one rendered prompt into the current active session.
- * @details Prefers the replacement-session `sendUserMessage(...)` helper exposed by `withSession(...)` callbacks after session replacement so post-switch prompt delivery never reuses stale pre-switch session-bound extension objects. Returns the underlying delivery promise without awaiting it so callers can record the `running` workflow transition as soon as prompt handoff is accepted instead of waiting for the full agent turn to complete on runtimes whose async replacement-session helpers resolve only after `agent_end`. When pi later invalidates that replacement-session context during successful prompt-end restoration, the helper suppresses the documented stale-extension-context rejection because the prompt was already accepted and late rethrow would surface a false orchestration failure. Falls back to `pi.sendUserMessage(...)` only for non-replacement flows or runtimes that do not expose replacement-session helpers. Runtime is O(n) in prompt length. Side effects are limited to user-message delivery.
+ * @details Prefers the replacement-session `sendMessage(...)` helper exposed by `withSession(...)` callbacks after session replacement so post-switch prompt delivery never reuses stale pre-switch session-bound extension objects. Delivers the rendered prompt as a `display:false` custom message with `triggerTurn:true` so the full content reaches the LLM agent without appearing on screen, and emits a `display:true` command invocation summary so the TUI shows only the compact summary. Returns the underlying hidden-delivery promise without awaiting it so callers can record the `running` workflow transition as soon as prompt handoff is accepted instead of waiting for the full agent turn to complete on runtimes whose async replacement-session helpers resolve only after `agent_end`. When pi later invalidates that replacement-session context during successful prompt-end restoration, the helper suppresses the documented stale-extension-context rejection because the prompt was already accepted and late rethrow would surface a false orchestration failure. Falls back to `sendUserMessage(...)` only for non-replacement flows or runtimes that do not expose `sendMessage`. Runtime is O(n) in prompt length. Side effects are limited to hidden prompt delivery plus on-screen summary display.
  * @param[in] pi {ExtensionAPI} Handler-scoped extension API instance retained as the fallback dispatcher.
  * @param[in] content {string} Rendered prompt markdown.
+ * @param[in] summary {string} Command invocation summary text displayed on screen.
  * @param[in] context {unknown} Optional replacement-session helper context.
  * @return {Promise<void>} Promise representing eventual prompt-delivery completion.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-227, REQ-281
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-227, REQ-281, REQ-334, REQ-335, DES-016
  */
 function deliverPromptCommand(
   pi: ExtensionAPI,
   content: string,
+  summary: string,
   context?: unknown,
 ): Promise<void> {
   const replacementContext = context as {
+    sendMessage?: (
+      message: { customType: string; content: string; display: boolean },
+      options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+    ) => Promise<void> | void;
     sendUserMessage?: (message: string) => Promise<void> | void;
   } | undefined;
+  const summaryMessage = {
+    customType: PROMPT_COMMAND_SUMMARY_CUSTOM_TYPE,
+    content: summary,
+    display: true,
+  };
+  const hiddenPromptMessage = {
+    customType: PROMPT_COMMAND_SUMMARY_CUSTOM_TYPE,
+    content,
+    display: false,
+  };
+  if (typeof replacementContext?.sendMessage === "function") {
+    replacementContext.sendMessage(summaryMessage);
+    return Promise.resolve(
+      replacementContext.sendMessage(hiddenPromptMessage, { triggerTurn: true }),
+    ).catch((error) => {
+      if (isStaleExtensionContextError(error)) {
+        return;
+      }
+      throw error;
+    });
+  }
+  if (typeof pi.sendMessage === "function") {
+    pi.sendMessage(summaryMessage);
+    pi.sendMessage(hiddenPromptMessage, { triggerTurn: true });
+    return Promise.resolve();
+  }
   if (typeof replacementContext?.sendUserMessage === "function") {
     return Promise.resolve(replacementContext.sendUserMessage(content)).catch((error) => {
       if (isStaleExtensionContextError(error)) {
@@ -3073,7 +3109,12 @@ function registerPromptCommands(
             },
           );
           renderPiUsereqStatus(statusController, promptContext);
-          const promptDelivery = deliverPromptCommand(pi, content, promptContext);
+          const commandSummary = renderPromptCommandSummary(
+            promptName,
+            args,
+            config,
+          );
+          const promptDelivery = deliverPromptCommand(pi, content, commandSummary, promptContext);
           transitionPromptWorkflowState(
             statusController,
             promptContext,

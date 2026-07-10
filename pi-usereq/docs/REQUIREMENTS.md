@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.70"
-date: "2026-07-09"
+version: "0.0.71"
+date: "2026-07-10"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -89,6 +89,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-010**: MUST centralize event-driven context snapshots, run-timing state, prompt-orchestration workflow state, and status-bar rendering through shared extension-status helpers.
 - **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates `build-release`, preserving changelog-driven GitHub Release creation while adding npm publication.
 - **DES-015**: MUST implement config-gated `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` slash-command wrappers in `src/index.ts` that reuse existing tool-runner execution paths.
+- **DES-016**: MUST deliver rendered bundled-prompt content to the LLM through `sendMessage` as a `display:false` custom message with `triggerTurn:true` and MUST NOT use `sendUserMessage` when `sendMessage` is available.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -157,6 +158,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted local and global configuration.
 - **REQ-067**: MUST send every bundled prompt-backed `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that sends bundled prompt-backed `req-<prompt>` payloads through the forked execution session by using only the replacement-session context for post-switch session-bound operations.
+- **REQ-334**: MUST NOT display rendered prompt content on screen when delivering bundled prompt-backed `req-<prompt>` commands and MUST deliver the full rendered content only to the LLM agent.
+- **REQ-335**: MUST display a command invocation summary on screen for every bundled prompt-backed `req-<prompt>` command containing the command name, passed arguments, and active configuration.
+- **REQ-336**: MUST render the command invocation summary with the command name without the `req-` prefix in uppercase and the user request arguments.
+- **REQ-337**: MUST include `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools` in the command invocation summary.
 - **REQ-008**: MUST provide a `Language static code checkers` submenu that adds global Command entries by guided language flow, removes configured global checker entries, toggles local per-language enablement, and resets static-check configuration.
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
@@ -506,6 +511,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-065**: MUST verify default startup-tool enablement matches the documented enabled and disabled tool matrix.
 - **TST-110**: MUST verify `Enable tools` toggles, enable-all, disable-all, and reset-defaults persist only in global configuration.
 - **TST-066**: MUST verify `req-<prompt>` commands keep working when extension custom-tool registrations are removed from the runtime inventory.
+- **TST-121**: MUST verify bundled prompt-backed `req-<prompt>` commands deliver the full rendered prompt content through the fallback `sendUserMessage` channel when the runtime does not expose `sendMessage`.
 - **TST-059**: MUST verify every agent-tool registration defines custom `renderResult` and that compact rendering shows essential invocation parameters while expanded rendering avoids fallback raw-content display.
 - **TST-086**: MUST verify bundled prompt-backed `req-<prompt>` commands abort before prompt dispatch when the persisted execution-session header cwd or `process.cwd()` differs from the expected execution path, and abort before merge when persisted execution-session header metadata or verified worktree artifacts diverge, while stale pre-switch context probes alone do not abort.
 - **TST-113**: MUST verify default local configuration persists `DEBUG_TOOL_COMMANDS_ENABLED=disable`, and the `Debug` submenu renders `Enable debug commands for tools` before `Log file`.

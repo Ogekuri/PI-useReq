@@ -6,7 +6,17 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { buildPromptReplacementPaths, DEFAULT_DOCS_DIR, type UseReqConfig } from "./config.js";
+import {
+  buildPromptReplacementPaths,
+  DEFAULT_DOCS_DIR,
+  DEFAULT_STATIC_CHECK_LANGUAGES,
+  resolveEffectiveGitWorktreeEnabled,
+  type UseReqConfig,
+} from "./config.js";
+import {
+  comparePiUsereqStartupToolNames,
+  type PiUsereqStartupToolName,
+} from "./pi-usereq-tools.js";
 import { formatRuntimePathForDisplay, normalizeRelativeDirContract } from "./path-context.js";
 import type {
   PromptCommandExecutionPlan,
@@ -354,4 +364,62 @@ export function renderPrompt(
     return adapted.split("%%CONTEXT_FILES%%").join(contextFilesBlock);
   }
   return adapted.split("%%CONTEXT_FILES%%").join("");
+}
+
+/**
+ * @brief Defines the custom-message type used for pi-usereq prompt-command screen summaries and hidden LLM prompt delivery.
+ * @details The constant is reused as the `customType` for both the `display:true` command invocation summary and the `display:false` hidden rendered prompt so the TUI renders only the summary while the full prompt reaches the LLM agent through the same custom-message channel. Access complexity is O(1).
+ * @satisfies DES-016, REQ-334
+ */
+export const PROMPT_COMMAND_SUMMARY_CUSTOM_TYPE = "pi-usereq-prompt-command";
+
+/**
+ * @brief Builds the on-screen command invocation summary for one bundled prompt-backed `req-<prompt>` command.
+ * @details Renders the command name without the `req-` prefix in uppercase, the user request arguments, and the active configuration fields (`docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools`) so the TUI shows only a compact summary while the full rendered prompt is delivered hidden to the LLM agent. Static-check languages are emitted in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order; enabled tools are emitted in documented menu order via `comparePiUsereqStartupToolNames`. Runtime is O(l + t log t) where l is language count and t is enabled-tool count. No external state is mutated.
+ * @param[in] promptName {string} Bundled prompt name without the `req-` prefix.
+ * @param[in] args {string} User request arguments passed to the slash command.
+ * @param[in] config {UseReqConfig} Effective project configuration supplying directory, git, static-check, and tool fields.
+ * @return {string} Multi-line command invocation summary text.
+ * @satisfies REQ-335, REQ-336, REQ-337
+ */
+export function renderPromptCommandSummary(
+  promptName: string,
+  args: string,
+  config: UseReqConfig,
+): string {
+  const contextFiles = CONTEXT_FILE_DESCRIPTORS
+    .filter((descriptor) => config[descriptor.flagKey])
+    .map((descriptor) => descriptor.fileName.replace(/\.md$/, "").toLowerCase())
+    .join(", ");
+  const enabledLanguages = DEFAULT_STATIC_CHECK_LANGUAGES
+    .filter((language) => config["static-check"][language]?.enabled === "enable")
+    .join(", ");
+  const enabledTools = [...config["enabled-tools"]]
+    .sort((left, right) =>
+      comparePiUsereqStartupToolNames(
+        left as PiUsereqStartupToolName,
+        right as PiUsereqStartupToolName,
+      ))
+    .join(", ");
+  const effectiveWorktree = resolveEffectiveGitWorktreeEnabled(
+    config.AUTO_GIT_COMMIT,
+    config.GIT_WORKTREE_ENABLED,
+  );
+  const lines: string[] = [
+    `Command: ${promptName.toUpperCase()}`,
+    "",
+    `User's Request: ${args}`,
+    "",
+    "Configuration:",
+    `- document dir:        ${config["docs-dir"]}`,
+    `- source-code dirs:    ${config["src-dir"].join(", ")}`,
+    `- unit tests dir:      ${config["tests-dir"]}`,
+    `- context files:       ${contextFiles}`,
+    `- auto git commit:     ${config.AUTO_GIT_COMMIT}`,
+    `- git worktree:        ${effectiveWorktree}`,
+    `- worktree prefix:     ${config.GIT_WORKTREE_PREFIX}`,
+    `- static code checks:  ${enabledLanguages}`,
+    `- enabled tools:       ${enabledTools}`,
+  ];
+  return lines.join("\n");
 }
