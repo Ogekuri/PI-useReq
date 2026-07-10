@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.40.0](https://github.com/Ogekuri/PI-useReq/compare/v0.39.0..v0.40.0) - 2026-07-10
+### 🚜  Changes
+- hide full prompt on screen, show command summary [useReq] *(prompt-delivery)*
+  - Deliver rendered prompt to LLM via sendMessage(display:false, triggerTurn:true)
+  - Display command invocation summary (command name, args, config) on screen
+  - Fall back to sendUserMessage when sendMessage is unavailable
+  - Add renderPromptCommandSummary in src/core/prompts.ts
+  - Update deliverPromptCommand in src/index.ts for all req-<prompt> commands
+  - Add requirements DES-016, REQ-334..337, TST-121
+  - Update WORKFLOW.md call-traces and REFERENCES.md
+
 ## [0.39.0](https://github.com/Ogekuri/PI-useReq/compare/v0.38.0..v0.39.0) - 2026-07-09
 ### ⛰️  Features
 - Add Context Files menu and %%CONTEXT_FILES%% prompt injection [useReq] *(context-files)*
@@ -535,6 +546,7 @@
 - \[0.37.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.37.0
 - \[0.38.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.38.0
 - \[0.39.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.39.0
+- \[0.40.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.40.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -573,3 +585,4 @@
 [0.37.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.36.0..v0.37.0
 [0.38.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.37.0..v0.38.0
 [0.39.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.38.0..v0.39.0
+[0.40.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.39.0..v0.40.0
