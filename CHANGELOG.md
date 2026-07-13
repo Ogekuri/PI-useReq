@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.49.0](https://github.com/Ogekuri/PI-useReq/compare/v0.48.0..v0.49.0) - 2026-07-13
+### 🚜  Changes
+- Reorder command summary: Configuration before User's Request [useReq] *(prompts)*
+  - Move the User's Request line after the Configuration block in the bundled prompt-backed command invocation summary so sections render as Command, Configuration, then User's Request, each separated by one blank line. Add REQ-353 and TST-131, update renderPromptCommandSummary in src/core/prompts.ts, and regenerate REFERENCES.md.
+
 ## [0.48.0](https://github.com/Ogekuri/PI-useReq/compare/v0.47.0..v0.48.0) - 2026-07-13
 ### 🐛  Bug Fixes
 - approve scripts at correct install root [useReq] *(install-static-checkers)*
@@ -650,6 +655,7 @@
 - \[0.46.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.46.0
 - \[0.47.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.47.0
 - \[0.48.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.48.0
+- \[0.49.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.49.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -697,3 +703,4 @@
 [0.46.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.45.0..v0.46.0
 [0.47.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.46.0..v0.47.0
 [0.48.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.47.0..v0.48.0
+[0.49.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.48.0..v0.49.0
