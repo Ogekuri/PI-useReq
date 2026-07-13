@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.50.0](https://github.com/Ogekuri/PI-useReq/compare/v0.49.0..v0.50.0) - 2026-07-13
+### 🚜  Changes
+- exclude tests from npm package via files allowlist [useReq] *(packaging)*
+  - Add package.json files allowlist ["src","scripts"] so npm consumer
+  - installs (e.g. .pi/agent/npm/node_modules/pi-usereq/) omit tests/.
+  - Satisfies CTN-021: published package ships only runtime-required
+  - src/ and scripts/, keeping tests for development only.
+  - Bump REQUIREMENTS.md to v0.0.79 with CTN-021 plus evidence.
+
 ## [0.49.0](https://github.com/Ogekuri/PI-useReq/compare/v0.48.0..v0.49.0) - 2026-07-13
 ### 🚜  Changes
 - Reorder command summary: Configuration before User's Request [useReq] *(prompts)*
@@ -656,6 +665,7 @@
 - \[0.47.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.47.0
 - \[0.48.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.48.0
 - \[0.49.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.49.0
+- \[0.50.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.50.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -704,3 +714,4 @@
 [0.47.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.46.0..v0.47.0
 [0.48.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.47.0..v0.48.0
 [0.49.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.48.0..v0.49.0
+[0.50.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.49.0..v0.50.0
