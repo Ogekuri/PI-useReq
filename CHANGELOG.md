@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.48.0](https://github.com/Ogekuri/PI-useReq/compare/v0.47.0..v0.48.0) - 2026-07-13
+### 🐛  Bug Fixes
+- approve scripts at correct install root [useReq] *(install-static-checkers)*
+  - getConsumerInstallRoot preferred INIT_CWD over npm_config_local_prefix.
+  - pi runs 'npm install --prefix <root>' from its own cwd, so INIT_CWD is the
+  - caller cwd, not the install root; the allowScripts approval was written to
+  - the wrong project (or nowhere) and 'npm warn allow-scripts' persisted on
+  - every 'pi update --extensions'.
+  - Swap priority to prefer npm_config_local_prefix (the real install root in
+  - both --prefix and plain installs), falling back to INIT_CWD.
+  - Add reproducer unit test; update WORKFLOW.md call-trace description.
+  - Satisfies DES-020, REQ-352.
+
 ## [0.47.0](https://github.com/Ogekuri/PI-useReq/compare/v0.46.0..v0.47.0) - 2026-07-13
 ### 🐛  Bug Fixes
 - Fix packages file.
@@ -636,6 +649,7 @@
 - \[0.45.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.45.0
 - \[0.46.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.46.0
 - \[0.47.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.47.0
+- \[0.48.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.48.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -682,3 +696,4 @@
 [0.45.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.44.0..v0.45.0
 [0.46.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.45.0..v0.46.0
 [0.47.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.46.0..v0.47.0
+[0.48.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.47.0..v0.48.0
