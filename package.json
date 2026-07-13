@@ -46,5 +46,10 @@
     "@eslint/js": "^10.0.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.2"
+  },
+  "allowScripts": {
+    "esbuild@0.27.7": true,
+    "koffi@2.15.6": true,
+    "protobufjs@7.5.4": true
   }
 }
