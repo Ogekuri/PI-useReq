@@ -51,7 +51,7 @@
   - Threads: no explicit threads detected
 - ID: `PROC:install-static-checkers`
   - Type: Process
-  - Role: Best-effort npm `postinstall` installer that approves pending install scripts, probes bundled static-checker executables, attempts `npm install` on miss, and prints platform guidance for native checkers.
+  - Role: Best-effort npm `postinstall` installer that writes consumer-root name-only `allowScripts` approvals, probes bundled static-checker executables, attempts `npm install` on miss, and prints platform guidance for native checkers.
   - Entrypoints:
     - `main(...)` [`scripts/install-static-checkers.ts`]
   - Parent Process: none
@@ -1307,9 +1307,12 @@
   - Looping model: single-pass probe plus optional install with no persistent loop.
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
-  - `main(...)`: best-effort approve pending npm install scripts, probe each bundled npm checker, attempt best-effort install on miss, print native-checker guidance, and return `0` [`scripts/install-static-checkers.ts`]
-    - `approvePendingInstallScripts(...)`: best-effort approve pending npm install scripts for bundled checker dependencies before probing [`scripts/install-static-checkers.ts`]
-      - `hasPendingInstallScriptPackages(...)`: report whether the parsed pending-scripts payload references install-script packages [`scripts/install-static-checkers.ts`]
+  - `main(...)`: when invoked as the npm `postinstall` lifecycle, best-effort write consumer-root name-only `allowScripts` approvals, then probe each bundled npm checker, attempt best-effort install on miss, print native-checker guidance, and return `0` [`scripts/install-static-checkers.ts`]
+    - `approvePendingInstallScripts(...)`: best-effort write name-only `allowScripts` approvals into the consumer-root `package.json` for installed packages declaring install lifecycle scripts before probing [`scripts/install-static-checkers.ts`]
+      - `getConsumerInstallRoot(...)`: resolve the consumer install root from the npm `INIT_CWD` or `npm_config_local_prefix` lifecycle environment [`scripts/install-static-checkers.ts`]
+      - `collectNodeModulesPackages(...)`: scan consumer-root `node_modules` and parse each readable package manifest [`scripts/install-static-checkers.ts`]
+      - `selectInstallScriptPackageNames(...)`: select package names declaring `preinstall`, `install`, or `postinstall` scripts [`scripts/install-static-checkers.ts`]
+      - `mergeAllowScriptsEntries(...)`: merge name-only approvals into the existing `allowScripts` map while preserving prior entries and explicit denials [`scripts/install-static-checkers.ts`]
     - `resolveCheckerExecutable(...)`: resolve one checker across `%%INSTALLATION_PATH%%` keyword, bundled `node_modules/.bin`, and PATH scan locations [`src/core/static-check.ts`]
       - `findExecutable(...)`: resolve executable on PATH or explicit path [`src/core/static-check.ts`]
         - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
@@ -1318,7 +1321,7 @@
     - `printNativeCheckerGuidance(...)`: emit platform-specific install guidance for native checkers [`scripts/install-static-checkers.ts`]
 - External Boundaries:
   - Node process APIs for argv, stdout, stderr, and exit code.
-  - Filesystem access for executable probing under the installation path.
+  - Filesystem access for executable probing under the installation path and best-effort read plus optional write of the consumer-root `package.json` `allowScripts` map during postinstall approval.
   - npm CLI subprocess spawned best-effort for missing bundled checkers.
 
 ## Communication Edges

@@ -17,7 +17,17 @@ import {
 } from "../src/core/static-check.js";
 import { getInstallationPath } from "../src/core/path-context.js";
 import { getDefaultConfig } from "../src/core/config.js";
-import { main as installStaticCheckersMain } from "../scripts/install-static-checkers.ts";
+import {
+  main as installStaticCheckersMain,
+  approvePendingInstallScripts,
+  getConsumerInstallRoot,
+  selectInstallScriptPackageNames,
+  mergeAllowScriptsEntries,
+} from "../scripts/install-static-checkers.ts";
+import type {
+  NodeModulesPackage,
+  InstallScriptApprovalDeps,
+} from "../scripts/install-static-checkers.ts";
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -97,4 +107,200 @@ test("checkDefaultCheckersAvailability returns empty array when all checkers dis
   }
   const missing = checkDefaultCheckersAvailability(config);
   assert.equal(missing.length, 0);
+});
+
+test("getConsumerInstallRoot resolves INIT_CWD as the consumer install root", () => {
+  const previousInitCwd = process.env.INIT_CWD;
+  const previousPrefix = process.env.npm_config_local_prefix;
+  try {
+    process.env.INIT_CWD = "/tmp/pi-usereq-consumer-root";
+    delete process.env.npm_config_local_prefix;
+    assert.equal(getConsumerInstallRoot(), "/tmp/pi-usereq-consumer-root");
+  } finally {
+    if (previousInitCwd === undefined) {
+      delete process.env.INIT_CWD;
+    } else {
+      process.env.INIT_CWD = previousInitCwd;
+    }
+    if (previousPrefix === undefined) {
+      delete process.env.npm_config_local_prefix;
+    } else {
+      process.env.npm_config_local_prefix = previousPrefix;
+    }
+  }
+});
+
+test("getConsumerInstallRoot falls back to npm_config_local_prefix and then undefined", () => {
+  const previousInitCwd = process.env.INIT_CWD;
+  const previousPrefix = process.env.npm_config_local_prefix;
+  try {
+    delete process.env.INIT_CWD;
+    process.env.npm_config_local_prefix = "/tmp/pi-usereq-prefix-root";
+    assert.equal(getConsumerInstallRoot(), "/tmp/pi-usereq-prefix-root");
+    delete process.env.npm_config_local_prefix;
+    assert.equal(getConsumerInstallRoot(), undefined);
+  } finally {
+    if (previousInitCwd === undefined) {
+      delete process.env.INIT_CWD;
+    } else {
+      process.env.INIT_CWD = previousInitCwd;
+    }
+    if (previousPrefix === undefined) {
+      delete process.env.npm_config_local_prefix;
+    } else {
+      process.env.npm_config_local_prefix = previousPrefix;
+    }
+  }
+});
+
+test("selectInstallScriptPackageNames returns only packages with lifecycle scripts", () => {
+  const packages: NodeModulesPackage[] = [
+    { name: "has-postinstall", scripts: { postinstall: "node install.js" } },
+    { name: "has-install", scripts: { install: "node build.js" } },
+    { name: "no-scripts", scripts: {} },
+    { name: "only-test-script", scripts: { test: "node --test" } },
+    { name: "empty-postinstall", scripts: { postinstall: "" } },
+    { name: "only-prepare-ignored", scripts: { prepare: "node prep.js" } },
+    { name: "@scope/has-preinstall", scripts: { preinstall: "node prep.js" } },
+  ];
+  assert.deepEqual(selectInstallScriptPackageNames(packages), [
+    "has-postinstall",
+    "has-install",
+    "@scope/has-preinstall",
+  ]);
+});
+
+test("mergeAllowScriptsEntries adds name-only approvals and preserves existing denials", () => {
+  const existing = { esbuild: true, koffi: false };
+  const merged = mergeAllowScriptsEntries(existing, ["esbuild", "pi-usereq", "koffi", "protobufjs"]);
+  assert.deepEqual(merged, {
+    esbuild: true,
+    koffi: false,
+    "pi-usereq": true,
+    protobufjs: true,
+  });
+});
+
+test("mergeAllowScriptsEntries starts from undefined and skips empty names", () => {
+  const merged = mergeAllowScriptsEntries(undefined, ["esbuild", "", "  "]);
+  assert.deepEqual(merged, { esbuild: true });
+});
+
+test("approvePendingInstallScripts writes name-only allowScripts into the consumer root", () => {
+  const consumerRoot = "/tmp/pi-usereq-approval-root";
+  const nodeModules = `${consumerRoot}/node_modules`;
+  const rootPackageJson = `${consumerRoot}/package.json`;
+  const files = new Map<string, string>([
+    [`${nodeModules}/esbuild/package.json`, JSON.stringify({ name: "esbuild", scripts: { postinstall: "node install.js" } })],
+    [`${nodeModules}/safe-dep/package.json`, JSON.stringify({ name: "safe-dep", scripts: { test: "node --test" } })],
+    [`${nodeModules}/@scope/has-install/package.json`, JSON.stringify({ name: "@scope/has-install", scripts: { install: "node build.js" } })],
+    [rootPackageJson, JSON.stringify({ name: "pi-extensions", private: true, dependencies: { "pi-usereq": "^0.45.0" } })],
+  ]);
+  const dirs = new Map<string, string[]>([
+    [nodeModules, ["esbuild", "safe-dep", "@scope", ".bin"]],
+    [`${nodeModules}/@scope`, ["has-install"]],
+  ]);
+  let writtenPath = "";
+  let writtenData = "";
+  const deps: InstallScriptApprovalDeps = {
+    existsSync: (p) => files.has(p) || dirs.has(p),
+    readdirSync: (p) => dirs.get(p) ?? [],
+    readFileSync: (p) => files.get(p) ?? "",
+    writeFileSync: (p, data) => {
+      writtenPath = p;
+      writtenData = data;
+    },
+  };
+  const previousInitCwd = process.env.INIT_CWD;
+  const previousPrefix = process.env.npm_config_local_prefix;
+  try {
+    process.env.INIT_CWD = consumerRoot;
+    delete process.env.npm_config_local_prefix;
+    approvePendingInstallScripts(deps);
+  } finally {
+    if (previousInitCwd === undefined) {
+      delete process.env.INIT_CWD;
+    } else {
+      process.env.INIT_CWD = previousInitCwd;
+    }
+    if (previousPrefix === undefined) {
+      delete process.env.npm_config_local_prefix;
+    } else {
+      process.env.npm_config_local_prefix = previousPrefix;
+    }
+  }
+  assert.equal(writtenPath, rootPackageJson);
+  const written = JSON.parse(writtenData) as { allowScripts?: Record<string, boolean>; dependencies?: unknown };
+  assert.deepEqual(written.allowScripts, { esbuild: true, "@scope/has-install": true });
+  assert.ok(written.dependencies, "existing package.json fields MUST be preserved");
+});
+
+test("approvePendingInstallScripts preserves existing allowScripts and skips when nothing changes", () => {
+  const consumerRoot = "/tmp/pi-usereq-noop-root";
+  const nodeModules = `${consumerRoot}/node_modules`;
+  const rootPackageJson = `${consumerRoot}/package.json`;
+  const files = new Map<string, string>([
+    [`${nodeModules}/esbuild/package.json`, JSON.stringify({ name: "esbuild", scripts: { postinstall: "node install.js" } })],
+    [rootPackageJson, JSON.stringify({ name: "pi-extensions", allowScripts: { esbuild: true, koffi: false } })],
+  ]);
+  const dirs = new Map<string, string[]>([[nodeModules, ["esbuild"]]]);
+  let wrote = false;
+  const deps: InstallScriptApprovalDeps = {
+    existsSync: (p) => files.has(p) || dirs.has(p),
+    readdirSync: (p) => dirs.get(p) ?? [],
+    readFileSync: (p) => files.get(p) ?? "",
+    writeFileSync: () => {
+      wrote = true;
+    },
+  };
+  const previousInitCwd = process.env.INIT_CWD;
+  const previousPrefix = process.env.npm_config_local_prefix;
+  try {
+    process.env.INIT_CWD = consumerRoot;
+    delete process.env.npm_config_local_prefix;
+    approvePendingInstallScripts(deps);
+  } finally {
+    if (previousInitCwd === undefined) {
+      delete process.env.INIT_CWD;
+    } else {
+      process.env.INIT_CWD = previousInitCwd;
+    }
+    if (previousPrefix === undefined) {
+      delete process.env.npm_config_local_prefix;
+    } else {
+      process.env.npm_config_local_prefix = previousPrefix;
+    }
+  }
+  assert.equal(wrote, false);
+});
+
+test("approvePendingInstallScripts skips approval outside an npm install lifecycle", () => {
+  let wrote = false;
+  const deps: InstallScriptApprovalDeps = {
+    existsSync: () => true,
+    readdirSync: () => [],
+    readFileSync: () => "{}",
+    writeFileSync: () => {
+      wrote = true;
+    },
+  };
+  const previousInitCwd = process.env.INIT_CWD;
+  const previousPrefix = process.env.npm_config_local_prefix;
+  try {
+    delete process.env.INIT_CWD;
+    delete process.env.npm_config_local_prefix;
+    approvePendingInstallScripts(deps);
+  } finally {
+    if (previousInitCwd === undefined) {
+      delete process.env.INIT_CWD;
+    } else {
+      process.env.INIT_CWD = previousInitCwd;
+    }
+    if (previousPrefix === undefined) {
+      delete process.env.npm_config_local_prefix;
+    } else {
+      process.env.npm_config_local_prefix = previousPrefix;
+    }
+  }
+  assert.equal(wrote, false);
 });
