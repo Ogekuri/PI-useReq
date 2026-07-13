@@ -11,6 +11,10 @@
   },
   "homepage": "https://github.com/Ogekuri/PI-useReq#readme",
   "type": "module",
+  "files": [
+    "src",
+    "scripts"
+  ],
   "scripts": {
     "test": "node --import tsx --test tests/**/*.test.ts",
     "test:watch": "node --import tsx --test --watch tests/**/*.test.ts",

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.78"
+version: "0.0.79"
 date: "2026-07-13"
 author: "OpenAI Codex"
 scope:
@@ -71,6 +71,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-017**: MUST NOT modify any path under `pi.dev-src/` during analysis, implementation, verification, or bug fixing.
 - **CTN-019**: MUST persist local `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
 - **CTN-020**: MUST declare `tsx` as a runtime `package.json` dependency so `node --import tsx` package scripts, the `postinstall` checker installer, and the `.ts` extension entry resolve on clean consumer installs.
+- **CTN-021**: MUST declare a `files` allowlist in `package.json` restricted to runtime-required `src/` and `scripts/` so npm consumer installs exclude the `tests/` directory.
 
 ## 3. Requirements
 
@@ -580,6 +581,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ### 5.3 Packaging and Tooling Surface
 - `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
+- `package.json` declares a `files` allowlist of `src` and `scripts` so npm consumer installs ship only runtime-required code and omit the `tests/` directory.
 - `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
 - `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, publishes the package to npm, and creates the matching GitHub Release.
 - `package.json` declares version `0.0.0` while `package-lock.json` resolves the top-level package as version `0.1.0`; this manifest metadata is inconsistent in the current revision.
@@ -675,6 +677,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | CTN-008 | `package.json` :: `"scripts"` :: `"test": "node --import tsx --test tests/**/*.test.ts"`, `"test:watch": ...`, `"cli": "node --import tsx ./src/cli.ts"`. |
 | CTN-011 | `src/core/config.ts` :: `buildPromptReplacementPaths` :: emits `%%TEMPLATE_PATH%%` from `~/.pi/pi-usereq/resources/templates`; bundled template files exist under `src/resources/templates/`. |
 | CTN-013 | `src/core/config.ts` :: `getDefaultConfig` and `loadConfig`; `src/core/debug-runtime.ts` :: `DEFAULT_DEBUG_WORKFLOW_EVENTS` and `normalizeDebugWorkflowEvents` :: default and normalize the persisted debug configuration including `DEBUG_WORKFLOW_EVENTS`. |
+| CTN-021 | `package.json` :: `"files": ["src", "scripts"]` :: npm-published file set ships runtime-required `src/` and `scripts/` only and omits the `tests/` directory. |
 
 ### 8.2 DES Evidence
 | ID | Evidence |
