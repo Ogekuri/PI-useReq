@@ -153,6 +153,32 @@ test("getConsumerInstallRoot falls back to npm_config_local_prefix and then unde
   }
 });
 
+test("getConsumerInstallRoot prefers npm_config_local_prefix over INIT_CWD for --prefix installs", () => {
+  // Reproducer for `pi update --extensions` `npm warn allow-scripts`: the pi host runs
+  // `npm install <pkg> --prefix <installRoot>` from its own caller cwd, so INIT_CWD is the
+  // caller cwd while npm_config_local_prefix is the real install root. Resolving INIT_CWD
+  // first writes the allowScripts approval to the wrong project (or nowhere) and the warning
+  // persists on every extension update.
+  const previousInitCwd = process.env.INIT_CWD;
+  const previousPrefix = process.env.npm_config_local_prefix;
+  try {
+    process.env.INIT_CWD = "/tmp/pi-usereq-caller-cwd";
+    process.env.npm_config_local_prefix = "/tmp/pi-usereq-install-root";
+    assert.equal(getConsumerInstallRoot(), "/tmp/pi-usereq-install-root");
+  } finally {
+    if (previousInitCwd === undefined) {
+      delete process.env.INIT_CWD;
+    } else {
+      process.env.INIT_CWD = previousInitCwd;
+    }
+    if (previousPrefix === undefined) {
+      delete process.env.npm_config_local_prefix;
+    } else {
+      process.env.npm_config_local_prefix = previousPrefix;
+    }
+  }
+});
+
 test("selectInstallScriptPackageNames returns only packages with lifecycle scripts", () => {
   const packages: NodeModulesPackage[] = [
     { name: "has-postinstall", scripts: { postinstall: "node install.js" } },

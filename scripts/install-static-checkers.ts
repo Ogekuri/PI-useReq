@@ -71,12 +71,13 @@ export interface InstallScriptApprovalDeps {
 
 /**
  * @brief Resolves the consumer install root that owns the active npm install transaction.
- * @details During an npm lifecycle script npm sets `INIT_CWD` to the invocation directory and `npm_config_local_prefix` to the resolved project prefix; both point at the true consumer root instead of the installed package directory that is the postinstall `process.cwd()`. Returns the first available value so the approval flow writes the consumer-root `package.json` allowScripts map instead of the nested `node_modules/<pkg>` directory. Runtime is O(1). No external state is mutated.
+ * @details During an npm lifecycle script npm sets `npm_config_local_prefix` to the resolved project prefix (the directory holding the `package.json` npm operates on) and `INIT_CWD` to the npm invocation directory. The pi extension host drives installs with `npm install <pkg> --prefix <installRoot>` from its own caller cwd, so in that flow `INIT_CWD` is the host caller cwd, NOT the install root, while `npm_config_local_prefix` equals the install root in both `--prefix` and plain `cd <root> && npm install` flows. Therefore `npm_config_local_prefix` MUST be selected first; `INIT_CWD` is retained only as a fallback for npm versions or flows that leave the prefix unset. Selecting `INIT_CWD` first would resolve the caller project (or a nonexistent path), so the `allowScripts` approval would be written to the wrong `package.json` (or nowhere) and the `npm warn allow-scripts` warning would persist on every extension update. Runtime is O(1). No external state is mutated.
  * @param[in] env {NodeJS.ProcessEnv} Environment map read for npm lifecycle path variables.
- * @return {string | undefined} Consumer install root, or `undefined` when not running inside an npm lifecycle.
+ * @return {string | undefined} Consumer install root, preferring `npm_config_local_prefix` then `INIT_CWD`, or `undefined` when not running inside an npm lifecycle.
+ * @satisfies DES-020, REQ-352
  */
 export function getConsumerInstallRoot(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  return env.INIT_CWD || env.npm_config_local_prefix || undefined;
+  return env.npm_config_local_prefix || env.INIT_CWD || undefined;
 }
 
 /**

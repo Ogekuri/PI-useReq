@@ -1309,7 +1309,7 @@
 - Internal Call-Trace Tree:
   - `main(...)`: when invoked as the npm `postinstall` lifecycle, best-effort write consumer-root name-only `allowScripts` approvals, then probe each bundled npm checker, attempt best-effort install on miss, print native-checker guidance, and return `0` [`scripts/install-static-checkers.ts`]
     - `approvePendingInstallScripts(...)`: best-effort write name-only `allowScripts` approvals into the consumer-root `package.json` for installed packages declaring install lifecycle scripts before probing [`scripts/install-static-checkers.ts`]
-      - `getConsumerInstallRoot(...)`: resolve the consumer install root from the npm `INIT_CWD` or `npm_config_local_prefix` lifecycle environment [`scripts/install-static-checkers.ts`]
+      - `getConsumerInstallRoot(...)`: resolve the consumer install root preferring the npm `npm_config_local_prefix` install root (correct under pi `npm install --prefix <root>` flows) over the `INIT_CWD` caller-cwd fallback [`scripts/install-static-checkers.ts`]
       - `collectNodeModulesPackages(...)`: scan consumer-root `node_modules` and parse each readable package manifest [`scripts/install-static-checkers.ts`]
       - `selectInstallScriptPackageNames(...)`: select package names declaring `preinstall`, `install`, or `postinstall` scripts [`scripts/install-static-checkers.ts`]
       - `mergeAllowScriptsEntries(...)`: merge name-only approvals into the existing `allowScripts` map while preserving prior entries and explicit denials [`scripts/install-static-checkers.ts`]
