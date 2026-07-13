@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.77"
+version: "0.0.78"
 date: "2026-07-13"
 author: "OpenAI Codex"
 scope:
@@ -168,6 +168,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-336**: MUST render the command invocation summary with the command name without the `req-` prefix in uppercase and the user request arguments.
 - **REQ-337**: MUST include `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools` in the command invocation summary.
 - **REQ-338**: MUST render `none` for the command invocation summary `context files`, `static code checks`, and `enabled tools` fields whenever their respective enabled-item list is empty.
+- **REQ-353**: MUST render the command invocation summary sections in the order `Command:`, `Configuration:` with its bullet list, then `User's Request:`, separated by one blank line between consecutive sections.
 - **REQ-008**: MUST provide a `Language static code checkers` submenu that adds, views, confirms-before-removes, and resets global Command checker entries, plus toggles local per-language enablement.
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
@@ -543,6 +544,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-119**: MUST verify `%%CONTEXT_FILES%%` replacement emits one section per enabled existing file in the documented order and omits disabled or missing files.
 - **TST-120**: MUST verify `%%CONTEXT_FILES%%` sections use the file-name heading, the pre-substituted HTML file reference, and four-backtick `markdown` fences around raw content.
 - **TST-122**: MUST verify the command invocation summary renders `none` for `context files`, `static code checks`, and `enabled tools` when no items are enabled in each respective category.
+- **TST-131**: MUST verify the command invocation summary renders sections in the order `Command:`, `Configuration:`, then `User's Request:`, with one blank line between consecutive sections.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
 - **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.
