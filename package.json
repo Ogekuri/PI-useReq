@@ -50,6 +50,9 @@
   "allowScripts": {
     "esbuild@0.27.7": true,
     "koffi@2.15.6": true,
-    "protobufjs@7.5.4": true
+    "protobufjs@7.5.4": true,
+    "esbuild": true,
+    "koffi": true,
+    "protobufjs": true
   }
 }
