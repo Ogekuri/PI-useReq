@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.45.0](https://github.com/Ogekuri/PI-useReq/compare/v0.44.0..v0.45.0) - 2026-07-13
+### 🐛  Bug Fixes
+- Fix packages.
+- Fix packages.
+
+### 🚜  Changes
+- add view/reset menu actions, removal confirmation, embedded keyword resolution, approve-scripts [useReq] *(static-check)*
+  - REQ-008/248/345-349: add View static code checker (read-only, before
+  - Remove), Reset static code checker (after Remove, restores embedded
+  - defaults), and require config preview plus confirmation before Remove.
+  - DES-019/REQ-350/351: resolveCheckerExecutable substitutes the
+  - %%INSTALLATION_PATH%% keyword and fixes hoisted node_modules/.bin probing.
+  - DES-020/REQ-352: postinstall best-effort runs npm approve-scripts for
+  - bundled checker dependencies before probing.
+  - Update REQUIREMENTS/WORKFLOW/REFERENCES and the static-check menu test.
+
 ## [0.44.0](https://github.com/Ogekuri/PI-useReq/compare/v0.43.0..v0.44.0) - 2026-07-13
 ### 🚜  Changes
 - BREAKING CHANGE: park failed worktree runs in error without resuming base-path [useReq] *(prompt-closure)*
@@ -609,6 +625,7 @@
 - \[0.42.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.42.0
 - \[0.43.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.43.0
 - \[0.44.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.44.0
+- \[0.45.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.45.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -652,3 +669,4 @@
 [0.42.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.41.0..v0.42.0
 [0.43.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.42.0..v0.43.0
 [0.44.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.43.0..v0.44.0
+[0.45.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.44.0..v0.45.0
