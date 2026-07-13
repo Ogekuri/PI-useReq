@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.0](https://github.com/Ogekuri/PI-useReq/compare/v0.43.0..v0.44.0) - 2026-07-13
+### 🚜  Changes
+- BREAKING CHANGE: park failed worktree runs in error without resuming base-path [useReq] *(prompt-closure)*
+  - REQ-209/REQ-230/TST-058: failed/interrupted/aborted/incomplete worktree-backed runs no longer resume the original base-path session.
+  - src/index.ts agent_end closure: the closure-failure branch keeps the worktree execution session visible, notifies the error, parks workflow in error, and retains the active request for req-reset recovery.
+  - tests/extension-registration.test.ts: realign the prompt-failure test to assert session retention + workflow error.
+
 ## [0.43.0](https://github.com/Ogekuri/PI-useReq/compare/v0.42.0..v0.43.0) - 2026-07-10
 ### 🚜  Changes
 - make tsx a runtime dependency so postinstall resolves [useReq] *(packaging)*
@@ -601,6 +608,7 @@
 - \[0.41.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.41.0
 - \[0.42.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.42.0
 - \[0.43.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.43.0
+- \[0.44.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.44.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -643,3 +651,4 @@
 [0.41.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.40.0..v0.41.0
 [0.42.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.41.0..v0.42.0
 [0.43.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.42.0..v0.43.0
+[0.44.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.43.0..v0.44.0
