@@ -3791,7 +3791,7 @@ function formatStaticCheckLanguagesSummary(config: UseReqConfig): string {
  * @details Serializes guided Command-oriented add and remove actions, renders one direct on/off toggle row for every supported language, and appends canonical terminal rows while omitting raw-spec and reference-only actions. Runtime is O(l). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
- * @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248
+ * @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248, REQ-345, REQ-347
  */
 function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const supportedLanguages = getSupportedStaticCheckLanguageSupport();
@@ -3804,10 +3804,22 @@ function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenu
       description: "Select a supported language, then configure one Command static-check executable.",
     },
     {
+      id: "view-static-check-entry",
+      label: "View static code checker",
+      value: configuredLanguageCount > 0 ? `${configuredLanguageCount} configured` : "(none)",
+      description: "Inspect the configured Command static-check entries for every language without mutating configuration.",
+    },
+    {
       id: "remove-static-check-entry",
       label: "Remove static code checker",
       value: configuredLanguageCount > 0 ? `${configuredLanguageCount} configured` : "(none)",
-      description: "Remove every configured static-check entry for one language.",
+      description: "Preview and confirm removal of every configured static-check entry for one language.",
+    },
+    {
+      id: "reset-static-check-entry",
+      label: "Reset static code checker",
+      value: "embedded defaults",
+      description: "Restore the documented per-language static-check defaults after explicit confirmation.",
     },
     ...supportedLanguages.map(({ language, extensions }) => {
       const languageConfig = getStaticCheckLanguageConfigForMenu(config, language);
@@ -3878,12 +3890,163 @@ function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUser
 }
 
 /**
+ * @brief Formats one static-check checker entry as a compact command summary.
+ * @details Joins the module command plus its parameter list into a single shell-like token sequence so inspection and confirmation menus can render checker identity deterministically. Runtime is O(p) in parameter count. No external state is mutated.
+ * @param[in] entry {StaticCheckEntry} Static-check configuration entry.
+ * @return {string} Compact command summary string.
+ */
+function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string {
+  const cmd = typeof entry.cmd === "string" ? entry.cmd.trim() : "";
+  const params = Array.isArray(entry.params) ? entry.params.map(String) : [];
+  return [cmd, ...params].filter((value) => value !== "").join(" ");
+}
+
+/**
+ * @brief Summarizes every configured checker for one language as a delimited command list.
+ * @details Joins each checker entry summary with `; ` so the value column exposes the full language configuration in one row. Runtime is O(c * p). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] language {string} Canonical language name.
+ * @return {string} Delimited checker summary string, or `(none)` when no checkers are configured.
+ */
+function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string {
+  const checkers = getStaticCheckLanguageConfigForMenu(config, language).checkers;
+  if (checkers.length === 0) {
+    return "(none)";
+  }
+  return checkers.map(formatStaticCheckCheckerEntry).join("; ");
+}
+
+/**
+ * @brief Builds the shared settings-menu choices for the read-only static-check inspection submenu.
+ * @details Exposes only configured languages as disabled rows whose value column renders the full checker command list, appends one selectable `Close` row, and emits a disabled placeholder when no language is configured so the submenu never mutates configuration. Runtime is O(l * c * p). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered read-only inspection choices.
+ * @satisfies REQ-346
+ */
+function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+  const configured = getSupportedStaticCheckLanguageSupport()
+    .filter(({ language }) => getStaticCheckLanguageConfigForMenu(config, language).checkers.length > 0);
+  if (configured.length === 0) {
+    return [
+      {
+        id: "view-static-check-empty",
+        label: "No configured static checkers",
+        value: "(none)",
+        description: "Configure at least one Command static-check entry before inspecting configuration.",
+        disabled: true,
+        labelTone: "dim",
+        valueTone: "dim",
+      },
+      {
+        id: "view-static-check-close",
+        label: "Close",
+        value: "",
+        description: "Close the static-check inspection view and return to the previous menu.",
+      },
+    ];
+  }
+  return [
+    ...configured.map(({ language, extensions }) => {
+      const languageConfig = getStaticCheckLanguageConfigForMenu(config, language);
+      const summary = formatStaticCheckLanguageCheckerSummary(config, language);
+      const checkerCount = languageConfig.checkers.length;
+      const suffix = checkerCount === 1 ? "checker" : "checkers";
+      return {
+        id: `view-static-check-language:${language}`,
+        label: language,
+        value: summary,
+        description: `Read-only inspection of the configured Command static-check entries for ${language}. Supported extensions: ${extensions.join(", ")}. ${checkerCount} ${suffix}.`,
+        disabled: true,
+        labelTone: "dim" as const,
+        valueTone: "dim" as const,
+      };
+    }),
+    {
+      id: "view-static-check-close",
+      label: "Close",
+      value: "",
+      description: "Close the static-check inspection view and return to the previous menu.",
+    },
+  ];
+}
+
+/**
+ * @brief Builds the confirmation submenu choices for removing one configured static-check language.
+ * @details Renders each configured checker as a disabled preview row, appends explicit approve and abort actions, and falls back to one disabled no-op row when the language has no checkers. Runtime is O(c * p). No external state is mutated.
+ * @param[in] language {string} Canonical language name targeted for removal.
+ * @param[in] checkers {StaticCheckEntry[]} Configured checker entries that removal would clear.
+ * @return {PiUsereqSettingsMenuChoice[]} Ordered removal-confirmation choices.
+ * @satisfies REQ-349
+ */
+function buildStaticCheckRemovalConfirmationChoices(
+  language: string,
+  checkers: StaticCheckEntry[],
+): PiUsereqSettingsMenuChoice[] {
+  const previewRows = checkers.length > 0
+    ? checkers.map((entry, index) => ({
+      id: `removal-preview:${language}:${index}`,
+      label: formatStaticCheckCheckerEntry(entry),
+      value: `${language} checker`,
+      description: `Remove the configured Command static-check entry ${formatStaticCheckCheckerEntry(entry)} from ${language}.`,
+      disabled: true,
+      labelTone: "dim" as const,
+      valueTone: "dim" as const,
+    }))
+    : [{
+      id: `removal-preview:${language}:none`,
+      label: `No configured checkers for ${language}`,
+      value: "nothing to remove",
+      description: `No configured static-check entries exist for ${language}.`,
+      disabled: true,
+      labelTone: "dim" as const,
+      valueTone: "dim" as const,
+    }];
+  return [
+    ...previewRows,
+    {
+      id: "removal-approve",
+      label: "Approve removal",
+      value: `${checkers.length} ${checkers.length === 1 ? "checker" : "checkers"}`,
+      description: `Remove every configured static-check entry for ${language}.`,
+    },
+    {
+      id: "removal-abort",
+      label: "Abort removal",
+      value: "keep current",
+      description: `Keep the configured static-check entries for ${language}.`,
+    },
+  ];
+}
+
+/**
+ * @brief Opens one explicit removal-confirmation submenu for a configured static-check language.
+ * @details Renders the targeted checker entries before removal and returns `true` only when the user selects the explicit approval action. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
+ * @param[in] ctx {ExtensionCommandContext} Active command context.
+ * @param[in] language {string} Canonical language name targeted for removal.
+ * @param[in] checkers {StaticCheckEntry[]} Configured checker entries that removal would clear.
+ * @return {Promise<boolean>} `true` when the removal is explicitly approved.
+ * @satisfies REQ-349
+ */
+async function confirmStaticCheckRemoval(
+  ctx: ExtensionCommandContext,
+  language: string,
+  checkers: StaticCheckEntry[],
+): Promise<boolean> {
+  const choice = await showPiUsereqSettingsMenu(
+    ctx,
+    `Remove static code checker: ${language}`,
+    buildStaticCheckRemovalConfirmationChoices(language, checkers),
+  );
+  return choice === "removal-approve";
+}
+
+/**
  * @brief Runs the interactive static-check configuration menu.
- * @details Lets the user add and remove global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
+ * @details Lets the user add, inspect, confirm-before-remove, and reset global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the menu closes.
- * @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253
+ * @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253, REQ-345, REQ-346, REQ-347, REQ-348, REQ-349
  */
 async function configureStaticCheckMenu(
   ctx: ExtensionCommandContext,
@@ -3978,6 +4141,11 @@ async function configureStaticCheckMenu(
       continue;
     }
 
+    if (staticChoice === "view-static-check-entry") {
+      await showPiUsereqSettingsMenu(ctx, "View static code checker", buildStaticCheckViewChoices(config));
+      continue;
+    }
+
     if (staticChoice === "remove-static-check-entry") {
       const configuredLanguage = await showPiUsereqSettingsMenu(ctx, "Remove static code checker", buildConfiguredStaticCheckLanguageChoices(config));
       if (!configuredLanguage) {
@@ -4004,9 +4172,37 @@ async function configureStaticCheckMenu(
         ctx.ui.notify("Restored default static code checker configuration", "info");
         continue;
       }
+      const targetedCheckers = getStaticCheckLanguageConfigForMenu(config, configuredLanguage).checkers;
+      const removalApproved = await confirmStaticCheckRemoval(ctx, configuredLanguage, targetedCheckers);
+      if (!removalApproved) {
+        ctx.ui.notify(`Aborted removal of static-check entries for ${configuredLanguage}`, "info");
+        continue;
+      }
       config["static-check"][configuredLanguage] = createStaticCheckLanguageConfig([]);
       onConfigChange();
       ctx.ui.notify(`Removed static-check entries for ${configuredLanguage}`, "info");
+      continue;
+    }
+
+    if (staticChoice === "reset-static-check-entry") {
+      const approved = await confirmResetChanges(
+        ctx,
+        "Confirm static-check reset",
+        [{
+          label: "Language static code checkers",
+          previousValue: formatStaticCheckLanguagesSummary(config),
+          nextValue: formatStaticCheckLanguagesSummary({ ...config, "static-check": getDefaultStaticCheckConfig() }),
+        }].filter((change) => change.previousValue !== change.nextValue),
+        "Approve restoring the documented per-language static-check defaults.",
+        "Abort the static-check reset and keep the current values.",
+      );
+      if (!approved) {
+        ctx.ui.notify("Aborted static-check reset", "info");
+        continue;
+      }
+      resetStaticCheckConfig(config);
+      onConfigChange();
+      ctx.ui.notify("Restored default static code checker configuration", "info");
       continue;
     }
 

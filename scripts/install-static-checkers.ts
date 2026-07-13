@@ -43,6 +43,52 @@ function bundledCheckerRange(pkg: string): string {
 }
 
 /**
+ * @brief Reports whether one parsed `npm approve-scripts --allow-scripts-pending` payload references pending install-script packages.
+ * @details Accepts an array of package specifiers or a map of package specifiers to pending-script descriptors, treating any non-empty array or non-empty object with at least one entry as pending. Runtime is O(n) in pending entry count. No external state is mutated.
+ * @param[in] pending {unknown} Parsed JSON payload emitted by `npm approve-scripts --allow-scripts-pending`.
+ * @return {boolean} `true` when at least one pending install-script package is referenced.
+ */
+function hasPendingInstallScriptPackages(pending: unknown): boolean {
+  if (Array.isArray(pending)) {
+    return pending.length > 0;
+  }
+  if (pending && typeof pending === "object") {
+    return Object.keys(pending as Record<string, unknown>).length > 0;
+  }
+  return false;
+}
+
+/**
+ * @brief Best-effort approves pending npm install scripts for bundled checker dependencies.
+ * @details Probes `npm approve-scripts --allow-scripts-pending`, parses the JSON payload when available, and runs `npm approve-scripts --all` only when pending script-bearing packages are detected so bundled checkers and their transitive dependencies execute without manual script approval. Swallows all errors so the postinstall flow never fails. Runtime is dominated by npm execution. Side effects include optional writes to the installation-owned `package.json` allowScripts map and subprocess spawning.
+ * @return {void} No return value.
+ * @satisfies DES-020, REQ-352
+ */
+function approvePendingInstallScripts(): void {
+  const pendingResult = spawnSync(
+    "npm",
+    ["approve-scripts", "--allow-scripts-pending", "--json"],
+    { encoding: "utf8" },
+  );
+  if (pendingResult.error || (pendingResult.status !== null && pendingResult.status !== 0)) {
+    return;
+  }
+  let pendingPayload: unknown;
+  try {
+    pendingPayload = JSON.parse(pendingResult.stdout ?? "");
+  } catch {
+    return;
+  }
+  if (!hasPendingInstallScriptPackages(pendingPayload)) {
+    return;
+  }
+  const approveResult = spawnSync("npm", ["approve-scripts", "--all"], { encoding: "utf8" });
+  if (approveResult.error) {
+    process.stderr.write(`Warning: failed to approve pending install scripts: ${approveResult.error.message}\n`);
+  }
+}
+
+/**
  * @brief Prints platform-specific install guidance for native checkers.
  * @details Detects the current platform and emits one consolidated stderr line per native checker describing the recommended system package manager command. Runtime is O(1). Side effect: writes to stderr.
  * @return {void} No return value.
@@ -101,10 +147,11 @@ function attemptBundledInstall(pkg: string): void {
  * @details Probes each bundled npm checker through `resolveCheckerExecutable`, attempts a best-effort install on miss, prints native-checker guidance for unresolvable native checkers, and always returns `0` so `npm install` never fails because of missing optional checkers. Runtime is dominated by PATH probing and optional npm execution. Side effects include stdout/stderr writes and best-effort `npm install` subprocess spawning. The script never modifies git-tracked files.
  * @param[in] argv {string[]} Raw CLI arguments (unused, retained for CLI convention parity).
  * @return {number} Always returns `0`.
- * @satisfies REQ-339, DES-017
+ * @satisfies REQ-339, DES-017, DES-020, REQ-352
  */
 export function main(argv = process.argv.slice(2)): number {
   void argv;
+  approvePendingInstallScripts();
   for (const checker of BUNDLED_NPM_CHECKERS) {
     if (resolveCheckerExecutable(checker)) {
       process.stdout.write(`Bundled static checker '${checker}' is available.\n`);

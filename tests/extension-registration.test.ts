@@ -6692,10 +6692,17 @@ test("configuration menu omits removed static-check raw-spec and reference actio
   const renderedStaticCheckMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
   const staticCheckItems = ctx.__state.selectCalls[1]?.items ?? [];
   assert.match(renderedStaticCheckMenu, /Add static code checker/);
+  assert.match(renderedStaticCheckMenu, /View static code checker/);
   assert.match(renderedStaticCheckMenu, /Remove static code checker/);
-  assert.deepEqual(staticCheckItems.slice(0, 2), ["Add static code checker", "Remove static code checker"]);
+  assert.match(renderedStaticCheckMenu, /Reset static code checker/);
+  assert.deepEqual(staticCheckItems.slice(0, 4), [
+    "Add static code checker",
+    "View static code checker",
+    "Remove static code checker",
+    "Reset static code checker",
+  ]);
   assert.deepEqual(
-    staticCheckItems.slice(2, 22),
+    staticCheckItems.slice(4, 24),
     getSupportedStaticCheckLanguageSupport().map((entry) => entry.language),
   );
   assert.deepEqual(staticCheckItems.slice(-1), ["Reset defaults"]);

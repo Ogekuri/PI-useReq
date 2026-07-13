@@ -51,7 +51,7 @@
   - Threads: no explicit threads detected
 - ID: `PROC:install-static-checkers`
   - Type: Process
-  - Role: Best-effort npm `postinstall` installer that probes bundled static-checker executables, attempts `npm install` on miss, and prints platform guidance for native checkers.
+  - Role: Best-effort npm `postinstall` installer that approves pending install scripts, probes bundled static-checker executables, attempts `npm install` on miss, and prints platform guidance for native checkers.
   - Entrypoints:
     - `main(...)` [`scripts/install-static-checkers.ts`]
   - Parent Process: none
@@ -1191,12 +1191,12 @@
         - `formatElapsedStatusValue(...)`: compose `⏱︎`, `⚑`, and `⌛︎` timer segments [`src/core/extension-status.ts`]
           - `formatCompletedStatusDuration(...)`: render completed timers or the unset placeholder [`src/core/extension-status.ts`]
           - `formatStatusDuration(...)`: render `M:SS` durations [`src/core/extension-status.ts`]
-    - `configureStaticCheckMenu(...)`: interactive editor that adds and removes global Command entries while toggling local per-language enable flags [`src/index.ts`]
+    - `configureStaticCheckMenu(...)`: interactive editor that adds, inspects, confirms-before-removes, and resets global Command entries while toggling local per-language enable flags [`src/index.ts`]
       - `getStaticCheckLanguageConfigForMenu(...)`: resolve a menu-facing per-language static-check object [`src/index.ts`]
       - `countConfiguredStaticCheckLanguages(...)`: count languages that retain global checker entries [`src/index.ts`]
       - `countEnabledStaticCheckLanguages(...)`: count languages whose local enable flag is on [`src/index.ts`]
       - `formatStaticCheckLanguagesSummary(...)`: summarize enabled languages and configured global checker languages [`src/index.ts`]
-      - `buildStaticCheckMenuChoices(...)`: serialize guided add/remove actions plus direct per-language local toggle rows [`src/index.ts`]
+      - `buildStaticCheckMenuChoices(...)`: serialize guided add/view/remove/reset actions plus direct per-language local toggle rows [`src/index.ts`]
         - `getSupportedStaticCheckLanguageSupport(...)`: enumerate supported languages and extensions [`src/core/static-check.ts`]
           - `getSupportedStaticCheckLanguages(...)`: enumerate canonical supported languages [`src/core/static-check.ts`]
         - `buildTerminalSettingsMenuChoices(...)`: append the canonical value-less `Reset defaults` row to the selector menu [`src/index.ts`]
@@ -1208,6 +1208,11 @@
         - `getSupportedStaticCheckLanguageSupport(...)`: enumerate supported languages and extensions [`src/core/static-check.ts`]
           - `getSupportedStaticCheckLanguages(...)`: enumerate canonical supported languages [`src/core/static-check.ts`]
         - `buildTerminalSettingsMenuChoices(...)`: append the canonical value-less `Reset defaults` row to the selector menu [`src/index.ts`]
+      - `formatStaticCheckCheckerEntry(...)`: format one checker entry as a shell-like command summary for inspection and confirmation menus [`src/index.ts`]
+      - `formatStaticCheckLanguageCheckerSummary(...)`: summarize configured checkers for one language as a delimited command list [`src/index.ts`]
+      - `buildStaticCheckViewChoices(...)`: serialize configured checkers as read-only disabled inspection rows terminated by a `Close` row [`src/index.ts`]
+      - `buildStaticCheckRemovalConfirmationChoices(...)`: serialize targeted checker preview rows plus approve and abort actions for removal confirmation [`src/index.ts`]
+      - `confirmStaticCheckRemoval(...)`: open one explicit removal-confirmation submenu and return the approval result [`src/index.ts`]
       - `resetStaticCheckConfig(...)`: restore documented per-language static-check defaults [`src/index.ts`]
         - `getDefaultStaticCheckConfig(...)`: build documented per-language static-check defaults [`src/core/config.ts`]
           - `createStaticCheckLanguageConfig(...)`: clone checker entries and derive the enable flag [`src/core/config.ts`]
@@ -1302,8 +1307,10 @@
   - Looping model: single-pass probe plus optional install with no persistent loop.
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
-  - `main(...)`: probe each bundled npm checker, attempt best-effort install on miss, print native-checker guidance, and return `0` [`scripts/install-static-checkers.ts`]
-    - `resolveCheckerExecutable(...)`: resolve one checker across bundled `node_modules/.bin` locations and PATH scan [`src/core/static-check.ts`]
+  - `main(...)`: best-effort approve pending npm install scripts, probe each bundled npm checker, attempt best-effort install on miss, print native-checker guidance, and return `0` [`scripts/install-static-checkers.ts`]
+    - `approvePendingInstallScripts(...)`: best-effort approve pending npm install scripts for bundled checker dependencies before probing [`scripts/install-static-checkers.ts`]
+      - `hasPendingInstallScriptPackages(...)`: report whether the parsed pending-scripts payload references install-script packages [`scripts/install-static-checkers.ts`]
+    - `resolveCheckerExecutable(...)`: resolve one checker across `%%INSTALLATION_PATH%%` keyword, bundled `node_modules/.bin`, and PATH scan locations [`src/core/static-check.ts`]
       - `findExecutable(...)`: resolve executable on PATH or explicit path [`src/core/static-check.ts`]
         - `isExecutableFile(...)`: verify executable access bits [`src/core/static-check.ts`]
     - `attemptBundledInstall(...)`: best-effort `npm install <pkg>@<range> --no-save --prefix <install-root>` swallowing all errors [`scripts/install-static-checkers.ts`]

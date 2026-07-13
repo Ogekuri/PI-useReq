@@ -399,11 +399,12 @@ export class StaticCheckCommand extends StaticCheckBase {
    * @throws {ReqError} Throws when the executable cannot be found on PATH.
    */
   constructor(cmd: string, inputs: string[], extraArgs?: string[], failOnly = false) {
-    if (!resolveCheckerExecutable(cmd)) {
+    const resolvedCmd = resolveCheckerExecutable(cmd);
+    if (!resolvedCmd) {
       throw new ReqError(`Error: external command '${cmd}' not found on PATH.`, 1);
     }
     super(inputs, extraArgs, failOnly);
-    this.cmd = cmd;
+    this.cmd = cmd.includes("%%INSTALLATION_PATH%%") ? resolvedCmd : cmd;
     this.label = `Command[${cmd}]`;
   }
 
@@ -475,20 +476,25 @@ export function findExecutable(cmd: string): string | undefined {
 }
 
 /**
- * @brief Resolves one checker executable across bundled `node_modules/.bin` locations and PATH.
- * @details Probes the installation-owned `node_modules/.bin` directory, the project-scope parent `node_modules/.bin` directory used by `--prefix` layouts, and finally the system PATH scan, returning the first executable match. Runtime is O(p) in PATH entry count plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
- * @param[in] cmd {string} Executable name or relative path to resolve.
+ * @brief Resolves one checker executable across installation-keyword, bundled `node_modules/.bin`, and PATH locations.
+ * @details Substitutes the `%%INSTALLATION_PATH%%` keyword with the runtime installation path and verifies the resulting explicit path when present, then probes the installation-owned `node_modules/.bin` directory, the project-scope parent `node_modules/.bin` directory used by `--prefix` layouts, and finally the system PATH scan, returning the first executable match so default configuration requires no target-project module installation. Runtime is O(p) in PATH entry count plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
+ * @param[in] cmd {string} Executable name, explicit path, or `%%INSTALLATION_PATH%%`-anchored path to resolve.
  * @return {string | undefined} Absolute executable path, or `undefined` when not found in any probed location.
- * @satisfies REQ-023, REQ-037, DES-018
+ * @satisfies REQ-023, REQ-037, DES-018, DES-019, REQ-350, REQ-351
  */
 export function resolveCheckerExecutable(cmd: string): string | undefined {
+  if (cmd.includes("%%INSTALLATION_PATH%%")) {
+    const installationPath = getInstallationPath();
+    const resolvedPath = cmd.split("%%INSTALLATION_PATH%%").join(installationPath);
+    return isExecutableFile(resolvedPath) ? path.resolve(resolvedPath) : undefined;
+  }
   if (cmd.includes(path.sep)) {
     return isExecutableFile(cmd) ? path.resolve(cmd) : undefined;
   }
   const installationPath = getInstallationPath();
   const bundledBinCandidates = [
     path.join(installationPath, "..", "node_modules", ".bin", cmd),
-    path.join(installationPath, "..", "..", "node_modules", ".bin", cmd),
+    path.join(installationPath, "..", "..", ".bin", cmd),
   ];
   for (const candidate of bundledBinCandidates) {
     if (isExecutableFile(candidate)) {

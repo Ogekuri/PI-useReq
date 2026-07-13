@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.76"
-date: "2026-07-10"
+version: "0.0.77"
+date: "2026-07-13"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -93,6 +93,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-016**: MUST deliver rendered bundled-prompt content to the LLM through `sendMessage` as a `display:false` custom message with `triggerTurn:true` and MUST NOT use `sendUserMessage` when `sendMessage` is available.
 - **DES-017**: MUST declare `pyright`, `ruff`, and `eslint` as pinned caret-range npm dependencies and register a `postinstall` script that installs bundled static checkers.
 - **DES-018**: MUST resolve checker executables by probing bundled `node_modules/.bin` paths relative to the installation path before falling back to `PATH` scan.
+- **DES-019**: MUST resolve the `%%INSTALLATION_PATH%%` keyword inside static-check `Command` `cmd` fields to the runtime installation path within `resolveCheckerExecutable` before executable probing.
+- **DES-020**: MUST extend `scripts/install-static-checkers.ts` to best-effort approve pending npm install scripts for bundled checker dependencies before probing bundled executables.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -166,10 +168,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-336**: MUST render the command invocation summary with the command name without the `req-` prefix in uppercase and the user request arguments.
 - **REQ-337**: MUST include `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools` in the command invocation summary.
 - **REQ-338**: MUST render `none` for the command invocation summary `context files`, `static code checks`, and `enabled tools` fields whenever their respective enabled-item list is empty.
-- **REQ-008**: MUST provide a `Language static code checkers` submenu that adds global Command entries by guided language flow, removes configured global checker entries, toggles local per-language enablement, and resets static-check configuration.
+- **REQ-008**: MUST provide a `Language static code checkers` submenu that adds, views, confirms-before-removes, and resets global Command checker entries, plus toggles local per-language enablement.
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
-- **REQ-248**: MUST render 20 per-language static-check toggle rows between `Remove static code checker` and `Reset defaults`, with right-aligned `on|off` values derived from persisted local enablement.
+- **REQ-248**: MUST render 20 per-language static-check toggle rows between `Reset static code checker` and `Reset defaults`, with right-aligned `on|off` values derived from persisted local enablement.
 - **REQ-249**: MUST persist local `static-check.<language>.enabled` with allowed values `enable|disable` and global `static-check.<language>.checkers` as ordered arrays.
 - **REQ-250**: MUST default global `static-check.C` and `static-check.C++` checker arrays to documented `cppcheck` and `clang-format` Command entries.
 - **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to their documented Command entries.
@@ -411,6 +413,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-342**: MUST keep `STATIC_CHECK_MODULES`, `dispatchStaticCheckForFile` signature, and `StaticCheckEntry` shape unchanged when adding bundled executable resolution.
 - **REQ-343**: MUST NOT transition workflow state or abort `session_start` when one or more enabled static checkers are missing.
 - **REQ-344**: MUST place the `session_start` missing-checker helper in `src/core/static-check.ts` so `src/index.ts` remains thin.
+- **REQ-345**: MUST expose `View static code checker` immediately before `Remove static code checker` inside the `Language static code checkers` submenu.
+- **REQ-346**: MUST make `View static code checker` render configured checker entries as read-only disabled inspection rows terminated by a `Close` row without mutating configuration.
+- **REQ-347**: MUST expose `Reset static code checker` immediately after `Remove static code checker` inside the `Language static code checkers` submenu.
+- **REQ-348**: MUST make `Reset static code checker` restore global checker arrays plus derived local enable flags to embedded defaults after explicit user confirmation.
+- **REQ-349**: MUST render the targeted configured checker entries and require explicit user confirmation before `Remove static code checker` removes any global checker entries.
+- **REQ-350**: MUST substitute the `%%INSTALLATION_PATH%%` keyword with the runtime extension installation path inside static-check `Command` `cmd` fields before executable resolution and execution.
+- **REQ-351**: MUST resolve bundled static-check executables from the extension installation `node_modules/.bin` so default configuration requires no target-project module installation.
+- **REQ-352**: MUST best-effort approve pending npm install scripts for bundled checker dependencies during extension install or run so embedded checkers execute without manual approval.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -421,7 +431,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-005**: MUST verify the configuration menu saves `docs-dir` locally and `AUTO_GIT_COMMIT`, `GIT_WORKTREE_ENABLED`, plus `GIT_WORKTREE_PREFIX` globally immediately after each change.
 - **TST-084**: MUST verify local configuration persistence trims trailing `/` and keeps `docs-dir`, `tests-dir`, and `src-dir` relative.
 - **TST-046**: MUST verify `Language static code checkers` omits module selection, raw-spec actions, supported-language reference actions, and hides `Dummy`, `Pylance`, and `Ruff` from user-configurable actions.
-- **TST-077**: MUST verify `Language static code checkers` renders 20 per-language `on|off` toggle rows between `Remove static code checker` and `Reset defaults`, and persists toggle changes only in local configuration.
+- **TST-077**: MUST verify `Language static code checkers` renders 20 per-language `on|off` toggle rows between `Reset static code checker` and `Reset defaults`, and persists toggle changes only in local configuration.
 - **TST-078**: MUST verify default configuration stores documented per-language `enabled` flags locally and checker lists globally for `C`, `C++`, `Python`, `JavaScript`, and `TypeScript`.
 - **TST-108**: MUST verify guided static-check entry addition updates global checker lists and sets the targeted local enable flag to `enable`, and guided removal updates global checker lists.
 - **TST-112**: MUST verify `--enable-static-check` stores checker commands in global configuration and preserves local enablement according to the documented defaulting rules.
@@ -536,6 +546,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
 - **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.
+- **TST-126**: MUST verify `View static code checker` appears before `Remove static code checker` and renders configured checkers as read-only inspection rows.
+- **TST-127**: MUST verify `Reset static code checker` appears after `Remove static code checker` and restores embedded defaults after explicit confirmation.
+- **TST-128**: MUST verify `Remove static code checker` previews targeted checker entries and requires explicit confirmation before removing configured global checker entries.
+- **TST-129**: MUST verify `resolveCheckerExecutable` substitutes `%%INSTALLATION_PATH%%` with the runtime installation path inside static-check `Command` `cmd` fields.
+- **TST-130**: MUST verify `scripts/install-static-checkers.ts` best-effort approves pending npm install scripts and always returns exit code `0`.
 
 ## 5. Observed Component Model
 
