@@ -1249,7 +1249,7 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
 
 /**
  * @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
- * @details Applies session-start-specific resource validation, project-config refresh, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, restores the original session-backed `base-path` for every matched worktree-backed completion by reusing persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the stash-assisted merge-and-delete finalization path for every matched successful worktree-backed completion even when a later busy-command rejection already moved workflow state to `error`, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful `agent_end` handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Applies session-start-specific resource validation, project-config refresh, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` because the pi 0.67.1+ `switchSession` implementation awaits the active agent run to become idle and would deadlock inside `agent_end`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful `agent_settled` handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
@@ -1373,6 +1373,13 @@ async function handleExtensionStatusEvent(
         );
       }
       if (shouldFinalizeMatchedSuccess) {
+        // Defer the restore switch, merge, and worktree deletion to
+        // `agent_settled`. The pi 0.67.1+ `switchSession` implementation
+        // awaits the active agent run to become idle before replacing the
+        // session, and that idle transition only happens at `agent_settled`.
+        // Calling `switchSession` here would deadlock the `agent_end` handler
+        // and leave the workflow parked in `merging` forever.
+        statusController.state.pendingFinalizationOutcome = outcome;
         if (debugConfig) {
           transitionPromptWorkflowState(
             statusController,
@@ -1384,75 +1391,6 @@ async function handleExtensionStatusEvent(
           );
         } else {
           setPiUsereqWorkflowState(statusController, "merging", promptContext);
-        }
-        let finalization:
-          | {
-            mergeAttempted: boolean;
-            mergeSucceeded: boolean;
-            cleanupSucceeded: boolean;
-            errorMessage?: string;
-            warningMessage?: string;
-            activeContext?: unknown;
-          }
-          | undefined;
-        try {
-          finalization = await finalizePromptCommandExecution(
-            activePromptRequest,
-            promptContext,
-            debugConfig
-              ? { config: debugConfig, workflowState: statusController.state.workflowState }
-              : undefined,
-          );
-          promptContext = (finalization.activeContext ?? promptContext) as typeof ctx;
-        } catch (error) {
-          promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
-          let errorMessage = error instanceof Error ? error.message : String(error);
-          let cleanupSucceeded = false;
-          try {
-            promptContext = (await restorePromptCommandExecution(
-              activePromptRequest,
-              promptContext,
-              debugConfig
-                ? { config: debugConfig, workflowState: statusController.state.workflowState }
-                : undefined,
-            ) ?? promptContext) as typeof ctx;
-            cleanupSucceeded = true;
-          } catch (restoreError) {
-            promptContext = (getPromptCommandErrorContext(restoreError) ?? promptContext) as typeof ctx;
-            errorMessage = restoreError instanceof Error ? restoreError.message : String(restoreError);
-          }
-          finalization = {
-            mergeAttempted: false,
-            mergeSucceeded: false,
-            cleanupSucceeded,
-            errorMessage,
-          };
-        }
-        if (
-          finalization.errorMessage
-          && (!finalization.cleanupSucceeded || !finalization.mergeSucceeded)
-        ) {
-          if (debugConfig) {
-            transitionPromptWorkflowState(
-              statusController,
-              promptContext,
-              activePromptRequest.basePath,
-              debugConfig,
-              activePromptRequest.promptName,
-              "error",
-            );
-          } else {
-            setPiUsereqWorkflowState(statusController, "error", promptContext);
-          }
-          notifyContextSafely(promptContext, finalization.errorMessage, "error");
-        }
-        if (
-          finalization.warningMessage
-          && finalization.cleanupSucceeded
-          && finalization.mergeSucceeded
-          && !finalization.errorMessage
-        ) {
-          notifyContextSafely(promptContext, finalization.warningMessage, "info");
         }
       } else if (closureFailureMessage !== undefined) {
         // Worktree-backed run that ended interrupted, failed, aborted, or
@@ -1500,7 +1438,7 @@ async function handleExtensionStatusEvent(
           notifyContextSafely(promptContext, error instanceof Error ? error.message : String(error), "error");
         }
       }
-      if (closureFailureMessage === undefined) {
+      if (closureFailureMessage === undefined && !shouldFinalizeMatchedSuccess) {
         statusController.state.pendingPromptRequest = undefined;
         statusController.state.activePromptRequest = undefined;
         if (debugConfig) {
@@ -1515,6 +1453,102 @@ async function handleExtensionStatusEvent(
         } else {
           setPiUsereqWorkflowState(statusController, "idle", promptContext);
         }
+      }
+    }
+  }
+  if (hookName === "agent_settled") {
+    const settledPromptRequest = statusController.state.activePromptRequest;
+    const pendingOutcome = statusController.state.pendingFinalizationOutcome;
+    if (
+      settledPromptRequest !== undefined
+      && settledPromptRequest.worktreeDir !== undefined
+      && pendingOutcome === "completed"
+    ) {
+      const debugConfig = statusController.config;
+      let promptContext = ctx;
+      let finalization:
+        | {
+          mergeAttempted: boolean;
+          mergeSucceeded: boolean;
+          cleanupSucceeded: boolean;
+          errorMessage?: string;
+          warningMessage?: string;
+          activeContext?: unknown;
+        }
+        | undefined;
+      try {
+        finalization = await finalizePromptCommandExecution(
+          settledPromptRequest,
+          promptContext,
+          debugConfig
+            ? { config: debugConfig, workflowState: statusController.state.workflowState }
+            : undefined,
+        );
+        promptContext = (finalization.activeContext ?? promptContext) as typeof ctx;
+      } catch (error) {
+        promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
+        let errorMessage = error instanceof Error ? error.message : String(error);
+        let cleanupSucceeded = false;
+        try {
+          promptContext = (await restorePromptCommandExecution(
+            settledPromptRequest,
+            promptContext,
+            debugConfig
+              ? { config: debugConfig, workflowState: statusController.state.workflowState }
+              : undefined,
+          ) ?? promptContext) as typeof ctx;
+          cleanupSucceeded = true;
+        } catch (restoreError) {
+          promptContext = (getPromptCommandErrorContext(restoreError) ?? promptContext) as typeof ctx;
+          errorMessage = restoreError instanceof Error ? restoreError.message : String(restoreError);
+        }
+        finalization = {
+          mergeAttempted: false,
+          mergeSucceeded: false,
+          cleanupSucceeded,
+          errorMessage,
+        };
+      }
+      if (
+        finalization.errorMessage
+        && (!finalization.cleanupSucceeded || !finalization.mergeSucceeded)
+      ) {
+        if (debugConfig) {
+          transitionPromptWorkflowState(
+            statusController,
+            promptContext,
+            settledPromptRequest.basePath,
+            debugConfig,
+            settledPromptRequest.promptName,
+            "error",
+          );
+        } else {
+          setPiUsereqWorkflowState(statusController, "error", promptContext);
+        }
+        notifyContextSafely(promptContext, finalization.errorMessage, "error");
+      }
+      if (
+        finalization.warningMessage
+        && finalization.cleanupSucceeded
+        && finalization.mergeSucceeded
+        && !finalization.errorMessage
+      ) {
+        notifyContextSafely(promptContext, finalization.warningMessage, "info");
+      }
+      statusController.state.pendingFinalizationOutcome = undefined;
+      statusController.state.pendingPromptRequest = undefined;
+      statusController.state.activePromptRequest = undefined;
+      if (debugConfig) {
+        transitionPromptWorkflowState(
+          statusController,
+          promptContext,
+          settledPromptRequest.basePath,
+          debugConfig,
+          settledPromptRequest.promptName,
+          "idle",
+        );
+      } else {
+        setPiUsereqWorkflowState(statusController, "idle", promptContext);
       }
     }
   }

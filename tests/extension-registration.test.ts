@@ -2248,6 +2248,7 @@ test("prompt debug logging captures failing and successful prompt orchestration 
   await successPi.emit("agent_end", {
     messages: [{ role: "assistant", stopReason: "end_turn" }],
   }, successCtx);
+  await successPi.emit("agent_settled", {}, successCtx);
   const successLog = JSON.parse(fs.readFileSync(path.join(successFixture.projectBase, "prompt-debug.json"), "utf8"));
   assert.ok(successLog.some((entry: any) => entry.action === "required_docs_check" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "worktree_create" && entry.result?.success === true));
@@ -3150,6 +3151,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     assert.equal(ctx.cwd, projectBase);
     assert.equal(process.cwd(), projectBase);
@@ -3309,6 +3311,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(ctx.cwd, projectBase);
@@ -3403,6 +3406,7 @@ test("worktree-backed successful closure stashes tracked base-path changes, merg
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     const statusResult = spawnSync("git", ["status", "--porcelain"], {
       cwd: projectBase,
@@ -3482,6 +3486,7 @@ test("prompt-command bootstrap ignores stale deleted-worktree session metadata o
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(ctx.cwd, projectBase);
@@ -3531,6 +3536,7 @@ test("prompt-command bootstrap ignores stale deleted-worktree session metadata o
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(ctx.cwd, projectBase);
@@ -3590,6 +3596,7 @@ test("worktree-backed finalization transitions through merging, error, and idle 
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(ctx.cwd, projectBase);
@@ -3765,6 +3772,7 @@ test("worktree-backed prompt commands use replacement-session callbacks for prom
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, activeSessionCtx);
+    await pi.emit("agent_settled", {}, activeSessionCtx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(activeSessionCtx.cwd, projectBase);
@@ -3828,6 +3836,7 @@ test("worktree-backed prompt commands merge and delete the worktree when prompt 
             await pi.emit("agent_end", {
               messages: [{ role: "assistant", stopReason: "stop", content: [] }],
             }, activeSessionCtx);
+            await pi.emit("agent_settled", {}, activeSessionCtx);
           }
         },
       };
@@ -3931,6 +3940,7 @@ test("worktree-backed prompt commands tolerate a rejecting summary sendMessage w
           await pi.emit("agent_end", {
             messages: [{ role: "assistant", stopReason: "stop", content: [] }],
           }, activeSessionCtx);
+          await pi.emit("agent_settled", {}, activeSessionCtx);
         },
       };
       activeSessionCtx = replacementCtx;
@@ -3995,6 +4005,7 @@ test("worktree-backed prompt commands merge and delete the worktree when prompt 
           await pi.emit("agent_end", {
             messages: [{ role: "assistant", stopReason: "stop", content: [] }],
           }, activeSessionCtx);
+          await pi.emit("agent_settled", {}, activeSessionCtx);
         });
       }
     };
@@ -4148,6 +4159,7 @@ test("worktree-backed prompt commands restore base-path when switchSession does 
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, activeSessionCtx);
+    await pi.emit("agent_settled", {}, activeSessionCtx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(activeSessionCtx.cwd, projectBase);
@@ -4215,6 +4227,7 @@ test("worktree-backed prompt commands close successfully with realistic single-a
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     // After closure: base-path restored, worktree merged and removed.
     assert.equal(process.cwd(), projectBase);
@@ -4404,6 +4417,7 @@ test("worktree-backed closure succeeds when agent_end lifecycle contexts omit sw
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, eventCtx);
+    await pi.emit("agent_settled", {}, eventCtx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(commandCtx.cwd, projectBase);
@@ -4416,6 +4430,88 @@ test("worktree-backed closure succeeds when agent_end lifecycle contexts omit sw
       }).status,
       0,
     );
+    assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies worktree-backed closure defers the restore switch until `agent_settled`.
+ * @details Simulates the pi 0.67.1+ `switchSession` contract where session replacement awaits the active agent run to become idle, so invoking the restore switch from inside `agent_end` deadlocks because the agent run is still active until `agent_settled` fires. The test proves `agent_end` must only classify the outcome and transition to `merging`, while `agent_settled` must restore `base-path`, merge the successful worktree branch, delete the worktree plus branch, and transition to `idle`. Runtime is dominated by temporary git worktree setup, commit creation, and prompt finalization. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after closure assertions complete.
+ * @throws {AssertionError} Throws when `agent_end` blocks on the restore switch or when `agent_settled` fails to finalize the worktree.
+ * @satisfies REQ-208, REQ-228, REQ-229, REQ-230, REQ-282, TST-089
+ */
+test("worktree-backed closure defers the restore switch until agent_settled", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const commandCtx = createFakeCtx(projectBase);
+    const originalSessionFile = commandCtx.sessionManager.getSessionFile() ?? "";
+    await pi.emit("session_start", { reason: "startup" }, commandCtx);
+
+    // Simulate the pi 0.67.1+ switchSession contract: the restore switch (back
+    // to the original base session) waits for the agent run to become idle,
+    // which only happens at agent_settled. The activation switch to the
+    // worktree must still resolve immediately.
+    let agentIdle = false;
+    let resolveAgentIdle!: () => void;
+    const agentIdlePromise = new Promise<void>((resolve) => {
+      resolveAgentIdle = resolve;
+    });
+    const originalSwitchSession = commandCtx.switchSession.bind(commandCtx);
+    commandCtx.switchSession = async (sessionPath: string) => {
+      if (!agentIdle && path.resolve(sessionPath) === path.resolve(originalSessionFile)) {
+        await agentIdlePromise;
+      }
+      return originalSwitchSession(sessionPath);
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", commandCtx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    const eventCtx = createFakeCtx(executionBasePath);
+    eventCtx.sessionManager.getSessionFile = () => commandCtx.sessionManager.getSessionFile() ?? "";
+    eventCtx.sessionManager.getSessionDir = () => path.dirname(commandCtx.sessionManager.getSessionFile() ?? "");
+    eventCtx.sessionManager.getCwd = () => executionBasePath;
+    eventCtx.cwd = executionBasePath;
+    delete eventCtx.switchSession;
+
+    await pi.emit("before_agent_start", {}, eventCtx);
+    await pi.emit("agent_start", {}, eventCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "settled-closure.ts"), "export const SETTLED_CLOSURE = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/settled-closure.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "settled closure"], {
+      cwd: executionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    // agent_end must not block on the restore switch: it only classifies the
+    // outcome and parks the workflow in `merging` until agent_settled.
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, eventCtx);
+    assert.equal(fs.existsSync(executionBasePath), true);
+
+    // agent_settled marks the agent idle and must drive the finalization.
+    agentIdle = true;
+    resolveAgentIdle();
+    await pi.emit("agent_settled", {}, eventCtx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(commandCtx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "settled-closure.ts")));
+    assert.equal(fs.existsSync(executionBasePath), false);
     assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {
     process.chdir(previousCwd);
@@ -4491,6 +4587,7 @@ test("switch-triggered session_shutdown preserves prompt state for same-runtime 
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(ctx.cwd, projectBase);
@@ -4572,6 +4669,7 @@ test("replacement-session runtime resynchronizes persisted running state before 
     await reboundPi!.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, reboundCtx);
+    await reboundPi!.emit("agent_settled", {}, reboundCtx);
 
     const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
     assert.ok(
@@ -4714,6 +4812,7 @@ test("replacement-session prompt delivery persists running before async sendUser
     await reboundPi!.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, reboundCtx);
+    await reboundPi!.emit("agent_settled", {}, reboundCtx);
 
     const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
     assert.ok(
@@ -4865,6 +4964,7 @@ test("replacement-session prompt delivery persists running before async sendUser
         setTimeout(() => reject(new Error("agent_end timed out")), 1_000);
       }),
     ]);
+    await reboundPi!.emit("agent_settled", {}, reboundCtx);
     assert.equal(rejectPromptDelivery, undefined);
     const handlerOutcome = await Promise.race([
       handlerOutcomePromise,
@@ -4934,6 +5034,7 @@ test("worktree-backed prompt execution survives switch-triggered extension rebin
     await reboundPi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, reboundCtx);
+    await reboundPi.emit("agent_settled", {}, reboundCtx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(reboundCtx.cwd, projectBase);
@@ -5137,6 +5238,7 @@ test("worktree-backed successful merge stops before merge when fork-session veri
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
     assert.equal(process.cwd(), projectBase);
     assert.equal(ctx.cwd, projectBase);
@@ -5216,6 +5318,7 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, eventCtx);
+    await pi.emit("agent_settled", {}, eventCtx);
 
     const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
     assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
@@ -5304,6 +5407,7 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "stop", content: [] }],
     }, eventCtx);
+    await pi.emit("agent_settled", {}, eventCtx);
 
     const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
     assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
@@ -5553,6 +5657,7 @@ test("extension registers wrappers for all pi-usereq status hooks", () => {
     [...pi.eventHandlers.keys()].sort(),
     [
       "agent_end",
+      "agent_settled",
       "agent_start",
       "before_agent_start",
       "before_provider_request",

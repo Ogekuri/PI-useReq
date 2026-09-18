@@ -14,7 +14,7 @@ import type {
   ThemeColor,
 } from "@mariozechner/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
-import type { PiNotifySoundLevel } from "./pi-notify.js";
+import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
 import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
 import {
   restorePersistedPromptCommandRuntimeStateForSession,
@@ -77,6 +77,7 @@ export const PI_USEREQ_STATUS_HOOK_NAMES = [
   "before_agent_start",
   "agent_start",
   "agent_end",
+  "agent_settled",
   "turn_start",
   "turn_end",
   "message_start",
@@ -124,6 +125,7 @@ export interface PiUsereqStatusState {
   runtimeSoundLevel: PiNotifySoundLevel | undefined;
   pendingPromptRequest: PiUsereqPromptRequest | undefined;
   activePromptRequest: PiUsereqPromptRequest | undefined;
+  pendingFinalizationOutcome: PiNotifyOutcome | undefined;
 }
 
 /**
@@ -680,6 +682,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       runtimeSoundLevel: undefined,
       pendingPromptRequest: undefined,
       activePromptRequest: undefined,
+      pendingFinalizationOutcome: undefined,
     },
     tickHandle: undefined,
   };
@@ -802,7 +805,7 @@ export function setPiUsereqWorkflowState(
 
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing on `agent_start`, promotes pending prompt-request metadata into the active run, captures non-aborted run duration on `agent_end`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing on `agent_start`, promotes pending prompt-request metadata into the active run, captures non-aborted run duration on `agent_end` or `agent_settled`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
@@ -851,9 +854,15 @@ export function updateExtensionStatus(
     controller.state.pendingPromptRequest = undefined;
   }
 
-  if (hookName === "agent_end" && controller.state.runStartTimeMs !== undefined) {
+  if (
+    (hookName === "agent_end" || hookName === "agent_settled")
+    && controller.state.runStartTimeMs !== undefined
+  ) {
     const durationMs = nowMs - controller.state.runStartTimeMs;
-    if (!didAgentEndAbort((event as AgentEndEvent).messages ?? [])) {
+    const agentEndMessages = hookName === "agent_end"
+      ? (event as AgentEndEvent).messages ?? []
+      : [];
+    if (!didAgentEndAbort(agentEndMessages)) {
       controller.state.lastRunDurationMs = durationMs;
       controller.state.totalRunDurationMs = controller.state.totalRunDurationMs === undefined
         ? durationMs
