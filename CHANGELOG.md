@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.51.0](https://github.com/Ogekuri/PI-useReq/compare/v0.50.0..v0.51.0) - 2026-09-18
+### 🐛  Bug Fixes
+- Fix PI source files.
+- Fix PI source files.
+- defer worktree finalization to agent_settled [useReq] *(prompt-orchestration)*
+  - pi 0.67.1+ switchSession awaits the active agent run to become idle via
+  - session.abort()/waitForIdle(), which deadlocks when invoked from the
+  - agent_end handler because the run stays active until agent_settled.
+  - Move the matched-success restore/merge/worktree-delete into a new
+  - agent_settled hook, keeping agent_end for outcome classification and
+  - notify dispatch. Adds agent_settled to the intercepted hook set and a
+  - pendingFinalizationOutcome state field.
+- Fix tests.
+
+### 📚  Documentation
+- Update PI Cli docs and source files.
+
 ## [0.50.0](https://github.com/Ogekuri/PI-useReq/compare/v0.49.0..v0.50.0) - 2026-07-13
 ### 🚜  Changes
 - exclude tests from npm package via files allowlist [useReq] *(packaging)*
@@ -666,6 +683,7 @@
 - \[0.48.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.48.0
 - \[0.49.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.49.0
 - \[0.50.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.50.0
+- \[0.51.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.51.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -715,3 +733,4 @@
 [0.48.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.47.0..v0.48.0
 [0.49.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.48.0..v0.49.0
 [0.50.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.49.0..v0.50.0
+[0.51.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.50.0..v0.51.0
