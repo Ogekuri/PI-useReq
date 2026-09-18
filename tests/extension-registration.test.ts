@@ -4167,6 +4167,74 @@ test("worktree-backed prompt commands restore base-path when switchSession does 
 });
 
 /**
+ * @brief Verifies worktree-backed prompt closure succeeds against the installed pi 0.67.1 session-switch contract.
+ * @details Simulates the real pi 0.67.1 runtime where `ctx.switchSession(sessionPath)` accepts a single argument, realigns `process.cwd()` to the target session's recorded cwd, never mutates the handler-scoped `ctx` object, and never invokes caller-supplied callbacks. The test proves that worktree-backed `req-<prompt>` activation, prompt execution, and prompt-end finalization must succeed against that contract by relying on the persisted session-file header and `process.cwd()` verification instead of the stale handler-scoped `ctx` probes. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after prompt delivery, merge handling, and restored-base assertions complete.
+ * @throws {AssertionError} Throws when prompt activation or prompt-end closure fails to restore the base-path, merge the worktree branch, or delete the worktree.
+ * @satisfies REQ-068, REQ-208, REQ-257, REQ-271, REQ-272, REQ-276, REQ-282
+ */
+test("worktree-backed prompt commands close successfully with realistic single-arg switchSession", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    // Model pi 0.67.1: switchSession(sessionPath) single-arg, chdirs to the session cwd,
+    // does NOT mutate handler ctx, no withSession callback.
+    ctx.switchSession = async (sessionPath: string) => {
+      const targetCwd = readFakeSessionFileCwd(sessionPath, process.cwd());
+      process.chdir(targetCwd);
+      // Never mutate handler-scoped ctx.  No withSession invocation.
+      return { cancelled: false };
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const originalSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.ok(fs.existsSync(executionBasePath));
+
+    // Stale ctx: sessionManager still reports the original session.
+    assert.notEqual(ctx.sessionManager.getSessionFile(), "");
+    assert.equal(process.cwd(), executionBasePath);
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "realistic-single-arg.ts"), "export const REALISTIC = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/realistic-single-arg.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(commit.status, 0, commit.stderr);
+
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+
+    // After closure: base-path restored, worktree merged and removed.
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "realistic-single-arg.ts")), true);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies restored base-path closure tolerates stale `ctx.cwd` mutations after a successful session switch.
  * @details Simulates the real pi runtime behavior observed in `/tmp/debug.json`, where restoring the original session succeeds but the old replacement-session context becomes stale immediately afterward, so mutating its `cwd` mirror throws the documented stale-extension-context error. The test proves `restorePromptCommandExecution(...)` MUST ignore that late stale mutation failure once session-target verification already succeeded, leaving prompt finalization free to continue merge and cleanup.
  * @return {Promise<void>} Promise resolved after restored-base assertions and cleanup complete.
