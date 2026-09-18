@@ -9,25 +9,18 @@
     "note": "All document paths, related references, and routing targets remain relative so the whole documentation folder can be moved without rewriting the manifest."
   },
   "collections": {
-    "pods-docs": {
-      "description": "GPU pod orchestration, vLLM deployment recipes, and Pi planning documents.",
-      "preferred_when": [
-        "The query is about serving large models on GPU pods or specific vLLM flags.",
-        "The query mentions DataCrunch, Vast.ai, RunPod, H100/H200/B200 sizing, or model deployment commands."
-      ]
-    },
     "coding-agent-docs": {
-      "description": "Pi coding-agent runtime, configuration, extension, SDK, TUI, protocol, and platform documentation.",
+      "description": "Pi coding-agent runtime, configuration, extension, SDK, TUI, protocol, platform, and reference documentation.",
       "preferred_when": [
         "The query is about pi itself, its SDK, extensions, sessions, settings, keybindings, providers, or protocols.",
         "The query mentions createAgentSession, pi.registerTool, models.json, auth.json, /tree, or --mode rpc/json."
       ]
     },
-    "mom-docs": {
-      "description": "Mom bot sandboxing, integration, events, and redesign architecture documents.",
+    "durable-docs": {
+      "description": "Pico5 durable agent harness specification, Chord integration, and implementation handoff.",
       "preferred_when": [
-        "The query is about Mom, Slack integration, event files, sandboxing, artifacts, or platform adapters.",
-        "The query mentions workspace/events, docker sandbox, v86, Socket Mode, or PlatformAdapter."
+        "The query is about Pico5, durable agent harness architecture, Chord documents, or Session/Harness API design.",
+        "The query mentions defineDoc, defineTask, watchDoc, DocumentSource, ConversationRecord, or Harness.open."
       ]
     }
   },
@@ -41,25 +34,7 @@
         "modelOverrides"
       ],
       "prefer": "coding-agent-docs/models.md",
-      "avoid": [
-        "pods-docs/models.md"
-      ],
-      "why": "The coding-agent models doc is about declarative provider/model configuration, not GPU sizing."
-    },
-    {
-      "if_query_mentions_any": [
-        "GPU count",
-        "H100",
-        "H200",
-        "B200",
-        "tool-call-parser",
-        "served-model-name"
-      ],
-      "prefer": "pods-docs/models.md",
-      "avoid": [
-        "coding-agent-docs/models.md"
-      ],
-      "why": "The pods models doc is the hardware and vLLM-args matrix."
+      "why": "The coding-agent models doc is about declarative provider/model configuration."
     },
     {
       "if_query_mentions_any": [
@@ -122,12 +97,11 @@
         "entry types",
         "buildSessionContext"
       ],
-      "prefer": "coding-agent-docs/session.md",
+      "prefer": "coding-agent-docs/session-format.md",
       "avoid": [
-        "coding-agent-docs/tree.md",
         "coding-agent-docs/compaction.md"
       ],
-      "why": "session.md is the persisted data-model reference."
+      "why": "session-format.md is the persisted data-model reference."
     },
     {
       "if_query_mentions_any": [
@@ -136,11 +110,11 @@
         "branch switching",
         "label timestamps"
       ],
-      "prefer": "coding-agent-docs/tree.md",
+      "prefer": "coding-agent-docs/sessions.md",
       "avoid": [
-        "coding-agent-docs/session.md"
+        "coding-agent-docs/session-format.md"
       ],
-      "why": "tree.md is the user-facing and API-facing branch-navigation guide."
+      "why": "sessions.md is the user-facing and API-facing branch-navigation and session-management guide."
     },
     {
       "if_query_mentions_any": [
@@ -150,915 +124,530 @@
         "session_before_compact"
       ],
       "prefer": "coding-agent-docs/compaction.md",
-      "avoid": [
-        "coding-agent-docs/tree.md"
-      ],
       "why": "compaction.md is the summarization and token-budget behavior reference."
     },
     {
       "if_query_mentions_any": [
-        "Pi architecture",
-        "pods setup",
-        "persistent model cache",
-        "~/.pi/pods.json"
+        "Gondolin",
+        "Dockerfile.pi",
+        "OpenShell",
+        "Docker Sandboxes",
+        "sbx run"
       ],
-      "prefer": "pods-docs/plan.md",
-      "avoid": [
-        "pods-docs/implementation-plan.md"
-      ],
-      "why": "plan.md is the behavioral/product plan, not the file-by-file implementation checklist."
+      "prefer": "coding-agent-docs/containerization.md",
+      "why": "containerization.md covers pi sandboxing patterns (Gondolin, Docker, OpenShell, Docker Sandboxes)."
     },
     {
       "if_query_mentions_any": [
-        "src/setup/generate-setup-script.ts",
-        "Package 1",
-        "commander",
-        "TypeScript modules"
+        "PI_SESSION_ID",
+        "PI_PROVIDER",
+        "PI_MODEL",
+        "PI_CODING_AGENT_DIR",
+        "PI_OFFLINE"
       ],
-      "prefer": "pods-docs/implementation-plan.md",
+      "prefer": "coding-agent-docs/environment-variables.md",
       "avoid": [
-        "pods-docs/plan.md"
+        "coding-agent-docs/providers.md"
       ],
-      "why": "implementation-plan.md is the engineering work-breakdown document."
+      "why": "environment-variables.md documents pi process and session environment variables; providers.md covers API-key env vars."
     },
     {
       "if_query_mentions_any": [
-        "workspace/events",
-        "immediate",
-        "one-shot",
-        "periodic",
-        "[SILENT]"
+        "/llama",
+        "llama-server",
+        "router mode",
+        "GGUF",
+        "llama.cpp"
       ],
-      "prefer": "mom-docs/events.md",
-      "avoid": [
-        "mom-docs/new.md"
-      ],
-      "why": "events.md is the dedicated event-system design."
+      "prefer": "coding-agent-docs/llama-cpp.md",
+      "why": "llama-cpp.md covers local llama.cpp router setup."
     },
     {
       "if_query_mentions_any": [
-        "PlatformAdapter",
-        "ChannelMessage",
-        "multi-platform",
-        "bubblewrap",
-        "invoke_tool"
+        "project trust",
+        "sandbox pi",
+        "untrusted repository",
+        "vulnerability reporting"
       ],
-      "prefer": "mom-docs/new.md",
+      "prefer": "coding-agent-docs/security.md",
       "avoid": [
-        "mom-docs/events.md",
-        "mom-docs/slack-bot-minimal-guide.md"
+        "coding-agent-docs/containerization.md"
       ],
-      "why": "new.md is the broad multi-platform redesign proposal."
+      "why": "security.md covers trust model and sandbox rationale; containerization.md covers the practical isolation patterns."
     },
     {
       "if_query_mentions_any": [
-        "Docker sandbox",
-        "docker.sh",
-        "--sandbox=docker"
+        "how to use pi",
+        "slash commands",
+        "/model",
+        "/fork",
+        "/clone",
+        "CLI reference"
       ],
-      "prefer": "mom-docs/sandbox.md",
+      "prefer": "coding-agent-docs/usage.md",
       "avoid": [
-        "mom-docs/v86.md"
+        "coding-agent-docs/quickstart.md"
       ],
-      "why": "sandbox.md is the operational Docker guide; v86.md is an evaluation of an alternative sandbox."
+      "why": "usage.md is the comprehensive day-to-day reference; quickstart.md is the minimal first-run guide."
     },
     {
       "if_query_mentions_any": [
-        "v86",
-        "rootlessRelay",
-        "10.0.2.2",
-        "save_state"
+        "install pi",
+        "npm install",
+        "first session",
+        "/login",
+        "AGENTS.md"
       ],
-      "prefer": "mom-docs/v86.md",
+      "prefer": "coding-agent-docs/quickstart.md",
       "avoid": [
-        "mom-docs/sandbox.md"
+        "coding-agent-docs/usage.md"
       ],
-      "why": "v86.md is the VM/evaluator document."
+      "why": "quickstart.md covers installation, authentication, and first run; usage.md covers ongoing workflow."
+    },
+    {
+      "if_query_mentions_any": [
+        "Pico5",
+        "durable agent harness",
+        "Chord document",
+        "defineDoc",
+        "defineTask",
+        "watchDoc",
+        "Harness.open",
+        "ConversationRecord"
+      ],
+      "prefer": "durable-docs/pico-v5.md",
+      "avoid": [
+        "coding-agent-docs/sdk.md",
+        "coding-agent-docs/extensions.md"
+      ],
+      "why": "Pico5 is a separate durable-agent specification, not part of the coding-agent extension system."
+    },
+    {
+      "if_query_mentions_any": [
+        "documentReplicatedState",
+        "Chord facet",
+        "defineDocFamily",
+        "tx.doc",
+        "DocumentSource"
+      ],
+      "prefer": "durable-docs/pico-v5-chord-usage.md",
+      "avoid": [
+        "durable-docs/pico-v5-handoff.md"
+      ],
+      "why": "chord-usage.md is the practical guide for using Chord with Pico5 documents."
+    },
+    {
+      "if_query_mentions_any": [
+        "implementation handoff",
+        "package 1",
+        "MemoryStorage",
+        "SQLite backend",
+        "JSONL publication"
+      ],
+      "prefer": "durable-docs/pico-v5-handoff.md",
+      "avoid": [
+        "durable-docs/pico-v5.md",
+        "durable-docs/pico-v5-chord-usage.md"
+      ],
+      "why": "handoff.md is the implementation checklist and build-order plan."
     }
   ],
-  "document_count": 36,
+  "document_count": 33,
   "documents": [
     {
-      "id": "pods/kimi-k2",
-      "title": "Kimi-K2 Deployment Guide",
+      "id": "coding/overview",
+      "title": "Pi Documentation (Index)",
       "aliases": [
-        "kimi-k2",
-        "Kimi K2",
-        "moonshotai/Kimi-K2-Instruct"
+        "Pi docs",
+        "documentation index",
+        "pi documentation"
       ],
-      "doc_type": "deployment-guide",
+      "doc_type": "landing-page",
       "audience": [
-        "GPU pod operator",
-        "vLLM/SGLang deployer"
+        "all pi users"
       ],
-      "summary": "Detailed deployment recipes for Kimi-K2 across vLLM, SGLang, KTransformers, and TensorRT-LLM, including multi-node serving and tool-calling setup.",
+      "summary": "Landing page for the Pi documentation set, linking to quickstart, usage, providers, security, containerization, settings, keybindings, sessions, compaction, extensions, skills, packages, SDK, RPC, TUI, and platform setup guides.",
       "primary_topics": [
-        "Kimi-K2",
-        "vLLM",
-        "SGLang",
-        "TensorRT-LLM",
-        "KTransformers",
-        "multi-node inference"
+        "documentation navigation",
+        "quickstart",
+        "usage",
+        "settings",
+        "extensions",
+        "SDK",
+        "platform setup"
       ],
       "strong_terms": [
-        "--tool-call-parser kimi_k2",
-        "--enable-auto-tool-choice",
-        "tensor-parallel-size 16",
-        "data parallel + expert parallel",
-        "mpirun",
-        "model_type kimi_k2"
+        "npm install -g @earendil-works/pi-coding-agent",
+        "/login",
+        "ANTHROPIC_API_KEY",
+        "AGENTS.md"
       ],
       "distinctive_markers": [
-        "Minimum 16 GPUs for FP8 + 128k context on H200/H20",
-        "Reuses DeepSeekV3CausalLM but sets model_type to kimi_k2",
-        "Includes TensorRT-LLM docker + passwordless ssh setup"
+        "Entry-point page with categorized section links",
+        "Contains the Pi documentation table of contents"
       ],
       "question_patterns": [
-        "How do I deploy Kimi-K2 on vLLM or SGLang?",
-        "What flags are required for Kimi-K2 tool calling?",
-        "How do I serve Kimi-K2 across multiple nodes with TensorRT-LLM?"
+        "Where does the Pi documentation start?",
+        "What documentation categories exist for pi?",
+        "How is the pi documentation organized?"
       ],
-      "confusable_with": [
-        {
-          "path": "pods-docs/models.md",
-          "difference": "That file is a compact model matrix; this file is the full Kimi-K2 deployment guide."
-        },
-        {
-          "path": "pods-docs/qwen3-coder.md",
-          "difference": "That guide is for Qwen3-Coder, not Kimi-K2."
-        }
-      ],
-      "path": "pods-docs/kimi-k2.md",
-      "collection": "pods-docs",
-      "line_count": 197,
+      "confusable_with": [],
+      "path": "coding-agent-docs/index.md",
+      "collection": "coding-agent-docs",
+      "line_count": 84,
       "headings": [
         {
           "level": 1,
-          "text": "Kimi-K2 Deployment Guide"
+          "text": "Pi Documentation"
         },
         {
           "level": 2,
-          "text": "vLLM Deployment"
-        },
-        {
-          "level": 3,
-          "text": "Tensor Parallelism"
-        },
-        {
-          "level": 1,
-          "text": "start ray on node 0 and node 1"
-        },
-        {
-          "level": 1,
-          "text": "node 0:"
-        },
-        {
-          "level": 3,
-          "text": "Data Parallelism + Expert Parallelism"
-        },
-        {
-          "level": 1,
-          "text": "node 0"
-        },
-        {
-          "level": 1,
-          "text": "node 1"
+          "text": "Quick start"
         },
         {
           "level": 2,
-          "text": "SGLang Deployment"
-        },
-        {
-          "level": 3,
-          "text": "Tensor Parallelism"
-        },
-        {
-          "level": 1,
-          "text": "Node 0"
-        },
-        {
-          "level": 1,
-          "text": "Node 1"
-        },
-        {
-          "level": 3,
-          "text": "Data Parallelism + Expert Parallelism"
-        },
-        {
-          "level": 1,
-          "text": "for prefill node"
-        },
-        {
-          "level": 1,
-          "text": "for decode node"
-        },
-        {
-          "level": 1,
-          "text": "pdlb"
+          "text": "Start here"
         },
         {
           "level": 2,
-          "text": "KTransformers Deployment"
+          "text": "Customization"
         },
         {
           "level": 2,
-          "text": "TensorRT-LLM Deployment"
-        },
-        {
-          "level": 3,
-          "text": "Prerequisite"
-        },
-        {
-          "level": 3,
-          "text": "Multi-node Serving"
-        },
-        {
-          "level": 4,
-          "text": "mpirun"
-        },
-        {
-          "level": 1,
-          "text": "use host network"
-        },
-        {
-          "level": 1,
-          "text": "host1"
-        },
-        {
-          "level": 1,
-          "text": "host2"
-        },
-        {
-          "level": 1,
-          "text": "modify /etc/ssh/sshd_config"
-        },
-        {
-          "level": 1,
-          "text": "modify /etc/ssh/sshd_config, change default port 22 to another unused port"
-        },
-        {
-          "level": 1,
-          "text": "modify /etc/ssh"
-        },
-        {
-          "level": 1,
-          "text": "on host1"
-        },
-        {
-          "level": 1,
-          "text": "on host2"
-        },
-        {
-          "level": 1,
-          "text": "restart ssh service on host1 and host2"
+          "text": "Programmatic usage"
         },
         {
           "level": 2,
-          "text": "Others"
-        }
-      ],
-      "relative_links": []
-    },
-    {
-      "id": "pods/gpt-oss",
-      "title": "gpt-oss vLLM Usage Guide",
-      "aliases": [
-        "gpt-oss",
-        "gpt-oss-20b",
-        "gpt-oss-120b"
-      ],
-      "doc_type": "deployment-guide",
-      "audience": [
-        "vLLM deployer",
-        "OpenAI-compatible model operator"
-      ],
-      "summary": "Hardware-specific vLLM guide for OpenAI gpt-oss models, covering install, serving on NVIDIA and AMD, /v1/responses tool use, evaluation, limitations, and troubleshooting.",
-      "primary_topics": [
-        "gpt-oss",
-        "vLLM",
-        "Responses API",
-        "tool use",
-        "NVIDIA H100/H200/B200",
-        "AMD ROCm"
-      ],
-      "strong_terms": [
-        "vllm==0.10.1+gptoss",
-        "--async-scheduling",
-        "/v1/responses",
-        "openai-harmony",
-        "EXA_API_KEY",
-        "PYTHON_EXECUTION_BACKEND=UV"
-      ],
-      "distinctive_markers": [
-        "Only guide in this set centered on built-in tools through /v1/responses",
-        "Covers Blackwell env vars for TRTLLM attention and FlashInfer MoE",
-        "Includes reproduced GPQA/AIME25 evaluation tables"
-      ],
-      "question_patterns": [
-        "How do I run gpt-oss on H100, B200, or AMD in vLLM?",
-        "How does gpt-oss tool use work via /v1/responses?",
-        "What are the known limitations or OOM settings for gpt-oss-120b?"
-      ],
-      "confusable_with": [
-        {
-          "path": "pods-docs/models.md",
-          "difference": "That file summarizes recommended configs; this file explains gpt-oss deployment and usage in detail."
-        },
-        {
-          "path": "coding-agent-docs/models.md",
-          "difference": "That file configures custom models/providers for pi; this file is about serving gpt-oss with vLLM."
-        }
-      ],
-      "path": "pods-docs/gpt-oss.md",
-      "collection": "pods-docs",
-      "line_count": 233,
-      "headings": [
-        {
-          "level": 2,
-          "text": "`gpt-oss` vLLM Usage Guide"
+          "text": "Reference"
         },
         {
           "level": 2,
-          "text": "Quickstart"
-        },
-        {
-          "level": 3,
-          "text": "Installation"
-        },
-        {
-          "level": 3,
-          "text": "H100 & H200"
-        },
-        {
-          "level": 1,
-          "text": "openai/gpt-oss-20b should run in single GPU"
-        },
-        {
-          "level": 1,
-          "text": "gpt-oss-120b will fit in a single H100/H200, but scaling it to higher TP sizes can help with throughput"
-        },
-        {
-          "level": 3,
-          "text": "B200"
-        },
-        {
-          "level": 1,
-          "text": "All 3 of these are required"
-        },
-        {
-          "level": 1,
-          "text": "Pick only one out of the two."
-        },
-        {
-          "level": 1,
-          "text": "mxfp8 activation for MoE. faster, but higher risk for accuracy."
-        },
-        {
-          "level": 1,
-          "text": "bf16 activation for MoE. matching reference precision."
-        },
-        {
-          "level": 1,
-          "text": "openai/gpt-oss-20b"
-        },
-        {
-          "level": 1,
-          "text": "gpt-oss-120b"
-        },
-        {
-          "level": 3,
-          "text": "AMD"
-        },
-        {
-          "level": 1,
-          "text": "MoE preshuffle, fusion and Triton GEMM flags"
+          "text": "Platform setup"
         },
         {
           "level": 2,
-          "text": "Usage"
-        },
-        {
-          "level": 3,
-          "text": "Tool Use"
-        },
-        {
-          "level": 2,
-          "text": "Accuracy Evaluation Panels"
-        },
-        {
-          "level": 1,
-          "text": "Example deployment on 8xH100"
-        },
-        {
-          "level": 2,
-          "text": "Known Limitations"
-        },
-        {
-          "level": 2,
-          "text": "Troubleshooting"
-        }
-      ],
-      "relative_links": []
-    },
-    {
-      "id": "pods/models-matrix",
-      "title": "Pods Model Compatibility Matrix",
-      "aliases": [
-        "pods models",
-        "Pi supported models",
-        "model hardware matrix"
-      ],
-      "doc_type": "reference-matrix",
-      "audience": [
-        "Pi CLI designer",
-        "GPU pod operator"
-      ],
-      "summary": "Compact reference matrix for Qwen-Coder, GPT-OSS, GLM-4.5, and Kimi, listing Hugging Face IDs, hardware requirements, vLLM flags, env vars, and operational notes.",
-      "primary_topics": [
-        "supported models",
-        "hardware sizing",
-        "vLLM flags",
-        "H100/H200/B200",
-        "Pi model presets"
-      ],
-      "strong_terms": [
-        "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
-        "openai/gpt-oss-120b",
-        "zai-org/GLM-4.5",
-        "moonshotai/Kimi-K2-Instruct",
-        "tool-call-parser",
-        "reasoning-parser glm45"
-      ],
-      "distinctive_markers": [
-        "Only document organized as four model family checklists",
-        "Acts as the condensed lookup table backing Pi model support decisions"
-      ],
-      "question_patterns": [
-        "Which models should Pi support out of the box and with what flags?",
-        "What GPU counts are recommended for Qwen, GPT-OSS, GLM, or Kimi?",
-        "What is the shortest matrix of hardware and vLLM args by model family?"
-      ],
-      "confusable_with": [
-        {
-          "path": "coding-agent-docs/models.md",
-          "difference": "That file is about ~/.pi/agent/models.json for custom providers; this file is about GPU deployment presets."
-        },
-        {
-          "path": "pods-docs/plan.md",
-          "difference": "That file explains Pi architecture and workflow; this one is only the model matrix."
-        }
-      ],
-      "path": "pods-docs/models.md",
-      "collection": "pods-docs",
-      "line_count": 116,
-      "headings": [
-        {
-          "level": 3,
-          "text": "Qwen-Coder"
-        },
-        {
-          "level": 3,
-          "text": "GPT-OSS"
-        },
-        {
-          "level": 3,
-          "text": "GLM-4.5"
-        },
-        {
-          "level": 3,
-          "text": "Kimi"
-        }
-      ],
-      "relative_links": []
-    },
-    {
-      "id": "pods/pi-plan",
-      "title": "Pi Pod Orchestration Plan",
-      "aliases": [
-        "Pi plan",
-        "pod plan",
-        "Pi pods architecture"
-      ],
-      "doc_type": "product-plan",
-      "audience": [
-        "tool architect",
-        "CLI designer"
-      ],
-      "summary": "High-level functional plan for Pi: registering ephemeral GPU pods, caching models on persistent volumes, starting and stopping vLLM instances over SSH, and testing models with basic tools.",
-      "primary_topics": [
-        "Pi CLI",
-        "pods",
-        "SSH orchestration",
-        "model caching",
-        "local JSON state",
-        "OpenAI-compatible endpoints"
-      ],
-      "strong_terms": [
-        "pi pods setup",
-        "pi start",
-        "~/.pi/pods.json",
-        "PI_API_KEY",
-        "HF_TOKEN",
-        "prompt tool testing"
-      ],
-      "distinctive_markers": [
-        "Defines pods as ephemeral compute and volumes as persistent model cache",
-        "Explains round-robin GPU assignment and local-only state tracking"
-      ],
-      "question_patterns": [
-        "What is Pi supposed to do for pod setup and model serving?",
-        "How does Pi store pod/model state and interact with remote pods?",
-        "What commands are planned for pods, models, and prompt testing?"
-      ],
-      "confusable_with": [
-        {
-          "path": "pods-docs/implementation-plan.md",
-          "difference": "That file decomposes implementation into TypeScript packages and source files; this file is the higher-level product/architecture plan."
-        },
-        {
-          "path": "pods-docs/models.md",
-          "difference": "That file is just the supported-model matrix."
-        }
-      ],
-      "path": "pods-docs/plan.md",
-      "collection": "pods-docs",
-      "line_count": 166,
-      "headings": [
-        {
-          "level": 2,
-          "text": "Pi"
-        },
-        {
-          "level": 2,
-          "text": "Usage"
-        },
-        {
-          "level": 3,
-          "text": "Pods"
-        },
-        {
-          "level": 3,
-          "text": "Models"
-        },
-        {
-          "level": 2,
-          "text": "Pod management"
-        },
-        {
-          "level": 3,
-          "text": "Pod setup"
-        },
-        {
-          "level": 3,
-          "text": "Model caching"
-        },
-        {
-          "level": 3,
-          "text": "Multi-pod management"
-        },
-        {
-          "level": 2,
-          "text": "Model deployment"
-        },
-        {
-          "level": 3,
-          "text": "Architecture"
-        },
-        {
-          "level": 3,
-          "text": "Starting models"
-        },
-        {
-          "level": 3,
-          "text": "Managing models"
-        },
-        {
-          "level": 3,
-          "text": "Error handling"
-        },
-        {
-          "level": 3,
-          "text": "Testing models"
-        },
-        {
-          "level": 2,
-          "text": "Models"
+          "text": "Development"
         }
       ],
       "relative_links": [
-        "./models.md"
+        "quickstart.md",
+        "usage.md",
+        "providers.md",
+        "llama-cpp.md",
+        "security.md",
+        "containerization.md",
+        "settings.md",
+        "keybindings.md",
+        "sessions.md",
+        "compaction.md",
+        "extensions.md",
+        "skills.md",
+        "prompt-templates.md",
+        "themes.md",
+        "packages.md",
+        "models.md",
+        "custom-provider.md",
+        "sdk.md",
+        "rpc.md",
+        "json.md",
+        "tui.md",
+        "environment-variables.md",
+        "session-format.md",
+        "windows.md",
+        "termux.md",
+        "tmux.md",
+        "terminal-setup.md",
+        "shell-aliases.md",
+        "development.md"
       ]
     },
     {
-      "id": "pods/qwen3-coder",
-      "title": "Qwen3-Coder Usage Guide",
+      "id": "coding/quickstart",
+      "title": "Quickstart",
       "aliases": [
-        "Qwen3-Coder",
-        "Qwen coder guide",
-        "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+        "quickstart",
+        "first run",
+        "install pi"
       ],
-      "doc_type": "deployment-guide",
+      "doc_type": "getting-started-guide",
       "audience": [
-        "vLLM deployer",
-        "coding-model operator"
+        "new pi user"
       ],
-      "summary": "Focused serving guide for Qwen3-Coder on vLLM, especially 480B BF16 and FP8 deployments on 8x H200/H20, with benchmark results, tool-calling flags, and FP8 tensor-parallel caveats.",
+      "summary": "Minimal first-run guide covering install from npm or curl, uninstall, authentication via /login or API keys, first session basics, AGENTS.md project instructions, file references, shell commands, model switching, session management, and non-interactive mode.",
       "primary_topics": [
-        "Qwen3-Coder",
-        "vLLM",
-        "BF16 vs FP8",
-        "DeepGEMM",
-        "tool calling",
-        "benchmarking"
+        "installation",
+        "authentication",
+        "first session",
+        "AGENTS.md",
+        "file references",
+        "shell commands",
+        "model switching",
+        "session management"
       ],
       "strong_terms": [
-        "--tool-call-parser qwen3_coder",
-        "VLLM_USE_DEEP_GEMM=1",
-        "--data-parallel-size 8",
-        "EvalPlus",
-        "tensor-parallel issue",
-        "HumanEval+/MBPP+"
+        "npm install -g --ignore-scripts",
+        "/login",
+        "ANTHROPIC_API_KEY",
+        "AGENTS.md",
+        "pi -c",
+        "pi -p",
+        "--mode json"
       ],
       "distinctive_markers": [
-        "Includes specific Qwen3 MoE FP8 weight-quantization error trace",
-        "Only guide here with EvalPlus pass@1 numbers for Qwen3-Coder"
+        "Only doc with explicit npm/curl install and uninstall instructions",
+        "Covers the minimum viable first flow from install to a useful session"
       ],
       "question_patterns": [
-        "How do I launch Qwen3-Coder on 8x H200/H20 with vLLM?",
-        "Why does Qwen3-Coder FP8 fail under tensor parallelism?",
-        "Which flags enable Qwen3-Coder tool calling and DeepGEMM?"
+        "How do I install pi?",
+        "How do I authenticate and run my first pi session?",
+        "What is the minimum set of commands to get started with pi?"
       ],
       "confusable_with": [
         {
-          "path": "pods-docs/models.md",
-          "difference": "That file summarizes Qwen configurations; this file gives the full Qwen3-Coder serving and benchmarking guide."
+          "path": "coding-agent-docs/usage.md",
+          "difference": "usage.md is the comprehensive day-to-day reference; this file is the minimal first-run guide."
         },
         {
-          "path": "pods-docs/kimi-k2.md",
-          "difference": "That guide is for Kimi-K2, not Qwen3-Coder."
+          "path": "coding-agent-docs/providers.md",
+          "difference": "providers.md covers all provider auth options in detail; this file covers only the basic login and API-key setup."
         }
       ],
-      "path": "pods-docs/qwen3-coder.md",
-      "collection": "pods-docs",
-      "line_count": 132,
+      "path": "coding-agent-docs/quickstart.md",
+      "collection": "coding-agent-docs",
+      "line_count": 167,
       "headings": [
         {
           "level": 1,
-          "text": "Qwen3-Coder Usage Guide"
+          "text": "Quickstart"
         },
         {
           "level": 2,
-          "text": "Installing vLLM"
-        },
-        {
-          "level": 2,
-          "text": "Launching Qwen3-Coder with vLLM"
+          "text": "Install"
         },
         {
           "level": 3,
-          "text": "Serving on 8xH200 (or H20) GPUs (141GB × 8)"
+          "text": "Uninstall"
         },
         {
           "level": 2,
-          "text": "Performance Metrics"
+          "text": "Authenticate"
         },
         {
           "level": 3,
-          "text": "Evaluation"
+          "text": "Option 1: subscription login"
         },
         {
           "level": 3,
-          "text": "Benchmarking"
+          "text": "Option 2: API key"
         },
         {
           "level": 2,
-          "text": "Using Tips"
+          "text": "First session"
+        },
+        {
+          "level": 2,
+          "text": "Give pi project instructions"
+        },
+        {
+          "level": 2,
+          "text": "Common things to try"
         },
         {
           "level": 3,
-          "text": "BF16 Models"
+          "text": "Reference files"
         },
         {
           "level": 3,
-          "text": "FP8 Models"
+          "text": "Run shell commands"
         },
         {
           "level": 3,
-          "text": "Tool Calling"
-        },
-        {
-          "level": 2,
-          "text": "Roadmap"
-        },
-        {
-          "level": 2,
-          "text": "Additional Resources"
-        }
-      ],
-      "relative_links": []
-    },
-    {
-      "id": "pods/implementation-plan",
-      "title": "Implementation Plan",
-      "aliases": [
-        "Pi implementation plan",
-        "package breakdown",
-        "TypeScript implementation plan"
-      ],
-      "doc_type": "implementation-plan",
-      "audience": [
-        "TypeScript implementer",
-        "maintainer"
-      ],
-      "summary": "Concrete implementation breakdown for Pi into packages and source files: setup-script generation, config store, SSH executor, pod/model commands, prompt testing, CLI entrypoint, and test strategy.",
-      "primary_topics": [
-        "TypeScript modules",
-        "commander CLI",
-        "config store",
-        "SSH executor",
-        "model lifecycle",
-        "testing strategy"
-      ],
-      "strong_terms": [
-        "src/setup/generate-setup-script.ts",
-        "src/config/store.ts",
-        "src/ssh/executor.ts",
-        "src/commands/start.ts",
-        "src/prompt/tools.ts",
-        "commander"
-      ],
-      "distinctive_markers": [
-        "Organized as Package 1..8 with file-level implementation checklist",
-        "Only doc in this set listing npm dependencies for the Pi implementation"
-      ],
-      "question_patterns": [
-        "How should Pi be implemented in TypeScript module by module?",
-        "What source files and packages are planned for Pi?",
-        "What dependencies and testing strategy does the Pi implementation use?"
-      ],
-      "confusable_with": [
-        {
-          "path": "pods-docs/plan.md",
-          "difference": "That file describes behavior and architecture; this file breaks implementation into packages and filenames."
-        }
-      ],
-      "path": "pods-docs/implementation-plan.md",
-      "collection": "pods-docs",
-      "line_count": 183,
-      "headings": [
-        {
-          "level": 1,
-          "text": "Implementation Plan"
-        },
-        {
-          "level": 2,
-          "text": "Core Principles"
-        },
-        {
-          "level": 2,
-          "text": "Package 1: Pod Setup Script Generation"
-        },
-        {
-          "level": 2,
-          "text": "Package 2: Config Management"
-        },
-        {
-          "level": 2,
-          "text": "Package 3: SSH Executor"
-        },
-        {
-          "level": 2,
-          "text": "Package 4: Pod Commands"
-        },
-        {
-          "level": 2,
-          "text": "Package 5: Model Management"
-        },
-        {
-          "level": 2,
-          "text": "Package 6: Model Commands"
-        },
-        {
-          "level": 2,
-          "text": "Package 7: Model Testing"
-        },
-        {
-          "level": 2,
-          "text": "Package 8: CLI Entry Point"
-        },
-        {
-          "level": 2,
-          "text": "Testing Strategy"
-        },
-        {
-          "level": 2,
-          "text": "Dependencies"
-        },
-        {
-          "level": 2,
-          "text": "Build & Distribution"
-        }
-      ],
-      "relative_links": []
-    },
-    {
-      "id": "pods/glm-4.5",
-      "title": "GLM-4.5",
-      "aliases": [
-        "GLM-4.5",
-        "GLM-4.5-Air",
-        "zai-org/GLM-4.5",
-        "gml-4.5"
-      ],
-      "doc_type": "model-guide",
-      "audience": [
-        "model deployer",
-        "agent-model evaluator"
-      ],
-      "summary": "Vendor-style overview for GLM-4.5 and GLM-4.5-Air models, including downloads, system requirements for inference/fine-tuning, and quick-start examples for transformers, vLLM, and SGLang.",
-      "primary_topics": [
-        "GLM-4.5",
-        "GLM-4.5-Air",
-        "downloads",
-        "inference requirements",
-        "vLLM",
-        "SGLang"
-      ],
-      "strong_terms": [
-        "tool-call-parser glm45",
-        "reasoning-parser glm45",
-        "thinking mode enabled by default",
-        "--cpu-offload-gb 16",
-        "speculative-algorithm EAGLE",
-        "128K context"
-      ],
-      "distinctive_markers": [
-        "Only document with both inference and fine-tuning hardware tables for GLM-4.5",
-        "Explains disabling thinking via chat_template_kwargs.enable_thinking=False"
-      ],
-      "question_patterns": [
-        "What are the official requirements and quick-start commands for GLM-4.5?",
-        "How do I run GLM-4.5 or GLM-4.5-Air with tool and reasoning parsers?",
-        "What GPU counts are needed for full 128K context on GLM-4.5?"
-      ],
-      "confusable_with": [
-        {
-          "path": "pods-docs/models.md",
-          "difference": "That file is a compact preset matrix; this file is the fuller GLM-4.5 product and deployment guide."
-        }
-      ],
-      "path": "pods-docs/gml-4.5.md",
-      "collection": "pods-docs",
-      "line_count": 189,
-      "headings": [
-        {
-          "level": 1,
-          "text": "GLM-4.5"
-        },
-        {
-          "level": 2,
-          "text": "Model Introduction"
-        },
-        {
-          "level": 2,
-          "text": "Model Downloads"
-        },
-        {
-          "level": 2,
-          "text": "System Requirements"
+          "text": "Switch models"
         },
         {
           "level": 3,
-          "text": "Inference"
+          "text": "Continue later"
         },
         {
           "level": 3,
-          "text": "Fine-tuning"
+          "text": "Non-interactive mode"
         },
         {
           "level": 2,
-          "text": "Quick Start"
-        },
-        {
-          "level": 3,
-          "text": "transformers"
-        },
-        {
-          "level": 3,
-          "text": "vLLM"
-        },
-        {
-          "level": 3,
-          "text": "SGLang"
-        },
-        {
-          "level": 3,
-          "text": "Request Parameter Instructions"
+          "text": "Next steps"
         }
       ],
       "relative_links": [
-        "./README_zh.md",
-        "resources/bench.png"
+        "providers.md",
+        "usage.md",
+        "settings.md",
+        "keybindings.md",
+        "packages.md",
+        "windows.md",
+        "termux.md",
+        "tmux.md",
+        "terminal-setup.md",
+        "shell-aliases.md"
+      ]
+    },
+    {
+      "id": "coding/usage",
+      "title": "Using Pi",
+      "aliases": [
+        "using pi",
+        "day-to-day pi",
+        "slash commands",
+        "CLI reference"
+      ],
+      "doc_type": "usage-reference",
+      "audience": [
+        "pi user",
+        "power user"
+      ],
+      "summary": "Comprehensive day-to-day usage reference covering interactive mode, slash commands (/login, /model, /tree, /fork, /clone, /settings, /export), message queue, sessions, context files, system prompt files, project trust, session export/share, CLI reference with all flags, tool options, and design principles.",
+      "primary_topics": [
+        "interactive mode",
+        "slash commands",
+        "message queue",
+        "sessions",
+        "context files",
+        "project trust",
+        "CLI flags",
+        "session export"
+      ],
+      "strong_terms": [
+        "/tree",
+        "/fork",
+        "/clone",
+        "/compact",
+        "/export",
+        "/share",
+        "AGENTS.override.md",
+        "--mode json",
+        "--mode rpc",
+        "pi config"
+      ],
+      "distinctive_markers": [
+        "Largest single usage reference in the doc set",
+        "Contains complete CLI flag reference and design principles section"
+      ],
+      "question_patterns": [
+        "How do I use pi day-to-day?",
+        "What slash commands are available in pi?",
+        "How do sessions, context files, and project trust work?",
+        "What CLI flags does pi support?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/quickstart.md",
+          "difference": "quickstart.md is the first-run guide; this file covers all day-to-day details."
+        },
+        {
+          "path": "coding-agent-docs/sessions.md",
+          "difference": "sessions.md focuses on session management; this file covers the broader usage including CLI flags and exports."
+        }
+      ],
+      "path": "coding-agent-docs/usage.md",
+      "collection": "coding-agent-docs",
+      "line_count": 311,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Using Pi"
+        },
+        {
+          "level": 2,
+          "text": "Interactive Mode"
+        },
+        {
+          "level": 3,
+          "text": "Editor Features"
+        },
+        {
+          "level": 2,
+          "text": "Slash Commands"
+        },
+        {
+          "level": 2,
+          "text": "Message Queue"
+        },
+        {
+          "level": 2,
+          "text": "Sessions"
+        },
+        {
+          "level": 2,
+          "text": "Context Files"
+        },
+        {
+          "level": 3,
+          "text": "System Prompt Files"
+        },
+        {
+          "level": 3,
+          "text": "Project Trust"
+        },
+        {
+          "level": 2,
+          "text": "Exporting and Sharing Sessions"
+        },
+        {
+          "level": 2,
+          "text": "CLI Reference"
+        },
+        {
+          "level": 3,
+          "text": "Package Commands"
+        },
+        {
+          "level": 3,
+          "text": "Modes"
+        },
+        {
+          "level": 3,
+          "text": "Model Options"
+        },
+        {
+          "level": 3,
+          "text": "Session Options"
+        },
+        {
+          "level": 3,
+          "text": "Tool Options"
+        },
+        {
+          "level": 3,
+          "text": "Resource Options"
+        },
+        {
+          "level": 3,
+          "text": "Other Options"
+        },
+        {
+          "level": 3,
+          "text": "File Arguments"
+        },
+        {
+          "level": 3,
+          "text": "Examples"
+        },
+        {
+          "level": 2,
+          "text": "Design Principles"
+        }
+      ],
+      "relative_links": [
+        "images/interactive-mode.png",
+        "keybindings.md",
+        "llama-cpp.md",
+        "sessions.md",
+        "compaction.md",
+        "packages.md",
+        "json.md",
+        "rpc.md",
+        "quickstart.md",
+        "terminal-setup.md",
+        "settings.md"
       ]
     },
     {
@@ -1917,7 +1506,7 @@
         },
         {
           "level": 3,
-          "text": "pi.getActiveTools() / pi.getAllTools() / pi.setActiveTools(names)"
+          "text": "pi.getActiveTools() / pi.getAllTools() / pi.setActActiveTools(names)"
         },
         {
           "level": 3,
@@ -1938,118 +1527,6 @@
         {
           "level": 3,
           "text": "pi.unregisterProvider(name)"
-        },
-        {
-          "level": 2,
-          "text": "State Management"
-        },
-        {
-          "level": 2,
-          "text": "Custom Tools"
-        },
-        {
-          "level": 3,
-          "text": "Tool Definition"
-        },
-        {
-          "level": 3,
-          "text": "Overriding Built-in Tools"
-        },
-        {
-          "level": 1,
-          "text": "Extension's read tool replaces built-in read"
-        },
-        {
-          "level": 1,
-          "text": "No built-in tools, only extension tools"
-        },
-        {
-          "level": 3,
-          "text": "Remote Execution"
-        },
-        {
-          "level": 3,
-          "text": "Output Truncation"
-        },
-        {
-          "level": 3,
-          "text": "Multiple Tools"
-        },
-        {
-          "level": 3,
-          "text": "Custom Rendering"
-        },
-        {
-          "level": 4,
-          "text": "renderCall"
-        },
-        {
-          "level": 4,
-          "text": "renderResult"
-        },
-        {
-          "level": 4,
-          "text": "Keybinding Hints"
-        },
-        {
-          "level": 4,
-          "text": "Best Practices"
-        },
-        {
-          "level": 4,
-          "text": "Fallback"
-        },
-        {
-          "level": 2,
-          "text": "Custom UI"
-        },
-        {
-          "level": 3,
-          "text": "Dialogs"
-        },
-        {
-          "level": 4,
-          "text": "Timed Dialogs with Countdown"
-        },
-        {
-          "level": 4,
-          "text": "Manual Dismissal with AbortSignal"
-        },
-        {
-          "level": 3,
-          "text": "Widgets, Status, and Footer"
-        },
-        {
-          "level": 3,
-          "text": "Custom Components"
-        },
-        {
-          "level": 4,
-          "text": "Overlay Mode (Experimental)"
-        },
-        {
-          "level": 3,
-          "text": "Custom Editor"
-        },
-        {
-          "level": 3,
-          "text": "Message Rendering"
-        },
-        {
-          "level": 3,
-          "text": "Theme Colors"
-        },
-        {
-          "level": 2,
-          "text": "Error Handling"
-        },
-        {
-          "level": 2,
-          "text": "Mode Behavior"
-        },
-        {
-          "level": 2,
-          "text": "Examples Reference"
         }
       ],
       "relative_links": [
@@ -2197,20 +1674,7 @@
         "How do compat flags like supportsDeveloperRole or thinkingFormat work?",
         "How do I override a built-in provider or specific built-in model?"
       ],
-      "confusable_with": [
-        {
-          "path": "pods-docs/models.md",
-          "difference": "pods-docs/models.md is a GPU deployment matrix; this file configures custom providers/models for pi."
-        },
-        {
-          "path": "coding-agent-docs/providers.md",
-          "difference": "providers.md covers credential sources and built-in providers; this file defines custom models/providers in models.json."
-        },
-        {
-          "path": "coding-agent-docs/custom-provider.md",
-          "difference": "custom-provider.md is for implementing providers via extensions, not declarative models.json config."
-        }
-      ],
+      "confusable_with": [],
       "path": "coding-agent-docs/models.md",
       "collection": "coding-agent-docs",
       "line_count": 392,
@@ -2782,12 +2246,12 @@
       ],
       "confusable_with": [
         {
-          "path": "coding-agent-docs/tree.md",
-          "difference": "tree.md explains navigation UX and hook flow; this file explains summarization algorithms and data structures."
+          "path": "coding-agent-docs/sessions.md",
+          "difference": "sessions.md explains navigation UX and hook flow; this file explains summarization algorithms and data structures."
         },
         {
-          "path": "coding-agent-docs/session.md",
-          "difference": "session.md defines session file entries; this file explains how compaction/summary entries are produced and used."
+          "path": "coding-agent-docs/session-format.md",
+          "difference": "session-format.md defines session file entries; this file explains how compaction/summary entries are produced and used."
         }
       ],
       "path": "coding-agent-docs/compaction.md",
@@ -3510,17 +2974,17 @@
       ],
       "confusable_with": [
         {
-          "path": "coding-agent-docs/tree.md",
-          "difference": "tree.md explains the /tree navigation UX; this file defines the stored session data model and APIs."
+          "path": "coding-agent-docs/sessions.md",
+          "difference": "sessions.md explains the /tree navigation UX and session-management commands; this file defines the stored session data model and APIs."
         },
         {
           "path": "coding-agent-docs/compaction.md",
           "difference": "compaction.md explains summarization behavior; this file defines the resulting entry types and context reconstruction."
         }
       ],
-      "path": "coding-agent-docs/session.md",
+      "path": "coding-agent-docs/session-format.md",
       "collection": "coding-agent-docs",
-      "line_count": 412,
+      "line_count": 466,
       "headings": [
         {
           "level": 1,
@@ -4166,9 +3630,10 @@
       "relative_links": []
     },
     {
-      "id": "coding/tree-navigation",
-      "title": "Session Tree Navigation",
+      "id": "coding/session-management",
+      "title": "Sessions",
       "aliases": [
+        "session management",
         "/tree",
         "navigateTree",
         "branch switching"
@@ -4178,135 +3643,100 @@
         "interactive pi user",
         "extension author"
       ],
-      "summary": "Explains the /tree command for navigating session history in place, including controls, selection behavior, branch summarization options, navigateTree API semantics, and hook events.",
+      "summary": "Guide for pi session management: session storage, continued/resume, naming, branching with /tree, /fork, /clone, branch summarization options, tree navigation API semantics, and hook events.",
       "primary_topics": [
-        "session tree",
-        "/tree",
-        "navigateTree",
-        "branch summary",
-        "labels"
+        "sessions",
+        "session storage",
+        "/tree navigation",
+        "/fork",
+        "/clone",
+        "branch summary"
       ],
       "strong_terms": [
+        "pi -c",
+        "pi -r",
+        "pi --session",
         "session_before_tree",
         "session_tree",
         "branchWithSummary",
         "Shift+L",
-        "Shift+T",
-        "editorText"
+        "Shift+T"
       ],
       "distinctive_markers": [
-        "Focused on in-place branch navigation instead of creating a new session file",
-        "Explains the three summarization choices offered during branch switching"
+        "Covers full session lifecycle from creation to resuming and branching",
+        "Explains the three summarization choices offered during /tree branch switching"
       ],
       "question_patterns": [
         "How does /tree work and what happens when I select a node?",
         "How does branch summarization during tree navigation behave?",
-        "How can an extension intercept or customize tree navigation?"
+        "How can an extension intercept or customize tree navigation?",
+        "How do sessions, naming, and /resume work?"
       ],
       "confusable_with": [
         {
-          "path": "coding-agent-docs/session.md",
-          "difference": "session.md defines the underlying session tree data; this file explains the /tree feature and UX."
+          "path": "coding-agent-docs/session-format.md",
+          "difference": "session-format.md defines the underlying session tree data; this file explains the /tree feature, /fork, /clone, and session management UX."
         },
         {
           "path": "coding-agent-docs/compaction.md",
           "difference": "compaction.md explains summary generation internals; this file explains when and why summaries are attached during navigation."
         }
       ],
-      "path": "coding-agent-docs/tree.md",
+      "path": "coding-agent-docs/sessions.md",
       "collection": "coding-agent-docs",
-      "line_count": 231,
+      "line_count": 145,
       "headings": [
         {
           "level": 1,
-          "text": "Session Tree Navigation"
+          "text": "Sessions"
         },
         {
           "level": 2,
-          "text": "Overview"
-        },
-        {
-          "level": 3,
-          "text": "Comparison with `/fork`"
+          "text": "Session Storage"
         },
         {
           "level": 2,
-          "text": "Tree UI"
-        },
-        {
-          "level": 3,
-          "text": "Controls"
-        },
-        {
-          "level": 3,
-          "text": "Display"
+          "text": "Session Commands"
         },
         {
           "level": 2,
+          "text": "Resuming and Deleting Sessions"
+        },
+        {
+          "level": 2,
+          "text": "Naming Sessions"
+        },
+        {
+          "level": 2,
+          "text": "Branching with `/tree`"
+        },
+        {
+          "level": 3,
+          "text": "Tree Controls"
+        },
+        {
+          "level": 3,
           "text": "Selection Behavior"
         },
         {
-          "level": 3,
-          "text": "User Message or Custom Message"
-        },
-        {
-          "level": 3,
-          "text": "Non-User Message (assistant, compaction, etc.)"
-        },
-        {
-          "level": 3,
-          "text": "Selecting Root User Message"
+          "level": 2,
+          "text": "`/tree`, `/fork`, and `/clone`"
         },
         {
           "level": 2,
-          "text": "Branch Summarization"
-        },
-        {
-          "level": 3,
-          "text": "What Gets Summarized"
-        },
-        {
-          "level": 3,
-          "text": "Summary Storage"
+          "text": "Branch Summaries"
         },
         {
           "level": 2,
-          "text": "Implementation"
-        },
-        {
-          "level": 3,
-          "text": "AgentSession.navigateTree()"
-        },
-        {
-          "level": 3,
-          "text": "SessionManager"
-        },
-        {
-          "level": 3,
-          "text": "InteractiveMode"
-        },
-        {
-          "level": 2,
-          "text": "Hook Events"
-        },
-        {
-          "level": 3,
-          "text": "`session_before_tree`"
-        },
-        {
-          "level": 3,
-          "text": "`session_tree`"
-        },
-        {
-          "level": 3,
-          "text": "Example: Custom Summarizer"
-        },
-        {
-          "level": 2,
-          "text": "Error Handling"
+          "text": "Session Format"
         }
       ],
-      "relative_links": []
+      "relative_links": [
+        "images/tree-view.png",
+        "session-format.md",
+        "compaction.md",
+        "settings.md"
+      ]
     },
     {
       "id": "coding/tmux",
@@ -4573,1013 +4003,808 @@
       "relative_links": []
     },
     {
-      "id": "mom/docker-sandbox",
-      "title": "Mom Docker Sandbox",
+      "id": "coding/containerization",
+      "title": "Containerization",
       "aliases": [
-        "Mom sandbox",
-        "docker sandbox",
-        "mom --sandbox=docker"
+        "container sandbox",
+        "Gondolin",
+        "Docker sandbox pi",
+        "OpenShell sandbox"
       ],
-      "doc_type": "sandbox-guide",
+      "doc_type": "sandbox-patterns-guide",
       "audience": [
-        "Mom operator"
+        "pi power user",
+        "security-conscious user"
       ],
-      "summary": "Explains how Mom can execute tools inside a persistent Docker container instead of on the host, including docker.sh commands, security model, persistence, and operational tradeoffs.",
+      "summary": "Guide for running pi inside an isolated environment: Gondolin micro-VM extension for tool routing, plain Docker container, OpenShell policy-controlled sandbox, and Docker Sandboxes with credential proxy.",
       "primary_topics": [
-        "Mom",
-        "Docker sandbox",
-        "tool isolation",
-        "security",
-        "docker.sh"
+        "containerization",
+        "Gondolin",
+        "Docker",
+        "OpenShell",
+        "Docker Sandboxes",
+        "micro-VM"
       ],
       "strong_terms": [
-        "mom --sandbox=docker:mom-sandbox",
-        "./docker.sh create",
-        "/workspace",
-        "apk add github-cli git curl",
-        "--sandbox=host"
+        "Gondolin extension",
+        "Dockerfile.pi",
+        "openshell sandbox create",
+        "sbx run",
+        "Docker Sandboxes"
       ],
       "distinctive_markers": [
-        "Treats the container as Mom's personal persistent computer",
-        "Explicit host-vs-container execution model for bash/read/write/edit tools"
+        "Only doc comparing four sandbox/container patterns for pi",
+        "Explains credential proxy model for Docker Sandboxes (no API keys in container)"
       ],
       "question_patterns": [
-        "How do I run Mom in a Docker sandbox?",
-        "What does the Mom sandbox isolate and persist?",
-        "What are the security tradeoffs of host mode vs docker mode?"
+        "How do I run pi inside a container or sandbox?",
+        "What is the difference between Gondolin, plain Docker, OpenShell, and Docker Sandboxes?",
+        "How do I keep API keys out of the container when sandboxing pi?"
       ],
       "confusable_with": [
         {
-          "path": "mom-docs/v86.md",
-          "difference": "v86.md evaluates a JS/WASM VM sandbox; this file describes the practical Docker sandbox currently envisioned."
-        },
-        {
-          "path": "mom-docs/new.md",
-          "difference": "new.md is the broader redesign architecture; this file is narrowly about sandbox execution mode."
+          "path": "coding-agent-docs/security.md",
+          "difference": "security.md explains the trust model and sandbox rationale; this file provides the practical sandbox recipes."
         }
       ],
-      "path": "mom-docs/sandbox.md",
-      "collection": "mom-docs",
-      "line_count": 153,
+      "path": "coding-agent-docs/containerization.md",
+      "collection": "coding-agent-docs",
+      "line_count": 156,
       "headings": [
         {
           "level": 1,
-          "text": "Mom Docker Sandbox"
+          "text": "Containerization"
         },
         {
           "level": 2,
-          "text": "Overview"
+          "text": "Choose a pattern"
         },
         {
           "level": 2,
-          "text": "Why Docker?"
+          "text": "Gondolin"
         },
         {
           "level": 2,
-          "text": "Quick Start"
-        },
-        {
-          "level": 1,
-          "text": "1. Create and start the container"
-        },
-        {
-          "level": 1,
-          "text": "2. Run mom with Docker sandbox"
+          "text": "Plain Docker"
         },
         {
           "level": 2,
-          "text": "How It Works"
+          "text": "OpenShell"
         },
         {
           "level": 2,
-          "text": "Container Setup"
-        },
-        {
-          "level": 2,
-          "text": "Mom Manages Her Own Computer"
-        },
-        {
-          "level": 3,
-          "text": "Example Flow"
-        },
-        {
-          "level": 2,
-          "text": "Persistence"
-        },
-        {
-          "level": 2,
-          "text": "CLI Options"
-        },
-        {
-          "level": 1,
-          "text": "Run on host (default, no isolation)"
-        },
-        {
-          "level": 1,
-          "text": "Run with Docker sandbox"
-        },
-        {
-          "level": 1,
-          "text": "Explicit host mode"
-        },
-        {
-          "level": 2,
-          "text": "Security Considerations"
-        },
-        {
-          "level": 2,
-          "text": "Troubleshooting"
-        },
-        {
-          "level": 3,
-          "text": "Container not running"
-        },
-        {
-          "level": 3,
-          "text": "Reset container"
-        },
-        {
-          "level": 3,
-          "text": "Missing tools"
+          "text": "Docker Sandboxes"
         }
       ],
-      "relative_links": []
+      "relative_links": [
+        "../examples/extensions/gondolin/",
+        "security.md"
+      ]
     },
     {
-      "id": "mom/artifacts-server",
-      "title": "Artifacts Server",
+      "id": "coding/environment-variables",
+      "title": "Environment Variables",
       "aliases": [
-        "artifacts server",
-        "Cloudflare Tunnel",
-        "live reload"
+        "PI_SESSION_ID",
+        "PI_PROVIDER",
+        "PI_MODEL",
+        "process markers",
+        "AI_AGENT"
       ],
-      "doc_type": "utility-guide",
+      "doc_type": "reference",
       "audience": [
-        "Mom operator",
-        "prototype sharer"
+        "pi user",
+        "extension author",
+        "integrator"
       ],
-      "summary": "Step-by-step guide for a Node.js artifacts server that serves HTML/JS/CSS from /workspace/artifacts via Cloudflare Tunnel, injects live reload through WebSocket, and watches files recursively.",
+      "summary": "Reference for environment variables used by pi: process markers (AI_AGENT, PI_CODING_AGENT), shell tool session environment (PI_SESSION_ID, PI_PROVIDER, PI_MODEL, PI_REASONING_LEVEL), and process configuration (PI_CODING_AGENT_DIR, PI_OFFLINE, PI_TELEMETRY, PI_IMAGE_PROTOCOL, etc.).",
       "primary_topics": [
-        "artifacts server",
-        "Express",
-        "WebSocket live reload",
-        "Cloudflare Tunnel",
-        "static file sharing"
+        "environment variables",
+        "process markers",
+        "shell tool environment",
+        "pi configuration",
+        "session metadata"
       ],
       "strong_terms": [
-        "/workspace/artifacts",
-        "?ws=true",
-        "cloudflared tunnel --url http://localhost:8080",
-        "chokidar",
-        "start-server.sh"
+        "AI_AGENT=pi",
+        "PI_CODING_AGENT=true",
+        "PI_SESSION_ID",
+        "PI_SESSION_FILE",
+        "PI_PROVIDER",
+        "PI_MODEL",
+        "PI_REASONING_LEVEL",
+        "PI_CODING_AGENT_DIR",
+        "PI_OFFLINE"
       ],
       "distinctive_markers": [
-        "Contains a full server.js and startup-script implementation",
-        "Explains why full /index.html paths are needed for live-reload injection"
+        "Only centralized reference for all pi environment variables",
+        "Explains custom shell tool environment injection via createBashTool"
       ],
       "question_patterns": [
-        "How do I let Mom publish and live-reload HTML artifacts over a public URL?",
-        "How does the artifacts server inject WebSocket live reload?",
-        "What directory layout should artifacts use under /workspace/artifacts/files/?"
+        "What environment variables does pi set for shell commands?",
+        "How can I check which model or provider pi is using from a shell command?",
+        "What PI_* variables configure the pi process itself?"
       ],
       "confusable_with": [
         {
-          "path": "mom-docs/slack-bot-minimal-guide.md",
-          "difference": "That file is about Slack connectivity; this file is about serving generated artifacts on the web."
+          "path": "coding-agent-docs/providers.md",
+          "difference": "providers.md covers API-key env vars (ANTHROPIC_API_KEY, etc.); this file covers pi process and session env vars."
         }
       ],
-      "path": "mom-docs/artifacts-server.md",
-      "collection": "mom-docs",
-      "line_count": 475,
+      "path": "coding-agent-docs/environment-variables.md",
+      "collection": "coding-agent-docs",
+      "line_count": 99,
       "headings": [
         {
           "level": 1,
-          "text": "Artifacts Server"
+          "text": "Environment Variables"
         },
         {
           "level": 2,
-          "text": "What is it?"
+          "text": "Process Marker"
         },
         {
           "level": 2,
-          "text": "Installation"
+          "text": "Shell Tool Session Environment"
         },
         {
           "level": 3,
-          "text": "1. Install Dependencies"
-        },
-        {
-          "level": 3,
-          "text": "2. Create Server"
-        },
-        {
-          "level": 3,
-          "text": "3. Create Startup Script"
-        },
-        {
-          "level": 1,
-          "text": "Start Node.js server in background"
-        },
-        {
-          "level": 1,
-          "text": "Wait for server to be ready"
-        },
-        {
-          "level": 1,
-          "text": "Start cloudflare tunnel"
-        },
-        {
-          "level": 1,
-          "text": "Wait for tunnel to establish"
-        },
-        {
-          "level": 1,
-          "text": "Extract and display public URL"
-        },
-        {
-          "level": 1,
-          "text": "Keep script running"
+          "text": "Custom Shell Tools"
         },
         {
           "level": 2,
-          "text": "Directory Structure"
-        },
-        {
-          "level": 2,
-          "text": "Usage"
-        },
-        {
-          "level": 3,
-          "text": "Starting the Server"
-        },
-        {
-          "level": 3,
-          "text": "Creating Artifacts"
-        },
-        {
-          "level": 3,
-          "text": "Live Reload"
-        },
-        {
-          "level": 2,
-          "text": "How It Works"
-        },
-        {
-          "level": 2,
-          "text": "Troubleshooting"
-        },
-        {
-          "level": 2,
-          "text": "Example Session"
-        },
-        {
-          "level": 2,
-          "text": "Technical Notes"
+          "text": "Pi Process Configuration"
         }
       ],
-      "relative_links": []
+      "relative_links": [
+        "providers.md",
+        "terminal-setup.md",
+        "development.md"
+      ]
     },
     {
-      "id": "mom/slack-bot-minimal",
-      "title": "Minimal Slack Bot Setup (No Web Server, WebSocket Only)",
+      "id": "coding/llama-cpp",
+      "title": "llama.cpp Router Setup",
       "aliases": [
-        "Slack Socket Mode",
-        "minimal Slack bot",
-        "xoxb/xapp guide"
+        "llama.cpp",
+        "llama-server",
+        "/llama",
+        "GGUF models"
       ],
       "doc_type": "integration-guide",
       "audience": [
-        "Slack bot implementer"
+        "local model user",
+        "pi power user"
       ],
-      "summary": "Practical Slack Socket Mode setup for a Node.js agent without a web server, covering required scopes and tokens, event subscriptions, and minimal working code using @slack/socket-mode and @slack/web-api.",
+      "summary": "Guide for using llama.cpp router server with pi, covering router startup with --models-dir, GGUF directory layout, pi configuration via /login or env vars, model loading/unloading via /llama, Hugging Face downloads, and troubleshooting.",
       "primary_topics": [
-        "Slack",
-        "Socket Mode",
-        "bot tokens",
-        "event subscriptions",
-        "Node.js"
+        "llama.cpp",
+        "router mode",
+        "GGUF models",
+        "/llama",
+        "Hugging Face downloads"
       ],
       "strong_terms": [
-        "xoxb-",
-        "xapp-",
-        "@slack/socket-mode",
-        "@slack/web-api",
-        "app_mention",
-        "await ack()"
+        "llama-server",
+        "--models-dir",
+        "--no-models-autoload",
+        "--jinja",
+        "/llama",
+        "HF_TOKEN",
+        "LLAMA_BASE_URL"
       ],
       "distinctive_markers": [
-        "Centered on the no-HTTP, WebSocket-only Slack setup",
-        "Lists a concrete set of bot scopes and direct code examples"
+        "Only doc about local llama.cpp integration with pi",
+        "Explains router mode vs single-model mode distinction"
       ],
       "question_patterns": [
-        "How do I connect a Node.js agent to Slack without running a web server?",
-        "Which Slack tokens, scopes, and events are needed for Socket Mode?",
-        "What does a minimal Slack bot loop with SocketModeClient look like?"
+        "How do I use llama.cpp with pi?",
+        "How do I load and unload GGUF models via /llama?",
+        "What directory layout does llama.cpp router expect for GGUF files?"
       ],
-      "confusable_with": [
-        {
-          "path": "mom-docs/new.md",
-          "difference": "new.md proposes a platform-agnostic architecture; this file is the concrete Slack-only setup guide."
-        },
-        {
-          "path": "mom-docs/events.md",
-          "difference": "events.md is about Mom wake-up events in workspace/events, not Slack event subscriptions."
-        }
-      ],
-      "path": "mom-docs/slack-bot-minimal-guide.md",
-      "collection": "mom-docs",
-      "line_count": 399,
+      "confusable_with": [],
+      "path": "coding-agent-docs/llama-cpp.md",
+      "collection": "coding-agent-docs",
+      "line_count": 101,
       "headings": [
         {
           "level": 1,
-          "text": "Minimal Slack Bot Setup (No Web Server, WebSocket Only)"
+          "text": "llama.cpp"
         },
         {
           "level": 2,
-          "text": "1. Dependencies"
+          "text": "Start the router"
         },
         {
           "level": 2,
-          "text": "2. Get Your Tokens"
-        },
-        {
-          "level": 3,
-          "text": "A. Bot Token (`xoxb-...`)"
-        },
-        {
-          "level": 3,
-          "text": "B. App-Level Token (`xapp-...`)"
+          "text": "Configure Pi"
         },
         {
           "level": 2,
-          "text": "3. Enable Socket Mode"
-        },
-        {
-          "level": 2,
-          "text": "4. Enable Direct Messages"
-        },
-        {
-          "level": 2,
-          "text": "5. Subscribe to Events"
-        },
-        {
-          "level": 2,
-          "text": "6. Store Tokens"
-        },
-        {
-          "level": 2,
-          "text": "7. Minimal Working Code"
-        },
-        {
-          "level": 2,
-          "text": "8. Listen to ALL Events (Not Just Mentions)"
-        },
-        {
-          "level": 2,
-          "text": "9. Common Operations"
-        },
-        {
-          "level": 3,
-          "text": "Send a message"
-        },
-        {
-          "level": 3,
-          "text": "Send a DM"
-        },
-        {
-          "level": 3,
-          "text": "List channels"
-        },
-        {
-          "level": 3,
-          "text": "Get channel members"
-        },
-        {
-          "level": 3,
-          "text": "Get user info"
-        },
-        {
-          "level": 3,
-          "text": "Join a channel"
-        },
-        {
-          "level": 3,
-          "text": "Upload a file"
-        },
-        {
-          "level": 2,
-          "text": "10. Complete Example with Your Agent"
-        },
-        {
-          "level": 2,
-          "text": "11. Available Event Types"
-        },
-        {
-          "level": 2,
-          "text": "12. Advantages of Socket Mode"
-        },
-        {
-          "level": 2,
-          "text": "13. Disadvantages"
-        },
-        {
-          "level": 2,
-          "text": "Important Notes"
+          "text": "Manage models"
         },
         {
           "level": 2,
           "text": "Troubleshooting"
+        }
+      ],
+      "relative_links": [
+        "providers.md"
+      ]
+    },
+    {
+      "id": "coding/security",
+      "title": "Security",
+      "aliases": [
+        "pi security",
+        "project trust",
+        "sandbox rationale",
+        "untrusted work"
+      ],
+      "doc_type": "security-guide",
+      "audience": [
+        "all pi users",
+        "security-conscious user"
+      ],
+      "summary": "Security guide for pi covering project trust model (what it does and does not protect), the no-built-in-sandbox rationale, recommendations for running untrusted or unmonitored work in contained environments, and vulnerability reporting.",
+      "primary_topics": [
+        "security",
+        "project trust",
+        "no built-in sandbox",
+        "untrusted work",
+        "vulnerability reporting"
+      ],
+      "strong_terms": [
+        "project trust",
+        "defaultProjectTrust",
+        "AGENTS.override.md",
+        ".pi/settings.json",
+        "trust.json",
+        "no built-in sandbox",
+        "Gondolin",
+        "Docker"
+      ],
+      "distinctive_markers": [
+        "Only doc explaining pi's trust model and intentional lack of built-in sandbox",
+        "References containerization patterns for practical isolation"
+      ],
+      "question_patterns": [
+        "How does project trust work in pi?",
+        "Why doesn't pi have a built-in sandbox?",
+        "How should I run pi with untrusted code or unattended automation?",
+        "How do I report a security issue in pi?"
+      ],
+      "confusable_with": [
+        {
+          "path": "coding-agent-docs/containerization.md",
+          "difference": "containerization.md provides the practical isolation recipes; this file explains the trust model and security philosophy."
+        },
+        {
+          "path": "coding-agent-docs/usage.md",
+          "difference": "usage.md covers project trust from a UX perspective; this file covers it from a security rationale perspective."
+        }
+      ],
+      "path": "coding-agent-docs/security.md",
+      "collection": "coding-agent-docs",
+      "line_count": 59,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Security"
+        },
+        {
+          "level": 2,
+          "text": "Project Trust"
+        },
+        {
+          "level": 2,
+          "text": "No Built-in Sandbox"
+        },
+        {
+          "level": 2,
+          "text": "Running Untrusted or Unmonitored Work"
+        },
+        {
+          "level": 2,
+          "text": "Reporting Security Issues"
+        }
+      ],
+      "relative_links": [
+        "containerization.md"
+      ]
+    },
+    {
+      "id": "durable/pico5-spec",
+      "title": "Pico5 Specification",
+      "aliases": [
+        "Pico5",
+        "Pico5 spec",
+        "durable agent harness"
+      ],
+      "doc_type": "specification",
+      "audience": [
+        "durable agent implementer",
+        "harness architect"
+      ],
+      "summary": "Normative specification for Pico5, a durable, extensible agent harness with immutable entries, Chord-tracked documents, task state machines, conversation tree structure, and Session/Harness public API.",
+      "primary_topics": [
+        "Pico5",
+        "Session",
+        "Harness",
+        "Conversation",
+        "task state machines",
+        "Chord documents",
+        "entries",
+        "inputs"
+      ],
+      "strong_terms": [
+        "Harness.open",
+        "Conversation",
+        "defineDoc",
+        "defineTask",
+        "watchDoc",
+        "Session.commit",
+        "tx.doc",
+        "InputHandle",
+        "SystemMessage",
+        "PR #9548"
+      ],
+      "distinctive_markers": [
+        "Normative specification document with TypeScript interface definitions",
+        "Covers terms, core records, documents, transactions, tasks, inputs, hooks, tools, system sections, built-in tasks, document observation, storage contract, and backends"
+      ],
+      "question_patterns": [
+        "What is the Pico5 durable agent harness architecture?",
+        "How do Sessions, Conversations, tasks, and documents work in Pico5?",
+        "What is the public Harness API in Pico5?",
+        "How do document forks, checkpoints, and migrations work?"
+      ],
+      "confusable_with": [
+        {
+          "path": "durable-docs/pico-v5-chord-usage.md",
+          "difference": "That file is a practical guide for using Chord with Pico5 documents; this file is the formal specification."
+        },
+        {
+          "path": "durable-docs/pico-v5-handoff.md",
+          "difference": "That file is an implementation checklist; this file is the normative specification to implement."
+        }
+      ],
+      "path": "durable-docs/pico-v5.md",
+      "collection": "durable-docs",
+      "line_count": 2002,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Pico5 specification"
+        },
+        {
+          "level": 2,
+          "text": "1. Terms and invariants"
+        },
+        {
+          "level": 2,
+          "text": "2. Core records"
         },
         {
           "level": 3,
-          "text": "\"invalid_auth\" error"
+          "text": "2.1 Entries and context"
         },
         {
           "level": 3,
-          "text": "\"missing_scope\" error"
+          "text": "2.2 Public Harness surface"
+        },
+        {
+          "level": 2,
+          "text": "3. Documents"
         },
         {
           "level": 3,
-          "text": "Not receiving events"
+          "text": "3.1 Definitions"
         },
         {
           "level": 3,
-          "text": "Bot doesn't respond to mentions"
+          "text": "3.2 Identity"
+        },
+        {
+          "level": 3,
+          "text": "3.3 Access and creation"
+        },
+        {
+          "level": 3,
+          "text": "3.4 Mutation ownership"
+        },
+        {
+          "level": 3,
+          "text": "3.5 Bases and checkpoints"
+        },
+        {
+          "level": 3,
+          "text": "3.6 Versions and migrations"
+        },
+        {
+          "level": 3,
+          "text": "3.7 Forks"
+        },
+        {
+          "level": 2,
+          "text": "4. Transactions and storage ownership"
+        },
+        {
+          "level": 2,
+          "text": "5. Tasks"
+        },
+        {
+          "level": 3,
+          "text": "5.1 Definition"
+        },
+        {
+          "level": 3,
+          "text": "5.2 Effect sandwich"
+        },
+        {
+          "level": 3,
+          "text": "5.3 Terminal tasks and dependencies"
+        },
+        {
+          "level": 3,
+          "text": "5.4 Scheduler, abort, and ownership"
+        },
+        {
+          "level": 2,
+          "text": "6. Inputs and inbox"
+        },
+        {
+          "level": 2,
+          "text": "7. Hooks, tools, and system sections"
+        },
+        {
+          "level": 3,
+          "text": "7.1 Hooks"
+        },
+        {
+          "level": 3,
+          "text": "7.2 Tools"
+        },
+        {
+          "level": 3,
+          "text": "7.3 System sections and dynamic tools"
+        },
+        {
+          "level": 3,
+          "text": "7.4 Host plugin reload"
+        },
+        {
+          "level": 2,
+          "text": "8. Built-in tasks"
+        },
+        {
+          "level": 2,
+          "text": "9. Document observation and Chord"
+        },
+        {
+          "level": 3,
+          "text": "9.1 Document source"
+        },
+        {
+          "level": 3,
+          "text": "9.2 watchDoc"
+        },
+        {
+          "level": 3,
+          "text": "9.3 Conversation view"
+        },
+        {
+          "level": 3,
+          "text": "9.4 Agent-mode notifications"
+        },
+        {
+          "level": 2,
+          "text": "10. Storage contract"
+        },
+        {
+          "level": 2,
+          "text": "11. Backends"
+        },
+        {
+          "level": 3,
+          "text": "11.1 Memory"
+        },
+        {
+          "level": 3,
+          "text": "11.2 SQLite"
+        },
+        {
+          "level": 3,
+          "text": "11.3 JSONL"
+        },
+        {
+          "level": 2,
+          "text": "12. API footguns"
+        },
+        {
+          "level": 2,
+          "text": "13. Non-goals"
         }
       ],
       "relative_links": []
     },
     {
-      "id": "mom/events-system",
-      "title": "Events System",
+      "id": "durable/pico5-chord-usage",
+      "title": "Pico5 Documents Through Chord",
       "aliases": [
-        "workspace/events",
-        "immediate events",
-        "one-shot events",
-        "periodic events"
+        "Pico5 Chord",
+        "Chord documents",
+        "documentReplicatedState",
+        "Chord facets"
       ],
-      "doc_type": "system-design",
+      "doc_type": "integration-guide",
       "audience": [
-        "Mom implementer",
-        "automation author"
+        "Chord integrator",
+        "Pico5 document consumer"
       ],
-      "summary": "Design for Mom's wake-up/event subsystem based on JSON files in workspace/events, supporting immediate, one-shot, and periodic cron-driven events with queue integration and silent completion.",
+      "summary": "Practical guide for using Chord with Pico5 documents: Session-wide canvas, conversation-scoped document families, task-scoped output with watch, built-in conversation views, commit delivery sequence, and key footguns.",
       "primary_topics": [
-        "events",
-        "workspace/events",
-        "cron scheduling",
-        "queue integration",
-        "silent completion"
+        "Chord",
+        "documentReplicatedState",
+        "defineDoc",
+        "defineDocFamily",
+        "watchDoc",
+        "DocumentSource",
+        "facets"
       ],
       "strong_terms": [
-        "type: immediate",
-        "type: one-shot",
-        "type: periodic",
-        "croner",
-        "[EVENT:filename:type:schedule]",
-        "[SILENT]"
+        "documentReplicatedState",
+        "CanvasDoc",
+        "ReviewDoc",
+        "JobOutputDoc",
+        "watchDoc",
+        "applyImmutable",
+        "DocumentObserver"
       ],
       "distinctive_markers": [
-        "Only doc that defines Mom event-file formats and execution semantics",
-        "Includes a system-prompt section teaching Mom how to create and manage event files"
+        "Uses step-by-step examples with working TypeScript code patterns",
+        "Explains the adapter boundary between Chord and Pico5 documents"
       ],
       "question_patterns": [
-        "How do scheduled or immediate events work for Mom?",
-        "What JSON schema should event files in /workspace/events use?",
-        "How are periodic events, queue limits, and silent completion handled?"
+        "How do I use Chord with Pico5 documents?",
+        "How does documentReplicatedState work with Session documents?",
+        "How do I watch a task-scoped document for progress?",
+        "What are the key footguns when using Pico5 documents with Chord?"
       ],
       "confusable_with": [
         {
-          "path": "mom-docs/new.md",
-          "difference": "new.md includes redesign notes and a brief events section; this file is the dedicated detailed event-system design."
+          "path": "durable-docs/pico-v5.md",
+          "difference": "That file is the formal specification; this file is the practical guide for Chord integration."
         },
         {
-          "path": "mom-docs/slack-bot-minimal-guide.md",
-          "difference": "That file describes Slack event subscriptions; this file describes Mom's own filesystem-triggered events."
+          "path": "durable-docs/pico-v5-handoff.md",
+          "difference": "That file is the implementation checklist; this file shows usage patterns and integration code."
         }
       ],
-      "path": "mom-docs/events.md",
-      "collection": "mom-docs",
-      "line_count": 307,
+      "path": "durable-docs/pico-v5-chord-usage.md",
+      "collection": "durable-docs",
+      "line_count": 382,
       "headings": [
         {
           "level": 1,
-          "text": "Events System"
+          "text": "Pico5 documents through Chord"
         },
         {
           "level": 2,
-          "text": "Event Types"
-        },
-        {
-          "level": 3,
-          "text": "Immediate"
-        },
-        {
-          "level": 3,
-          "text": "One-Shot"
-        },
-        {
-          "level": 3,
-          "text": "Periodic"
-        },
-        {
-          "level": 4,
-          "text": "Cron Format"
+          "text": "Imports and the adapter boundary"
         },
         {
           "level": 2,
-          "text": "Timezone Handling"
+          "text": "1. A Session-wide canvas"
         },
         {
           "level": 2,
-          "text": "Harness Behavior"
-        },
-        {
-          "level": 3,
-          "text": "Startup"
-        },
-        {
-          "level": 3,
-          "text": "File System Watching"
-        },
-        {
-          "level": 3,
-          "text": "Parse Errors"
-        },
-        {
-          "level": 3,
-          "text": "Execution Errors"
+          "text": "2. Conversation-scoped diff reviews"
         },
         {
           "level": 2,
-          "text": "Queue Integration"
+          "text": "3. Task-scoped output and a tool/task watch"
         },
         {
           "level": 2,
-          "text": "Event Execution"
+          "text": "4. Built-in conversation views and commit delivery"
         },
         {
           "level": 2,
-          "text": "Silent Completion"
-        },
-        {
-          "level": 2,
-          "text": "File Naming"
-        },
-        {
-          "level": 2,
-          "text": "Implementation"
-        },
-        {
-          "level": 3,
-          "text": "Files"
-        },
-        {
-          "level": 3,
-          "text": "Key Components"
-        },
-        {
-          "level": 3,
-          "text": "Dependencies"
-        },
-        {
-          "level": 2,
-          "text": "System Prompt Section"
-        },
-        {
-          "level": 2,
-          "text": "Events"
-        },
-        {
-          "level": 3,
-          "text": "Event Types"
-        },
-        {
-          "level": 3,
-          "text": "Cron Format"
-        },
-        {
-          "level": 3,
-          "text": "Timezones"
-        },
-        {
-          "level": 3,
-          "text": "Creating Events"
-        },
-        {
-          "level": 3,
-          "text": "Managing Events"
-        },
-        {
-          "level": 3,
-          "text": "When Events Trigger"
-        },
-        {
-          "level": 3,
-          "text": "Debouncing"
-        },
-        {
-          "level": 1,
-          "text": "Creates event per email — will flood the queue"
-        },
-        {
-          "level": 1,
-          "text": "Debounce: flag file + single delayed event"
-        },
-        {
-          "level": 3,
-          "text": "Limits"
+          "text": "Footguns"
         }
       ],
-      "relative_links": []
+      "relative_links": [
+        "../../chord/src/types.ts",
+        "../../chord/test/facets.test.ts",
+        "../../chord/src/services/state.ts",
+        "../../chord/src/services/provider.ts",
+        "../../chord/src/context/index.ts",
+        "../../chord/src/delta/README.md",
+        "pico-v5.md"
+      ]
     },
     {
-      "id": "mom/v86-evaluation",
-      "title": "v86 Sandbox Evaluation",
+      "id": "durable/pico5-handoff",
+      "title": "Pico5 Implementation Handoff",
       "aliases": [
-        "v86",
-        "rootlessRelay",
-        "WebAssembly sandbox",
-        "10.0.2.2"
+        "Pico5 handoff",
+        "implementation handoff",
+        "Pico5 packages"
       ],
-      "doc_type": "evaluation-report",
+      "doc_type": "implementation-plan",
       "audience": [
-        "sandbox architect",
-        "Mom implementer"
+        "Pico5 implementer",
+        "maintainer"
       ],
-      "summary": "Technical evaluation of using v86 as a sandboxed Linux execution environment for Mom, including networking through rootlessRelay, Alpine image build, state save/restore, and host-access patches.",
+      "summary": "Ordered implementation checklist for building Pico5 across 25 packages, covering records, memory/SQLite/JSONL storage, documents, trackers, definitions, forks, Chord integration, watches, conversations, context derivation, tasks, scheduler, abort, inputs, built-in documents, registries, tools, generation, collapse, jobs, and harness integration.",
       "primary_topics": [
-        "v86",
-        "WebAssembly VM",
-        "rootlessRelay",
-        "Alpine Linux",
-        "sandbox evaluation"
+        "implementation plan",
+        "package 1-25",
+        "MemoryStorage",
+        "SQLite",
+        "JSONL",
+        "Chord",
+        "document watches",
+        "tasks",
+        "harness"
       ],
       "strong_terms": [
-        "relay.js patches",
-        "10.0.2.2",
-        "serial0_send",
-        "save_state",
-        "restore_state",
-        "udhcpc -i eth0"
+        "MemoryStorage",
+        "ConversationRecord",
+        "EntryRecord",
+        "TaskRecord",
+        "defineDoc",
+        "defineDocFamily",
+        "defineTask",
+        "watchDoc",
+        "Harness.open",
+        "package 25"
       ],
       "distinctive_markers": [
-        "Only doc centered on a JS/WASM x86 emulator rather than Docker",
-        "Provides exact rootlessRelay patches for gateway-to-localhost access"
+        "Ordered 25-package implementation plan with test requirements",
+        "Only doc with explicit build-order and stop-for-review checkpoints"
       ],
       "question_patterns": [
-        "Can Mom run inside a v86 WebAssembly VM sandbox?",
-        "How does networking and host access work with rootlessRelay and v86?",
-        "What is the boot/restore workflow and performance profile of the v86 sandbox?"
+        "In what order should Pico5 be implemented?",
+        "What test requirements exist for each Pico5 package?",
+        "How does the Pico5 implementation progress from storage to harness integration?"
       ],
       "confusable_with": [
         {
-          "path": "mom-docs/sandbox.md",
-          "difference": "sandbox.md is the Docker-based practical sandbox guide; this file is an evaluation of a v86 VM-based alternative."
+          "path": "durable-docs/pico-v5.md",
+          "difference": "That file is the normative specification; this file is the implementation task list."
+        },
+        {
+          "path": "durable-docs/pico-v5-chord-usage.md",
+          "difference": "That file shows Chord integration patterns; this file lists the concrete implementation steps."
         }
       ],
-      "path": "mom-docs/v86.md",
-      "collection": "mom-docs",
-      "line_count": 319,
+      "path": "durable-docs/pico-v5-handoff.md",
+      "collection": "durable-docs",
+      "line_count": 336,
       "headings": [
         {
           "level": 1,
-          "text": "v86 Sandbox Evaluation"
+          "text": "Pico5 implementation handoff"
         },
         {
           "level": 2,
-          "text": "Overview"
+          "text": "Status"
         },
         {
           "level": 2,
-          "text": "Key Findings"
-        },
-        {
-          "level": 3,
-          "text": "What Works"
-        },
-        {
-          "level": 3,
-          "text": "What Doesn't Work"
+          "text": "1. Records, cursors, and memory tables"
         },
         {
           "level": 2,
-          "text": "Architecture"
+          "text": "2. Memory document records"
         },
         {
           "level": 2,
-          "text": "Components & Sizes"
+          "text": "3. SQLite backend"
         },
         {
           "level": 2,
-          "text": "Installation"
+          "text": "4. JSONL publication"
         },
         {
           "level": 2,
-          "text": "Building the Alpine Image"
-        },
-        {
-          "level": 1,
-          "text": "Edit Dockerfile to add packages:"
-        },
-        {
-          "level": 1,
-          "text": "ENV ADDPKGS=nodejs,npm,python3,git,curl"
+          "text": "5. JSONL reclamation"
         },
         {
           "level": 2,
-          "text": "Network Relay Setup"
-        },
-        {
-          "level": 3,
-          "text": "Required Patches for Host Access"
-        },
-        {
-          "level": 3,
-          "text": "Starting the Relay"
-        },
-        {
-          "level": 1,
-          "text": "Listens on ws://127.0.0.1:8086/"
+          "text": "6. Tracker transaction core"
         },
         {
           "level": 2,
-          "text": "Basic Usage"
+          "text": "7. Document definitions and access"
         },
         {
           "level": 2,
-          "text": "Communication Methods"
-        },
-        {
-          "level": 3,
-          "text": "1. Serial Console (stdin/stdout)"
-        },
-        {
-          "level": 3,
-          "text": "2. 9p Filesystem (file I/O)"
-        },
-        {
-          "level": 3,
-          "text": "3. Network (TCP to host services)"
-        },
-        {
-          "level": 1,
-          "text": "Inside VM"
+          "text": "8. Checkpoints and migration"
         },
         {
           "level": 2,
-          "text": "State Save/Restore"
+          "text": "9. Conversation document forks"
         },
         {
           "level": 2,
-          "text": "Network Setup Inside VM"
+          "text": "10. Chord structural array operations"
         },
         {
           "level": 2,
-          "text": "Performance"
+          "text": "11. Chord document source"
         },
         {
           "level": 2,
-          "text": "Typical Workflow for Mom"
+          "text": "12. Document watches"
         },
         {
           "level": 2,
-          "text": "Alternative: fetch Backend (No Relay Needed)"
+          "text": "13. Conversations and entries"
         },
         {
           "level": 2,
-          "text": "Files Reference"
+          "text": "14. Context derivation and system messages"
         },
         {
           "level": 2,
-          "text": "Resources"
+          "text": "15. Task definitions and invocations"
+        },
+        {
+          "level": 2,
+          "text": "16. Scheduler and terminal tasks"
+        },
+        {
+          "level": 2,
+          "text": "17. Abort and owned conversations"
+        },
+        {
+          "level": 2,
+          "text": "18. Inputs and positional inbox"
+        },
+        {
+          "level": 2,
+          "text": "19. Remaining built-in documents and view"
+        },
+        {
+          "level": 2,
+          "text": "20. Registries, hooks, and sections"
+        },
+        {
+          "level": 2,
+          "text": "21. Tool and post-tools tasks"
+        },
+        {
+          "level": 2,
+          "text": "22. Generation task"
+        },
+        {
+          "level": 2,
+          "text": "23. Collapse task"
+        },
+        {
+          "level": 2,
+          "text": "24. Job and plugin tasks"
+        },
+        {
+          "level": 2,
+          "text": "25. Harness integration"
         }
       ],
-      "relative_links": []
-    },
-    {
-      "id": "mom/redesign-multi-platform",
-      "title": "Mom Redesign: Multi-Platform Chat Support",
-      "aliases": [
-        "Mom redesign",
-        "multi-platform chat support",
-        "PlatformAdapter",
-        "ChannelMessage"
-      ],
-      "doc_type": "architecture-redesign",
-      "audience": [
-        "Mom architect",
-        "platform adapter implementer"
-      ],
-      "summary": "Large redesign proposal for making Mom platform-agnostic across Slack, Discord, and others, with unified channel storage, adapter interfaces, test strategy, host-side custom tools, and channel isolation ideas.",
-      "primary_topics": [
-        "multi-platform architecture",
-        "PlatformAdapter",
-        "MomAgent",
-        "ChannelMessage",
-        "custom host-side tools",
-        "bubblewrap isolation"
-      ],
-      "strong_terms": [
-        "PlatformAdapter",
-        "ChannelMessage",
-        "MomAgent.handleMessage",
-        "channels/<adapter>/<channelId>/",
-        "invoke_tool",
-        "bubblewrap"
-      ],
-      "distinctive_markers": [
-        "Broadest Mom architecture document in the set",
-        "Combines adapter abstraction, storage redesign, custom tools, and events into a single future-state design"
-      ],
-      "question_patterns": [
-        "How should Mom be redesigned to support Slack, Discord, and other chat platforms?",
-        "What interfaces should adapters, agents, and channel storage expose?",
-        "How do host-side custom tools and per-channel isolation fit into the redesign?"
-      ],
-      "confusable_with": [
-        {
-          "path": "mom-docs/events.md",
-          "difference": "events.md is the focused event system design; this file is the broader platform-agnostic redesign."
-        },
-        {
-          "path": "mom-docs/slack-bot-minimal-guide.md",
-          "difference": "That file is a concrete Slack-only integration; this one is the future multi-platform architecture."
-        }
-      ],
-      "path": "mom-docs/new.md",
-      "collection": "mom-docs",
-      "line_count": 970,
-      "headings": [
-        {
-          "level": 1,
-          "text": "Mom Redesign: Multi-Platform Chat Support"
-        },
-        {
-          "level": 2,
-          "text": "Goals"
-        },
-        {
-          "level": 2,
-          "text": "Current Architecture Problems"
-        },
-        {
-          "level": 2,
-          "text": "Proposed Architecture"
-        },
-        {
-          "level": 2,
-          "text": "Key Interfaces"
-        },
-        {
-          "level": 3,
-          "text": "1. ChannelMessage (Unified Message Format)"
-        },
-        {
-          "level": 3,
-          "text": "2. PlatformAdapter"
-        },
-        {
-          "level": 3,
-          "text": "3. MomAgent"
-        },
-        {
-          "level": 2,
-          "text": "Event Handling"
-        },
-        {
-          "level": 2,
-          "text": "Storage Format"
-        },
-        {
-          "level": 3,
-          "text": "log.jsonl (Channel History)"
-        },
-        {
-          "level": 3,
-          "text": "context.jsonl (LLM Context)"
-        },
-        {
-          "level": 2,
-          "text": "Directory Structure"
-        },
-        {
-          "level": 3,
-          "text": "Channel Isolation via Bubblewrap (Linux/Docker)"
-        },
-        {
-          "level": 2,
-          "text": "System Prompt Changes"
-        },
-        {
-          "level": 2,
-          "text": "Text Formatting"
-        },
-        {
-          "level": 2,
-          "text": "Users"
-        },
-        {
-          "level": 2,
-          "text": "Channels"
-        },
-        {
-          "level": 2,
-          "text": "Testing Strategy"
-        },
-        {
-          "level": 3,
-          "text": "1. Agent Tests (with temp Docker container)"
-        },
-        {
-          "level": 3,
-          "text": "2. Adapter Tests (no agent)"
-        },
-        {
-          "level": 3,
-          "text": "3. Integration Tests"
-        },
-        {
-          "level": 2,
-          "text": "Migration Path"
-        },
-        {
-          "level": 2,
-          "text": "Decisions"
-        },
-        {
-          "level": 2,
-          "text": "File Structure"
-        },
-        {
-          "level": 2,
-          "text": "Custom Tools (Host-Side Execution)"
-        },
-        {
-          "level": 3,
-          "text": "Architecture"
-        },
-        {
-          "level": 3,
-          "text": "Custom Tool Interface"
-        },
-        {
-          "level": 3,
-          "text": "MomCustomTool Type"
-        },
-        {
-          "level": 3,
-          "text": "Tool Discovery and Loading"
-        },
-        {
-          "level": 3,
-          "text": "The invoke_tool Agent Tool"
-        },
-        {
-          "level": 3,
-          "text": "System Prompt Integration"
-        },
-        {
-          "level": 3,
-          "text": "Example: Gmail Tool"
-        },
-        {
-          "level": 3,
-          "text": "Security Considerations"
-        },
-        {
-          "level": 3,
-          "text": "Loading"
-        },
-        {
-          "level": 2,
-          "text": "Events System"
-        },
-        {
-          "level": 3,
-          "text": "Format"
-        },
-        {
-          "level": 3,
-          "text": "Running"
-        },
-        {
-          "level": 2,
-          "text": "Summary"
-        }
-      ],
-      "relative_links": []
+      "relative_links": [
+        "../../chord/src/types.ts",
+        "../../chord/src/delta/index.ts",
+        "pico-v5.md"
+      ]
     }
   ],
   "indices": {
     "by_id": {
-      "pods/kimi-k2": "pods-docs/kimi-k2.md",
-      "pods/gpt-oss": "pods-docs/gpt-oss.md",
-      "pods/models-matrix": "pods-docs/models.md",
-      "pods/pi-plan": "pods-docs/plan.md",
-      "pods/qwen3-coder": "pods-docs/qwen3-coder.md",
-      "pods/implementation-plan": "pods-docs/implementation-plan.md",
-      "pods/glm-4.5": "pods-docs/gml-4.5.md",
+      "coding/overview": "coding-agent-docs/index.md",
+      "coding/quickstart": "coding-agent-docs/quickstart.md",
+      "coding/usage": "coding-agent-docs/usage.md",
       "coding/json-mode": "coding-agent-docs/json.md",
       "coding/prompt-templates": "coding-agent-docs/prompt-templates.md",
       "coding/termux": "coding-agent-docs/termux.md",
@@ -5596,28 +4821,25 @@
       "coding/providers": "coding-agent-docs/providers.md",
       "coding/windows": "coding-agent-docs/windows.md",
       "coding/tui": "coding-agent-docs/tui.md",
-      "coding/session-format": "coding-agent-docs/session.md",
+      "coding/session-format": "coding-agent-docs/session-format.md",
       "coding/rpc": "coding-agent-docs/rpc.md",
       "coding/keybindings": "coding-agent-docs/keybindings.md",
-      "coding/tree-navigation": "coding-agent-docs/tree.md",
+      "coding/session-management": "coding-agent-docs/sessions.md",
       "coding/tmux": "coding-agent-docs/tmux.md",
       "coding/custom-provider": "coding-agent-docs/custom-provider.md",
       "coding/shell-aliases": "coding-agent-docs/shell-aliases.md",
-      "mom/docker-sandbox": "mom-docs/sandbox.md",
-      "mom/artifacts-server": "mom-docs/artifacts-server.md",
-      "mom/slack-bot-minimal": "mom-docs/slack-bot-minimal-guide.md",
-      "mom/events-system": "mom-docs/events.md",
-      "mom/v86-evaluation": "mom-docs/v86.md",
-      "mom/redesign-multi-platform": "mom-docs/new.md"
+      "coding/containerization": "coding-agent-docs/containerization.md",
+      "coding/environment-variables": "coding-agent-docs/environment-variables.md",
+      "coding/llama-cpp": "coding-agent-docs/llama-cpp.md",
+      "coding/security": "coding-agent-docs/security.md",
+      "durable/pico5-spec": "durable-docs/pico-v5.md",
+      "durable/pico5-chord-usage": "durable-docs/pico-v5-chord-usage.md",
+      "durable/pico5-handoff": "durable-docs/pico-v5-handoff.md"
     },
     "by_path": {
-      "pods-docs/kimi-k2.md": "pods/kimi-k2",
-      "pods-docs/gpt-oss.md": "pods/gpt-oss",
-      "pods-docs/models.md": "pods/models-matrix",
-      "pods-docs/plan.md": "pods/pi-plan",
-      "pods-docs/qwen3-coder.md": "pods/qwen3-coder",
-      "pods-docs/implementation-plan.md": "pods/implementation-plan",
-      "pods-docs/gml-4.5.md": "pods/glm-4.5",
+      "coding-agent-docs/index.md": "coding/overview",
+      "coding-agent-docs/quickstart.md": "coding/quickstart",
+      "coding-agent-docs/usage.md": "coding/usage",
       "coding-agent-docs/json.md": "coding/json-mode",
       "coding-agent-docs/prompt-templates.md": "coding/prompt-templates",
       "coding-agent-docs/termux.md": "coding/termux",
@@ -5634,31 +4856,26 @@
       "coding-agent-docs/providers.md": "coding/providers",
       "coding-agent-docs/windows.md": "coding/windows",
       "coding-agent-docs/tui.md": "coding/tui",
-      "coding-agent-docs/session.md": "coding/session-format",
+      "coding-agent-docs/session-format.md": "coding/session-format",
       "coding-agent-docs/rpc.md": "coding/rpc",
       "coding-agent-docs/keybindings.md": "coding/keybindings",
-      "coding-agent-docs/tree.md": "coding/tree-navigation",
+      "coding-agent-docs/sessions.md": "coding/session-management",
       "coding-agent-docs/tmux.md": "coding/tmux",
       "coding-agent-docs/custom-provider.md": "coding/custom-provider",
       "coding-agent-docs/shell-aliases.md": "coding/shell-aliases",
-      "mom-docs/sandbox.md": "mom/docker-sandbox",
-      "mom-docs/artifacts-server.md": "mom/artifacts-server",
-      "mom-docs/slack-bot-minimal-guide.md": "mom/slack-bot-minimal",
-      "mom-docs/events.md": "mom/events-system",
-      "mom-docs/v86.md": "mom/v86-evaluation",
-      "mom-docs/new.md": "mom/redesign-multi-platform"
+      "coding-agent-docs/containerization.md": "coding/containerization",
+      "coding-agent-docs/environment-variables.md": "coding/environment-variables",
+      "coding-agent-docs/llama-cpp.md": "coding/llama-cpp",
+      "coding-agent-docs/security.md": "coding/security",
+      "durable-docs/pico-v5.md": "durable/pico5-spec",
+      "durable-docs/pico-v5-chord-usage.md": "durable/pico5-chord-usage",
+      "durable-docs/pico-v5-handoff.md": "durable/pico5-handoff"
     },
     "by_collection": {
-      "pods-docs": [
-        "pods/kimi-k2",
-        "pods/gpt-oss",
-        "pods/models-matrix",
-        "pods/pi-plan",
-        "pods/qwen3-coder",
-        "pods/implementation-plan",
-        "pods/glm-4.5"
-      ],
       "coding-agent-docs": [
+        "coding/overview",
+        "coding/quickstart",
+        "coding/usage",
         "coding/json-mode",
         "coding/prompt-templates",
         "coding/termux",
@@ -5678,722 +4895,157 @@
         "coding/session-format",
         "coding/rpc",
         "coding/keybindings",
-        "coding/tree-navigation",
+        "coding/session-management",
         "coding/tmux",
         "coding/custom-provider",
-        "coding/shell-aliases"
+        "coding/shell-aliases",
+        "coding/containerization",
+        "coding/environment-variables",
+        "coding/llama-cpp",
+        "coding/security"
       ],
-      "mom-docs": [
-        "mom/docker-sandbox",
-        "mom/artifacts-server",
-        "mom/slack-bot-minimal",
-        "mom/events-system",
-        "mom/v86-evaluation",
-        "mom/redesign-multi-platform"
+      "durable-docs": [
+        "durable/pico5-spec",
+        "durable/pico5-chord-usage",
+        "durable/pico5-handoff"
       ]
     },
     "by_alias": {
-      "/skill:name": [
-        "coding/skills"
-      ],
-      "/template commands": [
-        "coding/prompt-templates"
-      ],
-      "/tree": [
-        "coding/tree-navigation"
-      ],
-      "10.0.2.2": [
-        "mom/v86-evaluation"
-      ],
-      "@mariozechner/pi-tui": [
-        "coding/tui"
-      ],
-      "agent skills": [
-        "coding/skills"
-      ],
-      "agentsessionruntime": [
-        "coding/sdk"
-      ],
-      "android setup": [
-        "coding/termux"
-      ],
-      "api keys": [
-        "coding/providers"
-      ],
-      "artifacts server": [
-        "mom/artifacts-server"
-      ],
-      "artifacts-server": [
-        "mom/artifacts-server"
-      ],
-      "auth.json": [
-        "coding/providers"
-      ],
-      "branch summarization": [
-        "coding/compaction"
-      ],
-      "branch switching": [
-        "coding/tree-navigation"
-      ],
-      "channelmessage": [
-        "mom/redesign-multi-platform"
-      ],
-      "cloudflare tunnel": [
-        "mom/artifacts-server"
-      ],
-      "coding-agent-docs/compaction.md": [
-        "coding/compaction"
-      ],
-      "coding-agent-docs/custom-provider.md": [
-        "coding/custom-provider"
-      ],
-      "coding-agent-docs/development.md": [
-        "coding/development"
-      ],
-      "coding-agent-docs/extensions.md": [
-        "coding/extensions"
-      ],
-      "coding-agent-docs/json.md": [
-        "coding/json-mode"
-      ],
-      "coding-agent-docs/keybindings.md": [
-        "coding/keybindings"
-      ],
-      "coding-agent-docs/models.md": [
-        "coding/custom-models"
-      ],
-      "coding-agent-docs/packages.md": [
-        "coding/packages"
-      ],
-      "coding-agent-docs/prompt-templates.md": [
-        "coding/prompt-templates"
-      ],
-      "coding-agent-docs/providers.md": [
-        "coding/providers"
-      ],
-      "coding-agent-docs/rpc.md": [
-        "coding/rpc"
-      ],
-      "coding-agent-docs/sdk.md": [
-        "coding/sdk"
-      ],
-      "coding-agent-docs/session.md": [
-        "coding/session-format"
-      ],
-      "coding-agent-docs/settings.md": [
-        "coding/settings"
-      ],
-      "coding-agent-docs/shell-aliases.md": [
-        "coding/shell-aliases"
-      ],
-      "coding-agent-docs/skills.md": [
-        "coding/skills"
-      ],
-      "coding-agent-docs/terminal-setup.md": [
-        "coding/terminal-setup"
-      ],
-      "coding-agent-docs/termux.md": [
-        "coding/termux"
-      ],
-      "coding-agent-docs/themes.md": [
-        "coding/themes"
-      ],
-      "coding-agent-docs/tmux.md": [
-        "coding/tmux"
-      ],
-      "coding-agent-docs/tree.md": [
-        "coding/tree-navigation"
-      ],
-      "coding-agent-docs/tui.md": [
-        "coding/tui"
-      ],
-      "coding-agent-docs/windows.md": [
-        "coding/windows"
-      ],
-      "coding/compaction": [
-        "coding/compaction"
-      ],
-      "coding/custom-models": [
-        "coding/custom-models"
-      ],
-      "coding/custom-provider": [
-        "coding/custom-provider"
-      ],
-      "coding/development": [
-        "coding/development"
-      ],
-      "coding/extensions": [
-        "coding/extensions"
-      ],
-      "coding/json-mode": [
-        "coding/json-mode"
-      ],
-      "coding/keybindings": [
-        "coding/keybindings"
-      ],
-      "coding/packages": [
-        "coding/packages"
-      ],
-      "coding/prompt-templates": [
-        "coding/prompt-templates"
-      ],
-      "coding/providers": [
-        "coding/providers"
-      ],
-      "coding/rpc": [
-        "coding/rpc"
-      ],
-      "coding/sdk": [
-        "coding/sdk"
-      ],
-      "coding/session-format": [
-        "coding/session-format"
-      ],
-      "coding/settings": [
-        "coding/settings"
-      ],
-      "coding/shell-aliases": [
-        "coding/shell-aliases"
-      ],
-      "coding/skills": [
-        "coding/skills"
-      ],
-      "coding/terminal-setup": [
-        "coding/terminal-setup"
-      ],
-      "coding/termux": [
-        "coding/termux"
-      ],
-      "coding/themes": [
-        "coding/themes"
-      ],
-      "coding/tmux": [
-        "coding/tmux"
-      ],
-      "coding/tree-navigation": [
-        "coding/tree-navigation"
-      ],
-      "coding/tui": [
-        "coding/tui"
-      ],
-      "coding/windows": [
-        "coding/windows"
-      ],
-      "compaction": [
-        "coding/compaction"
-      ],
-      "compaction & branch summarization": [
-        "coding/compaction"
-      ],
-      "createagentsession": [
-        "coding/sdk"
-      ],
-      "csi-u": [
-        "coding/tmux"
-      ],
-      "custom components": [
-        "coding/tui"
-      ],
-      "custom models": [
-        "coding/custom-models"
-      ],
-      "custom providers": [
-        "coding/custom-models",
-        "coding/custom-provider"
-      ],
-      "custom theme": [
-        "coding/themes"
-      ],
-      "custom-provider": [
-        "coding/custom-provider"
-      ],
-      "development": [
-        "coding/development"
-      ],
-      "docker sandbox": [
-        "mom/docker-sandbox"
-      ],
-      "event stream mode": [
-        "coding/json-mode"
-      ],
-      "events": [
-        "mom/events-system"
-      ],
-      "events system": [
-        "mom/events-system"
-      ],
-      "expand_aliases": [
-        "coding/shell-aliases"
-      ],
-      "extended-keys": [
-        "coding/tmux"
-      ],
-      "extension ui protocol": [
-        "coding/rpc"
-      ],
-      "extensionapi": [
-        "coding/extensions"
-      ],
-      "extensions": [
-        "coding/extensions"
-      ],
-      "forking and rebranding": [
-        "coding/development"
-      ],
-      "git bash": [
-        "coding/windows"
-      ],
-      "glm-4.5": [
-        "pods/glm-4.5"
-      ],
-      "glm-4.5-air": [
-        "pods/glm-4.5"
-      ],
-      "global and project settings": [
-        "coding/settings"
-      ],
-      "gml-4.5": [
-        "pods/glm-4.5"
-      ],
-      "gpt-oss": [
-        "pods/gpt-oss"
-      ],
-      "gpt-oss vllm usage guide": [
-        "pods/gpt-oss"
-      ],
-      "gpt-oss-120b": [
-        "pods/gpt-oss"
-      ],
-      "gpt-oss-20b": [
-        "pods/gpt-oss"
-      ],
-      "immediate events": [
-        "mom/events-system"
-      ],
-      "implementation plan": [
-        "pods/implementation-plan"
-      ],
-      "implementation-plan": [
-        "pods/implementation-plan"
-      ],
-      "json": [
-        "coding/json-mode"
-      ],
-      "json event stream mode": [
-        "coding/json-mode"
-      ],
-      "json mode": [
-        "coding/json-mode"
-      ],
-      "keybindings": [
-        "coding/keybindings"
-      ],
-      "keybindings.json": [
-        "coding/keybindings"
-      ],
-      "keyboard shortcuts": [
-        "coding/keybindings"
-      ],
-      "kimi k2": [
-        "pods/kimi-k2"
-      ],
-      "kimi-k2": [
-        "pods/kimi-k2"
-      ],
-      "kimi-k2 deployment guide": [
-        "pods/kimi-k2"
-      ],
-      "kitty keyboard protocol": [
-        "coding/terminal-setup"
-      ],
-      "live reload": [
-        "mom/artifacts-server"
-      ],
-      "lm studio": [
-        "coding/custom-models"
-      ],
-      "minimal slack bot": [
-        "mom/slack-bot-minimal"
-      ],
-      "minimal slack bot setup (no web server, websocket only)": [
-        "mom/slack-bot-minimal"
-      ],
-      "model hardware matrix": [
-        "pods/models-matrix"
-      ],
-      "models": [
-        "pods/models-matrix",
-        "coding/custom-models"
-      ],
-      "models.json": [
-        "coding/custom-models"
-      ],
-      "mom --sandbox=docker": [
-        "mom/docker-sandbox"
-      ],
-      "mom docker sandbox": [
-        "mom/docker-sandbox"
-      ],
-      "mom redesign": [
-        "mom/redesign-multi-platform"
-      ],
-      "mom redesign: multi-platform chat support": [
-        "mom/redesign-multi-platform"
-      ],
-      "mom sandbox": [
-        "mom/docker-sandbox"
-      ],
-      "mom-docs/artifacts-server.md": [
-        "mom/artifacts-server"
-      ],
-      "mom-docs/events.md": [
-        "mom/events-system"
-      ],
-      "mom-docs/new.md": [
-        "mom/redesign-multi-platform"
-      ],
-      "mom-docs/sandbox.md": [
-        "mom/docker-sandbox"
-      ],
-      "mom-docs/slack-bot-minimal-guide.md": [
-        "mom/slack-bot-minimal"
-      ],
-      "mom-docs/v86.md": [
-        "mom/v86-evaluation"
-      ],
-      "mom/artifacts-server": [
-        "mom/artifacts-server"
-      ],
-      "mom/docker-sandbox": [
-        "mom/docker-sandbox"
-      ],
-      "mom/events-system": [
-        "mom/events-system"
-      ],
-      "mom/redesign-multi-platform": [
-        "mom/redesign-multi-platform"
-      ],
-      "mom/slack-bot-minimal": [
-        "mom/slack-bot-minimal"
-      ],
-      "mom/v86-evaluation": [
-        "mom/v86-evaluation"
-      ],
-      "moonshotai/kimi-k2-instruct": [
-        "pods/kimi-k2"
-      ],
-      "multi-platform chat support": [
-        "mom/redesign-multi-platform"
-      ],
-      "namespaced key ids": [
-        "coding/keybindings"
-      ],
-      "navigatetree": [
-        "coding/tree-navigation"
-      ],
-      "new": [
-        "mom/redesign-multi-platform"
-      ],
-      "oauth providers": [
-        "coding/providers"
-      ],
-      "ollama": [
-        "coding/custom-models"
-      ],
-      "one-shot events": [
-        "mom/events-system"
-      ],
-      "package breakdown": [
-        "pods/implementation-plan"
-      ],
-      "package manifest": [
-        "coding/packages"
-      ],
-      "packages": [
-        "coding/packages"
-      ],
-      "periodic events": [
-        "mom/events-system"
-      ],
-      "pi --mode json": [
-        "coding/json-mode"
-      ],
-      "pi --mode rpc": [
-        "coding/rpc"
-      ],
-      "pi development": [
-        "coding/development"
-      ],
-      "pi extensions": [
-        "coding/extensions"
-      ],
-      "pi implementation plan": [
-        "pods/implementation-plan"
-      ],
-      "pi install": [
-        "coding/packages"
-      ],
-      "pi packages": [
-        "coding/packages"
-      ],
-      "pi plan": [
-        "pods/pi-plan"
-      ],
-      "pi pod orchestration plan": [
-        "pods/pi-plan"
-      ],
-      "pi pods architecture": [
-        "pods/pi-plan"
-      ],
-      "pi settings": [
-        "coding/settings"
-      ],
-      "pi supported models": [
-        "pods/models-matrix"
-      ],
-      "pi-mono setup": [
-        "coding/development"
-      ],
-      "pi.on": [
-        "coding/extensions"
-      ],
-      "pi.registertool": [
-        "coding/extensions"
-      ],
-      "plan": [
-        "pods/pi-plan"
-      ],
-      "platformadapter": [
-        "mom/redesign-multi-platform"
-      ],
-      "pod plan": [
-        "pods/pi-plan"
-      ],
-      "pods model compatibility matrix": [
-        "pods/models-matrix"
-      ],
-      "pods models": [
-        "pods/models-matrix"
-      ],
-      "pods-docs/gml-4.5.md": [
-        "pods/glm-4.5"
-      ],
-      "pods-docs/gpt-oss.md": [
-        "pods/gpt-oss"
-      ],
-      "pods-docs/implementation-plan.md": [
-        "pods/implementation-plan"
-      ],
-      "pods-docs/kimi-k2.md": [
-        "pods/kimi-k2"
-      ],
-      "pods-docs/models.md": [
-        "pods/models-matrix"
-      ],
-      "pods-docs/plan.md": [
-        "pods/pi-plan"
-      ],
-      "pods-docs/qwen3-coder.md": [
-        "pods/qwen3-coder"
-      ],
-      "pods/glm-4.5": [
-        "pods/glm-4.5"
-      ],
-      "pods/gpt-oss": [
-        "pods/gpt-oss"
-      ],
-      "pods/implementation-plan": [
-        "pods/implementation-plan"
-      ],
-      "pods/kimi-k2": [
-        "pods/kimi-k2"
-      ],
-      "pods/models-matrix": [
-        "pods/models-matrix"
-      ],
-      "pods/pi-plan": [
-        "pods/pi-plan"
-      ],
-      "pods/qwen3-coder": [
-        "pods/qwen3-coder"
-      ],
-      "prompt templates": [
-        "coding/prompt-templates"
-      ],
-      "prompt-templates": [
-        "coding/prompt-templates"
-      ],
-      "prompts/*.md": [
-        "coding/prompt-templates"
-      ],
-      "provider extension": [
-        "coding/custom-provider"
-      ],
-      "providers": [
-        "coding/providers"
-      ],
-      "qwen coder guide": [
-        "pods/qwen3-coder"
-      ],
-      "qwen/qwen3-coder-480b-a35b-instruct": [
-        "pods/qwen3-coder"
-      ],
-      "qwen3-coder": [
-        "pods/qwen3-coder"
-      ],
-      "qwen3-coder usage guide": [
-        "pods/qwen3-coder"
-      ],
-      "registerprovider": [
-        "coding/custom-provider"
-      ],
-      "rootlessrelay": [
-        "mom/v86-evaluation"
-      ],
-      "rpc": [
-        "coding/rpc"
-      ],
-      "rpc mode": [
-        "coding/rpc"
-      ],
-      "sandbox": [
-        "mom/docker-sandbox"
-      ],
-      "sdk": [
-        "coding/sdk"
-      ],
-      "sdk integration": [
-        "coding/sdk"
-      ],
-      "session": [
-        "coding/session-format"
-      ],
-      "session file format": [
-        "coding/session-format"
-      ],
-      "session format": [
-        "coding/session-format"
-      ],
-      "session jsonl": [
-        "coding/session-format"
-      ],
-      "session tree navigation": [
-        "coding/tree-navigation"
-      ],
-      "session_before_compact": [
-        "coding/compaction"
-      ],
-      "sessionmanager": [
-        "coding/session-format"
-      ],
-      "settings": [
-        "coding/settings"
-      ],
-      "settings.json": [
-        "coding/settings"
-      ],
-      "shell aliases": [
-        "coding/shell-aliases"
-      ],
-      "shell-aliases": [
-        "coding/shell-aliases"
-      ],
-      "shellcommandprefix": [
-        "coding/shell-aliases"
-      ],
-      "shellpath": [
-        "coding/windows"
-      ],
-      "shift+enter setup": [
-        "coding/terminal-setup"
-      ],
-      "skill.md": [
-        "coding/skills"
-      ],
-      "skills": [
-        "coding/skills"
-      ],
-      "slack socket mode": [
-        "mom/slack-bot-minimal"
-      ],
-      "slack-bot-minimal-guide": [
-        "mom/slack-bot-minimal"
-      ],
-      "streamsimple": [
-        "coding/custom-provider"
-      ],
-      "terminal key setup": [
-        "coding/terminal-setup"
-      ],
-      "terminal setup": [
-        "coding/terminal-setup"
-      ],
-      "terminal-setup": [
-        "coding/terminal-setup"
-      ],
-      "termux": [
-        "coding/termux"
-      ],
-      "termux (android) setup": [
-        "coding/termux"
-      ],
-      "termux-api": [
-        "coding/termux"
-      ],
-      "theme json": [
-        "coding/themes"
-      ],
-      "theme-schema.json": [
-        "coding/themes"
-      ],
-      "themes": [
-        "coding/themes"
-      ],
-      "tmux": [
-        "coding/tmux"
-      ],
-      "tmux setup": [
-        "coding/tmux"
-      ],
-      "tree": [
-        "coding/tree-navigation"
-      ],
-      "tui": [
-        "coding/tui"
-      ],
-      "tui components": [
-        "coding/tui"
-      ],
-      "typescript implementation plan": [
-        "pods/implementation-plan"
-      ],
-      "v86": [
-        "mom/v86-evaluation"
-      ],
-      "v86 sandbox evaluation": [
-        "mom/v86-evaluation"
-      ],
-      "vllm provider config": [
-        "coding/custom-models"
-      ],
-      "webassembly sandbox": [
-        "mom/v86-evaluation"
-      ],
-      "windows": [
-        "coding/windows"
-      ],
-      "windows setup": [
-        "coding/windows"
-      ],
-      "workspace/events": [
-        "mom/events-system"
-      ],
-      "xoxb/xapp guide": [
-        "mom/slack-bot-minimal"
-      ],
-      "zai-org/glm-4.5": [
-        "pods/glm-4.5"
-      ]
+      "/llama": ["coding/llama-cpp"],
+      "/skill:name": ["coding/skills"],
+      "/template commands": ["coding/prompt-templates"],
+      "/tree": ["coding/session-management"],
+      "@mariozechner/pi-tui": ["coding/tui"],
+      "agent skills": ["coding/skills"],
+      "agentsessionruntime": ["coding/sdk"],
+      "ai_agent": ["coding/environment-variables"],
+      "android setup": ["coding/termux"],
+      "api keys": ["coding/providers"],
+      "auth.json": ["coding/providers"],
+      "branch summarization": ["coding/compaction"],
+      "branch switching": ["coding/session-management"],
+      "chord documents": ["durable/pico5-chord-usage"],
+      "chord facets": ["durable/pico5-chord-usage"],
+      "cli reference": ["coding/usage"],
+      "compaction": ["coding/compaction"],
+      "compaction & branch summarization": ["coding/compaction"],
+      "container sandbox": ["coding/containerization"],
+      "createagentsession": ["coding/sdk"],
+      "csi-u": ["coding/tmux"],
+      "custom components": ["coding/tui"],
+      "custom models": ["coding/custom-models"],
+      "custom providers": ["coding/custom-models", "coding/custom-provider"],
+      "custom theme": ["coding/themes"],
+      "day-to-day pi": ["coding/usage"],
+      "definedoc": ["durable/pico5-spec"],
+      "definedocfamily": ["durable/pico5-chord-usage"],
+      "definetask": ["durable/pico5-spec"],
+      "development": ["coding/development"],
+      "docker sandbox pi": ["coding/containerization"],
+      "document replicatedState": ["durable/pico5-chord-usage"],
+      "documentation index": ["coding/overview"],
+      "durable agent harness": ["durable/pico5-spec"],
+      "event stream mode": ["coding/json-mode"],
+      "expand_aliases": ["coding/shell-aliases"],
+      "extended-keys": ["coding/tmux"],
+      "extension ui protocol": ["coding/rpc"],
+      "extensionapi": ["coding/extensions"],
+      "extensions": ["coding/extensions"],
+      "first run": ["coding/quickstart"],
+      "forking and rebranding": ["coding/development"],
+      "gguf models": ["coding/llama-cpp"],
+      "git bash": ["coding/windows"],
+      "global and project settings": ["coding/settings"],
+      "gondolin": ["coding/containerization"],
+      "harness.open": ["durable/pico5-spec"],
+      "how to use pi": ["coding/usage"],
+      "implementation handoff": ["durable/pico5-handoff"],
+      "install pi": ["coding/quickstart"],
+      "json": ["coding/json-mode"],
+      "json event stream mode": ["coding/json-mode"],
+      "json mode": ["coding/json-mode"],
+      "keybindings": ["coding/keybindings"],
+      "keybindings.json": ["coding/keybindings"],
+      "keyboard shortcuts": ["coding/keybindings"],
+      "kitty keyboard protocol": ["coding/terminal-setup"],
+      "llama-server": ["coding/llama-cpp"],
+      "llama.cpp": ["coding/llama-cpp"],
+      "lm studio": ["coding/custom-models"],
+      "models": ["coding/custom-models"],
+      "models.json": ["coding/custom-models"],
+      "namespaced key ids": ["coding/keybindings"],
+      "navigatetree": ["coding/session-management"],
+      "oauth providers": ["coding/providers"],
+      "ollama": ["coding/custom-models"],
+      "openshell sandbox": ["coding/containerization"],
+      "package manifest": ["coding/packages"],
+      "packages": ["coding/packages"],
+      "pi --mode json": ["coding/json-mode"],
+      "pi --mode rpc": ["coding/rpc"],
+      "pi development": ["coding/development"],
+      "pi docs": ["coding/overview"],
+      "pi documentation": ["coding/overview"],
+      "pi extensions": ["coding/extensions"],
+      "pi install": ["coding/packages"],
+      "pi packages": ["coding/packages"],
+      "pi security": ["coding/security"],
+      "pi settings": ["coding/settings"],
+      "pi-mono setup": ["coding/development"],
+      "pi.on": ["coding/extensions"],
+      "pi.registertool": ["coding/extensions"],
+      "pico5": ["durable/pico5-spec"],
+      "pico5 chord": ["durable/pico5-chord-usage"],
+      "pico5 handoff": ["durable/pico5-handoff"],
+      "pico5 packages": ["durable/pico5-handoff"],
+      "pico5 spec": ["durable/pico5-spec"],
+      "process markers": ["coding/environment-variables"],
+      "project trust": ["coding/security"],
+      "prompt templates": ["coding/prompt-templates"],
+      "prompts/*.md": ["coding/prompt-templates"],
+      "provider extension": ["coding/custom-provider"],
+      "providers": ["coding/providers"],
+      "quickstart": ["coding/quickstart"],
+      "registerprovider": ["coding/custom-provider"],
+      "rpc": ["coding/rpc"],
+      "rpc mode": ["coding/rpc"],
+      "sandbox rationale": ["coding/security"],
+      "sdk": ["coding/sdk"],
+      "sdk integration": ["coding/sdk"],
+      "session": ["coding/session-format"],
+      "session file format": ["coding/session-format"],
+      "session format": ["coding/session-format"],
+      "session jsonl": ["coding/session-format"],
+      "session management": ["coding/session-management"],
+      "session_before_compact": ["coding/compaction"],
+      "sessionmanager": ["coding/session-format"],
+      "settings": ["coding/settings"],
+      "settings.json": ["coding/settings"],
+      "shell aliases": ["coding/shell-aliases"],
+      "shellcommandprefix": ["coding/shell-aliases"],
+      "shellpath": ["coding/windows"],
+      "shift+enter setup": ["coding/terminal-setup"],
+      "skill.md": ["coding/skills"],
+      "skills": ["coding/skills"],
+      "slash commands": ["coding/usage"],
+      "streamsimple": ["coding/custom-provider"],
+      "terminal key setup": ["coding/terminal-setup"],
+      "terminal setup": ["coding/terminal-setup"],
+      "termux": ["coding/termux"],
+      "termux-api": ["coding/termux"],
+      "theme json": ["coding/themes"],
+      "theme-schema.json": ["coding/themes"],
+      "themes": ["coding/themes"],
+      "tmux": ["coding/tmux"],
+      "tmux setup": ["coding/tmux"],
+      "tree": ["coding/session-management"],
+      "tui": ["coding/tui"],
+      "tui components": ["coding/tui"],
+      "untrusted work": ["coding/security"],
+      "using pi": ["coding/usage"],
+      "vllm provider config": ["coding/custom-models"],
+      "watchdoc": ["durable/pico5-spec"],
+      "windows": ["coding/windows"],
+      "windows setup": ["coding/windows"]
     }
   }
 }

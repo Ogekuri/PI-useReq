@@ -365,8 +365,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-034**: MUST make that block require manifest-guided document review before analyzing, verifying, or fixing extension code that interfaces with the pi.dev CLI.
 - **REQ-108**: MUST make that block require interface-contract compliance with `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json` for new or modified pi.dev CLI integrations.
 - **REQ-273**: MUST make that block declare every path under `docs/` and `pi.dev-src/` read-only for analysis, implementation, verification, and bug fixing.
-- **REQ-274**: MUST make that block require validation against `pi.dev-src/pi-mono` when manifest or `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client interface behavior.
-- **REQ-275**: MUST make that block require validation against `pi.dev-src/pi-mono` for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
+- **REQ-274**: MUST make that block require validation against `pi.dev-src/` when manifest or `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client interface behavior.
+- **REQ-275**: MUST make that block require validation against `pi.dev-src/` for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
 - **REQ-035**: MUST parse repeatable `--enable-static-check LANG=Command,CMD[,PARAM...]` CLI options before command dispatch and merge resulting entries into persisted global checker lists.
 - **REQ-253**: MUST set `static-check.<language>.enabled=enable` whenever guided or CLI `--enable-static-check` entry creation targets that language.
 - **REQ-036**: MUST preserve existing global `static-check` checker entries, append non-duplicate `--enable-static-check` entries in argument order, and treat canonical language, module, cmd, and params as the duplicate identity.
@@ -467,8 +467,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-010**: MUST verify `tsconfig.json` declares `NodeNext`, `strict`, `noEmit`, and includes both `src/**/*.ts` and `tests/**/*.ts`.
 - **TST-011**: MUST verify pi.dev-aware prompt rendering injects a governance block only when the manifest exists and that the block marks `docs/` plus `pi.dev-src/` as read-only.
 - **TST-030**: MUST verify pi.dev-aware prompt rendering injects an explicit interface-contract mandate covering `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json`.
-- **TST-087**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/pi-mono` validation when manifest or `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client behavior.
-- **TST-088**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/pi-mono` validation for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
+- **TST-087**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/` validation when manifest or `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client behavior.
+- **TST-088**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/` validation for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
 - **TST-012**: MUST verify TypeScript CLI parity for standalone command-option regressions covering `--files-tokens`, `--files-summarize`, `--files-compress`, `--files-find`, `--test-static-check`, `--enable-line-numbers`, `--enable-static-check`, and `--verbose`.
 - **TST-013**: MUST verify TypeScript CLI parity for project-scoped command-option regressions covering `--summarize`, `--compress`, `--find`, `--tokens`, `--files-static-check`, and `--static-check`.
 - **TST-014**: MUST maintain an executable mapping from each imported command-option regression case to one TypeScript test case identifier and fail verification when any mapped case is missing.
