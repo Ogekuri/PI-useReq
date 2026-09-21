@@ -366,6 +366,12 @@ function createFakePi(options: FakePiOptions = {}) {
       const handlers = eventHandlers.get(name) ?? [];
       handlers.push(handler);
       eventHandlers.set(name, handlers);
+      return () => {
+        const handlerIndex = handlers.indexOf(handler);
+        if (handlerIndex !== -1) {
+          handlers.splice(handlerIndex, 1);
+        }
+      };
     },
     async emit(name: string, event: any, ctx: any) {
       for (const handler of eventHandlers.get(name) ?? []) {
@@ -4511,6 +4517,66 @@ test("worktree-backed closure defers the restore switch until agent_settled", as
     assert.equal(process.cwd(), projectBase);
     assert.equal(commandCtx.cwd, projectBase);
     assert.ok(fs.existsSync(path.join(projectBase, "src", "settled-closure.ts")));
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies matched-success worktree closure finalizes at `agent_end` on hosts without `agent_settled`.
+ * @details Simulates a legacy pi host whose lifecycle registration returns no unsubscribe function (so prompt-end finalization detects that `agent_settled` is unavailable) and whose `switchSession` never awaits an idle agent run. The test proves `agent_end` must restore `base-path`, merge the successful worktree branch, delete the worktree plus branch, and transition through `merging` to `idle` without requiring an `agent_settled` event. Runtime is dominated by temporary git worktree setup, commit creation, and prompt finalization. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after closure assertions complete.
+ * @throws {AssertionError} Throws when `agent_end` fails to finalize the worktree on a legacy host.
+ * @satisfies REQ-354, REQ-355, TST-132
+ */
+test("worktree-backed closure finalizes at agent_end when the host lacks agent_settled", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    // Override the registration contract after activation so the host appears
+    // to be a legacy runtime that never emits `agent_settled`.
+    pi.on = () => undefined;
+    const commandCtx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, commandCtx);
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", commandCtx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    const eventCtx = createFakeCtx(executionBasePath);
+    eventCtx.sessionManager.getSessionFile = () => commandCtx.sessionManager.getSessionFile() ?? "";
+    eventCtx.sessionManager.getSessionDir = () => path.dirname(commandCtx.sessionManager.getSessionFile() ?? "");
+    eventCtx.sessionManager.getCwd = () => executionBasePath;
+    eventCtx.cwd = executionBasePath;
+    delete eventCtx.switchSession;
+
+    await pi.emit("before_agent_start", {}, eventCtx);
+    await pi.emit("agent_start", {}, eventCtx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "legacy-closure.ts"), "export const LEGACY_CLOSURE = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/legacy-closure.ts"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const worktreeCommit = spawnSync("git", ["commit", "-m", "legacy closure"], {
+      cwd: executionBasePath,
+      encoding: "utf8",
+    });
+    assert.equal(worktreeCommit.status, 0, worktreeCommit.stderr);
+
+    // On a legacy host the finalization must run at agent_end directly, with
+    // no later agent_settled event needed.
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, eventCtx);
+
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(commandCtx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "legacy-closure.ts")));
     assert.equal(fs.existsSync(executionBasePath), false);
     assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {

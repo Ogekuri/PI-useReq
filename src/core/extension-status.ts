@@ -12,7 +12,7 @@ import type {
   ContextUsage,
   ExtensionContext,
   ThemeColor,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
 import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
 import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
@@ -126,6 +126,7 @@ export interface PiUsereqStatusState {
   pendingPromptRequest: PiUsereqPromptRequest | undefined;
   activePromptRequest: PiUsereqPromptRequest | undefined;
   pendingFinalizationOutcome: PiNotifyOutcome | undefined;
+  agentSettledEventSupported: boolean | undefined;
 }
 
 /**
@@ -683,6 +684,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       pendingPromptRequest: undefined,
       activePromptRequest: undefined,
       pendingFinalizationOutcome: undefined,
+      agentSettledEventSupported: undefined,
     },
     tickHandle: undefined,
   };

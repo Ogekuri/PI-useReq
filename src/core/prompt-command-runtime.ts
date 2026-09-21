@@ -28,7 +28,7 @@ import {
   setRuntimeGitPath,
   setRuntimeWorktreePathState,
 } from "./path-context.js";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 import {
   clearPersistedPromptCommandSessionContext,
@@ -1945,11 +1945,11 @@ export async function finalizePromptCommandExecution(
 /**
  * @brief Maps one `agent_end` payload into the canonical prompt-worktree finalization outcome.
  * @details Delegates to the shared notification outcome classifier so worktree merge and fork-session retention decisions stay aligned with prompt-end notification routing. Runtime is O(m) in assistant message count. No external state is mutated.
- * @param[in] event {Pick<import("@mariozechner/pi-coding-agent").AgentEndEvent, "messages">} Agent-end payload subset.
+ * @param[in] event {Pick<import("@earendil-works/pi-coding-agent").AgentEndEvent, "messages">} Agent-end payload subset.
  * @return {PiNotifyOutcome} Canonical prompt-end outcome.
  */
 export function classifyPromptCommandOutcome(
-  event: Pick<import("@mariozechner/pi-coding-agent").AgentEndEvent, "messages">,
+  event: Pick<import("@earendil-works/pi-coding-agent").AgentEndEvent, "messages">,
 ): PiNotifyOutcome {
   return classifyPiNotifyOutcome(event);
 }

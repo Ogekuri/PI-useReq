@@ -62,19 +62,26 @@ test("prompt rendering injects the bundled read-only git instruction when auto g
   assert.doesNotMatch(rendered, /%%COMMIT%%/);
 });
 
-test("pi.dev-aware prompts inject read-only governance and interface-contract mandates when the manifest exists", () => {
+test("pi.dev-aware prompts inject read-only governance and interface-contract mandates when the coding-agent-docs tree exists", () => {
   ensureBundledResourcesAccessible();
   const projectBase = process.cwd();
   const config = getDefaultConfig(projectBase);
   const rendered = renderPrompt("new", "Add pi integration guidance", projectBase, config);
   assert.match(rendered, /Treat every path under `docs\/` as read-only/);
-  assert.match(rendered, /do NOT modify `docs\/pi\.dev\/agent-document-manifest\.json` or any other documentation file\./);
+  assert.match(rendered, /do NOT modify any documentation file, including those under `docs\/pi\.dev\/`\./);
   assert.match(rendered, /Treat every path under `pi\.dev-src\/` as read-only/);
   assert.match(rendered, /do NOT modify `pi\.dev-src\/pi-mono` or any other pi client source\./);
-  assert.match(rendered, /read `docs\/pi\.dev\/agent-document-manifest\.json` and every document path it references/);
-  assert.match(rendered, /`docs\/pi\.dev\/coding-agent-docs\/` and documents referenced by `docs\/pi\.dev\/agent-document-manifest\.json` as the authoritative read-only interface contract/);
+  assert.match(rendered, /review `docs\/pi\.dev\/coding-agent-docs\/` before analysis, implementation, verification, or bug fixing\./);
+  assert.match(rendered, /`docs\/pi\.dev\/coding-agent-docs\/` as the authoritative read-only interface contract/);
   assert.match(rendered, /new or modified pi\.dev CLI integrations MUST comply with the APIs they describe\./);
-  assert.match(rendered, /Treat manifest document paths as relative to `docs\/pi\.dev\/`/);
+});
+
+test("pi.dev-aware prompts treat the optional manifest as part of the read-only interface contract when present", () => {
+  ensureBundledResourcesAccessible();
+  const projectBase = process.cwd();
+  const config = getDefaultConfig(projectBase);
+  const rendered = renderPrompt("new", "Add pi integration guidance", projectBase, config);
+  assert.match(rendered, /If `docs\/pi\.dev\/agent-document-manifest\.json` exists under `docs\/pi\.dev\/`, treat every document path it references as part of the read-only interface contract\./);
 });
 
 test("pi.dev-aware prompts require pi client source validation for ambiguous or bug-fix interface work", () => {
@@ -82,21 +89,21 @@ test("pi.dev-aware prompts require pi client source validation for ambiguous or 
   const projectBase = process.cwd();
   const config = getDefaultConfig(projectBase);
   const rendered = renderPrompt("new", "Add pi integration guidance", projectBase, config);
-  assert.match(rendered, /If manifest or `docs\/pi\.dev\/coding-agent-docs\/` guidance is ambiguous for extension-to-pi-client interface behavior, validate the produced source code by analyzing `pi\.dev-src\/pi-mono`\./);
+  assert.match(rendered, /If `docs\/pi\.dev\/coding-agent-docs\/` guidance is ambiguous for extension-to-pi-client interface behavior, validate the produced source code by analyzing `pi\.dev-src\/pi-mono`\./);
   assert.match(rendered, /For bug fixes or problem resolution influenced by extension-to-pi-client interface implementations, validate the produced source code by analyzing `pi\.dev-src\/pi-mono`\./);
 });
 
-test("pi.dev-aware prompts stay unchanged when the manifest is absent", () => {
+test("pi.dev-aware prompts stay unchanged when the coding-agent-docs tree is absent", () => {
   ensureBundledResourcesAccessible();
   const projectBase = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-prompts-"));
   try {
     const config = getDefaultConfig(projectBase);
     const rendered = renderPrompt("new", "Add pi integration guidance", projectBase, config);
-    assert.doesNotMatch(rendered, /docs\/pi\.dev\/agent-document-manifest\.json/);
+    assert.doesNotMatch(rendered, /docs\/pi\.dev\/coding-agent-docs/);
     assert.doesNotMatch(rendered, /authoritative read-only interface contract/);
     assert.doesNotMatch(rendered, /Treat every path under `docs\/` as read-only/);
     assert.doesNotMatch(rendered, /pi\.dev-src\/pi-mono/);
-    assert.doesNotMatch(rendered, /Treat manifest document paths as relative to `docs\/pi\.dev\/`/);
+    assert.doesNotMatch(rendered, /agent-document-manifest\.json/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

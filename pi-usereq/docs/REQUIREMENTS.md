@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.79"
-date: "2026-07-13"
+version: "0.0.80"
+date: "2026-09-21"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -124,7 +124,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-053**: MUST make `session-start` invoke all registered `session_start` handlers and capture final active tools, statuses, notifications, editor text, and sent user messages.
 - **REQ-054**: MUST make `command` invoke the named registered command handler with supplied args and capture sent user messages plus UI side effects in the result payload.
 - **REQ-055**: MUST make `tool` invoke the named registered tool `execute` handler with supplied params and capture returned `content`, returned `details`, and UI side effects.
-- **REQ-056**: MUST make `sdk-smoke` use `DefaultResourceLoader` and `createAgentSession(...)` to load an explicit extension path and inventory extension-owned commands and tools from the official runtime.
+- **REQ-056**: MUST make `sdk-smoke` use `DefaultResourceLoader` plus `createAgentSession(...)` with the 0.80.4+ `authPath` and `modelsPath` options to inventory extension-owned commands and tools from the official runtime.
 - **REQ-057**: MUST compare offline and SDK inventories for command names, command descriptions, tool names, tool descriptions, parameter-schema presence, normalized provenance/sourceInfo, and active tools after `session_start`.
 - **REQ-058**: MUST exit with non-zero status when a requested harness command or tool is not registered or when SDK parity loading fails.
 - **REQ-059**: MUST expose package scripts `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
@@ -360,12 +360,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-318**: MUST make the `pi-usereq` menu expose `Show global configuration`, save pending local and global config, close the active menu tree, and then write persisted `~/.config/pi-usereq/config.json` text to the editor.
 - **REQ-162**: MUST render the `show-local-config` current value as the `~`-relative local config path using the settings-list `dim` value style.
 - **REQ-319**: MUST render the `show-global-config` current value as the `~`-relative global config path using the settings-list `dim` value style.
-- **REQ-032**: MUST inject a pi.dev governance block into rendered prompts when `docs/pi.dev/agent-document-manifest.json` exists under the project base.
-- **REQ-033**: MUST make that block require manifest-guided document review before implementing or changing extension code that interfaces with the pi.dev CLI.
-- **REQ-034**: MUST make that block require manifest-guided document review before analyzing, verifying, or fixing extension code that interfaces with the pi.dev CLI.
-- **REQ-108**: MUST make that block require interface-contract compliance with `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json` for new or modified pi.dev CLI integrations.
+- **REQ-032**: MUST inject a pi.dev governance block into rendered prompts when `docs/pi.dev/coding-agent-docs/` exists under the project base, without requiring the manifest file.
+- **REQ-033**: MUST make that block require `docs/pi.dev/coding-agent-docs/`-guided document review before implementing or changing extension code that interfaces with the pi.dev CLI.
+- **REQ-034**: MUST make that block require such document review before analyzing, verifying, or fixing extension code that interfaces with the pi.dev CLI.
+- **REQ-108**: MUST make that block require interface-contract compliance with `docs/pi.dev/coding-agent-docs/` and, when the manifest exists, with documents it references for new or modified pi.dev CLI integrations.
 - **REQ-273**: MUST make that block declare every path under `docs/` and `pi.dev-src/` read-only for analysis, implementation, verification, and bug fixing.
-- **REQ-274**: MUST make that block require validation against `pi.dev-src/` when manifest or `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client interface behavior.
+- **REQ-274**: MUST make that block require validation against `pi.dev-src/` when `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client interface behavior.
 - **REQ-275**: MUST make that block require validation against `pi.dev-src/` for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
 - **REQ-035**: MUST parse repeatable `--enable-static-check LANG=Command,CMD[,PARAM...]` CLI options before command dispatch and merge resulting entries into persisted global checker lists.
 - **REQ-253**: MUST set `static-check.<language>.enabled=enable` whenever guided or CLI `--enable-static-check` entry creation targets that language.
@@ -423,6 +423,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-350**: MUST substitute the `%%INSTALLATION_PATH%%` keyword with the runtime extension installation path inside static-check `Command` `cmd` fields before executable resolution and execution.
 - **REQ-351**: MUST resolve bundled static-check executables from the extension installation `node_modules/.bin` so default configuration requires no target-project module installation.
 - **REQ-352**: MUST best-effort approve pending npm install scripts for bundled checker dependencies during extension install or run so embedded checkers execute without manual approval.
+- **REQ-354**: MUST defer matched-success worktree closure finalization to the `agent_settled` event when the running pi host supports it, and MUST execute that finalization at `agent_end` when the host does not emit `agent_settled`.
+- **REQ-355**: MUST detect `agent_settled` availability on the running pi host from whether pi lifecycle event registration returns an unsubscribe function.
+- **REQ-356**: MUST make the `sdk-smoke` probe pass the 0.80.4+ `authPath` and `modelsPath` `createAgentSession` options and detect support for the new event surface (`agent_settled`, `project_trust`, `session_info_changed`, `session_compact_failed`, `before_provider_headers`, `after_provider_response`, `ui_prompt_start`, `ui_prompt_end`, `thinking_level_select`).
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -465,9 +468,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-043**: MUST verify configuration menus reuse the active CLI settings-list theme semantics for labels, values, descriptions, cursor, and hints.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
 - **TST-010**: MUST verify `tsconfig.json` declares `NodeNext`, `strict`, `noEmit`, and includes both `src/**/*.ts` and `tests/**/*.ts`.
-- **TST-011**: MUST verify pi.dev-aware prompt rendering injects a governance block only when the manifest exists and that the block marks `docs/` plus `pi.dev-src/` as read-only.
-- **TST-030**: MUST verify pi.dev-aware prompt rendering injects an explicit interface-contract mandate covering `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json`.
-- **TST-087**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/` validation when manifest or `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client behavior.
+- **TST-011**: MUST verify pi.dev-aware prompt rendering injects a governance block only when `docs/pi.dev/coding-agent-docs/` exists and that the block marks `docs/` plus `pi.dev-src/` as read-only.
+- **TST-030**: MUST verify pi.dev-aware prompt rendering injects an explicit interface-contract mandate covering `docs/pi.dev/coding-agent-docs/`, with manifest-referenced documents as an optional addition when the manifest exists.
+- **TST-087**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/` validation when `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client behavior.
 - **TST-088**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/` validation for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
 - **TST-012**: MUST verify TypeScript CLI parity for standalone command-option regressions covering `--files-tokens`, `--files-summarize`, `--files-compress`, `--files-find`, `--test-static-check`, `--enable-line-numbers`, `--enable-static-check`, and `--verbose`.
 - **TST-013**: MUST verify TypeScript CLI parity for project-scoped command-option regressions covering `--summarize`, `--compress`, `--find`, `--tokens`, `--files-static-check`, and `--static-check`.
@@ -477,7 +480,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-017**: MUST verify every archive-backed scenario required by `REQ-042` and `REQ-043` has a committed expected-result fixture file before executing TypeScript output comparisons.
 - **TST-018**: MUST verify offline harness inspection and session-start replay capture registered commands, registered tools, event handlers, active tools, statuses, notifications, editor text, and sent user messages.
 - **TST-019**: MUST verify offline harness command and tool replay invoke registered handlers, preserve requested cwd semantics, and capture prompt payloads, tool results, and UI side effects.
-- **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, and `package.json` declares the `debug:ext*` harness scripts.
+- **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, validates the 0.80.4+ `createAgentSession` options plus new event surface, and `package.json` declares the `debug:ext*` harness scripts.
 - **TST-021**: MUST verify `scripts/pi-usereq-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
 - **TST-022**: MUST verify `files-summarize` and `summarize` agent-tool outputs place monolithic summary markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
 - **TST-023**: MUST verify harness inspection surfaces `files-summarize` and `summarize` descriptions covering scope, monolithic markdown output, and failure details.
@@ -546,6 +549,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-120**: MUST verify `%%CONTEXT_FILES%%` sections use the file-name heading, the pre-substituted HTML file reference, and four-backtick `markdown` fences around raw content.
 - **TST-122**: MUST verify the command invocation summary renders `none` for `context files`, `static code checks`, and `enabled tools` when no items are enabled in each respective category.
 - **TST-131**: MUST verify the command invocation summary renders sections in the order `Command:`, `Configuration:`, then `User's Request:`, with one blank line between consecutive sections.
+- **TST-132**: MUST verify that when the running pi host does not expose `agent_settled`, matched-success worktree closure finalizes at `agent_end` and transitions through `merging` to `idle`.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
 - **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.
@@ -569,9 +573,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 
 ### 5.2 Libraries and Runtime Dependencies
-- `@mariozechner/pi-coding-agent` provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
-- `@mariozechner/pi-ai` is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
-- `@mariozechner/pi-tui` is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-coding-agent` (>=0.80.4) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
+- `@earendil-works/pi-ai` (>=0.80.4) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-tui` (>=0.80.4) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
 - `@sinclair/typebox` provides runtime tool parameter schemas and is declared as a peer dependency evidenced by `src/index.ts`, `package.json`, and `package-lock.json`.
 - `js-tiktoken` provides token counting evidence in `src/core/token-counter.ts`, `package.json`, and `package-lock.json`.
 - `fast-glob` provides wildcard expansion for static-check inputs evidence in `src/core/static-check.ts`, `package.json`, and `package-lock.json`.

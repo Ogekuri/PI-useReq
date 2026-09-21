@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Renders bundled pi-usereq prompts for the current project context.
- * @details Applies placeholder substitution, legacy tool-name rewrites, and conditional pi.dev governance guidance before prompt text is sent to the agent. Runtime is linear in prompt size plus replacement count. Side effects are limited to filesystem reads used for manifest checks and bundled prompt loading.
+ * @details Applies placeholder substitution, legacy tool-name rewrites, and conditional pi.dev governance guidance before prompt text is sent to the agent. Runtime is linear in prompt size plus replacement count. Side effects are limited to filesystem reads used for the coding-agent-docs directory check and bundled prompt loading.
  */
 
 import fs from "node:fs";
@@ -61,8 +61,8 @@ const PI_DEV_AWARE_PROMPT_NAMES = new Set<string>([
   "refactor",
 ]);
 /**
- * @brief Stores the repository-relative pi.dev manifest path used in prompt guidance.
- * @details The constant lets rendered prompts cite the authoritative documentation manifest with a deterministic path. Lookup complexity is O(1).
+ * @brief Stores the repository-relative optional pi.dev manifest path used in prompt guidance.
+ * @details The constant lets rendered prompts cite the authoritative documentation manifest when present with a deterministic path. The governance block is not gated on this file; it is an optional contract source. Lookup complexity is O(1).
  */
 const PI_DEV_MANIFEST_PROMPT_PATH = "docs/pi.dev/agent-document-manifest.json";
 /**
@@ -82,37 +82,36 @@ const PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH = `${PI_DEV_DOCS_PROMPT_PATH}/coding-
 const PI_DEV_SOURCE_PROMPT_PATH = "pi.dev-src/pi-mono";
 /**
  * @brief Defines the injected pi.dev governance guidance block.
- * @details The block requires read-only handling for documentation and pi client sources, manifest-first review, coding-agent-document compliance, and pi client source validation for ambiguous or bug-fix interface work. Construction happens once at module load. Access complexity is O(1).
+ * @details The block requires read-only handling for documentation and pi client sources, coding-agent-document review, coding-agent-document compliance, optional manifest-referenced document handling, and pi client source validation for ambiguous or bug-fix interface work. Construction happens once at module load. Access complexity is O(1).
  * @satisfies REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
  */
 const PI_DEV_CONFORMANCE_BLOCK = [
   "- Treat every path under `docs/` as read-only; do NOT modify "
-    + `\`${PI_DEV_MANIFEST_PROMPT_PATH}\` or any other documentation file.`,
+    + "any documentation file, including those under `docs/pi.dev/`.",
   "- Treat every path under `pi.dev-src/` as read-only; do NOT modify "
     + `\`${PI_DEV_SOURCE_PROMPT_PATH}\` or any other pi client source.`,
   "- If the task creates or modifies software that interfaces with the "
-    + `pi.dev CLI, read \`${PI_DEV_MANIFEST_PROMPT_PATH}\` and every `
-    + "document path it references before analysis, implementation, "
-    + "verification, or bug fixing.",
-  `- Treat \`${PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH}/\` and documents `
-    + `referenced by \`${PI_DEV_MANIFEST_PROMPT_PATH}\` as the `
+    + `pi.dev CLI, review \`${PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH}/\` `
+    + "before analysis, implementation, verification, or bug fixing.",
+  `- Treat \`${PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH}/\` as the `
     + "authoritative read-only interface contract; new or modified "
     + "pi.dev CLI integrations MUST comply with the APIs they describe.",
-  `- Treat manifest document paths as relative to \`${PI_DEV_DOCS_PROMPT_PATH}/\`.`,
-  "- If manifest or "
-    + `\`${PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH}/\` guidance is `
+  `- If \`${PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH}/\` guidance is `
     + "ambiguous for extension-to-pi-client interface behavior, validate "
     + `the produced source code by analyzing \`${PI_DEV_SOURCE_PROMPT_PATH}\`.`,
   "- For bug fixes or problem resolution influenced by extension-to-pi-client "
     + "interface implementations, validate the produced source code by "
     + `analyzing \`${PI_DEV_SOURCE_PROMPT_PATH}\`.`,
+  `- If \`${PI_DEV_MANIFEST_PROMPT_PATH}\` exists under \`${PI_DEV_DOCS_PROMPT_PATH}/\`, `
+    + "treat every document path it references as part of the read-only "
+    + "interface contract.",
 ].join("\n");
 
 /**
  * @brief Builds the conditional pi.dev governance block for one rendered prompt.
- * @details Emits the manifest-driven governance rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the pi.dev manifest. Time complexity O(1). No filesystem writes.
+ * @details Emits the coding-agent-document-driven governance rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the `docs/pi.dev/coding-agent-docs/` directory; the manifest file is optional and its absence does not suppress the block. Time complexity O(1). No filesystem writes.
  * @param[in] promptName {string} Bundled prompt identifier.
- * @param[in] projectBase {string} Absolute project root used for manifest existence checks.
+ * @param[in] projectBase {string} Absolute project root used for coding-agent-docs directory existence checks.
  * @return {string} Markdown bullet block or the empty string when injection is not applicable.
  * @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
  */
@@ -120,8 +119,8 @@ function buildPiDevConformanceBlock(promptName: string, projectBase: string): st
   if (!PI_DEV_AWARE_PROMPT_NAMES.has(promptName)) {
     return "";
   }
-  const manifestPath = path.join(projectBase, PI_DEV_MANIFEST_PROMPT_PATH);
-  if (!fs.existsSync(manifestPath) || !fs.statSync(manifestPath).isFile()) {
+  const codingAgentDocsPath = path.join(projectBase, PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH);
+  if (!fs.existsSync(codingAgentDocsPath) || !fs.statSync(codingAgentDocsPath).isDirectory()) {
     return "";
   }
   return PI_DEV_CONFORMANCE_BLOCK;
@@ -132,7 +131,7 @@ function buildPiDevConformanceBlock(promptName: string, projectBase: string): st
  * @details Inserts the block immediately after the `## Behavior` heading so downstream agents evaluate the rule before workflow steps. Leaves prompts unchanged when no behavior section exists or the block is already present. Time complexity O(n).
  * @param[in] text {string} Prompt markdown after placeholder replacement.
  * @param[in] promptName {string} Bundled prompt identifier.
- * @param[in] projectBase {string} Absolute project root used for manifest existence checks.
+ * @param[in] projectBase {string} Absolute project root used for coding-agent-docs directory existence checks.
  * @return {string} Prompt markdown with zero or one injected conformance block.
  * @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
  */

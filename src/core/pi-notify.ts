@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import * as https from "node:https";
-import type { AgentEndEvent } from "@mariozechner/pi-coding-agent";
+import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
 import { getInstallationPath, normalizePathSlashes } from "./path-context.js";
 import type { UseReqConfig } from "./config.js";
 

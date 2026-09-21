@@ -1,11 +1,27 @@
 # Changelog
 
+## [0.52.0](https://github.com/Ogekuri/PI-useReq/compare/v0.51.0..v0.52.0) - 2026-09-21
+### 🚜  Changes
+- re-gate pi.dev governance on coding-agent-docs and finalize worktree closure capability-aware [useReq] *(prompts, orchestration)*
+  - Gate the pi.dev governance block on `docs/pi.dev/coding-agent-docs/` existing
+    (manifest optional) and reword the block so it never requires the manifest.
+  - Make worktree finalization capability-aware: defer matched-success closure to
+    `agent_settled` on 0.80.4+ hosts and execute it at `agent_end` on legacy hosts
+    that never emit the event, avoiding the parked `merging` state and unrecovered
+    worktrees.
+  - Align peer dependencies and source imports to the `@earendil-works` scope at
+    `>=0.80.4`, fix the misleading `pi 0.67.1+` references to `pi 0.80.4+`, and
+    extend the SDK-parity probe with the new `createAgentSession` options plus the
+    new event surface.
+  - Satisfies REQ-032/033/034/108/274/275, REQ-056, REQ-354/355/356 and
+    TST-011/020/030/087/132.
+
 ## [0.51.0](https://github.com/Ogekuri/PI-useReq/compare/v0.50.0..v0.51.0) - 2026-09-18
 ### 🐛  Bug Fixes
 - Fix PI source files.
 - Fix PI source files.
 - defer worktree finalization to agent_settled [useReq] *(prompt-orchestration)*
-  - pi 0.67.1+ switchSession awaits the active agent run to become idle via
+  - pi 0.80.4+ switchSession awaits the active agent run to become idle via
   - session.abort()/waitForIdle(), which deadlocks when invoked from the
   - agent_end handler because the run stays active until agent_settled.
   - Move the matched-success restore/merge/worktree-delete into a new

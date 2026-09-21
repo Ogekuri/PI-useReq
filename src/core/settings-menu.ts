@@ -4,8 +4,8 @@
  * @details Wraps `SettingsList` in one extension-command helper that exposes right-aligned current values, built-in circular scrolling, bottom-line descriptions, and a deterministic bridge for offline test harnesses. Runtime is O(n) in visible choice count plus user interaction cost. Side effects are limited to transient custom-UI rendering.
  */
 
-import { getSettingsListTheme, type ThemeColor, type ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import { Container, SettingsList, Text, type Component, type SettingItem, type SettingsListTheme } from "@mariozechner/pi-tui";
+import { getSettingsListTheme, type ThemeColor, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { Container, SettingsList, Text, type Component, type SettingItem, type SettingsListTheme } from "@earendil-works/pi-tui";
 
 /**
  * @brief Describes one selectable pi-usereq settings-menu choice.
