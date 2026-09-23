@@ -195,8 +195,131 @@ function listReqResetMatchingBranchNames(
 }
 
 /**
+ * @brief Resolves the main repository worktree root for one git path.
+ * @details Runs `git rev-parse --path-format=absolute --git-common-dir` from the supplied path, treats a common-directory result whose basename is `.git` as proof that its parent is the main repository worktree root, and falls back to the supplied root when git probing fails or the repository layout is non-standard. This keeps all `req-reset` cleanup probes anchored to the main repository even when the live pi session cwd is inside a linked worktree. Runtime is dominated by one git subprocess plus O(1) path math. Side effects include subprocess creation.
+ * @param[in] gitRoot {string} Absolute git worktree root used as probing cwd.
+ * @return {string} Absolute main repository worktree root.
+ */
+function resolveReqResetMainWorktreeRoot(gitRoot: string): string {
+  const normalizedGitRoot = path.resolve(gitRoot);
+  const commonDirResult = runCapture(
+    ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    normalizedGitRoot,
+  );
+  if (commonDirResult.error || commonDirResult.status !== 0) {
+    return normalizedGitRoot;
+  }
+  const commonDirPath = path.resolve(commonDirResult.stdout.trim());
+  return path.basename(commonDirPath) === ".git"
+    ? path.dirname(commonDirPath)
+    : normalizedGitRoot;
+}
+
+/**
+ * @brief Resolves the repository main branch name used by `req-reset` cleanup.
+ * @details Prefers the local branch referenced by `refs/remotes/origin/HEAD` with the leading remote `origin/` prefix stripped, then conventional local `main`, then local `master`, and returns `undefined` when no candidate exists locally so callers skip branch switching without losing cleanup facts. Runtime is dominated by up to three git subprocesses. Side effects include subprocess creation.
+ * @param[in] gitRoot {string} Absolute main repository worktree root.
+ * @return {string | undefined} Local main branch name or `undefined` when unresolvable.
+ */
+function resolveReqResetMainBranchName(gitRoot: string): string | undefined {
+  const symbolicHeadResult = runCapture(
+    ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    gitRoot,
+  );
+  const originCandidate = symbolicHeadResult.error || symbolicHeadResult.status !== 0
+    ? undefined
+    : symbolicHeadResult.stdout.trim();
+  for (const candidate of [
+    originCandidate?.startsWith("origin/") === true
+      ? originCandidate.slice("origin/".length)
+      : originCandidate,
+    "main",
+    "master",
+  ]) {
+    if (candidate === undefined || candidate === "" || candidate === "." || candidate === "..") {
+      continue;
+    }
+    const verifyResult = runCapture(
+      ["git", "show-ref", "--verify", "--quiet", `refs/heads/${candidate}`],
+      gitRoot,
+    );
+    if (!verifyResult.error && verifyResult.status === 0) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * @brief Ensures the main repository HEAD stays on the main branch before cleanup.
+ * @details Reads the current local branch of the main repository; when HEAD is checked out on a generated prompt-command branch that matches the cleanup matcher, resolves the repository main branch and switches to it so later forced branch deletion cannot fail with git's checked-out-worktree guard. Normal branches, detached HEAD, unresolvable main branches, and probing failures skip the switch defensively. Runtime is dominated by up to two git subprocesses. Side effects include main-worktree branch switching.
+ * @param[in] gitRoot {string} Absolute main repository worktree root.
+ * @param[in] worktreeNamePattern {RegExp} Generated-worktree name matcher.
+ * @return {void} No return value.
+ * @throws {ReqError} Throws when the main worktree cannot switch off one generated branch.
+ * @satisfies REQ-309, REQ-310
+ */
+function ensureReqResetMainBranch(gitRoot: string, worktreeNamePattern: RegExp): void {
+  const currentBranchResult = runCapture(["git", "branch", "--show-current"], gitRoot);
+  if (currentBranchResult.error || currentBranchResult.status !== 0) {
+    return;
+  }
+  const currentBranch = currentBranchResult.stdout.trim();
+  if (currentBranch === "" || !worktreeNamePattern.test(currentBranch)) {
+    return;
+  }
+  const mainBranchName = resolveReqResetMainBranchName(gitRoot);
+  if (mainBranchName === undefined || mainBranchName === currentBranch) {
+    return;
+  }
+  const switchResult = runCapture(["git", "switch", mainBranchName], gitRoot);
+  if (switchResult.error || switchResult.status !== 0) {
+    const diagnostic = switchResult.stderr.trim()
+      || switchResult.stdout.trim()
+      || switchResult.error?.message
+      || `Unable to switch ${mainBranchName}.`;
+    throw new ReqError(`ERROR: git switch failed for ${mainBranchName}: ${diagnostic}`, 1);
+  }
+}
+
+/**
+ * @brief Restores live process and context cwd surfaces after worktree removal.
+ * @details Best-effort re-points `process.cwd()` and the supplied context `cwd` mirror to the main repository base path when the previously live cwd was removed by `req-reset` cleanup, so subsequent status rendering and notifications never probe deleted worktree paths. Runtime is O(1) plus bounded filesystem probes. Side effects include process cwd mutation and optional context mirror mutation.
+ * @param[in] basePath {string} Absolute main repository base path.
+ * @param[in,out] activeContext {ReqResetCommandContext | undefined} Mutated session context mirror.
+ * @return {void} No return value.
+ */
+function restoreReqResetExecutionCwd(basePath: string, activeContext: ReqResetCommandContext | undefined): void {
+  const normalizedBasePath = path.resolve(basePath);
+  let processCwd = "";
+  try {
+    processCwd = path.resolve(process.cwd());
+  } catch (error) {
+    // Deleted process cwd after worktree removal.
+  }
+  if (processCwd === "" || !fs.existsSync(processCwd)) {
+    try {
+      process.chdir(normalizedBasePath);
+    } catch (error) {
+      // Best-effort; cleanup facts remain authoritative.
+    }
+  }
+  if (activeContext === undefined) {
+    return;
+  }
+  try {
+    const contextCwd = typeof activeContext.cwd === "string" ? path.resolve(activeContext.cwd) : "";
+    if (contextCwd !== normalizedBasePath && (contextCwd === "" || !fs.existsSync(contextCwd))) {
+      Reflect.set(activeContext, "cwd", normalizedBasePath);
+    }
+  } catch (error) {
+    // Best-effort context mirror mutation.
+  }
+}
+
+/**
  * @brief Prepares the specialized `req-reset` execution plan.
- * @details Resolves the active project base into a runtime git root, derives the sibling-worktree parent directory and generated-name matcher from the same prefix plus repository-basename contract used by prompt-command worktree generation, and keeps only worktree-backed persisted prompt execution plans for transcript-preserving base-path restoration. Runtime is O(p) in path length. No external state is mutated.
+ * @details Resolves the active project base into a runtime git root, normalizes that root to the main repository worktree so cleanup and branch checks never run from inside a linked worktree, derives the sibling-worktree parent directory and generated-name matcher from the same prefix plus repository-basename contract used by prompt-command worktree generation, and keeps only worktree-backed persisted prompt execution plans for transcript-preserving base-path restoration. Runtime is O(p) in path length plus one git subprocess. No external state is mutated.
  * @param[in] projectBase {string} Absolute project base path.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] promptRequest {PromptCommandExecutionPlan | undefined} Pending or active prompt execution plan when available.
@@ -215,23 +338,25 @@ export function prepareReqResetCommandExecution(
     throw new ReqError("ERROR: Unable to resolve git repository for req-reset.", 1);
   }
   const normalizedGitPath = path.resolve(gitPath);
+  const mainGitPath = resolveReqResetMainWorktreeRoot(normalizedGitPath);
+  const mainBasePath = path.join(mainGitPath, path.relative(normalizedGitPath, basePath));
   const resetPromptRequest = promptRequest?.worktreeDir
     && promptRequest.worktreeRootPath
     && promptRequest.worktreePath
     ? promptRequest
     : undefined;
   return {
-    basePath,
-    gitPath: normalizedGitPath,
-    parentPath: path.resolve(normalizedGitPath, ".."),
-    worktreeNamePattern: buildReqResetWorktreeNamePattern(normalizedGitPath, config),
+    basePath: mainBasePath,
+    gitPath: mainGitPath,
+    parentPath: path.resolve(mainGitPath, ".."),
+    worktreeNamePattern: buildReqResetWorktreeNamePattern(mainGitPath, config),
     promptRequest: resetPromptRequest,
   };
 }
 
 /**
  * @brief Executes the specialized `req-reset` recovery and cleanup workflow.
- * @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, worktree deletion, branch deletion, and filesystem reads.
+ * @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
  * @param[in] plan {ReqResetCommandPlan} Prepared recovery and cleanup plan.
  * @param[in] ctx {ReqResetCommandContext | undefined} Optional session-bound command context.
  * @return {Promise<ReqResetCommandExecutionResult>} Recovery and cleanup outcome facts.
@@ -269,6 +394,12 @@ export async function executeReqResetCommandExecution(
         errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  try {
+    ensureReqResetMainBranch(plan.gitPath, plan.worktreeNamePattern);
+  } catch (error) {
+    errorMessages.push(error instanceof Error ? error.message : String(error));
   }
 
   let matchingWorktreeRoots: string[] = [];
@@ -309,6 +440,8 @@ export async function executeReqResetCommandExecution(
   } catch (error) {
     errorMessages.push(error instanceof Error ? error.message : String(error));
   }
+
+  restoreReqResetExecutionCwd(plan.basePath, activeContext);
 
   return {
     activeContext,

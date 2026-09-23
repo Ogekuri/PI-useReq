@@ -2888,6 +2888,160 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
   }
 });
 
+/**
+ * @brief Verifies `req-reset` switches the main worktree off generated branches before cleanup.
+ * @details Prepares one fixture repository whose main worktree HEAD is left checked out on a generated prompt-command branch while a second generated worktree plus branch remains pending, invokes `req-reset`, and verifies the command switches the main worktree back to the repository main branch first so both generated branches and the pending worktree are force-removed without git's checked-out-worktree rejection. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after main-branch recovery assertions complete.
+ * @throws {AssertionError} Throws when `req-reset` leaves generated branch cleanup blocked, fails to restore the main branch, or reports a failed reset.
+ * @satisfies TST-106
+ */
+test("req-reset switches the main worktree off generated branches before removing pending worktrees", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  const parentPath = path.resolve(projectBase, "..");
+  const projectName = path.basename(projectBase);
+  const headBranchName = `PI-useReq-${projectName}-master-20260923165510`;
+  const pendingBranchName = `PI-useReq-${projectName}-master-20260923165520`;
+  const pendingWorktreeRoot = path.join(parentPath, pendingBranchName);
+  try {
+    const headBranchCreate = spawnSync("git", ["branch", headBranchName], { cwd: projectBase, encoding: "utf8" });
+    assert.equal(headBranchCreate.status, 0, headBranchCreate.stderr);
+    const headSwitch = spawnSync("git", ["switch", headBranchName], { cwd: projectBase, encoding: "utf8" });
+    assert.equal(headSwitch.status, 0, headSwitch.stderr);
+    const pendingWorktreeAdd = spawnSync(
+      "git",
+      ["worktree", "add", pendingWorktreeRoot, "-b", pendingBranchName],
+      { cwd: projectBase, encoding: "utf8" },
+    );
+    assert.equal(pendingWorktreeAdd.status, 0, pendingWorktreeAdd.stderr);
+    assert.equal(
+      spawnSync("git", ["branch", "--show-current"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
+      headBranchName,
+    );
+
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-reset")!.handler("", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.equal(fs.existsSync(pendingWorktreeRoot), false);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${headBranchName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      1,
+    );
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${pendingBranchName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      1,
+    );
+    assert.equal(
+      spawnSync("git", ["branch", "--show-current"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
+      "master",
+    );
+    assert.match(
+      spawnSync("git", ["worktree", "list", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout,
+      /^worktree /mu,
+    );
+    assert.equal(
+      spawnSync("git", ["worktree", "list", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout
+        .includes(path.resolve(pendingWorktreeRoot)),
+      false,
+    );
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)));
+    assert.ok(!ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "idle",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(pendingWorktreeRoot, { recursive: true, force: true });
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-reset` cleans generated worktrees when invoked from inside one.
+ * @details Prepares one fixture repository with one generated worktree plus branch, chdirs the host process into that worktree, invokes `req-reset` without any persisted prompt state, and verifies plan resolution normalizes to the main repository so the generated worktree and branch are force-removed, the deleted live cwd is restored to the main base path, and a success notification is emitted without error leftovers. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation, process cwd mutation, and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after main-repository normalization assertions complete.
+ * @throws {AssertionError} Throws when `req-reset` leaves generated worktree artifacts behind, fails to restore the live cwd, or reports a failed reset.
+ * @satisfies TST-106
+ */
+test("req-reset removes generated worktrees when invoked from inside a leftover worktree", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  const parentPath = path.resolve(projectBase, "..");
+  const projectName = path.basename(projectBase);
+  const generatedBranchName = `PI-useReq-${projectName}-master-20260923165519`;
+  const worktreeRoot = path.join(parentPath, generatedBranchName);
+  try {
+    const worktreeAdd = spawnSync(
+      "git",
+      ["worktree", "add", worktreeRoot, "-b", generatedBranchName],
+      { cwd: projectBase, encoding: "utf8" },
+    );
+    assert.equal(worktreeAdd.status, 0, worktreeAdd.stderr);
+
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(worktreeRoot);
+    process.chdir(worktreeRoot);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-reset")!.handler("", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.equal(fs.existsSync(worktreeRoot), false);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${generatedBranchName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      1,
+    );
+    assert.equal(
+      spawnSync("git", ["worktree", "list", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout
+        .includes(path.resolve(worktreeRoot)),
+      false,
+    );
+    assert.equal(path.resolve(process.cwd()), path.resolve(projectBase));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)));
+    assert.ok(!ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "idle",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(worktreeRoot, { recursive: true, force: true });
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("prompt commands skip worktree creation when auto git commit is disabled", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
