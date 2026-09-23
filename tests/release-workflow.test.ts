@@ -184,6 +184,33 @@ test(
   },
 );
 
+/**
+ * @brief Asserts both release-workflow jobs pin the Ubuntu 24.04 hosted-runner label.
+ * @details Reads `.github/workflows/release-npm.yml` through `readReleaseWorkflow` and asserts that every `runs-on:` declaration resolves to `ubuntu-24.04` while the floating `ubuntu-latest` label is absent. Guards the pipeline against the GitHub Ubuntu 26.04 `ubuntu-latest` re-target breaking change (migration window starting 2026-10-19) that fails compilation on Ubuntu 24.04-specific tooling. Deterministic and isolated; side effects limited to the read-only workflow document.
+ * @return {void} No return value.
+ * @satisfies TST-039
+ */
+test(
+  "release workflow pins both jobs to the ubuntu-24.04 runner label",
+  () => {
+    const workflow = readReleaseWorkflow();
+
+    const runOnDeclarations = workflow
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("runs-on:"));
+    assert.ok(
+      runOnDeclarations.length >= 2,
+      `expected per-job runs-on declarations, found: ${runOnDeclarations.join(", ")}`,
+    );
+    assert.ok(
+      runOnDeclarations.every((line) => line === "runs-on: ubuntu-24.04"),
+      `unexpected runner label: ${runOnDeclarations.join(", ")}`,
+    );
+    assert.doesNotMatch(workflow, /ubuntu-latest/u);
+  },
+);
+
 test(
   "package manifest keeps the npm publication name fixed to pi-usereq",
   assertFixedPackageName,
