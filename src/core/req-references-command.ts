@@ -117,6 +117,47 @@ function getGitAddTargetPath(gitRoot: string, absolutePath: string): string {
 }
 
 /**
+ * @brief Detects whether the git index holds staged differences for the given target paths.
+ * @details Executes `git diff --cached --quiet -- <paths>`; exit code `1` signals at least one staged difference, exit code `0` signals no staged difference for the target paths, and any other status or spawn failure is converted into a deterministic `ReqError`. Runtime is dominated by one git subprocess. Side effects include subprocess creation. No index or worktree mutation occurs.
+ * @param[in] gitRoot {string} Absolute git root path.
+ * @param[in] targetPaths {string[]} Git-add target paths inspected in the cached index.
+ * @return {boolean} `true` when at least one staged difference exists for the target paths.
+ * @throws {ReqError} Throws when staged-difference inspection fails.
+ * @satisfies REQ-357
+ */
+function hasStagedChangesForPaths(gitRoot: string, targetPaths: string[]): boolean {
+  const diffResult = runCapture(["git", "diff", "--cached", "--quiet", "--", ...targetPaths], gitRoot);
+  if (diffResult.error || diffResult.status === null || diffResult.status < 0 || diffResult.status > 1) {
+    throw new ReqError("ERROR: Unable to inspect staged changes before git commit.", 1);
+  }
+  return diffResult.status === 1;
+}
+
+/**
+ * @brief Executes one guarded `git commit` invocation for the staged target paths.
+ * @details Runs a staged-changes precheck against the cached index and returns without creating a commit when no staged difference exists for the target paths, preventing empty-commit failures such as `nothing to commit, working tree clean`. When a staged difference exists, delegates to `git commit -m <commitMessage>` and converts any non-zero result into a deterministic `ReqError`. Runtime is dominated by up to two git subprocesses. Side effects include subprocess creation and conditional commit creation.
+ * @param[in] gitRoot {string} Absolute git root path.
+ * @param[in] targetPaths {string[]} Git-add target paths inspected by the staged-changes precheck.
+ * @param[in] commitMessage {string} Commit message used when a staged difference exists.
+ * @return {void} No return value.
+ * @throws {ReqError} Throws when staged-difference inspection or commit creation fails.
+ * @satisfies REQ-357, REQ-358
+ */
+function runGuardedGitCommit(gitRoot: string, targetPaths: string[], commitMessage: string): void {
+  if (!hasStagedChangesForPaths(gitRoot, targetPaths)) {
+    return;
+  }
+  const commitResult = runCapture(["git", "commit", "-m", commitMessage], gitRoot);
+  if (commitResult.error || commitResult.status !== 0) {
+    const diagnostic = commitResult.stderr.trim()
+      || commitResult.stdout.trim()
+      || commitResult.error?.message
+      || "unknown error";
+    throw new ReqError(`ERROR: git commit failed: ${diagnostic}`, 1);
+  }
+}
+
+/**
  * @brief Prepares the specialized `req-references` execution plan.
  * @details Reuses slash-command-owned git validation, resolves the configured references document path, and returns the fixed commit metadata consumed by the direct-write workflow. Runtime is dominated by git validation subprocesses. Side effects include subprocess creation delegated through `validatePromptGitState(...)`.
  * @param[in] projectBase {string} Absolute project base path.
@@ -142,12 +183,12 @@ export function prepareReqReferencesCommandExecution(
 
 /**
  * @brief Executes the specialized `req-references` direct-write workflow.
- * @details Regenerates `REFERENCES.md` through the same source-summary path used by the `references` tool, stages only the target file, creates the fixed-message commit, and verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out. Runtime is dominated by summary generation plus three git subprocesses. Side effects include documentation writes, index mutation, commit creation, and subprocess creation.
+ * @details Regenerates `REFERENCES.md` through the same source-summary path used by the `references` tool, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, and verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out. Runtime is dominated by summary generation plus two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
  * @param[in] plan {ReqReferencesCommandPlan} Prepared direct-write execution plan.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {void} No return value.
- * @throws {ReqError} Throws when reference generation, staging, commit creation, or cleanliness verification fails.
- * @satisfies REQ-300, REQ-301, REQ-302, REQ-303
+ * @throws {ReqError} Throws when reference generation, staging, guarded commit creation, or cleanliness verification fails.
+ * @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358
  */
 export function executeReqReferencesCommandExecution(
   plan: ReqReferencesCommandPlan,
@@ -160,14 +201,7 @@ export function executeReqReferencesCommandExecution(
     const diagnostic = addResult.stderr.trim() || addResult.error?.message || "unknown error";
     throw new ReqError(`ERROR: git add failed for ${addTargetPath}: ${diagnostic}`, 1);
   }
-  const commitResult = runCapture(["git", "commit", "-m", plan.commitMessage], plan.gitPath);
-  if (commitResult.error || commitResult.status !== 0) {
-    const diagnostic = commitResult.stderr.trim()
-      || commitResult.stdout.trim()
-      || commitResult.error?.message
-      || "unknown error";
-    throw new ReqError(`ERROR: git commit failed: ${diagnostic}`, 1);
-  }
+  runGuardedGitCommit(plan.gitPath, [addTargetPath], plan.commitMessage);
   const residualStatusLines = listResidualGitStatusLines(plan.basePath, plan.gitPath, config);
   if (residualStatusLines.length > 0) {
     throw new ReqError("ERROR: Git repository is not clean after req-references commit.", 1);

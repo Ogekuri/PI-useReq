@@ -3469,7 +3469,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 
 ---
 
-# req-references-command.ts | TypeScript | 175L | 7 symbols | 6 imports | 10 comments
+# req-references-command.ts | TypeScript | 209L | 9 symbols | 6 imports | 12 comments
 > Path: `src/core/req-references-command.ts`
 - @brief Implements the specialized `req-references` slash-command workflow.
 - @details Performs slash-command-owned git validation reuse, reference-file generation, targeted staging, fixed-message commit creation, and post-commit cleanliness verification without creating a worktree or starting an LLM session. Runtime is dominated by git subprocess execution plus source-summary generation and one documentation write. Side effects include filesystem writes and git index/history mutation.
@@ -3521,7 +3521,26 @@ import { runReferences } from "./tool-runner.js";
 - @param[in] absolutePath {string} Absolute path to stage.
 - @return {string} Relative or absolute git-add target path.
 
-### fn `export function prepareReqReferencesCommandExecution(` (L128-141)
+### fn `function hasStagedChangesForPaths(gitRoot: string, targetPaths: string[]): boolean` (L128-134)
+- @brief Detects whether the git index holds staged differences for the given target paths.
+- @details Executes `git diff --cached --quiet -- <paths>`; exit code `1` signals at least one staged difference, exit code `0` signals no staged difference for the target paths, and any other status or spawn failure is converted into a deterministic `ReqError`. Runtime is dominated by one git subprocess. Side effects include subprocess creation. No index or worktree mutation occurs.
+- @param[in] gitRoot {string} Absolute git root path.
+- @param[in] targetPaths {string[]} Git-add target paths inspected in the cached index.
+- @return {boolean} `true` when at least one staged difference exists for the target paths.
+- @throws {ReqError} Throws when staged-difference inspection fails.
+- @satisfies REQ-357
+
+### fn `function runGuardedGitCommit(gitRoot: string, targetPaths: string[], commitMessage: string): void` (L146-158)
+- @brief Executes one guarded `git commit` invocation for the staged target paths.
+- @details Runs a staged-changes precheck against the cached index and returns without creating a commit when no staged difference exists for the target paths, preventing empty-commit failures such as `nothing to commit, working tree clean`. When a staged difference exists, delegates to `git commit -m <commitMessage>` and converts any non-zero result into a deterministic `ReqError`. Runtime is dominated by up to two git subprocesses. Side effects include subprocess creation and conditional commit creation.
+- @param[in] gitRoot {string} Absolute git root path.
+- @param[in] targetPaths {string[]} Git-add target paths inspected by the staged-changes precheck.
+- @param[in] commitMessage {string} Commit message used when a staged difference exists.
+- @return {void} No return value.
+- @throws {ReqError} Throws when staged-difference inspection or commit creation fails.
+- @satisfies REQ-357, REQ-358
+
+### fn `export function prepareReqReferencesCommandExecution(` (L169-182)
 - @brief Prepares the specialized `req-references` execution plan.
 - @details Reuses slash-command-owned git validation, resolves the configured references document path, and returns the fixed commit metadata consumed by the direct-write workflow. Runtime is dominated by git validation subprocesses. Side effects include subprocess creation delegated through `validatePromptGitState(...)`.
 - @param[in] projectBase {string} Absolute project base path.
@@ -3530,14 +3549,14 @@ import { runReferences } from "./tool-runner.js";
 - @throws {ReqError} Throws when git validation fails.
 - @satisfies REQ-200, REQ-299
 
-### fn `export function executeReqReferencesCommandExecution(` (L152-175)
+### fn `export function executeReqReferencesCommandExecution(` (L193-209)
 - @brief Executes the specialized `req-references` direct-write workflow.
-- @details Regenerates `REFERENCES.md` through the same source-summary path used by the `references` tool, stages only the target file, creates the fixed-message commit, and verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out. Runtime is dominated by summary generation plus three git subprocesses. Side effects include documentation writes, index mutation, commit creation, and subprocess creation.
+- @details Regenerates `REFERENCES.md` through the same source-summary path used by the `references` tool, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, and verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out. Runtime is dominated by summary generation plus two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
 - @param[in] plan {ReqReferencesCommandPlan} Prepared direct-write execution plan.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {void} No return value.
-- @throws {ReqError} Throws when reference generation, staging, commit creation, or cleanliness verification fails.
-- @satisfies REQ-300, REQ-301, REQ-302, REQ-303
+- @throws {ReqError} Throws when reference generation, staging, guarded commit creation, or cleanliness verification fails.
+- @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -3547,8 +3566,10 @@ import { runReferences } from "./tool-runner.js";
 |`buildIgnoredGitStatusPaths`|fn||59-73|function buildIgnoredGitStatusPaths(|
 |`listResidualGitStatusLines`|fn||84-102|function listResidualGitStatusLines(|
 |`getGitAddTargetPath`|fn||111-117|function getGitAddTargetPath(gitRoot: string, absolutePat...|
-|`prepareReqReferencesCommandExecution`|fn||128-141|export function prepareReqReferencesCommandExecution(|
-|`executeReqReferencesCommandExecution`|fn||152-175|export function executeReqReferencesCommandExecution(|
+|`hasStagedChangesForPaths`|fn||128-134|function hasStagedChangesForPaths(gitRoot: string, target...|
+|`runGuardedGitCommit`|fn||146-158|function runGuardedGitCommit(gitRoot: string, targetPaths...|
+|`prepareReqReferencesCommandExecution`|fn||169-182|export function prepareReqReferencesCommandExecution(|
+|`executeReqReferencesCommandExecution`|fn||193-209|export function executeReqReferencesCommandExecution(|
 
 
 ---

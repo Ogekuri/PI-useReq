@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.80"
-date: "2026-09-21"
+version: "0.0.81"
+date: "2026-09-23"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -272,7 +272,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-227**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `running` only after required-doc checks, worktree preparation, worktree verification, and prompt-session handoff succeed.
 - **REQ-299**: MUST make `req-references`, after passing the shared `idle` gate, transition workflow state to `checking`, validate slash-command-owned git state, and transition directly to `running` without worktree creation, session switching, or LLM-session initialization.
 - **REQ-300**: MUST make `req-references` execute the same reference-generation and overwrite logic as `references`, writing configured-source reference markdown to `<base-path>/<docs-dir>/REFERENCES.md`.
-- **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]`.
+- **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]` whenever the staged file differs from `HEAD`.
 - **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `idle` before the command handler returns.
 - **REQ-303**: MUST make failing `req-references` execution notify pi CLI, transition workflow state to `error`, and surface git or reference-generation failures without LLM-session initialization.
 - **REQ-304**: MUST register `req-reset` as a dedicated extension command with description `Reset req workflow state, restore base-path, and remove generated worktrees` and MUST NOT depend on a bundled prompt Markdown file.
@@ -426,6 +426,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-354**: MUST defer matched-success worktree closure finalization to the `agent_settled` event when the running pi host supports it, and MUST execute that finalization at `agent_end` when the host does not emit `agent_settled`.
 - **REQ-355**: MUST detect `agent_settled` availability on the running pi host from whether pi lifecycle event registration returns an unsubscribe function.
 - **REQ-356**: MUST make the `sdk-smoke` probe pass the 0.80.4+ `authPath` and `modelsPath` `createAgentSession` options and detect support for the new event surface (`agent_settled`, `project_trust`, `session_info_changed`, `session_compact_failed`, `before_provider_headers`, `after_provider_response`, `ui_prompt_start`, `ui_prompt_end`, `thinking_level_select`).
+- **REQ-357**: MUST guard every runtime `git commit` invocation with a staged-changes precheck that skips commit creation when the git index holds no staged difference for the intended target paths.
+- **REQ-358**: MUST make `req-references` skip the fixed-message commit when regenerated `REFERENCES.md` content matches `HEAD` and still verify repository cleanliness plus report success.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -550,6 +552,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-122**: MUST verify the command invocation summary renders `none` for `context files`, `static code checks`, and `enabled tools` when no items are enabled in each respective category.
 - **TST-131**: MUST verify the command invocation summary renders sections in the order `Command:`, `Configuration:`, then `User's Request:`, with one blank line between consecutive sections.
 - **TST-132**: MUST verify that when the running pi host does not expose `agent_settled`, matched-success worktree closure finalizes at `agent_end` and transitions through `merging` to `idle`.
+- **TST-133**: MUST verify `req-references` stages `REFERENCES.md` and reports success without creating a commit when the regenerated content matches `HEAD`, leaving the repository clean.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
 - **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.
@@ -708,6 +711,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-301 | `src/core/req-references-command.ts` :: `REQ_REFERENCES_COMMIT_MESSAGE`, `getGitAddTargetPath(...)`, and `executeReqReferencesCommandExecution(...)` :: stage only `REFERENCES.md` and create the fixed commit. |
 | REQ-302 | `src/index.ts` :: `registerReqReferencesCommand` :: restores workflow state `idle` and emits success notification after direct execution; `src/core/req-references-command.ts` :: `listResidualGitStatusLines(...)` verifies clean repository state. |
 | REQ-303 | `src/index.ts` :: `registerReqReferencesCommand` :: transitions to `error` and notifies on failure; `src/core/req-references-command.ts` :: throws deterministic `ReqError` failures for generation, staging, commit, and cleanliness errors. |
+| REQ-357 | `src/core/req-references-command.ts` :: `runGuardedGitCommit` and `hasStagedChangesForPaths` :: skip `git commit` when the cached index holds no staged difference for the target paths. |
+| REQ-358 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution` :: invokes `runGuardedGitCommit(...)` before residual-status verification. |
 | REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
 | REQ-006 | `src/index.ts` :: `buildPiUsereqMenuChoices` and `configurePiUsereq` :: expose directories, git automation, static-check, tools, notifications, debug settings, reset, save, and `Show configuration`. |
 | REQ-236 | `src/core/config.ts` :: `getDefaultConfig`, `loadConfig`, and `buildPersistedConfig` :: persist `DEBUG_ENABLED` with default `disable`. |
@@ -783,6 +788,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-024 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-search` and `search` monolithic-output tests. |
 | TST-026 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-compress` and `compress` monolithic-output tests. |
 | TST-039 | `tests/release-workflow.test.ts` :: workflow-content assertions cover semver gating, `origin/master` containment, Node.js `24.15.0`, npm publication, and GitHub release generation. |
+| TST-133 | `tests/extension-registration.test.ts` :: `req-references` direct-commit workflow coverage verifies the guarded commit path against staged-change presence. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.
