@@ -1,25 +1,27 @@
 # Changelog
 
-## [0.53.0](https://github.com/Ogekuri/PI-useReq/compare/v0.52.0..v0.53.0) - 2026-09-23
-### 🐛  Bug Fixes
-- Pin GitHub Actions runner to ubuntu-24.04 for ubuntu-latest migration [useReq] *(release-workflow)*
-  - Pin check-branch and build-release jobs to the ubuntu-24.04 runner image because GitHub is migrating the ubuntu-latest label from Ubuntu 24.04 to Ubuntu 26.04, which can break the release build's prebuilt-binary npm dependencies.
-  - Add regression test asserting both jobs pin the stable runner image.
-
-## [0.52.0](https://github.com/Ogekuri/PI-useReq/compare/v0.51.0..v0.52.0) - 2026-09-23
+## [0.52.0](https://github.com/Ogekuri/PI-useReq/compare/v0.51.0..v0.52.0) - 2026-09-21
 ### 🚜  Changes
-- BREAKING CHANGE: re-gate pi.dev governance and make worktree closure capability-aware [useReq] *(core)*
-  - Gate the pi.dev governance block on docs/pi.dev/coding-agent-docs/ existing (manifest optional) and rework the block text to never require the manifest (REQ-032/033/034/108/273/274/275).
-  - Make worktree finalization capability-aware: defer matched-success closure to agent_settled on 0.80.4+ hosts and execute it at agent_end on legacy hosts that never emit the event (REQ-208/228/229/230/282/291/292/354/355).
-  - Align peer dependencies and source imports to the @earendil-works scope at >=0.80.4 and extend the SDK-parity probe with authPath/modelsPath createAgentSession options plus the new event surface (REQ-056/356).
-  - Update requirements, WORKFLOW.md, CHANGELOG.md, REFERENCES.md; update tests/prompt-rendering.test.ts and add the legacy-host fallback test (TST-011/020/030/087/132).
+- re-gate pi.dev governance on coding-agent-docs and finalize worktree closure capability-aware [useReq] *(prompts, orchestration)*
+  - Gate the pi.dev governance block on `docs/pi.dev/coding-agent-docs/` existing
+    (manifest optional) and reword the block so it never requires the manifest.
+  - Make worktree finalization capability-aware: defer matched-success closure to
+    `agent_settled` on 0.80.4+ hosts and execute it at `agent_end` on legacy hosts
+    that never emit the event, avoiding the parked `merging` state and unrecovered
+    worktrees.
+  - Align peer dependencies and source imports to the `@earendil-works` scope at
+    `>=0.80.4`, fix the misleading `pi 0.67.1+` references to `pi 0.80.4+`, and
+    extend the SDK-parity probe with the new `createAgentSession` options plus the
+    new event surface.
+  - Satisfies REQ-032/033/034/108/274/275, REQ-056, REQ-354/355/356 and
+    TST-011/020/030/087/132.
 
 ## [0.51.0](https://github.com/Ogekuri/PI-useReq/compare/v0.50.0..v0.51.0) - 2026-09-18
 ### 🐛  Bug Fixes
 - Fix PI source files.
 - Fix PI source files.
 - defer worktree finalization to agent_settled [useReq] *(prompt-orchestration)*
-  - pi 0.67.1+ switchSession awaits the active agent run to become idle via
+  - pi 0.80.4+ switchSession awaits the active agent run to become idle via
   - session.abort()/waitForIdle(), which deadlocks when invoked from the
   - agent_end handler because the run stays active until agent_settled.
   - Move the matched-success restore/merge/worktree-delete into a new
@@ -698,8 +700,6 @@
 - \[0.49.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.49.0
 - \[0.50.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.50.0
 - \[0.51.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.51.0
-- \[0.52.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.52.0
-- \[0.53.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.53.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -750,5 +750,3 @@
 [0.49.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.48.0..v0.49.0
 [0.50.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.49.0..v0.50.0
 [0.51.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.50.0..v0.51.0
-[0.52.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.51.0..v0.52.0
-[0.53.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.52.0..v0.53.0
