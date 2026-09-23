@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.53.0](https://github.com/Ogekuri/PI-useReq/compare/v0.52.0..v0.53.0) - 2026-09-23
+### 🐛  Bug Fixes
+- Pin GitHub Actions runner to ubuntu-24.04 for ubuntu-latest migration [useReq] *(release-workflow)*
+  - Pin check-branch and build-release jobs to the ubuntu-24.04 runner image because GitHub is migrating the ubuntu-latest label from Ubuntu 24.04 to Ubuntu 26.04, which can break the release build's prebuilt-binary npm dependencies.
+  - Add regression test asserting both jobs pin the stable runner image.
+
 ## [0.52.0](https://github.com/Ogekuri/PI-useReq/compare/v0.51.0..v0.52.0) - 2026-09-23
 ### 🚜  Changes
 - BREAKING CHANGE: re-gate pi.dev governance and make worktree closure capability-aware [useReq] *(core)*
@@ -693,6 +699,7 @@
 - \[0.50.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.50.0
 - \[0.51.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.51.0
 - \[0.52.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.52.0
+- \[0.53.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.53.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -744,3 +751,4 @@
 [0.50.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.49.0..v0.50.0
 [0.51.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.50.0..v0.51.0
 [0.52.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.51.0..v0.52.0
+[0.53.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.52.0..v0.53.0
