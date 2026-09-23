@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.57.0](https://github.com/Ogekuri/PI-useReq/compare/v0.56.0..v0.57.0) - 2026-09-23
+### 🐛  Bug Fixes
+- Fix npm audit.
+
 ## [0.56.0](https://github.com/Ogekuri/PI-useReq/compare/v0.55.0..v0.56.0) - 2026-09-23
 ### 🚜  Changes
 - guard git commits against empty-commit failures [useReq] *(req-references)*
@@ -729,6 +733,7 @@
 - \[0.54.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.54.0
 - \[0.55.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.55.0
 - \[0.56.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.56.0
+- \[0.57.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.57.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -784,3 +789,4 @@
 [0.54.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.53.0..v0.54.0
 [0.55.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.54.0..v0.55.0
 [0.56.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.55.0..v0.56.0
+[0.57.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.56.0..v0.57.0
