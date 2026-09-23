@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.55.0](https://github.com/Ogekuri/PI-useReq/compare/v0.54.0..v0.55.0) - 2026-09-23
+### 🐛  Bug Fixes
+- regenerate lock file in sync with manifest [useReq] *(npm-setup)*
+  - Regenerate package-lock.json via npm install so npm ci no longer fails
+  - with EUSAGE; lock root version now matches package.json 0.54.0 and
+  - includes all resolved @earendil-works peer dependencies.
+  - Approve @google/genai install script in package.json allowScripts as
+  - recorded by the synced install.
+
 ## [0.54.0](https://github.com/Ogekuri/PI-useReq/compare/v0.53.0..v0.54.0) - 2026-09-23
 ### 🐛  Bug Fixes
 - pin GitHub Actions runner to ubuntu-24.04 [useReq] *(release-npm)*
@@ -710,6 +719,7 @@
 - \[0.52.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.52.0
 - \[0.53.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.53.0
 - \[0.54.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.54.0
+- \[0.55.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.55.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -763,3 +773,4 @@
 [0.52.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.51.0..v0.52.0
 [0.53.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.52.0..v0.53.0
 [0.54.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.53.0..v0.54.0
+[0.55.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.54.0..v0.55.0
