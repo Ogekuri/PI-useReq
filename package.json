@@ -57,6 +57,7 @@
     "protobufjs@7.5.4": true,
     "esbuild": true,
     "koffi": true,
-    "protobufjs": true
+    "protobufjs": true,
+    "@google/genai": true
   }
 }
