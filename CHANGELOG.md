@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.58.0](https://github.com/Ogekuri/PI-useReq/compare/v0.57.0..v0.58.0) - 2026-09-23
+### 🐛  Bug Fixes
+- ensure main-branch switch before worktree cleanup [useReq] *(req-reset)*
+  - Normalize req-reset cleanup to the main repository worktree so generated
+  - worktree matching and git probes never run from inside a linked worktree.
+  - Switch the main worktree back to the main branch before forced branch
+  - deletion when HEAD rests on a generated prompt-command branch.
+  - Restore deleted process and context cwd surfaces after worktree removal.
+  - Add reproducer tests for both blocked-cleanup scenarios.
+
 ## [0.57.0](https://github.com/Ogekuri/PI-useReq/compare/v0.56.0..v0.57.0) - 2026-09-23
 ### 🐛  Bug Fixes
 - Fix npm audit.
@@ -734,6 +744,7 @@
 - \[0.55.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.55.0
 - \[0.56.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.56.0
 - \[0.57.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.57.0
+- \[0.58.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.58.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -790,3 +801,4 @@
 [0.55.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.54.0..v0.55.0
 [0.56.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.55.0..v0.56.0
 [0.57.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.56.0..v0.57.0
+[0.58.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.57.0..v0.58.0
