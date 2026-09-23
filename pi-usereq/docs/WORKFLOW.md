@@ -37,14 +37,14 @@
   - Threads: no explicit threads detected
 - ID: `PROC:gh-release-check`
   - Type: Process
-  - Role: GitHub Actions release-gate runner that validates the workflow tag trigger ancestry against `origin/master` before downstream release work.
+  - Role: GitHub Actions release-gate runner that validates the workflow tag trigger ancestry against `origin/master` before downstream release work on a pinned `ubuntu-24.04` hosted runner.
   - Entrypoints:
     - `check-branch(...)` [`.github/workflows/release-npm.yml`]
   - Parent Process: none
   - Threads: no explicit threads detected
 - ID: `PROC:gh-release-build`
   - Type: Process
-  - Role: GitHub Actions release runner that configures Node.js `24.15.0`, publishes the npm package, builds changelog text, and creates the GitHub Release after branch gating succeeds.
+  - Role: GitHub Actions release runner that configures Node.js `24.15.0`, publishes the npm package, builds changelog text, and creates the GitHub Release after branch gating succeeds on a pinned `ubuntu-24.04` hosted runner.
   - Entrypoints:
     - `build-release(...)` [`.github/workflows/release-npm.yml`]
   - Parent Process: none
@@ -1285,7 +1285,7 @@
   - `check-branch(...)`: fetch `origin/master`, evaluate tagged-commit containment, and export the downstream gate flag [`.github/workflows/release-npm.yml`]
     - External boundaries: `actions/checkout@v5`, GitHub Actions runner shell, `git` CLI, `grep`, and `$GITHUB_OUTPUT`.
 - External Boundaries:
-  - GitHub Actions event routing, hosted-runner lifecycle, checkout action, git subprocesses, and runner output channels.
+  - GitHub Actions event routing, pinned `ubuntu-24.04` hosted-runner lifecycle, checkout action, git subprocesses, and runner output channels.
 
 ### `PROC:gh-release-build`
 - Entrypoints:
@@ -1299,7 +1299,7 @@
   - `build-release(...)`: checkout repository content, configure Node.js `24.15.0` for npm publication, install dependencies, remove manifest `private`, publish the package, build changelog text, and create the GitHub Release [`.github/workflows/release-npm.yml`]
     - External boundaries: `actions/checkout@v5`, `actions/setup-node@v5`, npm CLI, npm registry, OIDC token issuance, `mikepenz/release-changelog-builder-action@v6`, `softprops/action-gh-release@v2`, `secrets.NPM_TOKEN`, and `secrets.GITHUB_TOKEN`.
 - External Boundaries:
-  - GitHub Actions event routing, hosted-runner lifecycle, checkout action, setup-node action, npm CLI, npm registry, changelog-builder action, GitHub Releases API, and repository secrets.
+  - GitHub Actions event routing, pinned `ubuntu-24.04` hosted-runner lifecycle, checkout action, setup-node action, npm CLI, npm registry, changelog-builder action, GitHub Releases API, and repository secrets.
 
 ### `PROC:install-static-checkers`
 - Entrypoints:

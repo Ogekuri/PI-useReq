@@ -193,3 +193,21 @@ test(
   "package manifest keeps canonical repository, bugs, and homepage metadata for npm provenance",
   assertCanonicalPackageProvenanceMetadata,
 );
+
+/**
+ * @brief Verifies the release workflow pins both jobs to the stable `ubuntu-24.04` hosted runner image.
+ * @details Asserts that `.github/workflows/release-npm.yml` no longer depends on the mutable `ubuntu-latest` label that GitHub is migrating from Ubuntu 24.04 to Ubuntu 26.04, and that exactly two jobs pin the `ubuntu-24.04` image. This preserves the Ubuntu 24.04 runner contract required by the release build's prebuilt-binary npm dependencies. Runtime is O(n) in file size. Side effects are limited to filesystem reads through `readReleaseWorkflow`.
+ * @return {void} No return value.
+ * @satisfies TST-039
+ */
+function assertPinnedRunnerImage(): void {
+  const workflow = readReleaseWorkflow();
+
+  assert.doesNotMatch(workflow, /runs-on:\s+ubuntu-latest/);
+  assert.equal(workflow.match(/runs-on:\s+ubuntu-24\.04/g)?.length ?? 0, 2);
+}
+
+test(
+  "release workflow pins both jobs to the ubuntu-24.04 runner image for the ubuntu-latest migration",
+  assertPinnedRunnerImage,
+);

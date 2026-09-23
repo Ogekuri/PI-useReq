@@ -16,7 +16,8 @@ env:
 jobs:
   # 1. Controlla se siamo sul branch corretto
   check-branch:
-    runs-on: ubuntu-latest
+    # Pin the runner to Ubuntu 24.04 because GitHub is migrating the ubuntu-latest label to Ubuntu 26.04, which can break the release build's prebuilt-binary npm dependencies.
+    runs-on: ubuntu-24.04
     outputs:
       is_master: ${{ steps.check.outputs.is_master }}
     steps:
@@ -42,7 +43,8 @@ jobs:
     needs: check-branch
     # Esegue questo job SOLO se l'output del job precedente è 'true'
     if: needs.check-branch.outputs.is_master == 'true'
-    runs-on: ubuntu-latest
+    # Pin the runner to Ubuntu 24.04 because GitHub is migrating the ubuntu-latest label to Ubuntu 26.04, which can break the release build's prebuilt-binary npm dependencies.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
