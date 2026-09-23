@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.56.0](https://github.com/Ogekuri/PI-useReq/compare/v0.55.0..v0.56.0) - 2026-09-23
+### 🚜  Changes
+- guard git commits against empty-commit failures [useReq] *(req-references)*
+  - Requirements: add REQ-357/REQ-358 and TST-133, refine REQ-301 for conditional commits.
+  - Source: route the sole runtime git commit through runGuardedGitCommit with a hasStagedChangesForPaths precheck, skipping empty commits and preventing 'nothing to commit, working tree clean' failures.
+  - Docs: update WORKFLOW.md req-references call-traces and regenerate REFERENCES.md.
+  - Verification: eslint clean, extension-registration suite 112/112, guarded empty-commit scenario verified end-to-end.
+
 ## [0.55.0](https://github.com/Ogekuri/PI-useReq/compare/v0.54.0..v0.55.0) - 2026-09-23
 ### 🐛  Bug Fixes
 - regenerate lock file in sync with manifest [useReq] *(npm-setup)*
@@ -720,6 +728,7 @@
 - \[0.53.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.53.0
 - \[0.54.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.54.0
 - \[0.55.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.55.0
+- \[0.56.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.56.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -774,3 +783,4 @@
 [0.53.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.52.0..v0.53.0
 [0.54.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.53.0..v0.54.0
 [0.55.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.54.0..v0.55.0
+[0.56.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.55.0..v0.56.0
