@@ -650,8 +650,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── .codex/skills/req-*/SKILL.md
 ├── .gemini/commands/req/*.toml
 ├── .kiro/agents/*.json
-├── .opencode/command/*.md
-└── .vscode/settings.json
+└── .opencode/command/*.md
 ```
 
 ## 7. Test Evidence Summary

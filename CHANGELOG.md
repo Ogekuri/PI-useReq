@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 ### 🚜  Changes
+- remove vscode settings support [useReq] *(core)*
+  - Requirements: drop the `.vscode/settings.json` entry from the Repository Structure tree view in REQUIREMENTS.md; pi-usereq manages no Visual Studio Code settings file.
+  - Source: no code ever managed vscode settings; verified zero references remain in src/, scripts/, tests/, README.md, and canonical docs.
+  - Docs: WORKFLOW.md and REFERENCES.md untouched (no vscode references); README.md verified free of vscode content.
+  - Verification: static-check environment-blocked (eslint not on PATH); unit tests N/A for documentation-only change.
 - remove model configuration support [useReq] *(sdk-smoke)*
   - Requirements: drop the 0.80.4+ authPath/modelsPath createAgentSession options from REQ-056/REQ-356; model selection and configuration stay exclusive to the pi client host.
   - Source: remove the authPath/modelsPath sandbox paths (.pi-usereq-agent-auth.json/.pi-usereq-agent-models.json) from the sdk-smoke probe call and its docstrings in scripts/lib/sdk-smoke.ts.
