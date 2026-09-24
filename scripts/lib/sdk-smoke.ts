@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Implements SDK-parity probing and comparison for the standalone debug harness.
- * @details Dynamically loads the official pi SDK when available, inventories extension-owned commands and tools from the runtime surface, passes the 0.80.4+ `authPath` and `modelsPath` `createAgentSession` options, probes support for the new 0.80.4+ event surface, normalizes provenance metadata, and compares the result against the offline recorder snapshot. Runtime is O(c + t + e) in command, tool, and probed-event counts plus the cost of SDK session creation. Side effects are limited to dynamic module loading, optional SDK-managed filesystem reads, and any extension-owned startup behavior triggered by the official runtime.
+ * @details Dynamically loads the official pi SDK when available, inventories extension-owned commands and tools from the runtime surface, probes support for the new 0.80.4+ event surface, normalizes provenance metadata, and compares the result against the offline recorder snapshot. Runtime is O(c + t + e) in command, tool, and probed-event counts plus the cost of SDK session creation. Side effects are limited to dynamic module loading, optional SDK-managed filesystem reads, and any extension-owned startup behavior triggered by the official runtime.
  */
 
 import path from "node:path";
@@ -469,7 +469,7 @@ export function buildParityReport(offline: OfflineContractSnapshot, sdk: SdkCont
 
 /**
  * @brief Loads the official pi SDK runtime and extracts the extension-owned command and tool inventories.
- * @details Dynamically imports `@earendil-works/pi-coding-agent`, creates a `DefaultResourceLoader` with the requested extension path, creates an SDK session with the 0.80.4+ `authPath` and `modelsPath` options, extracts inventory methods from the returned runtime surface, probes support for the new 0.80.4+ event surface, and filters to extension-owned commands and tools only. Runtime is dominated by SDK startup. Side effects include SDK-managed resource loading and extension startup behavior.
+ * @details Dynamically imports `@earendil-works/pi-coding-agent`, creates a `DefaultResourceLoader` with the requested extension path, creates an SDK session, extracts inventory methods from the returned runtime surface, probes support for the new 0.80.4+ event surface, and filters to extension-owned commands and tools only. Runtime is dominated by SDK startup. Side effects include SDK-managed resource loading and extension startup behavior.
  * @param[in] cwd {string | undefined} Requested working directory.
  * @param[in] extensionPath {string | undefined} Requested extension entry path.
  * @return {Promise<SdkContractSnapshot>} Normalized SDK inventory snapshot.
@@ -509,8 +509,6 @@ export async function probeSdkRuntime(cwd?: string, extensionPath?: string): Pro
       resourceLoader,
       sessionManager: SessionManager.inMemory(),
       settingsManager: typeof SettingsManager?.inMemory === "function" ? SettingsManager.inMemory({}) : undefined,
-      authPath: path.join(paths.cwd, ".pi-usereq-agent-auth.json"),
-      modelsPath: path.join(paths.cwd, ".pi-usereq-agent-models.json"),
     });
   } catch (error) {
     throw new ReqError(`Error: SDK parity loading failed: ${error instanceof Error ? error.message : String(error)}`, 1);

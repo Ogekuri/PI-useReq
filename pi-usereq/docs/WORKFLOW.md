@@ -676,7 +676,7 @@
           - `normalizeToolFailure(...)`: convert runner failures into deterministic execution records [`src/core/agent-tool-json.ts`]
     - `runSdkSmoke(...)`: replay offline `session_start`, probe the official SDK runtime, and compare inventories [`scripts/lib/sdk-smoke.ts`]
       - `replaySessionStart(...)`: capture the offline `session_start` contract [`scripts/lib/extension-debug-harness.ts`]
-      - `probeSdkRuntime(...)`: load the official SDK runtime with the 0.80.4+ `createAgentSession` options and extract extension-owned inventory plus new-event-surface support [`scripts/lib/sdk-smoke.ts`]
+      - `probeSdkRuntime(...)`: load the official SDK runtime via `createAgentSession` and extract extension-owned inventory plus new-event-surface support [`scripts/lib/sdk-smoke.ts`]
         - `resolveHarnessPaths(...)`: validate working-directory and extension-entry paths [`scripts/lib/extension-debug-harness.ts`]
         - `extractSdkApi(...)`: locate the runtime inventory surface [`scripts/lib/sdk-smoke.ts`]
         - `probePiEventSurface(...)`: probe the runtime for support of the 0.80.4+ pi event surface via unsubscribe-function registrations [`scripts/lib/sdk-smoke.ts`]

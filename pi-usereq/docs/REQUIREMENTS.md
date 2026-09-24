@@ -124,7 +124,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-053**: MUST make `session-start` invoke all registered `session_start` handlers and capture final active tools, statuses, notifications, editor text, and sent user messages.
 - **REQ-054**: MUST make `command` invoke the named registered command handler with supplied args and capture sent user messages plus UI side effects in the result payload.
 - **REQ-055**: MUST make `tool` invoke the named registered tool `execute` handler with supplied params and capture returned `content`, returned `details`, and UI side effects.
-- **REQ-056**: MUST make `sdk-smoke` use `DefaultResourceLoader` plus `createAgentSession(...)` with the 0.80.4+ `authPath` and `modelsPath` options to inventory extension-owned commands and tools from the official runtime.
+- **REQ-056**: MUST make `sdk-smoke` use `DefaultResourceLoader` plus `createAgentSession(...)` to inventory extension-owned commands and tools from the official runtime.
 - **REQ-057**: MUST compare offline and SDK inventories for command names, command descriptions, tool names, tool descriptions, parameter-schema presence, normalized provenance/sourceInfo, and active tools after `session_start`.
 - **REQ-058**: MUST exit with non-zero status when a requested harness command or tool is not registered or when SDK parity loading fails.
 - **REQ-059**: MUST expose package scripts `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
@@ -425,7 +425,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-352**: MUST best-effort approve pending npm install scripts for bundled checker dependencies during extension install or run so embedded checkers execute without manual approval.
 - **REQ-354**: MUST defer matched-success worktree closure finalization to the `agent_settled` event when the running pi host supports it, and MUST execute that finalization at `agent_end` when the host does not emit `agent_settled`.
 - **REQ-355**: MUST detect `agent_settled` availability on the running pi host from whether pi lifecycle event registration returns an unsubscribe function.
-- **REQ-356**: MUST make the `sdk-smoke` probe pass the 0.80.4+ `authPath` and `modelsPath` `createAgentSession` options and detect support for the new event surface (`agent_settled`, `project_trust`, `session_info_changed`, `session_compact_failed`, `before_provider_headers`, `after_provider_response`, `ui_prompt_start`, `ui_prompt_end`, `thinking_level_select`).
+- **REQ-356**: MUST make the `sdk-smoke` probe detect support for the new event surface (`agent_settled`, `project_trust`, `session_info_changed`, `session_compact_failed`, `before_provider_headers`, `after_provider_response`, `ui_prompt_start`, `ui_prompt_end`, `thinking_level_select`).
 - **REQ-357**: MUST guard every runtime `git commit` invocation with a staged-changes precheck that skips commit creation when the git index holds no staged difference for the intended target paths.
 - **REQ-358**: MUST make `req-references` skip the fixed-message commit when regenerated `REFERENCES.md` content matches `HEAD` and still verify repository cleanliness plus report success.
 

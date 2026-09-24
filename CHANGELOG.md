@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+### 🚜  Changes
+- remove model configuration support [useReq] *(sdk-smoke)*
+  - Requirements: drop the 0.80.4+ authPath/modelsPath createAgentSession options from REQ-056/REQ-356; model selection and configuration stay exclusive to the pi client host.
+  - Source: remove the authPath/modelsPath sandbox paths (.pi-usereq-agent-auth.json/.pi-usereq-agent-models.json) from the sdk-smoke probe call and its docstrings in scripts/lib/sdk-smoke.ts.
+  - Docs: update WORKFLOW.md sdk-smoke call-trace and regenerate REFERENCES.md.
+  - Verification: extension-registration plus debug-extension-harness suites 125/125; eslint check environment-blocked in sandbox (binary not on PATH).
+
 ## [0.58.0](https://github.com/Ogekuri/PI-useReq/compare/v0.57.0..v0.58.0) - 2026-09-23
 ### 🐛  Bug Fixes
 - ensure main-branch switch before worktree cleanup [useReq] *(req-reset)*
