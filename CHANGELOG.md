@@ -1,17 +1,26 @@
 # Changelog
 
-## [Unreleased]
+## [0.59.0](https://github.com/Ogekuri/PI-useReq/compare/v0.58.0..v0.59.0) - 2026-09-24
+### 🐛  Bug Fixes
+- return pi CLI to main branch before removing worktrees [useReq] *(req-reset)*
+  - Redirect the pi CLI session, process.cwd(), and context cwd to the
+  - main base path before deleting any matching generated worktree when no
+  - persisted prompt execution plan restored the base-path session first.
+  - Resolve the redirect target from the active session parentSession link,
+  - falling back to the most recent persisted base-path session.
+  - Export the stale-context-tolerant session-switch helper for reuse.
+  - Add a reproducer unit test proving the switch precedes worktree removal.
+  - Closes the reported /req-reset defect where the CLI stayed on the
+  - deleted worktree path with an undefined branch after cleanup.
+
 ### 🚜  Changes
+- emit context-retention reminder after req-* runs and document clean sessions [useReq] *(core)*
+  - REQUIREMENTS.md: add REQ-359..REQ-365 covering clean-context README advice, final retained-context info notification with context-usage percentage, stale-safe channel constraints, and failure-path exclusion
+  - src/index.ts: add notifyContextRetentionReminder(...) emitted at req-reset and req-references tails plus successful prompt closure for worktree-backed and no-worktree runs
+  - README.md: recommend starting a new session with clean context (/new) before each /req-* command unless retaining the previous context
+  - WORKFLOW.md and REFERENCES.md: update call traces and symbol index
 - remove vscode settings support [useReq] *(core)*
-  - Requirements: drop the `.vscode/settings.json` entry from the Repository Structure tree view in REQUIREMENTS.md; pi-usereq manages no Visual Studio Code settings file.
-  - Source: no code ever managed vscode settings; verified zero references remain in src/, scripts/, tests/, README.md, and canonical docs.
-  - Docs: WORKFLOW.md and REFERENCES.md untouched (no vscode references); README.md verified free of vscode content.
-  - Verification: static-check environment-blocked (eslint not on PATH); unit tests N/A for documentation-only change.
 - remove model configuration support [useReq] *(sdk-smoke)*
-  - Requirements: drop the 0.80.4+ authPath/modelsPath createAgentSession options from REQ-056/REQ-356; model selection and configuration stay exclusive to the pi client host.
-  - Source: remove the authPath/modelsPath sandbox paths (.pi-usereq-agent-auth.json/.pi-usereq-agent-models.json) from the sdk-smoke probe call and its docstrings in scripts/lib/sdk-smoke.ts.
-  - Docs: update WORKFLOW.md sdk-smoke call-trace and regenerate REFERENCES.md.
-  - Verification: extension-registration plus debug-extension-harness suites 125/125; eslint check environment-blocked in sandbox (binary not on PATH).
 
 ## [0.58.0](https://github.com/Ogekuri/PI-useReq/compare/v0.57.0..v0.58.0) - 2026-09-23
 ### 🐛  Bug Fixes
@@ -758,6 +767,7 @@
 - \[0.56.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.56.0
 - \[0.57.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.57.0
 - \[0.58.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.58.0
+- \[0.59.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.59.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -815,3 +825,4 @@
 [0.56.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.55.0..v0.56.0
 [0.57.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.56.0..v0.57.0
 [0.58.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.57.0..v0.58.0
+[0.59.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.58.0..v0.59.0
