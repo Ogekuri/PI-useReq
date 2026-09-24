@@ -51,6 +51,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 - **Git repository** - every `req-*` command runs slash-command-owned git validation: the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
 - **Requirements documentation** - the configured `docs-dir` (default `pi-usereq/docs`) must contain the canonical documents required by each command (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); commands such as `/req-write`, `/req-create`, and `/req-workflow` are the entry points that generate them.
 - **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install automatically through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
+- **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker).
 
 
 ## Feature Highlights
@@ -278,6 +279,7 @@ The interactive configuration menu exposes every user-facing setting; changes ar
 - **Debug** — local debug logging: log file, log-on-status filter, status-change/workflow-event toggles, enabled tools/prompts, and `Enable debug commands for tools`.
 - **Show local/global configuration** — write the exact config file contents into the editor.
 - **Reset defaults** — restore the default configuration with a confirmation preview.
+- **Models** (not a setting) — the menu exposes no model management: models, custom providers, and authentication are configured at the pi client level and simply shared with pi-usereq commands at runtime.
 
 ### Extension Side Features
 
