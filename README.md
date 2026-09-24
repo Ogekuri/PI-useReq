@@ -74,6 +74,11 @@ isolated worktree, render the bundled prompt with the project context, and on su
 repository clean. `/req-references` and `/req-reset` are non-agentic: they execute directly without starting an LLM session or
 creating a worktree.
 
+> **Clean context between commands** — every `/req-*` orchestration keeps the session context content in place when it
+> completes, so a subsequent command continues with the retained transcript. It is therefore recommended to start a new
+> session with a clean context (run `/new`, pi's `Start a new session` action) before each new `/req-*` command, unless you
+> actually need to keep the previous context (for example when the next command builds on the outputs of the previous one).
+
 | Command | Description | Required docs |
 | --- | --- | --- |
 | `/req-write` | Produce a *SRS* draft based on the User Request description | none |

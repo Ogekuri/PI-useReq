@@ -1161,6 +1161,29 @@ function notifyContextSafely(
 }
 
 /**
+ * @brief Emits the final context-retention reminder info notification for a successfully completed `/req-*` orchestration.
+ * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(1). Side effect is user notification delivery only when the supplied context is still active.
+ * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
+ * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
+ * @return {void} No return value.
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365
+ */
+function notifyContextRetentionReminder(
+  statusController: PiUsereqStatusController,
+  ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
+): void {
+  const percent = statusController.state.contextUsage?.percent;
+  const percentText = typeof percent === "number" && Number.isFinite(percent)
+    ? ` Current context usage: ${Math.round(percent)}%.`
+    : "";
+  notifyContextSafely(
+    ctx,
+    `Context retained.${percentText} Start a new session with a clean context (/new) before the next /req-* command.`,
+    "info",
+  );
+}
+
+/**
  * @brief Rejects one non-`idle` req-command invocation and records the workflow error state.
  * @details Builds a deterministic busy-state diagnostic from the current workflow state, transitions the shared workflow state to `error`, preserves any pending or active prompt execution metadata for later closure handling, emits an error notification, and throws `ReqError`. Bundled prompt commands reuse `transitionPromptWorkflowState(...)` when cached configuration is available so prompt debug logging captures the actual state transition; specialized non-prompt commands fall back to direct status mutation. Runtime is O(1). Side effects include workflow-state mutation, status-bar rendering, optional debug-log writes, and user notification delivery.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
@@ -1374,6 +1397,9 @@ async function finalizeMatchedPromptSuccess(
     );
   } else {
     setPiUsereqWorkflowState(statusController, "idle", promptContext);
+  }
+  if (!finalization.errorMessage) {
+    notifyContextRetentionReminder(statusController, promptContext);
   }
 }
 
@@ -1594,6 +1620,9 @@ async function handleExtensionStatusEvent(
           );
         } else {
           setPiUsereqWorkflowState(statusController, "idle", promptContext);
+        }
+        if (outcome === "completed") {
+          notifyContextRetentionReminder(statusController, promptContext);
         }
       }
     }
@@ -3106,6 +3135,7 @@ function registerReqResetCommand(
         ? `SUCCESS: req-reset restored base-path and removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es).`
         : `SUCCESS: req-reset removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es) and restored idle state.`;
       notifyContextSafely(resetContext, successMessage, "info");
+      notifyContextRetentionReminder(statusController, resetContext);
     },
   });
 }
@@ -3148,6 +3178,7 @@ function registerReqReferencesCommand(
           `SUCCESS: Updated ${formatRuntimePathForDisplay(executionPlan.referencesPath)} and committed changes.`,
           "info",
         );
+        notifyContextRetentionReminder(statusController, ctx);
       } catch (error) {
         statusController.state.pendingPromptRequest = undefined;
         statusController.state.activePromptRequest = undefined;

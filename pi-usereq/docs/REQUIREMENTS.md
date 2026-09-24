@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.81"
-date: "2026-09-23"
+version: "0.0.82"
+date: "2026-09-24"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -428,6 +428,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-356**: MUST make the `sdk-smoke` probe detect support for the new event surface (`agent_settled`, `project_trust`, `session_info_changed`, `session_compact_failed`, `before_provider_headers`, `after_provider_response`, `ui_prompt_start`, `ui_prompt_end`, `thinking_level_select`).
 - **REQ-357**: MUST guard every runtime `git commit` invocation with a staged-changes precheck that skips commit creation when the git index holds no staged difference for the intended target paths.
 - **REQ-358**: MUST make `req-references` skip the fixed-message commit when regenerated `REFERENCES.md` content matches `HEAD` and still verify repository cleanliness plus report success.
+- **REQ-359**: MUST state in `README.md` that initializing a new session with a clean context before each new `/req-*` command is recommended, unless the previous context MUST be retained.
+- **REQ-360**: MUST reference pi's `Start a new session` action (the `/new` command) as the clean-context session-start mechanism in the `README.md` recommendation and in the final context-retention notification.
+- **REQ-361**: MUST emit one final info-level notification at the tail of every successfully completed `/req-*` command orchestration stating that the session context content was retained.
+- **REQ-362**: MUST include in that final context-retention notification the recommendation to initialize a new session with a clean context before the next `/req-*` command.
+- **REQ-363**: MUST append the current context-usage percentage to the final context-retention notification when a normalized context-usage snapshot exists.
+- **REQ-364**: MUST deliver the final context-retention notification exclusively through the stale-context-safe UI-notification channel and MUST NOT send it as a session message or perform session switching at that point.
+- **REQ-365**: MUST NOT emit the final context-retention notification for interrupted, failed, aborted, or incomplete worktree-backed `/req-*` orchestrations that retain the execution session per REQ-209.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
