@@ -280,6 +280,7 @@ The interactive configuration menu exposes every user-facing setting; changes ar
 - **Show local/global configuration** — write the exact config file contents into the editor.
 - **Reset defaults** — restore the default configuration with a confirmation preview.
 - **Models** (not a setting) — the menu exposes no model management: models, custom providers, and authentication are configured at the pi client level and simply shared with pi-usereq commands at runtime.
+- **Editor/IDE** (not a setting) — the menu exposes no editor or IDE management: the extension bundles, generates, reads, and requires no Visual Studio Code files (e.g. `.vscode/settings.json`), and all settings are persisted only in `.pi-usereq.json` and `~/.config/pi-usereq/config.json`.
 
 ### Extension Side Features
 
