@@ -692,7 +692,7 @@ function verifyPromptCommandClosureArtifacts(
  * @throws {ReqError} Throws when the context cannot switch sessions, when the host cancels the switch, or when later verification proves the target session never became active.
  * @satisfies REQ-068, REQ-271, REQ-272
  */
-async function switchPromptCommandSession(
+export async function switchPromptCommandSession(
   sessionFile: string,
   ctx?: PromptCommandSessionContext,
 ): Promise<PromptCommandSessionContext | undefined> {
