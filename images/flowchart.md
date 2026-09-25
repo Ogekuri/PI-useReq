@@ -11,8 +11,6 @@ flowchart TD
     START@{ shape: circle, label: "**START**"}
     NP@{ shape: hex, label: "***New*** *Project*"}
     EP@{ shape: hex, label: "***Existing*** *Project*"}
-    CMDNP@{ shape: subproc, label: "**req** --base project/ --docs-dir docs/ --src-dir src/.." }
-    CMDEP@{ shape: subproc, label: "**req** --here --docs-dir docs/ --src-dir src/.." }
     REQ[(Requiremets)]
     CHANGE@{ shape: lean-r, label: "Req.**Change**"}
     CHECK@{ shape: lean-r, label: "Req.**Check**"}
@@ -35,16 +33,14 @@ flowchart TD
     
 
     %% New Project
-    NP --> CMDNP
-    CMDNP -- **input** project's description ---> WRITE
-    WRITE ----> IMPLEMENT
+    NP --> WRITE
+    WRITE -- **input** project's description ---> IMPLEMENT
     IMPLEMENT --> REFERENCES
     REFERENCES --> WORKFLOW
     WORKFLOW --> START
 
     %% Existing Project
-    EP --> CMDEP
-    CMDEP ----> CREATE
+    EP --> CREATE
     CREATE --> REFERENCES
 
 
