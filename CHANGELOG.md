@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.60.0](https://github.com/Ogekuri/PI-useReq/compare/v0.59.0..v0.60.0) - 2026-09-25
+### 📚  Documentation
+- Update images.
+
 ## [0.59.0](https://github.com/Ogekuri/PI-useReq/compare/v0.58.0..v0.59.0) - 2026-09-24
 ### 🐛  Bug Fixes
 - return pi CLI to main branch before removing worktrees [useReq] *(req-reset)*
@@ -768,6 +772,7 @@
 - \[0.57.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.57.0
 - \[0.58.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.58.0
 - \[0.59.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.59.0
+- \[0.60.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.60.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -826,3 +831,4 @@
 [0.57.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.56.0..v0.57.0
 [0.58.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.57.0..v0.58.0
 [0.59.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.58.0..v0.59.0
+[0.60.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.59.0..v0.60.0
