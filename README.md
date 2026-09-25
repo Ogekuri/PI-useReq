@@ -51,7 +51,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 - **Git repository** - every `req-*` command runs slash-command-owned git validation: the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
 - **Requirements documentation** - the configured `docs-dir` (default `pi-usereq/docs`) must contain the canonical documents required by each command (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); commands such as `/req-write`, `/req-create`, and `/req-workflow` are the entry points that generate them.
 - **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install automatically through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
-- **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker).
+- **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker). The tool is tested with the OpenRouter model `~deepseek/deepseek-v4-flash-latest`; the extension is model-agnostic and also works with other models exposed by the pi client.
 
 
 ## Feature Highlights
@@ -78,6 +78,12 @@ creating a worktree.
 > completes, so a subsequent command continues with the retained transcript. It is therefore recommended to start a new
 > session with a clean context (run `/new`, pi's `Start a new session` action) before each new `/req-*` command, unless you
 > actually need to keep the previous context (for example when the next command builds on the outputs of the previous one).
+
+> **Recommended context for analysis** — for the most effective analysis it is recommended to place the requirements,
+> reference, and workflow documents in the prompt context by enabling the `Context Files` toggles for `REQUIREMENTS.md`,
+> `REFERENCES.md`, and `WORKFLOW.md` (the settings-menu row then reads `Context Files  requirements:on • references:on • workflow:on`).
+> The enabled canonical documents are injected into every bundled prompt through `%%CONTEXT_FILES%%`, so the agent analyzes
+> the requirements, the reference index, and the workflow documentation together with the source code.
 
 | Command | Description | Required docs |
 | --- | --- | --- |
@@ -275,7 +281,7 @@ The interactive configuration menu exposes every user-facing setting; changes ar
 - **Documentation directory** — `docs-dir` (default `pi-usereq/docs`) used for the canonical documents.
 - **Unit tests directory** — `tests-dir` (default `tests`).
 - **Source directories** — `src-dir` (default `["src"]`) used by the analysis tools.
-- **Context Files** — toggles to inject `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` into the prompt context through `%%CONTEXT_FILES%%`.
+- **Context Files** — toggles to inject `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` into the prompt context through `%%CONTEXT_FILES%%`. It is recommended to keep all three toggles enabled (`requirements:on • references:on • workflow:on`) so the analysis commands receive the canonical documents in their context.
 - **Auto git commit** — `enable` (default) injects git commit instructions into every prompt; `disable` forces read-only git behavior (`git_read-only.md`) and turns worktree orchestration off.
 - **Git worktree** / **Worktree prefix** — enable/disable prompt-command worktree isolation and set the name prefix (default `PI-useReq-`).
 - **Language static code checkers** — per-language `enable`/`disable` flags and the global `Command`-module checker definitions (view/remove/reset with confirmation).
