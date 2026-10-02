@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.62.0](https://github.com/Ogekuri/PI-useReq/compare/v0.61.0..v0.62.0) - 2026-10-02
+### 🐛  Bug Fixes
+- re-apply captured model via rebound extension api [useReq] *(prompt-runtime)*
+  - pi 1.0.0 invalidates the extension api captured by a session's extension
+  - instance whenever that session is replaced (ctx.switchSession/fork/new/reload),
+  - so the guarded model re-apply built its session-scoped setModel surface from a
+  - stale captured pi and degraded the preserved model into the observed
+  - stale-extension-context warning while leaving the default model active.
+  - Store the latest live extension api in process-scoped prompt-command state on
+  - every extension bind (writePersistedPromptCommandRuntimeApi).
+  - Source the re-apply surface from the stored rebound api, falling back to the
+  - captured api for hosts that do not rebind (REQ-367..372, DES-021).
+  - Add failing-first reproducer test simulating the pi 1.0.0 rebind contract;
+  - assert captured model plus thinking level are applied once on the replacement
+  - session, closure skips duplicates, and no stale warning is emitted.
+  - Refresh WORKFLOW.md call traces and regenerate REFERENCES.md.
+
 ## [0.61.0](https://github.com/Ogekuri/PI-useReq/compare/v0.60.0..v0.61.0) - 2026-10-02
 ### 🐛  Bug Fixes
 - Update .g.conf references.
@@ -806,6 +823,7 @@
 - \[0.59.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.59.0
 - \[0.60.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.60.0
 - \[0.61.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.61.0
+- \[0.62.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.62.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -866,3 +884,4 @@
 [0.59.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.58.0..v0.59.0
 [0.60.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.59.0..v0.60.0
 [0.61.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.60.0..v0.61.0
+[0.62.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.61.0..v0.62.0
