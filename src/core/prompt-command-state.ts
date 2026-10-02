@@ -209,3 +209,49 @@ export function restorePersistedPromptCommandRuntimeStateForSession(
   }
   return undefined;
 }
+
+/**
+ * @brief Describes the loosely-typed extension-api surface persisted for model re-application.
+ * @details Stores only the session-scoped model appliers plus thinking-level probe needed to re-apply one captured selection after session replacement. The structural shape avoids importing concrete pi SDK types into this process-scoped module. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-367, REQ-368, REQ-369
+ */
+export interface PersistedPromptCommandRuntimeApi {
+  setModel?: (model: unknown) => unknown;
+  setThinkingLevel?: (level: unknown) => unknown;
+  getThinkingLevel?: () => unknown;
+}
+
+/**
+ * @brief Defines the global property used for latest live extension-api persistence.
+ * @details The property lives on `globalThis` because pi invalidates the extension api captured by one session's extension instance whenever that session is replaced and reloads the extension against the replacement session while the host process persists. Access complexity is O(1).
+ */
+const PI_USEREQ_PROMPT_COMMAND_RUNTIME_API_KEY = "__piUsereqPromptCommandRuntimeApi";
+
+/**
+ * @brief Writes the latest live extension api into process-scoped persistence.
+ * @details Replaces the stored loosely-typed model-api surface so model re-application helpers always bind to the extension instance of the currently active session runner and never to an api invalidated by session replacement. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @param[in] runtimeApi {PersistedPromptCommandRuntimeApi | undefined} Latest extension-api surface written at extension bind time, or undefined to clear the stored surface.
+ * @return {void} No return value.
+ * @satisfies REQ-367, REQ-368, REQ-369
+ */
+export function writePersistedPromptCommandRuntimeApi(
+  runtimeApi: PersistedPromptCommandRuntimeApi | undefined,
+): void {
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPromptCommandRuntimeApi?: PersistedPromptCommandRuntimeApi | undefined;
+  };
+  globalState[PI_USEREQ_PROMPT_COMMAND_RUNTIME_API_KEY] = runtimeApi;
+}
+
+/**
+ * @brief Reads the latest live extension api from process-scoped persistence.
+ * @details Returns the extension-api surface written by the most recent extension bind so post-switch model re-application uses a session-scoped api that remains valid after session replacement, returning undefined so callers degrade to their own captured api. Runtime is O(1). No external state is mutated.
+ * @return {PersistedPromptCommandRuntimeApi | undefined} Latest stored extension-api surface, or undefined when no extension has bound in this process.
+ * @satisfies REQ-367, REQ-368, REQ-369
+ */
+export function readPersistedPromptCommandRuntimeApi(): PersistedPromptCommandRuntimeApi | undefined {
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPromptCommandRuntimeApi?: PersistedPromptCommandRuntimeApi | undefined;
+  };
+  return globalState[PI_USEREQ_PROMPT_COMMAND_RUNTIME_API_KEY];
+}

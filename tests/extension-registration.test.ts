@@ -4339,6 +4339,147 @@ test("worktree-backed prompt commands restore base-path when switchSession does 
 });
 
 /**
+ * @brief Verifies worktree-backed prompt commands re-apply the captured model through the rebound extension api after session replacement.
+ * @details Simulates the pi 1.0.0 session-replacement contract where `ctx.switchSession(...)` disposes the original session, invalidates the captured extension api, reloads the extension against the replacement session, and then invokes `withSession(...)`. The test proves that model re-application after the execution-session switch MUST NOT call the invalidated pre-switch api, which throws the documented stale-extension-context error and degrades the preserved model into a warning notification, and MUST apply the captured model plus thinking level through the latest process-scoped extension api bound to the active session. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after prompt activation, model re-application, prompt-end closure, and restored-base assertions complete.
+ * @throws {AssertionError} Throws when the stale pre-switch api is used for model re-application, when the captured model or thinking level is not applied on the replacement session, or when a `Could not re-apply model` warning notification is emitted.
+ * @satisfies REQ-367, REQ-368, REQ-370, REQ-371, REQ-372
+ */
+test("worktree-backed prompt commands re-apply the captured model through the rebound extension api", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(projectBase);
+    const staleMessage = "This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload().";
+    const baseModel = { provider: "openrouter", id: "openai/gpt-astra-latest" };
+    const staleModelSelections: unknown[] = [];
+    const pi = createFakePi();
+    (pi as any).model = baseModel;
+    (pi as any).thinkingLevel = "high";
+    (pi as any).getThinkingLevel = () => "high";
+    (pi as any).setModel = async (model: unknown) => {
+      staleModelSelections.push(model);
+      return true;
+    };
+    (pi as any).setThinkingLevel = () => {};
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    const originalSessionFile = ctx.sessionManager.getSessionFile();
+    (ctx as any).model = baseModel;
+    (ctx as any).modelRegistry = { find: () => baseModel };
+    (ctx as any).thinkingLevel = "high";
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    // The replacement session boots with the configured default model, so the
+    // captured selection differs after the switch and re-application is required.
+    const defaultModel = { provider: "openrouter", id: "gpt-5-mini" };
+    const replacementModelSelections: unknown[] = [];
+    const replacementThinkingLevels: unknown[] = [];
+    const replacementPi = createFakePi();
+    (replacementPi as any).setModel = async (model: unknown) => {
+      replacementModelSelections.push(model);
+      return true;
+    };
+    (replacementPi as any).setThinkingLevel = (level: unknown) => {
+      replacementThinkingLevels.push(level);
+    };
+
+    let activeSessionCtx: any = ctx;
+    ctx.switchSession = async (
+      sessionPath: string,
+      options?: { withSession?: (replacementCtx: any) => Promise<void> },
+    ) => {
+      const isRestoreLeg = path.resolve(sessionPath) === path.resolve(String(originalSessionFile));
+      const legState: { model: unknown; thinkingLevel: string | undefined } = {
+        model: isRestoreLeg ? baseModel : defaultModel,
+        thinkingLevel: isRestoreLeg ? "high" : undefined,
+      };
+      const replacementCwd = readFakeSessionFileCwd(sessionPath, projectBase);
+      const replacementCtx = {
+        ...ctx,
+        cwd: replacementCwd,
+        get model() {
+          return legState.model;
+        },
+        modelRegistry: { find: () => baseModel },
+        get thinkingLevel() {
+          return legState.thinkingLevel;
+        },
+        sessionManager: {
+          ...ctx.sessionManager,
+          getCwd: () => replacementCwd,
+          getSessionFile: () => sessionPath,
+        },
+        switchSession: ctx.switchSession,
+        async sendUserMessage(content: unknown, sendOptions?: unknown) {
+          pi.sentUserMessages.push({ content, options: sendOptions });
+        },
+      };
+      // pi 1.0.0 invalidates the original extension api before the extension
+      // rebinds for the replacement session and before withSession() runs.
+      (pi as any).setModel = async () => {
+        throw new Error(staleMessage);
+      };
+      (pi as any).setThinkingLevel = () => {
+        throw new Error(staleMessage);
+      };
+      (replacementPi as any).setModel = async (model: unknown) => {
+        replacementModelSelections.push(model);
+        legState.model = model;
+        return true;
+      };
+      (replacementPi as any).setThinkingLevel = (level: unknown) => {
+        replacementThinkingLevels.push(level);
+        legState.thinkingLevel = typeof level === "string" ? level : legState.thinkingLevel;
+      };
+      piUsereqExtension(replacementPi);
+      activeSessionCtx = replacementCtx;
+      await options?.withSession?.(replacementCtx);
+      return { cancelled: false };
+    };
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+
+    assert.equal(pi.sentUserMessages.length, 1);
+    assert.equal(
+      replacementModelSelections.length,
+      1,
+      JSON.stringify(ctx.__state.notifications),
+    );
+    const appliedModel = replacementModelSelections[0] as { provider?: string; id?: string };
+    assert.equal(appliedModel?.provider, baseModel.provider);
+    assert.equal(appliedModel?.id, baseModel.id);
+    assert.deepEqual(replacementThinkingLevels, ["high"]);
+    assert.equal(staleModelSelections.length, 0);
+    assert.equal(
+      ctx.__state.notifications.filter((entry: { message: string }) => /Could not re-apply model/.test(entry.message)).length,
+      0,
+      JSON.stringify(ctx.__state.notifications),
+    );
+
+    await pi.emit("before_agent_start", {}, activeSessionCtx);
+    await pi.emit("agent_start", {}, activeSessionCtx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, activeSessionCtx);
+    await pi.emit("agent_settled", {}, activeSessionCtx);
+
+    assert.equal(process.cwd(), projectBase);
+    // REQ-370: the restored base session already matches the captured selection,
+    // so closure re-application is skipped without a second model mutation.
+    assert.equal(replacementModelSelections.length, 1);
+    assert.equal(
+      ctx.__state.notifications.filter((entry: { message: string }) => /Could not re-apply model/.test(entry.message)).length,
+      0,
+      JSON.stringify(ctx.__state.notifications),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies worktree-backed prompt closure succeeds against the installed pi 0.67.1 session-switch contract.
  * @details Simulates the real pi 0.67.1 runtime where `ctx.switchSession(sessionPath)` accepts a single argument, realigns `process.cwd()` to the target session's recorded cwd, never mutates the handler-scoped `ctx` object, and never invokes caller-supplied callbacks. The test proves that worktree-backed `req-<prompt>` activation, prompt execution, and prompt-end finalization must succeed against that contract by relying on the persisted session-file header and `process.cwd()` verification instead of the stale handler-scoped `ctx` probes. Runtime is dominated by temporary git worktree setup and teardown. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after prompt delivery, merge handling, and restored-base assertions complete.

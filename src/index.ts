@@ -145,8 +145,11 @@ import { PROMPT_COMMAND_NAMES } from "./core/prompt-command-catalog.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import {
   clearPersistedPromptCommandRuntimeState,
+  readPersistedPromptCommandRuntimeApi,
   readPersistedPromptCommandRuntimeState,
+  writePersistedPromptCommandRuntimeApi,
   writePersistedPromptCommandRuntimeState,
+  type PersistedPromptCommandRuntimeApi,
 } from "./core/prompt-command-state.js";
 import { ensureBundledResourcesAccessible, readBundledPromptDescription } from "./core/resources.js";
 import { ReqError } from "./core/errors.js";
@@ -3148,8 +3151,8 @@ function resolveCurrentThinkingLevel(pi: ExtensionAPI, ctx: unknown): string | u
 
 /**
  * @brief Builds the loosely-typed model-selection surface from the runtime API plus context.
- * @details Wraps `setModel` and `setThinkingLevel` with defensive function probes so the surface only exposes appliers the running host actually implements, and copies the context model, thinking level, and model registry used by the guarded re-apply comparison. Returns undefined when no context is available so re-application degrades to a not-attempted skip. Runtime is O(1). No external state is mutated.
- * @param[in] pi {ExtensionAPI} Active extension API instance supplying the session-scoped model appliers.
+ * @details Wraps `setModel` and `setThinkingLevel` with defensive function probes so the surface only exposes appliers the running host actually implements, and copies the context model, thinking level, and model registry used by the guarded re-apply comparison. The supplied api MUST be the latest live extension api bound to the active session runner because pi invalidates captured extension apis after session replacement. Returns undefined when no context is available so re-application degrades to a not-attempted skip. Runtime is O(1). No external state is mutated.
+ * @param[in] pi {ExtensionAPI} Latest live extension api instance supplying the session-scoped model appliers; after session replacement callers pass the rebound api rather than a captured pre-switch api.
  * @param[in] ctx {unknown} Active extension or command context supplying model probes.
  * @return {PromptCommandModelSelectionSurface | undefined} Re-apply surface, or undefined when no context exists.
  * @satisfies REQ-367, REQ-370, REQ-371
@@ -3182,10 +3185,10 @@ function resolvePromptCommandModelSurface(
 
 /**
  * @brief Re-applies one captured model selection onto the active post-switch session.
- * @details Builds the guarded re-apply surface from the runtime API plus context, forwards the captured selection plus thinking level into `reapplyPromptCommandSessionSelection(...)`, and routes every warning through `notifyContextSafely(...)` so stale replacement contexts after session replacement never abort orchestration. Runtime is O(1) plus one awaited model mutation. Side effects include session-scoped model and thinking-level mutation plus stale-safe warning notifications.
+ * @details Builds the guarded re-apply surface from the latest process-scoped extension api plus context, preferring the api written by the most recent extension bind because pi invalidates the api captured before session replacement, and falls back to the caller-supplied api for hosts that do not rebind. Forwards the captured selection plus thinking level into `reapplyPromptCommandSessionSelection(...)` and routes every warning through `notifyContextSafely(...)` so stale replacement contexts after session replacement never abort orchestration. Runtime is O(1) plus one awaited model mutation. Side effects include session-scoped model and thinking-level mutation plus stale-safe warning notifications.
  * @param[in] selection {PromptCommandModelSelection | undefined} Captured model provider plus identifier.
  * @param[in] thinkingLevel {string | undefined} Captured thinking level.
- * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] pi {ExtensionAPI} Extension api captured by the running handler, used only as fallback when no rebound api is stored.
  * @param[in] ctx {unknown} Active extension or command context used for probes and warning delivery.
  * @return {Promise<void>} Promise resolved once the guarded re-application completed.
  * @satisfies REQ-367, REQ-368, REQ-369, REQ-370, REQ-371, REQ-372
@@ -3196,10 +3199,12 @@ async function reapplyCapturedPromptModelSelection(
   pi: ExtensionAPI,
   ctx: unknown,
 ): Promise<void> {
+  const liveApi = readPersistedPromptCommandRuntimeApi();
+  const activeApi = liveApi ?? pi;
   await reapplyPromptCommandSessionSelection({
     selection,
     thinkingLevel,
-    surface: resolvePromptCommandModelSurface(pi, ctx),
+    surface: resolvePromptCommandModelSurface(activeApi as ExtensionAPI, ctx),
     notifyWarning: (message) => {
       notifyContextSafely(ctx as ExtensionContext, message, "error");
     },
@@ -5132,12 +5137,13 @@ function registerConfigCommands(
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, optional debug-log writes, and timer scheduling.
+ * @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, then validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-002, DES-015, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
+  writePersistedPromptCommandRuntimeApi(pi as unknown as PersistedPromptCommandRuntimeApi);
   const statusController = createPiUsereqStatusController();
   ensureBundledResourcesAccessible();
   registerReqResetCommand(pi, statusController);
