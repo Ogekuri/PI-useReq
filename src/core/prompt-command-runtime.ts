@@ -63,6 +63,126 @@ export interface PromptCommandExecutionPlan {
   worktreeDir?: string;
   worktreePath?: string;
   worktreeRootPath?: string;
+  originalModel?: PromptCommandModelSelection;
+  originalThinkingLevel?: string;
+}
+
+/**
+ * @brief Describes one serializable model-selection fact captured at prompt-command preflight.
+ * @details Stores the active model provider and identifier as plain strings so the selection can travel inside the prompt execution plan and process-scoped persistence across session replacement without retaining live SDK model objects, and MUST NOT be persisted into pi-usereq configuration files per CTN-022. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-366, CTN-022
+ */
+export interface PromptCommandModelSelection {
+  provider: string;
+  modelId: string;
+}
+
+/**
+ * @brief Describes the loosely-typed runtime surface required to re-apply one captured selection.
+ * @details Narrows the pi runtime to the model registry lookup, the active model plus thinking-level probes used by the duplicate-skip guard, and the session-scoped `setModel`/`setThinkingLevel` appliers that leave the configured default model untouched. All members stay optional so legacy hosts and offline replays degrade to a documented warning instead of aborting orchestration. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-367, REQ-370, REQ-371
+ */
+export interface PromptCommandModelSelectionSurface {
+  modelRegistry?: { find?: (provider: unknown, modelId: unknown) => unknown };
+  model?: unknown;
+  thinkingLevel?: unknown;
+  setModel?: (model: unknown) => Promise<boolean>;
+  setThinkingLevel?: (level: unknown) => void;
+}
+
+/**
+ * @brief Describes the re-apply request consumed by `reapplyPromptCommandSessionSelection`.
+ * @details Carries the captured selection plus thinking level, the runtime surface, and the optional stale-context-safe warning callback so callers keep notification ownership inside `src/index.ts` while the helper stays independent from extension UI types per DES-012. The interface is compile-time only and introduces no runtime cost.
+ */
+export interface PromptCommandModelSelectionReapplyOptions {
+  selection: PromptCommandModelSelection | undefined;
+  thinkingLevel: string | undefined;
+  surface: PromptCommandModelSelectionSurface | undefined;
+  notifyWarning?: (message: string) => void;
+}
+
+/**
+ * @brief Describes the deterministic outcome facts of one guarded selection re-application.
+ * @details Distinguishes not-attempted skips (missing selection, missing surface, or post-switch state already matching the captured selection) from attempted applications, and carries the normalized warning message emitted when resolution, authentication, or the runtime applier fails. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-370, REQ-372
+ */
+export interface PromptCommandModelSelectionReapplyResult {
+  attempted: boolean;
+  applied: boolean;
+  skipped: boolean;
+  warningMessage?: string;
+}
+
+/**
+ * @brief Re-applies one captured model selection onto the active post-switch session.
+ * @details Resolves the captured provider plus identifier through the surface model registry, skips the whole operation when the selection or surface is unavailable and when the active model and thinking level already match the captured selection so no duplicate `model_change` session entry is emitted, otherwise awaits the session-scoped `setModel` applier, then re-applies the captured thinking level when the active level differs. Every resolution, authentication, and applier failure degrades into one warning notification through the supplied callback without throwing, so prompt orchestration and worktree closure continue unchanged. Runtime is O(1) plus one awaited model mutation. No external state is mutated beyond the applied session selection.
+ * @param[in] options {PromptCommandModelSelectionReapplyOptions} Captured selection, runtime surface, and warning callback.
+ * @return {Promise<PromptCommandModelSelectionReapplyResult>} Attempted, applied, skipped, and warning facts for the re-application.
+ * @satisfies REQ-366, REQ-367, REQ-368, REQ-369, REQ-370, REQ-371, REQ-372, DES-021
+ */
+export async function reapplyPromptCommandSessionSelection(
+  options: PromptCommandModelSelectionReapplyOptions,
+): Promise<PromptCommandModelSelectionReapplyResult> {
+  const selection = options.selection;
+  const surface = options.surface;
+  if (!selection || !surface) {
+    return { attempted: false, applied: false, skipped: true };
+  }
+  const notifyWarning = options.notifyWarning;
+  const registryFind = surface.modelRegistry?.find;
+  const resolvedCandidate = typeof registryFind === "function"
+    ? registryFind.call(surface.modelRegistry, selection.provider, selection.modelId)
+    : undefined;
+  const resolved = resolvedCandidate as { provider?: unknown; id?: unknown } | null | undefined;
+  if (!resolved || typeof resolved.provider !== "string" || typeof resolved.id !== "string") {
+    const message = `WARNING: Could not re-apply model ${selection.provider}/${selection.modelId}: model is not available in the active model registry.`;
+    notifyWarning?.(message);
+    return { attempted: true, applied: false, skipped: false, warningMessage: message };
+  }
+  const currentModel = surface.model as { provider?: unknown; id?: unknown } | null | undefined;
+  const modelMatches = currentModel !== null
+    && currentModel !== undefined
+    && currentModel.provider === selection.provider
+    && currentModel.id === selection.modelId;
+  const levelMatches = typeof options.thinkingLevel !== "string"
+    || surface.thinkingLevel === options.thinkingLevel;
+  if (modelMatches && levelMatches) {
+    return { attempted: false, applied: false, skipped: true };
+  }
+  if (!modelMatches) {
+    const setModelFn = surface.setModel;
+    if (typeof setModelFn !== "function") {
+      const message = `WARNING: Could not re-apply model ${selection.provider}/${selection.modelId}: the runtime does not expose setModel.`;
+      notifyWarning?.(message);
+      return { attempted: true, applied: false, skipped: false, warningMessage: message };
+    }
+    let setModelResult: unknown;
+    try {
+      setModelResult = await setModelFn.call(surface, resolved);
+    } catch (error) {
+      const message = `WARNING: Could not re-apply model ${selection.provider}/${selection.modelId}: ${error instanceof Error ? error.message : String(error)}.`;
+      notifyWarning?.(message);
+      return { attempted: true, applied: false, skipped: false, warningMessage: message };
+    }
+    if (setModelResult === false) {
+      const message = `WARNING: Could not re-apply model ${selection.provider}/${selection.modelId}: no API key configured for ${selection.provider}.`;
+      notifyWarning?.(message);
+      return { attempted: true, applied: false, skipped: false, warningMessage: message };
+    }
+  }
+  const setThinkingLevelFn = surface.setThinkingLevel;
+  if (
+    typeof options.thinkingLevel === "string"
+    && surface.thinkingLevel !== options.thinkingLevel
+    && typeof setThinkingLevelFn === "function"
+  ) {
+    try {
+      setThinkingLevelFn.call(surface, options.thinkingLevel);
+    } catch {
+      // REQ-372: thinking-level failures are advisory-only and MUST NOT abort orchestration.
+    }
+  }
+  return { attempted: true, applied: true, skipped: false };
 }
 
 /**
@@ -1584,9 +1704,11 @@ export function validatePromptRequiredDocs(
  * @param[in] currentSessionDir {string | undefined} Active session directory reused when the execution session is forked.
  * @param[in] currentSessionBranch {PromptCommandSessionEntry[] | undefined} Active in-memory session branch copied when the origin session file is not flushed yet.
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
+ * @param[in] originalModel {PromptCommandModelSelection | undefined} Active model provider plus identifier captured by the command handler for later re-application.
+ * @param[in] originalThinkingLevel {string | undefined} Active thinking level captured by the command handler for later re-application.
  * @return {PromptCommandExecutionPlan} Prepared execution plan.
  * @throws {ReqError} Throws when repository validation, required-doc validation, worktree creation, or session preparation fails.
- * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271
+ * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271, REQ-366
  */
 export function preparePromptCommandExecution(
   promptName: PromptCommandName,
@@ -1597,6 +1719,8 @@ export function preparePromptCommandExecution(
   currentSessionDir: string | undefined,
   currentSessionBranch: PromptCommandSessionEntry[] | undefined,
   debugOptions?: PromptCommandDebugOptions,
+  originalModel?: PromptCommandModelSelection,
+  originalThinkingLevel?: string,
 ): PromptCommandExecutionPlan {
   const gitPath = validatePromptGitState(projectBase, config);
   const reuseCurrentSessionFile = isUsablePromptSessionFile(currentSessionFile, projectBase);
@@ -1624,6 +1748,8 @@ export function preparePromptCommandExecution(
       baseDir: staticWorktreePaths.baseDir,
       originalSessionFile,
       executionSessionFile: originalSessionFile,
+      originalModel,
+      originalThinkingLevel,
     };
   }
   const worktreeDir = buildPromptWorktreeName(gitPath, config);
@@ -1663,6 +1789,8 @@ export function preparePromptCommandExecution(
     worktreeDir: worktreePaths.worktreeDir,
     worktreePath: worktreePaths.worktreePath,
     worktreeRootPath: worktreePaths.worktreeRootPath,
+    originalModel,
+    originalThinkingLevel,
   };
 }
 

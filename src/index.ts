@@ -95,8 +95,11 @@ import {
   finalizePromptCommandExecution,
   getPromptCommandErrorContext,
   preparePromptCommandExecution,
+  reapplyPromptCommandSessionSelection,
   restorePromptCommandExecution,
   type PromptCommandExecutionPlan,
+  type PromptCommandModelSelection,
+  type PromptCommandModelSelectionSurface,
 } from "./core/prompt-command-runtime.js";
 import {
   REQ_REFERENCES_COMMAND_DESCRIPTION,
@@ -1301,13 +1304,15 @@ function isPiAgentSettledEventSupported(
 /**
  * @brief Finalizes a matched successful worktree-backed prompt at the current lifecycle point.
  * @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications, clears the pending finalization outcome plus prompt state, and transitions workflow state through `merging` to `idle`. Reused by the `agent_settled` handler on 0.80.4+ hosts and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
+ * @param[in] pi {ExtensionAPI} Active extension API instance supplying the model re-apply appliers.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller whose pending and active prompt state is cleared.
  * @param[in] promptRequest {PiUsereqPromptRequest} Matched successful worktree-backed prompt execution plan.
  * @param[in] ctx {ExtensionContext} Active extension context used for finalization and notifications.
  * @return {Promise<void>} Promise resolved when finalization and state transitions complete.
- * @satisfies REQ-208, REQ-228, REQ-229, REQ-230, REQ-282, REQ-291, REQ-292, REQ-354, REQ-355
+ * @satisfies REQ-208, REQ-228, REQ-229, REQ-230, REQ-282, REQ-291, REQ-292, REQ-354, REQ-355, REQ-368, REQ-370, REQ-371, REQ-372
  */
 async function finalizeMatchedPromptSuccess(
+  pi: ExtensionAPI,
   statusController: PiUsereqStatusController,
   promptRequest: PiUsereqPromptRequest,
   ctx: ExtensionContext,
@@ -1333,6 +1338,14 @@ async function finalizeMatchedPromptSuccess(
         : undefined,
     );
     promptContext = (finalization.activeContext ?? promptContext) as typeof ctx;
+    if (finalization.cleanupSucceeded && !finalization.errorMessage) {
+      await reapplyCapturedPromptModelSelection(
+        promptRequest.originalModel,
+        promptRequest.originalThinkingLevel,
+        pi,
+        promptContext,
+      );
+    }
   } catch (error) {
     promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
     let errorMessage = error instanceof Error ? error.message : String(error);
@@ -1346,6 +1359,12 @@ async function finalizeMatchedPromptSuccess(
           : undefined,
       ) ?? promptContext) as typeof ctx;
       cleanupSucceeded = true;
+      await reapplyCapturedPromptModelSelection(
+        promptRequest.originalModel,
+        promptRequest.originalThinkingLevel,
+        pi,
+        promptContext,
+      );
     } catch (restoreError) {
       promptContext = (getPromptCommandErrorContext(restoreError) ?? promptContext) as typeof ctx;
       errorMessage = restoreError instanceof Error ? restoreError.message : String(restoreError);
@@ -1451,6 +1470,12 @@ async function handleExtensionStatusEvent(
     const requestForActivation = activePromptRequest ?? pendingPromptRequest;
     if (requestForActivation !== undefined) {
       await activatePromptCommandExecution(requestForActivation, ctx);
+      await reapplyCapturedPromptModelSelection(
+        requestForActivation.originalModel,
+        requestForActivation.originalThinkingLevel,
+        pi,
+        ctx,
+      );
     }
   }
   const notifyRequest: PiNotifyEventRequest | undefined = hookName === "agent_end"
@@ -1555,6 +1580,7 @@ async function handleExtensionStatusEvent(
           // directly at `agent_end` to avoid parking in `merging` forever.
           statusController.state.pendingFinalizationOutcome = outcome;
           await finalizeMatchedPromptSuccess(
+            pi,
             statusController,
             activePromptRequest,
             promptContext,
@@ -1635,7 +1661,7 @@ async function handleExtensionStatusEvent(
       && settledPromptRequest.worktreeDir !== undefined
       && pendingOutcome === "completed"
     ) {
-      await finalizeMatchedPromptSuccess(statusController, settledPromptRequest, ctx);
+      await finalizeMatchedPromptSuccess(pi, statusController, settledPromptRequest, ctx);
     }
   }
   if (hookName === "session_shutdown") {
@@ -3042,6 +3068,139 @@ function registerPiNotifyShortcut(
 }
 
 /**
+ * @brief Describes the loosely-typed pi extension API surface required by model re-application.
+ * @details Narrows the runtime API to the model appliers and thinking-level probe accessed defensively so legacy hosts and offline harnesses without `setModel`, `setThinkingLevel`, or `getThinkingLevel` degrade to a documented warning instead of a runtime exception. The alias is compile-time only and introduces no runtime cost.
+ */
+type PromptModelSelectionApiSurface = {
+  setModel?: (model: unknown) => unknown;
+  setThinkingLevel?: (level: unknown) => unknown;
+  getThinkingLevel?: () => unknown;
+};
+
+/**
+ * @brief Describes the loosely-typed context surface required by model re-application.
+ * @details Narrows extension contexts to the active model, thinking level, and model registry probe used to capture the pre-switch selection and to evaluate the duplicate-skip guard after session replacement. The alias is compile-time only and introduces no runtime cost.
+ */
+type PromptModelSelectionContextSurface = {
+  model?: unknown;
+  thinkingLevel?: unknown;
+  modelRegistry?: { find?: (provider: unknown, modelId: unknown) => unknown };
+};
+
+/**
+ * @brief Captures the active model provider and identifier from one loosely-typed context model.
+ * @details Validates that the runtime model object exposes non-empty string provider and identifier fields and emits the serializable selection fact stored inside the prompt execution plan, returning undefined when the runtime exposes no usable model so preflight capture never throws. Runtime is O(1). No external state is mutated.
+ * @param[in] model {unknown} Active runtime model object from `ctx.model`.
+ * @return {PromptCommandModelSelection | undefined} Serializable provider plus identifier fact, or undefined when unavailable.
+ * @satisfies REQ-366
+ */
+function resolveCurrentModelSelection(
+  model: unknown,
+): PromptCommandModelSelection | undefined {
+  const candidate = model as { provider?: unknown; id?: unknown } | null | undefined;
+  if (candidate === null || candidate === undefined) {
+    return undefined;
+  }
+  if (
+    typeof candidate.provider !== "string"
+    || typeof candidate.id !== "string"
+    || candidate.provider === ""
+    || candidate.id === ""
+  ) {
+    return undefined;
+  }
+  return { provider: candidate.provider, modelId: candidate.id };
+}
+
+/**
+ * @brief Captures the active thinking level from the runtime API or fallback context.
+ * @details Prefers `pi.getThinkingLevel()` when the host exposes it and falls back to the context `thinkingLevel` probe, returning undefined for legacy hosts or offline harnesses that provide neither so capture stays advisory. Runtime is O(1). No external state is mutated.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] ctx {unknown} Active extension or command context used as fallback probe.
+ * @return {string | undefined} Active thinking level, or undefined when unavailable.
+ * @satisfies REQ-366, REQ-371
+ */
+function resolveCurrentThinkingLevel(pi: ExtensionAPI, ctx: unknown): string | undefined {
+  const api = pi as unknown as PromptModelSelectionApiSurface;
+  if (typeof api.getThinkingLevel === "function") {
+    const level = api.getThinkingLevel();
+    if (typeof level === "string" && level !== "") {
+      return level;
+    }
+  }
+  const context = ctx as PromptModelSelectionContextSurface | null | undefined;
+  if (
+    context !== null
+    && context !== undefined
+    && typeof context.thinkingLevel === "string"
+    && context.thinkingLevel !== ""
+  ) {
+    return context.thinkingLevel;
+  }
+  return undefined;
+}
+
+/**
+ * @brief Builds the loosely-typed model-selection surface from the runtime API plus context.
+ * @details Wraps `setModel` and `setThinkingLevel` with defensive function probes so the surface only exposes appliers the running host actually implements, and copies the context model, thinking level, and model registry used by the guarded re-apply comparison. Returns undefined when no context is available so re-application degrades to a not-attempted skip. Runtime is O(1). No external state is mutated.
+ * @param[in] pi {ExtensionAPI} Active extension API instance supplying the session-scoped model appliers.
+ * @param[in] ctx {unknown} Active extension or command context supplying model probes.
+ * @return {PromptCommandModelSelectionSurface | undefined} Re-apply surface, or undefined when no context exists.
+ * @satisfies REQ-367, REQ-370, REQ-371
+ */
+function resolvePromptCommandModelSurface(
+  pi: ExtensionAPI,
+  ctx: unknown,
+): PromptCommandModelSelectionSurface | undefined {
+  const context = ctx as PromptModelSelectionContextSurface | null | undefined;
+  if (context === null || context === undefined) {
+    return undefined;
+  }
+  const api = pi as unknown as PromptModelSelectionApiSurface;
+  const setModelFn = api.setModel;
+  const setThinkingLevelFn = api.setThinkingLevel;
+  return {
+    modelRegistry: context.modelRegistry,
+    model: context.model,
+    thinkingLevel: context.thinkingLevel,
+    setModel: typeof setModelFn === "function"
+      ? (model: unknown) => setModelFn.call(pi, model) as Promise<boolean>
+      : undefined,
+    setThinkingLevel: typeof setThinkingLevelFn === "function"
+      ? (level: unknown) => {
+          setThinkingLevelFn.call(pi, level);
+        }
+      : undefined,
+  };
+}
+
+/**
+ * @brief Re-applies one captured model selection onto the active post-switch session.
+ * @details Builds the guarded re-apply surface from the runtime API plus context, forwards the captured selection plus thinking level into `reapplyPromptCommandSessionSelection(...)`, and routes every warning through `notifyContextSafely(...)` so stale replacement contexts after session replacement never abort orchestration. Runtime is O(1) plus one awaited model mutation. Side effects include session-scoped model and thinking-level mutation plus stale-safe warning notifications.
+ * @param[in] selection {PromptCommandModelSelection | undefined} Captured model provider plus identifier.
+ * @param[in] thinkingLevel {string | undefined} Captured thinking level.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in] ctx {unknown} Active extension or command context used for probes and warning delivery.
+ * @return {Promise<void>} Promise resolved once the guarded re-application completed.
+ * @satisfies REQ-367, REQ-368, REQ-369, REQ-370, REQ-371, REQ-372
+ */
+async function reapplyCapturedPromptModelSelection(
+  selection: PromptCommandModelSelection | undefined,
+  thinkingLevel: string | undefined,
+  pi: ExtensionAPI,
+  ctx: unknown,
+): Promise<void> {
+  await reapplyPromptCommandSessionSelection({
+    selection,
+    thinkingLevel,
+    surface: resolvePromptCommandModelSurface(pi, ctx),
+    notifyWarning: (message) => {
+      notifyContextSafely(ctx as ExtensionContext, message, "error");
+    },
+  });
+}
+
+/**
  * @brief Resolves the prompt execution plan targeted by `req-reset` recovery.
  * @details Prefers the current in-memory active request, then the current in-memory pending request, then the process-scoped persisted prompt runtime state so the dedicated reset command can recover from same-host unclean prompt termination after session replacement. Runtime is O(1). No external state is mutated.
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller.
@@ -3091,6 +3250,10 @@ function registerReqResetCommand(
     description: REQ_RESET_COMMAND_DESCRIPTION,
     handler: async (_args, ctx) => {
       const promptRequest = resolveReqResetPromptRequest(statusController);
+      const resetModelSelection = promptRequest?.originalModel
+        ?? resolveCurrentModelSelection((ctx as unknown as PromptModelSelectionContextSurface).model);
+      const resetThinkingLevel = promptRequest?.originalThinkingLevel
+        ?? resolveCurrentThinkingLevel(pi, ctx);
       const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
       syncContextCwdMirror(ctx, commandCwd);
       const projectBase = path.resolve(promptRequest?.basePath ?? getProjectBase(commandCwd));
@@ -3109,6 +3272,12 @@ function registerReqResetCommand(
         executionPlan = prepareReqResetCommandExecution(projectBase, config, promptRequest);
         executionResult = await executeReqResetCommandExecution(executionPlan, ctx);
         resetContext = (executionResult.activeContext ?? resetContext) as typeof ctx;
+        await reapplyCapturedPromptModelSelection(
+          resetModelSelection,
+          resetThinkingLevel,
+          pi,
+          resetContext,
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setPiUsereqWorkflowState(statusController, "error", resetContext);
@@ -3228,6 +3397,10 @@ function registerPromptCommands(
         ensureBundledResourcesAccessible();
         let executionPlan: PromptCommandExecutionPlan | undefined;
         let promptContext = ctx;
+        const originalModel = resolveCurrentModelSelection(
+          (ctx as unknown as PromptModelSelectionContextSurface).model,
+        );
+        const originalThinkingLevel = resolveCurrentThinkingLevel(pi, ctx);
         try {
           executionPlan = preparePromptCommandExecution(
             promptName,
@@ -3241,6 +3414,8 @@ function registerPromptCommands(
               config,
               workflowState: statusController.state.workflowState,
             },
+            originalModel,
+            originalThinkingLevel,
           );
           const content = renderPrompt(
             promptName,
@@ -3256,6 +3431,12 @@ function registerPromptCommands(
             activePromptRequest: statusController.state.activePromptRequest,
           });
           promptContext = (await activatePromptCommandExecution(executionPlan, ctx) ?? ctx) as typeof ctx;
+          await reapplyCapturedPromptModelSelection(
+            executionPlan.originalModel,
+            executionPlan.originalThinkingLevel,
+            pi,
+            promptContext,
+          );
           logPromptWorkflowEvent(
             projectBase,
             config,

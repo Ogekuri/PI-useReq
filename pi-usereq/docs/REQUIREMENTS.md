@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.83"
+version: "0.0.84"
 date: "2026-10-02"
 author: "OpenAI Codex"
 scope:
@@ -72,6 +72,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-019**: MUST persist local `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
 - **CTN-020**: MUST declare `tsx` as a runtime `package.json` dependency so `node --import tsx` package scripts, the `postinstall` checker installer, and the `.ts` extension entry resolve on clean consumer installs.
 - **CTN-021**: MUST declare a `files` allowlist in `package.json` restricted to runtime-required `src/` and `scripts/` so npm consumer installs exclude the `tests/` directory.
+- **CTN-022**: MUST NOT persist the selected model provider, model identifier, or thinking level in local or global pi-usereq configuration files.
 
 ## 3. Requirements
 
@@ -96,6 +97,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-018**: MUST resolve checker executables by probing bundled `node_modules/.bin` paths relative to the installation path before falling back to `PATH` scan.
 - **DES-019**: MUST resolve the `%%INSTALLATION_PATH%%` keyword inside static-check `Command` `cmd` fields to the runtime installation path within `resolveCheckerExecutable` before executable probing.
 - **DES-020**: MUST extend `scripts/install-static-checkers.ts` to best-effort approve pending npm install scripts for bundled checker dependencies before probing bundled executables.
+- **DES-021**: MUST implement the guarded model-selection reapply helper in `src/core/prompt-command-runtime.ts` without importing extension custom-tool executors from `src/core/tool-runner.ts`.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -435,6 +437,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-363**: MUST append the current context-usage percentage to the final context-retention notification when a normalized context-usage snapshot exists.
 - **REQ-364**: MUST deliver the final context-retention notification exclusively through the stale-context-safe UI-notification channel and MUST NOT send it as a session message or perform session switching at that point.
 - **REQ-365**: MUST NOT emit the final context-retention notification for interrupted, failed, aborted, or incomplete worktree-backed `/req-*` orchestrations that retain the execution session per REQ-209.
+- **REQ-366**: MUST capture the active model provider, model identifier, and thinking level into the prompt-command execution plan during command preflight.
+- **REQ-367**: MUST re-apply the captured model after the prompt execution-session switch succeeds and before agent start using the session-scoped model API.
+- **REQ-368**: MUST re-apply the captured model after successful `base-path` session restoration during orchestrated closure using the session-scoped model API.
+- **REQ-369**: MUST re-apply the captured model after `req-reset` returns the active pi session to the main `base-path` session.
+- **REQ-370**: MUST skip model re-application when the post-switch active model already matches the captured provider and identifier, avoiding duplicate `model_change` session entries.
+- **REQ-371**: MUST re-apply the captured thinking level at every model re-application point only when the active thinking level differs.
+- **REQ-372**: MUST emit one stale-context-safe warning notification and continue orchestration without aborting when model re-application fails or is rejected.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -560,6 +569,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-131**: MUST verify the command invocation summary renders sections in the order `Command:`, `Configuration:`, then `User's Request:`, with one blank line between consecutive sections.
 - **TST-132**: MUST verify that when the running pi host does not expose `agent_settled`, matched-success worktree closure finalizes at `agent_end` and transitions through `merging` to `idle`.
 - **TST-133**: MUST verify `req-references` stages `REFERENCES.md` and reports success without creating a commit when the regenerated content matches `HEAD`, leaving the repository clean.
+- **TST-134**: MUST verify prompt-command preflight stores the captured model provider, model identifier, and thinking level inside the execution plan.
+- **TST-135**: MUST verify execution-session activation re-applies the captured model on the replacement session before agent start when the restored model differs.
+- **TST-136**: MUST verify orchestrated closure re-applies the captured model after successful `base-path` restoration when the restored model differs.
+- **TST-137**: MUST verify `req-reset` re-applies the captured model after returning the active session to the main `base-path`.
+- **TST-138**: MUST verify re-application is skipped without a second model mutation when the post-switch model and thinking level already match the captured selection.
+- **TST-139**: MUST verify a failed or unauthenticated model re-application emits one warning notification, keeps workflow state consistent, and does not abort orchestration.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
 - **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.
