@@ -84,6 +84,12 @@ import {
   type PiUsereqStartupToolName,
 } from "./core/pi-usereq-tools.js";
 import {
+  formatContextFileSize,
+  measureContextFileSizes,
+  type ContextFileName,
+  type ContextFileSizeFacts,
+} from "./core/context-file-size.js";
+import {
   PROMPT_COMMAND_SUMMARY_CUSTOM_TYPE,
   renderPrompt,
   renderPromptCommandSummary,
@@ -3366,7 +3372,7 @@ function registerReqReferencesCommand(
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377
  */
 function registerPromptCommands(
   pi: ExtensionAPI,
@@ -3458,6 +3464,7 @@ function registerPromptCommands(
             promptName,
             args,
             config,
+            measureContextFileSizes(projectBase, config),
           );
           const promptDelivery = deliverPromptCommand(pi, content, commandSummary, promptContext);
           transitionPromptWorkflowState(
@@ -4533,46 +4540,68 @@ async function configureStaticCheckMenu(
 }
 
 /**
- * @brief Summarizes the `Context Files` flag state for the top-level menu value column.
- * @details Renders the three context-file flags as compact `name:on|off` segments in the documented order so the top-level row reflects the current injection configuration. Runtime is O(1). No external state is mutated.
+ * @brief Summarizes the `Context Files` flag state with measured sizes for the top-level menu value column.
+ * @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment so the top-level row exposes a runtime estimate of the injected context payload while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
  * @return {string} Compact `Context Files` summary string.
- * @satisfies REQ-327
+ * @satisfies REQ-327, REQ-376
  */
-function formatContextFilesSummary(config: UseReqConfig): string {
-  return `requirements:${config["context-files-requirements"] ? "on" : "off"} \u2022 references:${config["context-files-references"] ? "on" : "off"} \u2022 workflow:${config["context-files-workflow"] ? "on" : "off"}`;
+function formatContextFilesSummary(
+  config: UseReqConfig,
+  sizes: Record<ContextFileName, ContextFileSizeFacts>,
+): string {
+  const segments = [
+    `requirements:${config["context-files-requirements"] ? `on(${formatContextFileSize(sizes["REQUIREMENTS.md"])})` : "off"}`,
+    `references:${config["context-files-references"] ? `on(${formatContextFileSize(sizes["REFERENCES.md"])})` : "off"}`,
+    `workflow:${config["context-files-workflow"] ? `on(${formatContextFileSize(sizes["WORKFLOW.md"])})` : "off"}`,
+  ];
+  return segments.join(" \u2022 ");
 }
 
 /**
  * @brief Builds the shared settings-menu choices for the `Context Files` submenu.
- * @details Exposes one inline on|off toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order plus a value-less subtree-local `Reset defaults` row. Runtime is O(1). No external state is mutated.
+ * @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
- * @satisfies REQ-327, REQ-328, REQ-333
+ * @satisfies REQ-327, REQ-328, REQ-333, REQ-375
  */
-function buildContextFilesMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
+function buildContextFilesMenuChoices(
+  config: UseReqConfig,
+  sizes: Record<ContextFileName, ContextFileSizeFacts>,
+): PiUsereqSettingsMenuChoice[] {
+  const buildRow = (
+    id: "context-files-requirements" | "context-files-references" | "context-files-workflow",
+    fileName: ContextFileName,
+    description: string,
+  ): PiUsereqSettingsMenuChoice => {
+    const sizedOn = `on \u2022 ${formatContextFileSize(sizes[fileName])}`;
+    const sizedOff = `off \u2022 ${formatContextFileSize(sizes[fileName])}`;
+    return {
+      id,
+      label: fileName,
+      value: config[id] ? sizedOn : sizedOff,
+      values: [sizedOn, sizedOff],
+      description,
+    };
+  };
   return [
-    {
-      id: "context-files-requirements",
-      label: "REQUIREMENTS.md",
-      value: config["context-files-requirements"] ? "on" : "off",
-      values: ["on", "off"],
-      description: "Toggle injection of REQUIREMENTS.md into the prompt context through `%%CONTEXT_FILES%%`.",
-    },
-    {
-      id: "context-files-references",
-      label: "REFERENCES.md",
-      value: config["context-files-references"] ? "on" : "off",
-      values: ["on", "off"],
-      description: "Toggle injection of REFERENCES.md into the prompt context through `%%CONTEXT_FILES%%`.",
-    },
-    {
-      id: "context-files-workflow",
-      label: "WORKFLOW.md",
-      value: config["context-files-workflow"] ? "on" : "off",
-      values: ["on", "off"],
-      description: "Toggle injection of WORKFLOW.md into the prompt context through `%%CONTEXT_FILES%%`.",
-    },
+    buildRow(
+      "context-files-requirements",
+      "REQUIREMENTS.md",
+      "Toggle injection of REQUIREMENTS.md into the prompt context through `%%CONTEXT_FILES%%`.",
+    ),
+    buildRow(
+      "context-files-references",
+      "REFERENCES.md",
+      "Toggle injection of REFERENCES.md into the prompt context through `%%CONTEXT_FILES%%`.",
+    ),
+    buildRow(
+      "context-files-workflow",
+      "WORKFLOW.md",
+      "Toggle injection of WORKFLOW.md into the prompt context through `%%CONTEXT_FILES%%`.",
+    ),
     ...buildTerminalSettingsMenuChoices({
       resetDefaultsDescription: "Restore the default Context Files configuration (all three files enabled).",
     }),
@@ -4593,6 +4622,7 @@ async function configureContextFilesMenu(
   config: UseReqConfig,
   onConfigChange: () => void,
 ): Promise<void> {
+  const contextFileSizes = measureContextFileSizes(getProjectBase(ctx.cwd), config);
   const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void => {
     config[flagKey] = enabled;
     onConfigChange();
@@ -4600,20 +4630,20 @@ async function configureContextFilesMenu(
   };
   let focusedChoiceId: string | undefined;
   while (true) {
-    const choice = await showPiUsereqSettingsMenu(ctx, "Context Files", buildContextFilesMenuChoices(config), {
+    const choice = await showPiUsereqSettingsMenu(ctx, "Context Files", buildContextFilesMenuChoices(config, contextFileSizes), {
       initialSelectedId: focusedChoiceId,
-      getChoices: () => buildContextFilesMenuChoices(config),
+      getChoices: () => buildContextFilesMenuChoices(config, contextFileSizes),
       onChange: (choiceId, newValue) => {
         if (choiceId === "context-files-requirements") {
-          setFlag("context-files-requirements", newValue === "on");
+          setFlag("context-files-requirements", newValue.startsWith("on"));
           return;
         }
         if (choiceId === "context-files-references") {
-          setFlag("context-files-references", newValue === "on");
+          setFlag("context-files-references", newValue.startsWith("on"));
           return;
         }
         if (choiceId === "context-files-workflow") {
-          setFlag("context-files-workflow", newValue === "on");
+          setFlag("context-files-workflow", newValue.startsWith("on"));
         }
       },
     });
@@ -4654,7 +4684,7 @@ async function configureContextFilesMenu(
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376
  */
 function buildPiUsereqMenuChoices(
   cwd: string,
@@ -4687,7 +4717,7 @@ function buildPiUsereqMenuChoices(
     {
       id: "context-files",
       label: "Context Files",
-      value: formatContextFilesSummary(config),
+      value: formatContextFilesSummary(config, measureContextFileSizes(cwd, config)),
       description: "Toggle injection of REQUIREMENTS.md, REFERENCES.md, and WORKFLOW.md into prompt context through `%%CONTEXT_FILES%%`.",
     },
     {
@@ -5044,7 +5074,7 @@ async function configurePiUsereq(
           { label: "Document directory", previousValue: config["docs-dir"], nextValue: defaultConfig["docs-dir"] },
           { label: "Source-code directories", previousValue: config["src-dir"].join(", "), nextValue: defaultConfig["src-dir"].join(", ") },
           { label: "Unit tests directory", previousValue: config["tests-dir"], nextValue: defaultConfig["tests-dir"] },
-          { label: "Context Files", previousValue: formatContextFilesSummary(config), nextValue: formatContextFilesSummary(defaultConfig) },
+          { label: "Context Files", previousValue: formatContextFilesSummary(config, measureContextFileSizes(ctx.cwd, config)), nextValue: formatContextFilesSummary(defaultConfig, measureContextFileSizes(ctx.cwd, defaultConfig)) },
           { label: "Auto git commit", previousValue: config.AUTO_GIT_COMMIT, nextValue: defaultConfig.AUTO_GIT_COMMIT },
           { label: "Git worktree", previousValue: config.GIT_WORKTREE_ENABLED, nextValue: defaultConfig.GIT_WORKTREE_ENABLED },
           { label: "Worktree prefix", previousValue: config.GIT_WORKTREE_PREFIX, nextValue: defaultConfig.GIT_WORKTREE_PREFIX },

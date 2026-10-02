@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.84"
+version: "0.0.85"
 date: "2026-10-02"
 author: "OpenAI Codex"
 scope:
@@ -444,6 +444,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-370**: MUST skip model re-application when the post-switch active model already matches the captured provider and identifier, avoiding duplicate `model_change` session entries.
 - **REQ-371**: MUST re-apply the captured thinking level at every model re-application point only when the active thinking level differs.
 - **REQ-372**: MUST emit one stale-context-safe warning notification and continue orchestration without aborting when model re-application fails or is rejected.
+- **REQ-373**: MUST expose reusable context-file sizing helpers in `src/core/context-file-size.ts` that compute character and `cl100k_base` token estimates for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` under `<base-path>/<docs-dir>`.
+- **REQ-374**: MUST return one `{ exists, chars, tokens }` record per context file, reporting `exists=false`, `chars=0`, and `tokens=0` for missing or unreadable files without throwing.
+- **REQ-375**: MUST render each `Context Files` submenu row value as `on|off • <chars>c/<tokens>t` derived from the measured facts of the targeted file.
+- **REQ-376**: MUST append `(<chars>c/<tokens>t)` to each enabled segment and render disabled segments as `name:off` in the top-level `Context Files` summary.
+- **REQ-377**: MUST append `(<chars>c/<tokens>t)` to each enabled context file in the command invocation summary `context files` field when that file exists.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -575,6 +580,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-137**: MUST verify `req-reset` re-applies the captured model after returning the active session to the main `base-path`.
 - **TST-138**: MUST verify re-application is skipped without a second model mutation when the post-switch model and thinking level already match the captured selection.
 - **TST-139**: MUST verify a failed or unauthenticated model re-application emits one warning notification, keeps workflow state consistent, and does not abort orchestration.
+- **TST-140**: MUST verify `src/core/context-file-size.ts` reports `exists=false` with zero metrics for missing context files and exact character plus `cl100k_base` token counts for existing files.
+- **TST-141**: MUST verify the `Context Files` submenu rows and top-level summary render `<chars>c/<tokens>t` size facts from measured context files.
+- **TST-142**: MUST verify the command invocation summary `context files` field renders size suffixes only for enabled existing context files.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
 - **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.
