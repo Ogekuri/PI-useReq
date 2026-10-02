@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.61.0](https://github.com/Ogekuri/PI-useReq/compare/v0.60.0..v0.61.0) - 2026-10-02
+### 🐛  Bug Fixes
+- Update .g.conf references.
+
+### 🚜  Changes
+- add runtime context-file size estimation for menus and req summaries [useReq] *(core)*
+  - Add src/core/context-file-size.ts with reusable cl100k_base token and
+  - character measurement helpers for REQUIREMENTS/REFERENCES/WORKFLOW docs.
+  - Context Files submenu and top-level summary now render measured
+  - '<chars>c/<tokens>t' size facts next to each on|off flag.
+  - Command invocation summaries append size suffixes to enabled context
+  - files for every bundled prompt-backed req-* command.
+  - SRS: add REQ-373..377 and TST-140..142; refresh WORKFLOW call traces
+  - and regenerate REFERENCES.md.
+- preserve selected model across session switches [useReq] *(prompt-runtime)*
+  - Add REQ-366..372 with CTN-022, DES-021, and TST-134..139 to REQUIREMENTS.md
+  - Capture active model identity plus thinking level into the execution plan at preflight
+  - Add guarded reapplyPromptCommandSessionSelection helper in prompt-command-runtime
+  - Re-apply captured selection after worktree activation, base-path closure restore, and req-reset redirect
+  - Skip duplicate model_change via match guard; emit warning-only notification on failures
+- BREAKING CHANGE: Align extension to pi CLI 1.0.0 and fix bundled checker spawn [useReq] *(core)*
+  - package.json/package-lock.json: raise @earendil-works pi-coding-agent, pi-ai, and pi-tui peer dependency ranges from 0.x to ^1.0.0 so the extension resolves against pi CLI 1.0.0.
+  - pi-usereq/docs/REQUIREMENTS.md: document the pi >=1.0.0 dependency floor in section 5.2 and bump front matter to 0.0.83.
+  - pi-usereq/docs/REFERENCES.md: regenerate from the updated source surface.
+  - src/core/prompt-command-runtime.ts: narrow PromptCommandActiveContext sendUserMessage to the string delivery contract so the local session-context mirror stays structurally assignable to the pi 1.0.0 ReplacedSessionContext signatures.
+  - src/core/static-check.ts: spawn the resolveCheckerExecutable result instead of the bare command name so bundled node_modules/.bin resolution drives execution as required by DES-018 and REQ-351.
+  - No requirement or test changes were mandatory beyond the dependency floor: the pi 1.0.0 extension API surface (events, contexts, SessionManager, session format v3, theme tokens, SettingsList) is backward compatible, and extension-registration plus the pi-host simulation suites pass 158/158.
+
+### 📚  Documentation
+- Updated pi docs from 0.87.1 to 1.0.0.
+- Updated pi from 0.87.1 to 1.0.0.
+
 ## [0.60.0](https://github.com/Ogekuri/PI-useReq/compare/v0.59.0..v0.60.0) - 2026-09-25
 ### 📚  Documentation
 - Update images.
@@ -773,6 +805,7 @@
 - \[0.58.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.58.0
 - \[0.59.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.59.0
 - \[0.60.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.60.0
+- \[0.61.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.61.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -832,3 +865,4 @@
 [0.58.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.57.0..v0.58.0
 [0.59.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.58.0..v0.59.0
 [0.60.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.59.0..v0.60.0
+[0.61.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.60.0..v0.61.0
