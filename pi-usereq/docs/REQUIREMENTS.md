@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.82"
-date: "2026-09-24"
+version: "0.0.83"
+date: "2026-10-02"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -583,9 +583,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 
 ### 5.2 Libraries and Runtime Dependencies
-- `@earendil-works/pi-coding-agent` (>=0.80.4) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
-- `@earendil-works/pi-ai` (>=0.80.4) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
-- `@earendil-works/pi-tui` (>=0.80.4) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-coding-agent` (>=1.0.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
+- `@earendil-works/pi-ai` (>=1.0.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-tui` (>=1.0.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
 - `@sinclair/typebox` provides runtime tool parameter schemas and is declared as a peer dependency evidenced by `src/index.ts`, `package.json`, and `package-lock.json`.
 - `js-tiktoken` provides token counting evidence in `src/core/token-counter.ts`, `package.json`, and `package-lock.json`.
 - `fast-glob` provides wildcard expansion for static-check inputs evidence in `src/core/static-check.ts`, `package.json`, and `package-lock.json`.

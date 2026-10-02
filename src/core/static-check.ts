@@ -404,7 +404,7 @@ export class StaticCheckCommand extends StaticCheckBase {
       throw new ReqError(`Error: external command '${cmd}' not found on PATH.`, 1);
     }
     super(inputs, extraArgs, failOnly);
-    this.cmd = cmd.includes("%%INSTALLATION_PATH%%") ? resolvedCmd : cmd;
+    this.cmd = resolvedCmd;
     this.label = `Command[${cmd}]`;
   }
 

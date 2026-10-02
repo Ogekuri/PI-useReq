@@ -109,11 +109,11 @@ interface PromptCommandSessionSwitchOptions {
 
 /**
  * @brief Describes the minimal session-bound surface available after session replacement.
- * @details Extends the shared prompt-command context with `sendUserMessage(...)` so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The interface is compile-time only and introduces no runtime cost.
+ * @details Extends the shared prompt-command context with a string-only `sendUserMessage(...)` probe so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The string content parameter mirrors the prompt-delivery contract consumed by `deliverPromptCommand(...)` while remaining structurally compatible with the pi 1.0.0 replacement-session delivery signatures. The interface is compile-time only and introduces no runtime cost.
  */
 interface PromptCommandActiveContext extends PromptCommandSessionContext {
   sendUserMessage?: (
-    content: string | Array<{ type: string; text?: string }>,
+    content: string,
     options?: PromptCommandSessionMessageOptions,
   ) => Promise<void> | void;
 }

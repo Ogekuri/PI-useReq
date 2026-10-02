@@ -2806,7 +2806,7 @@ import {
 
 ### iface `interface PromptCommandActiveContext extends PromptCommandSessionContext` : PromptCommandSessionContext (L114-119)
 - @brief Describes the minimal session-bound surface available after session replacement.
-- @details Extends the shared prompt-command context with `sendUserMessage(...)` so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The interface is compile-time only and introduces no runtime cost.
+- @details Extends the shared prompt-command context with a string-only `sendUserMessage(...)` probe so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The string content parameter mirrors the prompt-delivery contract consumed by `deliverPromptCommand(...)` while remaining structurally compatible with the pi 1.0.0 replacement-session delivery signatures. The interface is compile-time only and introduces no runtime cost.
 
 ### iface `interface PromptCommandSessionEntry` (L125-130)
 - @brief Describes one serializable session entry copied into a materialized execution-session file.
