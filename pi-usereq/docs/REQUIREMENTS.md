@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.85"
+version: "0.0.86"
 date: "2026-10-02"
 author: "OpenAI Codex"
 scope:
@@ -68,11 +68,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-014**: MUST serialize every configured or derived path without a trailing `/`.
 - **CTN-015**: MUST reserve `*-path` names for absolute paths and `*-dir` names for relative paths.
 - **CTN-016**: MUST NOT modify any path under `docs/` during analysis, implementation, verification, or bug fixing.
-- **CTN-017**: MUST NOT modify any path under `pi.dev-src/` during analysis, implementation, verification, or bug fixing.
+- **CTN-017**: MUST NOT modify any path under `pi.dev-src/` in any way, because those pi CLI client sources are permanently read-only.
 - **CTN-019**: MUST persist local `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
 - **CTN-020**: MUST declare `tsx` as a runtime `package.json` dependency so `node --import tsx` package scripts, the `postinstall` checker installer, and the `.ts` extension entry resolve on clean consumer installs.
 - **CTN-021**: MUST declare a `files` allowlist in `package.json` restricted to runtime-required `src/` and `scripts/` so npm consumer installs exclude the `tests/` directory.
 - **CTN-022**: MUST NOT persist the selected model provider, model identifier, or thinking level in local or global pi-usereq configuration files.
+- **CTN-023**: MUST use the read-only pi CLI client sources under `pi.dev-src/` as reference material during analysis, implementation, verification, and bug fixing.
+- **CTN-024**: MUST treat the read-only pi CLI client sources under `pi.dev-src/` as the source-of-truth for new implementations, source-code modifications, and bug fixes.
 
 ## 3. Requirements
 
@@ -366,9 +368,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-033**: MUST make that block require `docs/pi.dev/coding-agent-docs/`-guided document review before implementing or changing extension code that interfaces with the pi.dev CLI.
 - **REQ-034**: MUST make that block require such document review before analyzing, verifying, or fixing extension code that interfaces with the pi.dev CLI.
 - **REQ-108**: MUST make that block require interface-contract compliance with `docs/pi.dev/coding-agent-docs/` and, when the manifest exists, with documents it references for new or modified pi.dev CLI integrations.
-- **REQ-273**: MUST make that block declare every path under `docs/` and `pi.dev-src/` read-only for analysis, implementation, verification, and bug fixing.
+- **REQ-273**: MUST make that block declare every path under `docs/` and `pi.dev-src/` read-only and unmodifiable in any way.
 - **REQ-274**: MUST make that block require validation against `pi.dev-src/` when `docs/pi.dev/coding-agent-docs/` guidance is ambiguous for extension-to-pi-client interface behavior.
 - **REQ-275**: MUST make that block require validation against `pi.dev-src/` for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
+- **REQ-378**: MUST make that block declare `pi.dev-src/` the read-only pi CLI client reference and source-of-truth for new implementations, source-code modifications, and bug fixes.
 - **REQ-035**: MUST parse repeatable `--enable-static-check LANG=Command,CMD[,PARAM...]` CLI options before command dispatch and merge resulting entries into persisted global checker lists.
 - **REQ-253**: MUST set `static-check.<language>.enabled=enable` whenever guided or CLI `--enable-static-check` entry creation targets that language.
 - **REQ-036**: MUST preserve existing global `static-check` checker entries, append non-duplicate `--enable-static-check` entries in argument order, and treat canonical language, module, cmd, and params as the duplicate identity.
@@ -714,6 +717,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | CTN-011 | `src/core/config.ts` :: `buildPromptReplacementPaths` :: emits `%%TEMPLATE_PATH%%` from `~/.pi/pi-usereq/resources/templates`; bundled template files exist under `src/resources/templates/`. |
 | CTN-013 | `src/core/config.ts` :: `getDefaultConfig` and `loadConfig`; `src/core/debug-runtime.ts` :: `DEFAULT_DEBUG_WORKFLOW_EVENTS` and `normalizeDebugWorkflowEvents` :: default and normalize the persisted debug configuration including `DEBUG_WORKFLOW_EVENTS`. |
 | CTN-021 | `package.json` :: `"files": ["src", "scripts"]` :: npm-published file set ships runtime-required `src/` and `scripts/` only and omits the `tests/` directory. |
+| CTN-023 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` mandatory reference mandate for analysis, implementation, verification, and bug fixing. |
+| CTN-024 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` source-of-truth mandate for new implementations, source-code modifications, and bug fixes. |
 
 ### 8.2 DES Evidence
 | ID | Evidence |
@@ -788,6 +793,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-139 | `.github/workflows/release-npm.yml` :: branch-check job fetches `origin/master` and gates downstream jobs on containment of `github.sha`. |
 | REQ-140 | `.github/workflows/release-npm.yml` :: `env.NODE_VERSION` is `24.15.0`; publish job uses `actions/setup-node`, `npm ci`, `npm pkg delete private`, and `npm publish --provenance --access public` with `NODE_AUTH_TOKEN`. |
 | REQ-141 | `.github/workflows/release-npm.yml` :: release job uses changelog-builder output as `softprops/action-gh-release` body with non-draft and non-prerelease flags. |
+| REQ-378 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` read-only pi CLI client reference plus source-of-truth bullets injected into pi.dev-aware rendered prompts. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |

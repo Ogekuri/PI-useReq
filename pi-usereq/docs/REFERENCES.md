@@ -3459,7 +3459,7 @@ import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
 
 ---
 
-# prompts.ts | TypeScript | 431L | 11 symbols | 9 imports | 21 comments
+# prompts.ts | TypeScript | 443L | 11 symbols | 9 imports | 22 comments
 > Path: `src/core/prompts.ts`
 - @brief Renders bundled pi-usereq prompts for the current project context.
 - @details Applies placeholder substitution, legacy tool-name rewrites, and conditional pi.dev governance guidance before prompt text is sent to the agent. Runtime is linear in prompt size plus replacement count. Side effects are limited to filesystem reads used for the coding-agent-docs directory check and bundled prompt loading.
@@ -3479,24 +3479,24 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 
 ## Definitions
 
-### fn `function buildPiDevConformanceBlock(promptName: string, projectBase: string): string` (L119-128)
+### fn `function buildPiDevConformanceBlock(promptName: string, projectBase: string): string` (L131-140)
 - @brief Builds the conditional pi.dev governance block for one rendered prompt.
-- @details Emits the coding-agent-document-driven governance rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the `docs/pi.dev/coding-agent-docs/` directory; the manifest file is optional and its absence does not suppress the block. Time complexity O(1). No filesystem writes.
+- @details Emits the coding-agent-document-driven governance rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the `docs/pi.dev/coding-agent-docs/` directory; the manifest file is optional and its absence does not suppress the block. The emitted rules declare `pi.dev-src/` the permanently read-only pi CLI client reference and source-of-truth for new implementations, source-code modifications, and bug fixes. Time complexity O(1). No filesystem writes.
 - @param[in] promptName {string} Bundled prompt identifier.
 - @param[in] projectBase {string} Absolute project root used for coding-agent-docs directory existence checks.
 - @return {string} Markdown bullet block or the empty string when injection is not applicable.
-- @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
+- @satisfies CTN-023, CTN-024, REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275, REQ-378
 
-### fn `function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string` (L139-146)
+### fn `function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string` (L151-158)
 - @brief Injects the pi.dev governance block into the prompt behavior section.
 - @details Inserts the block immediately after the `## Behavior` heading so downstream agents evaluate the rule before workflow steps. Leaves prompts unchanged when no behavior section exists or the block is already present. Time complexity O(n).
 - @param[in] text {string} Prompt markdown after placeholder replacement.
 - @param[in] promptName {string} Bundled prompt identifier.
 - @param[in] projectBase {string} Absolute project root used for coding-agent-docs directory existence checks.
 - @return {string} Prompt markdown with zero or one injected conformance block.
-- @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
+- @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275, REQ-378
 
-### fn `function buildContextFilesBlock(projectBase: string, config: UseReqConfig): string` (L167-184)
+### fn `function buildContextFilesBlock(projectBase: string, config: UseReqConfig): string` (L179-196)
 - @brief Builds the markdown block that replaces the `%%CONTEXT_FILES%%` prompt token.
 - @details Iterates the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order, skips disabled flags and missing files without error, and renders each remaining file as a file-name heading, an HTML `<file name="<docs-dir>/<filename>">` reference with `%%DOC_PATH%%` pre-substituted, and the raw file content inside four-backtick `markdown` fences. Runtime is O(n) in aggregate context-file size. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root used to resolve the configured docs directory.
@@ -3504,14 +3504,14 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Rendered markdown block, or the empty string when no enabled context file exists.
 - @satisfies REQ-329, REQ-330, REQ-331, REQ-332
 
-### fn `export function adaptPromptForInternalTools(text: string): string` (L193-199)
+### fn `export function adaptPromptForInternalTools(text: string): string` (L205-211)
 - @brief Rewrites bundled prompt tool references from legacy `req --...` syntax to internal tool names.
 - @details Applies deterministic global regex replacements so prompt text matches the extension-registered tool surface instead of the standalone CLI spelling. Time complexity O(p*r) where p is pattern count and r is prompt length.
 - @param[in] text {string} Prompt markdown before tool-reference normalization.
 - @return {string} Prompt markdown with internal tool names.
 - @satisfies REQ-003
 
-### fn `export function applyReplacements(text: string, replacements: Record<string, string>): string` (L209-215)
+### fn `export function applyReplacements(text: string, replacements: Record<string, string>): string` (L221-227)
 - @brief Applies literal placeholder replacements to bundled prompt markdown.
 - @details Replaces every placeholder token using split/join semantics so all occurrences are updated without regex escaping. Time complexity O(t*n) where t is replacement count and n is prompt length.
 - @param[in] text {string} Prompt markdown containing placeholder tokens.
@@ -3519,7 +3519,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Prompt markdown with all placeholder tokens expanded.
 - @satisfies REQ-002
 
-### fn `function buildPromptExecutionBlock(` (L225-247)
+### fn `function buildPromptExecutionBlock(` (L237-259)
 - @brief Builds the prompt-command execution block injected at prompt start.
 - @details Serializes the already-completed repository validation, prompt-specific required-doc validation, worktree routing decision, and extension-owned lifecycle responsibilities so downstream agents do not repeat command-side orchestration. Time complexity is O(d) in required-doc count. No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt identifier.
@@ -3527,7 +3527,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Markdown block or the empty string when runtime execution metadata is unavailable.
 - @satisfies REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209
 
-### fn `function injectPromptExecutionBlock(` (L257-268)
+### fn `function injectPromptExecutionBlock(` (L269-280)
 - @brief Injects the prompt-command execution block near the start of the rendered prompt.
 - @details Inserts the execution block immediately after the first level-1 heading so downstream agents evaluate extension-owned orchestration before workflow steps. Leaves prompts unchanged when no execution block is provided or when the block is already present. Time complexity O(n).
 - @param[in] text {string} Prompt markdown after placeholder replacement.
@@ -3535,7 +3535,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @param[in] executionPlan {PromptCommandExecutionPlan | undefined} Prepared execution plan.
 - @return {string} Prompt markdown with zero or one injected execution block.
 
-### fn `function buildPromptReplacements(` (L280-292)
+### fn `function buildPromptReplacements(` (L292-304)
 - @brief Builds prompt-specific runtime placeholder replacements.
 - @details Merges shared path substitutions with prompt-scoped runtime values for `%%ARGS%%` and `%%PROMPT%%`. Time complexity is O(g log g + s) due to delegated path replacement building, where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads delegated to shared path-context helpers.
 - @param[in] promptName {string} Bundled prompt identifier without the `req-` prefix.
@@ -3545,7 +3545,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {Record<string, string>} Prompt-specific placeholder-to-value map.
 - @satisfies REQ-002, REQ-211
 
-### fn `function renderBundledCommitInstruction(` (L304-318)
+### fn `function renderBundledCommitInstruction(` (L316-330)
 - @brief Renders the bundled git instruction injected through `%%COMMIT%%`.
 - @details Selects `resources/instructions/git_commit.md` when automatic git commit is enabled and `resources/instructions/git_read-only.md` otherwise, then applies the same runtime placeholder substitutions used by bundled prompts before returning the rendered markdown. Time complexity is O(n + g log g + s) where n is instruction size, g is guideline count, and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] promptName {string} Bundled prompt identifier without the `req-` prefix.
@@ -3555,7 +3555,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @return {string} Rendered bundled git instruction selected for the current automatic-commit mode.
 - @satisfies REQ-211, REQ-213, REQ-214
 
-### fn `export function renderPrompt(` (L331-367)
+### fn `export function renderPrompt(` (L343-379)
 - @brief Renders a bundled prompt for the current project context.
 - @details Loads the bundled markdown template, expands configuration-derived placeholders, injects extension-owned execution guidance plus conditional pi.dev governance guidance, expands the optional bundled commit instruction, and rewrites legacy tool references to internal names. Time complexity O(n) relative to prompt size plus delegated commit-instruction rendering. No tracked files are modified.
 - @param[in] promptName {string} Bundled prompt identifier.
@@ -3564,9 +3564,9 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 - @param[in] config {UseReqConfig} Effective project configuration used for path substitutions.
 - @param[in] executionPlan {PromptCommandExecutionPlan | undefined} Optional prompt-command execution plan used for injected runtime guidance.
 - @return {string} Fully rendered prompt markdown ready for `pi.sendUserMessage(...)`.
-- @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108, REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209, REQ-211, REQ-213, REQ-214, REQ-273, REQ-274, REQ-275, REQ-329, REQ-330, REQ-331, REQ-332
+- @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108, REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209, REQ-211, REQ-213, REQ-214, REQ-273, REQ-274, REQ-275, REQ-378, REQ-329, REQ-330, REQ-331, REQ-332
 
-### fn `export function renderPromptCommandSummary(` (L386-431)
+### fn `export function renderPromptCommandSummary(` (L398-443)
 - @brief Builds the on-screen command invocation summary for one bundled prompt-backed `req-<prompt>` command.
 - @details Renders the command name without the `req-` prefix in uppercase, the user request arguments, and the active configuration fields (`docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools`) so the TUI shows only a compact summary while the full rendered prompt is delivered hidden to the LLM agent. When measured context-file size facts are supplied, every enabled existing context file in the `context files` field is rendered as `name(<chars>c/<tokens>t)`; without facts, or for enabled missing files, the plain `name` form is rendered. Static-check languages are emitted in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order; enabled tools are emitted in documented menu order via `comparePiUsereqStartupToolNames`. The `context files`, `static code checks`, and `enabled tools` fields render the literal `none` placeholder whenever their respective enabled-item list is empty so the summary never shows a blank value. Sections are emitted in the order `Command:`, `Configuration:` with its bullet list, then `User's Request:`, each separated by one blank line. Runtime is O(l + t log t) where l is language count and t is enabled-tool count. No external state is mutated.
 - @param[in] promptName {string} Bundled prompt name without the `req-` prefix.
@@ -3579,17 +3579,17 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`buildPiDevConformanceBlock`|fn||119-128|function buildPiDevConformanceBlock(promptName: string, p...|
-|`injectPiDevConformanceBlock`|fn||139-146|function injectPiDevConformanceBlock(text: string, prompt...|
-|`buildContextFilesBlock`|fn||167-184|function buildContextFilesBlock(projectBase: string, conf...|
-|`adaptPromptForInternalTools`|fn||193-199|export function adaptPromptForInternalTools(text: string)...|
-|`applyReplacements`|fn||209-215|export function applyReplacements(text: string, replaceme...|
-|`buildPromptExecutionBlock`|fn||225-247|function buildPromptExecutionBlock(|
-|`injectPromptExecutionBlock`|fn||257-268|function injectPromptExecutionBlock(|
-|`buildPromptReplacements`|fn||280-292|function buildPromptReplacements(|
-|`renderBundledCommitInstruction`|fn||304-318|function renderBundledCommitInstruction(|
-|`renderPrompt`|fn||331-367|export function renderPrompt(|
-|`renderPromptCommandSummary`|fn||386-431|export function renderPromptCommandSummary(|
+|`buildPiDevConformanceBlock`|fn||131-140|function buildPiDevConformanceBlock(promptName: string, p...|
+|`injectPiDevConformanceBlock`|fn||151-158|function injectPiDevConformanceBlock(text: string, prompt...|
+|`buildContextFilesBlock`|fn||179-196|function buildContextFilesBlock(projectBase: string, conf...|
+|`adaptPromptForInternalTools`|fn||205-211|export function adaptPromptForInternalTools(text: string)...|
+|`applyReplacements`|fn||221-227|export function applyReplacements(text: string, replaceme...|
+|`buildPromptExecutionBlock`|fn||237-259|function buildPromptExecutionBlock(|
+|`injectPromptExecutionBlock`|fn||269-280|function injectPromptExecutionBlock(|
+|`buildPromptReplacements`|fn||292-304|function buildPromptReplacements(|
+|`renderBundledCommitInstruction`|fn||316-330|function renderBundledCommitInstruction(|
+|`renderPrompt`|fn||343-379|export function renderPrompt(|
+|`renderPromptCommandSummary`|fn||398-443|export function renderPromptCommandSummary(|
 
 
 ---

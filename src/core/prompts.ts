@@ -82,15 +82,27 @@ const PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH = `${PI_DEV_DOCS_PROMPT_PATH}/coding-
  */
 const PI_DEV_SOURCE_PROMPT_PATH = "pi.dev-src/pi-mono";
 /**
+ * @brief Stores the repository-relative root directory of the pi CLI client sources.
+ * @details Prompt guidance cites this directory when declaring the permanently read-only pi CLI client reference and source-of-truth mandates for new implementations, source-code modifications, and bug fixes. Lookup complexity is O(1).
+ */
+const PI_DEV_SOURCE_ROOT_PROMPT_PATH = "pi.dev-src";
+/**
  * @brief Defines the injected pi.dev governance guidance block.
- * @details The block requires read-only handling for documentation and pi client sources, coding-agent-document review, coding-agent-document compliance, optional manifest-referenced document handling, and pi client source validation for ambiguous or bug-fix interface work. Construction happens once at module load. Access complexity is O(1).
- * @satisfies REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
+ * @details The block requires read-only handling for documentation and pi client sources, mandatory read-only pi CLI client reference usage plus source-of-truth handling for new implementations, source-code modifications, and bug fixes, coding-agent-document review, coding-agent-document compliance, optional manifest-referenced document handling, and pi client source validation for ambiguous or bug-fix interface work. Construction happens once at module load. Access complexity is O(1).
+ * @satisfies CTN-017, CTN-023, CTN-024, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275, REQ-378
  */
 const PI_DEV_CONFORMANCE_BLOCK = [
   "- Treat every path under `docs/` as read-only; do NOT modify "
     + "any documentation file, including those under `docs/pi.dev/`.",
   "- Treat every path under `pi.dev-src/` as read-only; do NOT modify "
     + `\`${PI_DEV_SOURCE_PROMPT_PATH}\` or any other pi client source.`,
+  `- Every file under \`${PI_DEV_SOURCE_ROOT_PROMPT_PATH}/\` is a pi CLI client `
+    + "source: it MAY and MUST be used as read-only reference material "
+    + "during analysis, implementation, verification, and bug fixing.",
+  `- Treat \`${PI_DEV_SOURCE_ROOT_PROMPT_PATH}/\` as the source-of-truth (SoT) `
+    + "for new implementations, source-code modifications, and bug fixes; "
+    + "derive pi-client-facing behavior from it without modifying it "
+    + "in any way.",
   "- If the task creates or modifies software that interfaces with the "
     + `pi.dev CLI, review \`${PI_DEV_CODING_AGENT_DOCS_PROMPT_PATH}/\` `
     + "before analysis, implementation, verification, or bug fixing.",
@@ -110,11 +122,11 @@ const PI_DEV_CONFORMANCE_BLOCK = [
 
 /**
  * @brief Builds the conditional pi.dev governance block for one rendered prompt.
- * @details Emits the coding-agent-document-driven governance rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the `docs/pi.dev/coding-agent-docs/` directory; the manifest file is optional and its absence does not suppress the block. Time complexity O(1). No filesystem writes.
+ * @details Emits the coding-agent-document-driven governance rules only when the selected bundled prompt can analyze or mutate source code and the project root contains the `docs/pi.dev/coding-agent-docs/` directory; the manifest file is optional and its absence does not suppress the block. The emitted rules declare `pi.dev-src/` the permanently read-only pi CLI client reference and source-of-truth for new implementations, source-code modifications, and bug fixes. Time complexity O(1). No filesystem writes.
  * @param[in] promptName {string} Bundled prompt identifier.
  * @param[in] projectBase {string} Absolute project root used for coding-agent-docs directory existence checks.
  * @return {string} Markdown bullet block or the empty string when injection is not applicable.
- * @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
+ * @satisfies CTN-023, CTN-024, REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275, REQ-378
  */
 function buildPiDevConformanceBlock(promptName: string, projectBase: string): string {
   if (!PI_DEV_AWARE_PROMPT_NAMES.has(promptName)) {
@@ -134,7 +146,7 @@ function buildPiDevConformanceBlock(promptName: string, projectBase: string): st
  * @param[in] promptName {string} Bundled prompt identifier.
  * @param[in] projectBase {string} Absolute project root used for coding-agent-docs directory existence checks.
  * @return {string} Prompt markdown with zero or one injected conformance block.
- * @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275
+ * @satisfies REQ-032, REQ-033, REQ-034, REQ-108, REQ-273, REQ-274, REQ-275, REQ-378
  */
 function injectPiDevConformanceBlock(text: string, promptName: string, projectBase: string): string {
   const block = buildPiDevConformanceBlock(promptName, projectBase);
@@ -326,7 +338,7 @@ function renderBundledCommitInstruction(
  * @param[in] config {UseReqConfig} Effective project configuration used for path substitutions.
  * @param[in] executionPlan {PromptCommandExecutionPlan | undefined} Optional prompt-command execution plan used for injected runtime guidance.
  * @return {string} Fully rendered prompt markdown ready for `pi.sendUserMessage(...)`.
- * @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108, REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209, REQ-211, REQ-213, REQ-214, REQ-273, REQ-274, REQ-275, REQ-329, REQ-330, REQ-331, REQ-332
+ * @satisfies REQ-002, REQ-003, REQ-032, REQ-033, REQ-034, REQ-108, REQ-200, REQ-201, REQ-202, REQ-206, REQ-207, REQ-208, REQ-209, REQ-211, REQ-213, REQ-214, REQ-273, REQ-274, REQ-275, REQ-378, REQ-329, REQ-330, REQ-331, REQ-332
  */
 export function renderPrompt(
   promptName: string,
