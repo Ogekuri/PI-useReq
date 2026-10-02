@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.63.0](https://github.com/Ogekuri/PI-useReq/compare/v0.62.0..v0.63.0) - 2026-10-02
+### 🚜  Changes
+- mandate read-only pi.dev-src SoT reference governance *(core/prompts)*
+  - Add CTN-023/CTN-024: pi.dev-src pi CLI client sources are mandatory reference and source-of-truth for new implementations, source-code modifications, and bug fixes.
+  - Strengthen CTN-017 and REQ-273: forbid pi.dev-src modifications in any way.
+  - Add REQ-378: governance block declares read-only pi CLI client reference and SoT mandates.
+  - Emit the new mandates from PI_DEV_CONFORMANCE_BLOCK in src/core/prompts.ts; update WORKFLOW.md and regenerate REFERENCES.md.
+
 ## [0.62.0](https://github.com/Ogekuri/PI-useReq/compare/v0.61.0..v0.62.0) - 2026-10-02
 ### 🐛  Bug Fixes
 - re-apply captured model via rebound extension api [useReq] *(prompt-runtime)*
@@ -824,6 +832,7 @@
 - \[0.60.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.60.0
 - \[0.61.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.61.0
 - \[0.62.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.62.0
+- \[0.63.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.63.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -885,3 +894,4 @@
 [0.60.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.59.0..v0.60.0
 [0.61.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.60.0..v0.61.0
 [0.62.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.61.0..v0.62.0
+[0.63.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.62.0..v0.63.0
