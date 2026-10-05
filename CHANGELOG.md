@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.64.0](https://github.com/Ogekuri/PI-useReq/compare/v0.63.0..v0.64.0) - 2026-10-05
+### ⛰️  Features
+- Update prompts.
+- Add pi-prompts-update.sh bundled-resource updater [useReq] *(scripts)*
+  - Add DES-022 plus REQ-379..REQ-384 covering PI-Prompts fallback clone
+  - URLs, latest-release-on-master ref selection, full synchronization of
+  - instructions/prompts/templates into src/resources, and timestamp
+  - preservation for synchronized files.
+  - Add scripts/pi-prompts-update.sh implementing the updater with
+  - git-only release checkout, staging backup-and-swap full sync, and
+  - cp -p access/modification timestamp preservation.
+  - Update REQUIREMENTS.md scope/model entries, WORKFLOW.md
+  - PROC:pi-prompts-update runtime unit, and front matter version.
+
 ## [0.63.0](https://github.com/Ogekuri/PI-useReq/compare/v0.62.0..v0.63.0) - 2026-10-02
 ### 🚜  Changes
 - mandate read-only pi.dev-src SoT reference governance *(core/prompts)*
@@ -833,6 +847,7 @@
 - \[0.61.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.61.0
 - \[0.62.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.62.0
 - \[0.63.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.63.0
+- \[0.64.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.64.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -895,3 +910,4 @@
 [0.61.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.60.0..v0.61.0
 [0.62.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.61.0..v0.62.0
 [0.63.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.62.0..v0.63.0
+[0.64.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.63.0..v0.64.0
