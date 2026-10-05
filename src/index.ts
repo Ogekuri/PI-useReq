@@ -4578,27 +4578,26 @@ function formatContextFilesSummary(
 
 /**
  * @brief Builds the shared settings-menu choices for the `Context Files` submenu.
- * @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus the context-occupancy suffix computed from the enabled existing token total against the selected model max input context, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
+ * @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
  * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the documented 1,000,000-token fallback.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
- * @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406
+ * @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412
  */
 function buildContextFilesMenuChoices(
   config: UseReqConfig,
   sizes: Record<ContextFileName, ContextFileSizeFacts>,
   maxContextTokens?: number | undefined,
 ): PiUsereqSettingsMenuChoice[] {
-  const totalTokens = sumEnabledContextFileTokens(config, sizes);
-  const occupancySuffix = totalTokens > 0
-    ? ` ${computeContextOccupancyFacts(totalTokens, maxContextTokens).suffix}`
-    : "";
   const buildRow = (
     id: "context-files-requirements" | "context-files-references" | "context-files-workflow",
     fileName: ContextFileName,
     description: string,
   ): PiUsereqSettingsMenuChoice => {
+    const occupancySuffix = sizes[fileName].tokens > 0
+      ? ` ${computeContextOccupancyFacts(sizes[fileName].tokens, maxContextTokens).suffix}`
+      : "";
     const sizedOn = `on \u2022 ${formatContextFileSize(sizes[fileName])}${occupancySuffix}`;
     const sizedOff = `off \u2022 ${formatContextFileSize(sizes[fileName])}${occupancySuffix}`;
     return {

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.90"
+version: "0.0.91"
 date: "2026-10-05"
 author: "OpenAI Codex"
 scope:
@@ -481,12 +481,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-403**: MUST render the occupancy suffix as `[<percent>% context]` when the max input context is known and as `[<percent>%/1.0M* context]` computed against the documented 1,000,000-token fallback when it is unknown.
 - **REQ-404**: MUST omit the occupancy suffix from every context-file surface whenever no enabled existing context file contributes tokens.
 - **REQ-405**: MUST append the occupancy suffix after the last enabled file segment of the top-level `Context Files` summary value.
-- **REQ-406**: MUST append the occupancy suffix after the measured size facts of every `Context Files` submenu row value.
+- **REQ-406**: MUST compute each `Context Files` submenu row occupancy suffix from that row's measured file token count against the selected model max input context or the documented fallback.
 - **REQ-407**: MUST append the occupancy suffix after the last enabled context-file segment of the command invocation summary `context files` field.
 - **REQ-408**: MUST run a context-occupancy early check in every bundled prompt-backed `req-<prompt>` command after git validation and before worktree preparation and prompt dispatch.
 - **REQ-409**: MUST abort bundled prompt-backed `req-<prompt>` orchestration with workflow state `error` when the early-check enabled context-file token total strictly exceeds the selected model max input context tokens or the documented 1,000,000-token fallback when that max is unknown.
 - **REQ-410**: MUST surface one early-check error diagnostic listing every enabled existing context file as `name(<chars>c/<tokens>t)`, the aggregate token total, and the occupancy suffix.
 - **REQ-411**: MUST create no worktree and dispatch no prompt message when the context-occupancy early check fails.
+- **REQ-412**: MUST omit a `Context Files` submenu row occupancy suffix when that row's measured file token count is zero.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -619,7 +620,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-138**: MUST verify re-application is skipped without a second model mutation when the post-switch model and thinking level already match the captured selection.
 - **TST-139**: MUST verify a failed or unauthenticated model re-application emits one warning notification, keeps workflow state consistent, and does not abort orchestration.
 - **TST-140**: MUST verify `src/core/context-file-size.ts` reports `exists=false` with zero metrics for missing context files and exact character plus `cl100k_base` token counts for existing files.
-- **TST-141**: MUST verify the `Context Files` submenu rows and top-level summary render `<chars>c/<tokens>t` size facts from measured context files.
+- **TST-141**: MUST verify the `Context Files` submenu rows render `<chars>c/<tokens>t` size facts with per-row token-derived occupancy suffixes, and the top-level summary renders measured size facts from context files.
 - **TST-142**: MUST verify the command invocation summary `context files` field renders size suffixes only for enabled existing context files.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.

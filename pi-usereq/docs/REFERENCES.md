@@ -5075,7 +5075,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 5182L | 120 symbols | 28 imports | 147 comments
+# index.ts | TypeScript | 5181L | 120 symbols | 28 imports | 147 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -5904,16 +5904,16 @@ registration and status updates.
 - @return {string} Compact `Context Files` summary string with the occupancy suffix.
 - @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405
 
-### fn `function buildContextFilesMenuChoices(` (L4588-4632)
+### fn `function buildContextFilesMenuChoices(` (L4588-4631)
 - @brief Builds the shared settings-menu choices for the `Context Files` submenu.
-- @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus the context-occupancy suffix computed from the enabled existing token total against the selected model max input context, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
+- @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
 - @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the documented 1,000,000-token fallback.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
-- @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406
+- @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412
 
-### fn `async function configureContextFilesMenu(` (L4644-4704)
+### fn `async function configureContextFilesMenu(` (L4643-4703)
 - @brief Runs the `Context Files` configuration submenu.
 - @details Loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -5923,9 +5923,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-406
 
-### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L4651-4655)
+### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L4650-4654)
 
-### fn `function buildPiUsereqMenuChoices(` (L4715-4821)
+### fn `function buildPiUsereqMenuChoices(` (L4714-4820)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
 - @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] cwd {string} Current working directory.
@@ -5934,21 +5934,21 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376, REQ-405
 
-### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4830-4848)
+### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4829-4847)
 - @brief Builds the shared settings-menu choices for source-directory management.
 - @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4857-4869)
+### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4856-4868)
 - @brief Builds the shared settings-menu choices for removing one source-directory entry.
 - @details Exposes every configured `src-dir` entry as one removable row and appends a value-less subtree-local `Reset defaults` row. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L4880-5139)
+### fn `async function configurePiUsereq(` (L4879-5138)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads the effective merged config, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -5957,9 +5957,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-327, REQ-328, REQ-333
 
-### fn `const persistConfigChange = () =>` (L4892-4897)
+### fn `const persistConfigChange = () =>` (L4891-4896)
 
-### fn `function registerConfigCommands(` (L5149-5159)
+### fn `function registerConfigCommands(` (L5148-5158)
 - @brief Registers configuration-management commands.
 - @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -5967,7 +5967,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-006, REQ-031
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5168-5182)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5167-5181)
 - @brief Registers the complete pi-usereq extension.
 - @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, then validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6087,14 +6087,14 @@ registration and status updates.
 |`confirmStaticCheckRemoval`|fn||4351-4362|async function confirmStaticCheckRemoval(|
 |`configureStaticCheckMenu`|fn||4372-4551|async function configureStaticCheckMenu(|
 |`formatContextFilesSummary`|fn||4562-4577|function formatContextFilesSummary(|
-|`buildContextFilesMenuChoices`|fn||4588-4632|function buildContextFilesMenuChoices(|
-|`configureContextFilesMenu`|fn||4644-4704|async function configureContextFilesMenu(|
-|`setFlag`|fn||4651-4655|const setFlag = (flagKey: "context-files-requirements" | ...|
-|`buildPiUsereqMenuChoices`|fn||4715-4821|function buildPiUsereqMenuChoices(|
-|`buildSrcDirMenuChoices`|fn||4830-4848|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
-|`buildSrcDirRemovalChoices`|fn||4857-4869|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||4880-5139|async function configurePiUsereq(|
-|`persistConfigChange`|fn||4892-4897|const persistConfigChange = () =>|
-|`registerConfigCommands`|fn||5149-5159|function registerConfigCommands(|
-|`piUsereqExtension`|fn||5168-5182|export default function piUsereqExtension(pi: ExtensionAP...|
+|`buildContextFilesMenuChoices`|fn||4588-4631|function buildContextFilesMenuChoices(|
+|`configureContextFilesMenu`|fn||4643-4703|async function configureContextFilesMenu(|
+|`setFlag`|fn||4650-4654|const setFlag = (flagKey: "context-files-requirements" | ...|
+|`buildPiUsereqMenuChoices`|fn||4714-4820|function buildPiUsereqMenuChoices(|
+|`buildSrcDirMenuChoices`|fn||4829-4847|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
+|`buildSrcDirRemovalChoices`|fn||4856-4868|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
+|`configurePiUsereq`|fn||4879-5138|async function configurePiUsereq(|
+|`persistConfigChange`|fn||4891-4896|const persistConfigChange = () =>|
+|`registerConfigCommands`|fn||5148-5158|function registerConfigCommands(|
+|`piUsereqExtension`|fn||5167-5181|export default function piUsereqExtension(pi: ExtensionAP...|
 
