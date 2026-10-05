@@ -65,7 +65,7 @@
   - Threads: no explicit threads detected
 - ID: `PROC:pi-cli-update`
   - Type: Process
-  - Role: Bash updater that clones the latest pi CLI release reachable from the upstream default branch and fully synchronizes the read-only `pi.dev-src/pi` sources plus the three `docs/pi.dev` documentation targets after explicit user confirmation.
+  - Role: Bash updater that clones the latest pi CLI release reachable from the upstream default branch and fully synchronizes the read-only `pi.dev-src/pi` sources plus the three `docs/pi.dev` documentation targets after explicit user confirmation, preserving existing target files that differ from the upstream candidate only in line-ending bytes.
   - Entrypoints:
     - `main(...)` [`scripts/pi-cli-update-src-docs.sh`]
   - Parent Process: none
@@ -1455,7 +1455,8 @@
     - `resolve_release_tag(...)`: prefer the origin HEAD ref, fall back to `origin/master` then `origin/main`, and select the newest version-sorted release tag merged into that ref, aborting through `fail(...)` when none is resolvable [`scripts/pi-cli-update-src-docs.sh`]
     - `confirm_update(...)`: print the latest plus stored versions, prompt one English `Y/n` confirmation, and succeed only for the exact `Y` input [`scripts/pi-cli-update-src-docs.sh`]
       - `log(...)`: emit one progress line on stdout [`scripts/pi-cli-update-src-docs.sh`]
-    - `sync_directory(...)`: stage every upstream non-dot entry with timestamp-preserving copies, excluding every dot-prefixed entry and its subtree at every tree level, and swap the staged tree into the target directory through a backup-and-swap sequence so the file sets match exactly [`scripts/pi-cli-update-src-docs.sh`]
+    - `sync_directory(...)`: stage every upstream non-dot entry with timestamp-preserving copies, excluding every dot-prefixed entry and its subtree at every tree level, and swap the staged tree into the target directory through a backup-and-swap sequence so the file sets match exactly while existing target files whose bytes differ from the staged upstream file only in carriage-return line-ending characters are preserved [`scripts/pi-cli-update-src-docs.sh`]
+      - `staged_copy_replaces_existing(...)`: decide whether one staged upstream file must replace the existing target file by comparing raw bytes and comparing both files after removing every carriage-return byte, returning replace for missing targets and content differences beyond line endings and preserve for byte-equal or line-ending-only-equal files [`scripts/pi-cli-update-src-docs.sh`]
       - `fail(...)`: emit one `ERROR:` diagnostic to stderr and exit with status `1` [`scripts/pi-cli-update-src-docs.sh`]
   - `cleanup(...)`: remove the upstream working tree and any pending staging directory registered on the `EXIT` trap [`scripts/pi-cli-update-src-docs.sh`]
 - External Boundaries:

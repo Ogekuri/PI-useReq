@@ -15,7 +15,11 @@
 #     from `pi.dev-src/pi/packages/coding-agent/docs`,
 #     `docs/pi.dev/coding-agent-examples` from
 #     `pi.dev-src/pi/packages/coding-agent/examples`, and `docs/pi.dev/durable-docs`
-#     from `pi.dev-src/pi/packages/durable/docs`. Before any modification, the
+#     from `pi.dev-src/pi/packages/durable/docs`. Existing target files whose
+#     bytes differ from the upstream candidate only in carriage-return
+#     line-ending characters are preserved with their committed bytes and
+#     timestamps, so repeated updates against an unchanged upstream release
+#     leave the git working tree clean. Before any modification, the
 #     updater prints the resolved latest version and the stored versions read from
 #     `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt`
 #     (missing or empty files report `unknown`), then requires an explicit `Y`
@@ -188,14 +192,48 @@ resolve_release_tag() {
   printf '%s\n' "${release_tag}"
 }
 
+## @brief Decides whether one staged upstream file must replace the existing target file.
+## @details Returns success (replace) when the target file does not exist or when
+##     its bytes differ from the staged upstream file beyond line-ending
+##     characters. Returns failure (preserve) when both files are byte-equal or
+##     when both files are equal after removing every carriage-return byte, so
+##     committed reference bytes and timestamps stay stable when upstream
+##     releases change only line endings. Runtime is O(n) in compared file size
+##     plus at most three subprocesses. Side effects are limited to subprocess
+##     execution and stdin pipes; no file is mutated.
+## @param[in] source_file {string} Absolute staged upstream candidate file path.
+## @param[in] target_file {string} Absolute existing target file path.
+## @return {integer} `0` when the staged file must replace the target; `1` when
+##     the existing target bytes must be preserved.
+staged_copy_replaces_existing() {
+  local source_file="$1"
+  local target_file="$2"
+  local source_normalized=""
+  local target_normalized=""
+
+  if [ ! -f "${target_file}" ]; then
+    return 0
+  fi
+  if cmp -s -- "${source_file}" "${target_file}"; then
+    return 0
+  fi
+  source_normalized="$(tr -d '\r' < "${source_file}" | git hash-object --stdin)" || return 0
+  target_normalized="$(tr -d '\r' < "${target_file}" | git hash-object --stdin)" || return 0
+  [ "${source_normalized}" != "${target_normalized}" ]
+}
+
 ## @brief Fully synchronizes one upstream directory into one target directory.
 ## @details Stages every upstream entry below `source_dir` into a fresh sibling
 ##     staging directory using timestamp-preserving copies, excluding every
 ##     dot-prefixed entry and its whole subtree at every tree level, then
 ##     replaces `target_dir` with the staged tree through a backup-and-swap
 ##     sequence so files removed upstream disappear and existing files are
-##     overwritten with an exact file-set match. Runtime is dominated by per-file
-##     copy cost. Side effects include staging plus backup directory creation and
+##     overwritten with an exact file-set match. Existing target files
+##     whose bytes differ from the staged upstream file only in carriage-return
+##     line-ending characters are preserved through
+##     `staged_copy_replaces_existing(...)` so unchanged upstream releases do
+##     not dirty the git working tree. Runtime is dominated by per-file copy
+##     cost. Side effects include staging plus backup directory creation and
 ##     removal, target-directory replacement, and one progress line on `stdout`.
 ## @param[in] source_dir {string} Absolute upstream source directory path.
 ## @param[in] target_dir {string} Absolute read-only target directory path.
@@ -221,7 +259,11 @@ sync_directory() {
     else
       parent_dir="$(dirname "${destination}")"
       mkdir -p "${parent_dir}"
-      cp -p "${source_dir}/${entry}" "${destination}"
+      if staged_copy_replaces_existing "${source_dir}/${entry}" "${target_dir}/${entry}"; then
+        cp -p "${source_dir}/${entry}" "${destination}"
+      else
+        cp -p "${target_dir}/${entry}" "${destination}"
+      fi
     fi
     copied=$((copied + 1))
   done < <(cd "${source_dir}" && find . -mindepth 1 \( -name '.*' -prune \) -o -print0)
@@ -283,6 +325,7 @@ main() {
   require_tool find
   require_tool mkdir
   require_tool cp
+  require_tool cmp
 
   local doc_version src_version
   doc_version="$(read_version_file "${REPO_ROOT}/${DOC_VERSION_REL}")"
