@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.66.0](https://github.com/Ogekuri/PI-useReq/compare/v0.65.0..v0.66.0) - 2026-10-05
+### 🚜  Changes
+- render per-file occupancy suffix in Context Files submenu [useReq] *(context-files)*
+  - REQ-406 now mandates each Context Files submenu row percentage be computed from that row's measured token count, not the enabled aggregate.
+  - REQ-412 added: omit a submenu row occupancy suffix when that row's measured token count is zero.
+  - TST-141 updated to verify per-row token-derived suffixes alongside top-level summary size facts.
+  - buildContextFilesMenuChoices (src/index.ts) computes per-file suffixes via computeContextOccupancyFacts; aggregate suffixes on the top-level summary and command invocation summary remain unchanged.
+  - REQUIREMENTS.md bumped to 0.0.91; WORKFLOW.md and REFERENCES.md runtime references refreshed.
+
 ## [0.65.0](https://github.com/Ogekuri/PI-useReq/compare/v0.64.0..v0.65.0) - 2026-10-05
 ### ⛰️  Features
 - Add pi-prompts-version.txt file.
@@ -901,6 +910,7 @@
 - \[0.63.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.63.0
 - \[0.64.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.64.0
 - \[0.65.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.65.0
+- \[0.66.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.66.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -965,3 +975,4 @@
 [0.63.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.62.0..v0.63.0
 [0.64.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.63.0..v0.64.0
 [0.65.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.64.0..v0.65.0
+[0.66.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.65.0..v0.66.0
