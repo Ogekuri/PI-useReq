@@ -9,6 +9,7 @@ import path from "node:path";
 import { DEFAULT_DOCS_DIR, type UseReqConfig } from "./config.js";
 import { normalizeRelativeDirContract } from "./path-context.js";
 import { countFileMetrics } from "./token-counter.js";
+import { ReqError } from "./errors.js";
 
 /**
  * @brief Stores the canonical context-file names in their documented injection order.
@@ -143,4 +144,163 @@ export function measureContextFileSizes(
  */
 export function formatContextFileSize(facts: ContextFileSizeFacts): string {
   return `${facts.chars}c/${facts.tokens}t`;
+}
+
+/**
+ * @brief Stores the documented fallback context-window token budget.
+ * @details Used as the occupancy computation basis and as the early-check limit whenever the selected model max input context is unknown, and always renders behind the `*` marker so consumers can detect the assumed basis. Lookup complexity is O(1).
+ * @satisfies REQ-403
+ */
+export const CONTEXT_OCCUPANCY_FALLBACK_CONTEXT_WINDOW_TOKENS = 1_000_000;
+
+/**
+ * @brief Maps every canonical context file to its persisted configuration flag key.
+ * @details Single mapping source shared by the token summation and segment renderers so enabled-file selection stays identical across every occupancy surface. Lookup complexity is O(1). No external state is mutated.
+ */
+const CONTEXT_FILE_FLAG_KEYS: Record<ContextFileName, "context-files-requirements" | "context-files-references" | "context-files-workflow"> = {
+  "REQUIREMENTS.md": "context-files-requirements",
+  "REFERENCES.md": "context-files-references",
+  "WORKFLOW.md": "context-files-workflow",
+};
+
+/**
+ * @brief Describes the computed context-occupancy facts of one enabled context-file set.
+ * @details Stores the aggregate token total, the resolved selected-model max input context (undefined when unknown), the effective basis tokens used for the percentage, the rendered percentage label, the rendered max-context label, and the final bracketed occupancy suffix. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-400
+ */
+export interface ContextOccupancyFacts {
+  readonly totalTokens: number;
+  readonly maxContextTokens: number | undefined;
+  readonly basisTokens: number;
+  readonly percentLabel: string;
+  readonly maxLabel: string;
+  readonly suffix: string;
+}
+
+/**
+ * @brief Sums the `cl100k_base` token estimates of every enabled existing context file.
+ * @details Iterates `CONTEXT_FILE_NAMES` in documented order, skips disabled flags and missing or unreadable files, and accumulates the measured token estimates so occupancy surfaces and the prompt-dispatch early check share one total. Runtime is O(1) in file count. No external state is mutated.
+ * @param[in] config {Pick<UseReqConfig, "context-files-requirements" | "context-files-references" | "context-files-workflow">} Effective configuration supplying the three context-file flags.
+ * @param[in] sizes {Record<string, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
+ * @return {number} Aggregate token estimate of enabled existing context files.
+ * @satisfies REQ-400
+ */
+export function sumEnabledContextFileTokens(
+  config: Pick<UseReqConfig, "context-files-requirements" | "context-files-references" | "context-files-workflow">,
+  sizes: Record<string, ContextFileSizeFacts>,
+): number {
+  let totalTokens = 0;
+  for (const fileName of CONTEXT_FILE_NAMES) {
+    const facts = sizes[fileName];
+    if (!config[CONTEXT_FILE_FLAG_KEYS[fileName]] || !facts || !facts.exists) {
+      continue;
+    }
+    totalTokens += facts.tokens;
+  }
+  return totalTokens;
+}
+
+/**
+ * @brief Formats one context-window token count as a compact human-readable label.
+ * @details Renders token counts of one million or more as `<x.x>M`, counts of one thousand or more as `<x.x>K`, and smaller counts as rounded integers so the documented `1.0M` fallback shape stays deterministic. Runtime is O(1). No external state is mutated.
+ * @param[in] tokens {number} Context-window token count to label.
+ * @return {string} Compact context-window label such as `1.0M`, `200.0K`, or `512`.
+ * @satisfies REQ-403
+ */
+export function formatContextWindowTokensLabel(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}K`;
+  }
+  return String(Math.round(tokens));
+}
+
+/**
+ * @brief Formats one occupancy percentage as a compact label with one decimal place.
+ * @details Rounds the percentage to one decimal place and removes a trailing `.0` so whole percentages render as `36%` and fractional values keep their decimal digit. Runtime is O(1). No external state is mutated.
+ * @param[in] percent {number} Occupancy percentage value.
+ * @return {string} Percentage label such as `36%`, `0.4%`, or `0%`.
+ * @satisfies REQ-402
+ */
+export function formatContextOccupancyPercentLabel(percent: number): string {
+  const fixed = percent.toFixed(1);
+  return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
+}
+
+/**
+ * @brief Computes the context-occupancy facts of one enabled context-file token total.
+ * @details Resolves the effective basis from the supplied max input context or the documented 1,000,000-token fallback, derives the percentage label, derives the max label with the `*` marker only for the unknown fallback, and renders `[<percent>% context]` for a known max or `[<percent>%/1.0M* context]` for the fallback basis. Runtime is O(1). No external state is mutated.
+ * @param[in] totalTokens {number} Aggregate enabled existing context-file token estimate.
+ * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the fallback basis.
+ * @return {ContextOccupancyFacts} Computed occupancy facts including the rendered suffix.
+ * @satisfies REQ-400, REQ-402, REQ-403
+ */
+export function computeContextOccupancyFacts(
+  totalTokens: number,
+  maxContextTokens: number | undefined,
+): ContextOccupancyFacts {
+  const knownMax = typeof maxContextTokens === "number" && Number.isFinite(maxContextTokens) && maxContextTokens > 0
+    ? maxContextTokens
+    : undefined;
+  const basisTokens = knownMax ?? CONTEXT_OCCUPANCY_FALLBACK_CONTEXT_WINDOW_TOKENS;
+  const percentLabel = formatContextOccupancyPercentLabel((totalTokens / basisTokens) * 100);
+  const maxLabel = knownMax === undefined
+    ? `${formatContextWindowTokensLabel(basisTokens)}*`
+    : formatContextWindowTokensLabel(knownMax);
+  const suffix = knownMax === undefined
+    ? `[${percentLabel}%/${maxLabel} context]`
+    : `[${percentLabel}% context]`;
+  return { totalTokens, maxContextTokens: knownMax, basisTokens, percentLabel, maxLabel, suffix };
+}
+
+/**
+ * @brief Renders every enabled existing context file as a `name(<chars>c/<tokens>t)` segment list.
+ * @details Iterates `CONTEXT_FILE_NAMES` in documented order, skips disabled flags and missing or unreadable files, and joins the remaining segments with the documented ` • ` separator so early-check diagnostics reuse the same segment shape as the configuration summary. Runtime is O(1) in file count. No external state is mutated.
+ * @param[in] config {Pick<UseReqConfig, "context-files-requirements" | "context-files-references" | "context-files-workflow">} Effective configuration supplying the three context-file flags.
+ * @param[in] sizes {Record<string, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
+ * @return {string} Joined segment list, or the empty string when no enabled existing context file contributes.
+ * @satisfies REQ-410
+ */
+export function formatEnabledContextFileSegments(
+  config: Pick<UseReqConfig, "context-files-requirements" | "context-files-references" | "context-files-workflow">,
+  sizes: Record<string, ContextFileSizeFacts>,
+): string {
+  const segments: string[] = [];
+  for (const fileName of CONTEXT_FILE_NAMES) {
+    const facts = sizes[fileName];
+    if (!config[CONTEXT_FILE_FLAG_KEYS[fileName]] || !facts || !facts.exists) {
+      continue;
+    }
+    segments.push(`${fileName}(${formatContextFileSize(facts)})`);
+  }
+  return segments.join(" • ");
+}
+
+/**
+ * @brief Enforces the context-occupancy early check for one prepared prompt command.
+ * @details Sums the enabled existing context-file tokens, computes the occupancy facts against the supplied max input context or the documented fallback, and throws one deterministic ReqError diagnostic listing every enabled existing file segment, the aggregate token total, and the occupancy suffix whenever the total strictly exceeds the basis. Runtime is O(1) in file count. No external state is mutated.
+ * @param[in] config {Pick<UseReqConfig, "context-files-requirements" | "context-files-references" | "context-files-workflow">} Effective configuration supplying the three context-file flags.
+ * @param[in] sizes {Record<string, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
+ * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the fallback basis.
+ * @return {ContextOccupancyFacts} Computed occupancy facts when the check passes.
+ * @throws {ReqError} Throws when the enabled token total strictly exceeds the effective basis.
+ * @satisfies REQ-408, REQ-409, REQ-410
+ */
+export function enforceContextOccupancyLimit(
+  config: Pick<UseReqConfig, "context-files-requirements" | "context-files-references" | "context-files-workflow">,
+  sizes: Record<string, ContextFileSizeFacts>,
+  maxContextTokens: number | undefined,
+): ContextOccupancyFacts {
+  const facts = computeContextOccupancyFacts(sumEnabledContextFileTokens(config, sizes), maxContextTokens);
+  const segments = formatEnabledContextFileSegments(config, sizes);
+  if (segments.length > 0 && facts.totalTokens > facts.basisTokens) {
+    throw new ReqError(
+      `Context occupancy early check failed: enabled context files total ${facts.totalTokens}t exceed ` +
+        `${facts.maxLabel} selected model input context. ${segments} ${facts.suffix}`,
+      1,
+    );
+  }
+  return facts;
 }

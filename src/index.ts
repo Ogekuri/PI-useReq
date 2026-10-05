@@ -84,8 +84,10 @@ import {
   type PiUsereqStartupToolName,
 } from "./core/pi-usereq-tools.js";
 import {
+  computeContextOccupancyFacts,
   formatContextFileSize,
   measureContextFileSizes,
+  sumEnabledContextFileTokens,
   type ContextFileName,
   type ContextFileSizeFacts,
 } from "./core/context-file-size.js";
@@ -160,6 +162,7 @@ import {
   getPiUsereqRuntimeSoundLevel,
   isStaleExtensionContextError,
   renderPiUsereqStatus,
+  resolveModelContextWindowTokens,
   setPiUsereqRuntimeSoundLevel,
   setPiUsereqStatusConfig,
   setPiUsereqWorkflowState,
@@ -3397,6 +3400,7 @@ function registerPromptCommands(
         });
         const projectBase = getProjectBase(commandCwd);
         const config = loadProjectConfig(commandCwd);
+        const maxContextTokens = resolveModelContextWindowTokens(statusController.state.contextUsage);
         transitionPromptWorkflowState(
           statusController,
           ctx,
@@ -3427,6 +3431,7 @@ function registerPromptCommands(
             },
             originalModel,
             originalThinkingLevel,
+            maxContextTokens,
           );
           const content = renderPrompt(
             promptName,
@@ -3470,6 +3475,7 @@ function registerPromptCommands(
             args,
             config,
             measureContextFileSizes(projectBase, config),
+            maxContextTokens,
           );
           const promptDelivery = deliverPromptCommand(pi, content, commandSummary, promptContext);
           transitionPromptWorkflowState(
@@ -4545,44 +4551,56 @@ async function configureStaticCheckMenu(
 }
 
 /**
- * @brief Summarizes the `Context Files` flag state with measured sizes for the top-level menu value column.
- * @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment so the top-level row exposes a runtime estimate of the injected context payload while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
+ * @brief Summarizes the `Context Files` flag state with measured sizes and context occupancy for the top-level menu value column.
+ * @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
- * @return {string} Compact `Context Files` summary string.
- * @satisfies REQ-327, REQ-376
+ * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the documented 1,000,000-token fallback.
+ * @return {string} Compact `Context Files` summary string with the occupancy suffix.
+ * @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405
  */
 function formatContextFilesSummary(
   config: UseReqConfig,
   sizes: Record<ContextFileName, ContextFileSizeFacts>,
+  maxContextTokens?: number | undefined,
 ): string {
   const segments = [
     `requirements:${config["context-files-requirements"] ? `on(${formatContextFileSize(sizes["REQUIREMENTS.md"])})` : "off"}`,
     `references:${config["context-files-references"] ? `on(${formatContextFileSize(sizes["REFERENCES.md"])})` : "off"}`,
     `workflow:${config["context-files-workflow"] ? `on(${formatContextFileSize(sizes["WORKFLOW.md"])})` : "off"}`,
   ];
-  return segments.join(" \u2022 ");
+  const summary = segments.join(" \u2022 ");
+  const totalTokens = sumEnabledContextFileTokens(config, sizes);
+  return totalTokens > 0
+    ? `${summary} ${computeContextOccupancyFacts(totalTokens, maxContextTokens).suffix}`
+    : summary;
 }
 
 /**
  * @brief Builds the shared settings-menu choices for the `Context Files` submenu.
- * @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
+ * @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus the context-occupancy suffix computed from the enabled existing token total against the selected model max input context, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
+ * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the documented 1,000,000-token fallback.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
- * @satisfies REQ-327, REQ-328, REQ-333, REQ-375
+ * @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406
  */
 function buildContextFilesMenuChoices(
   config: UseReqConfig,
   sizes: Record<ContextFileName, ContextFileSizeFacts>,
+  maxContextTokens?: number | undefined,
 ): PiUsereqSettingsMenuChoice[] {
+  const totalTokens = sumEnabledContextFileTokens(config, sizes);
+  const occupancySuffix = totalTokens > 0
+    ? ` ${computeContextOccupancyFacts(totalTokens, maxContextTokens).suffix}`
+    : "";
   const buildRow = (
     id: "context-files-requirements" | "context-files-references" | "context-files-workflow",
     fileName: ContextFileName,
     description: string,
   ): PiUsereqSettingsMenuChoice => {
-    const sizedOn = `on \u2022 ${formatContextFileSize(sizes[fileName])}`;
-    const sizedOff = `off \u2022 ${formatContextFileSize(sizes[fileName])}`;
+    const sizedOn = `on \u2022 ${formatContextFileSize(sizes[fileName])}${occupancySuffix}`;
+    const sizedOff = `off \u2022 ${formatContextFileSize(sizes[fileName])}${occupancySuffix}`;
     return {
       id,
       label: fileName,
@@ -4619,13 +4637,15 @@ function buildContextFilesMenuChoices(
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable effective project configuration.
  * @param[in] onConfigChange {() => void} Shared persistence-plus-status callback.
+ * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens used by the submenu occupancy suffix; undefined selects the documented 1,000,000-token fallback.
  * @return {Promise<void>} Promise resolved when the submenu closes.
- * @satisfies REQ-327, REQ-328, REQ-333
+ * @satisfies REQ-327, REQ-328, REQ-333, REQ-406
  */
 async function configureContextFilesMenu(
   ctx: ExtensionCommandContext,
   config: UseReqConfig,
   onConfigChange: () => void,
+  maxContextTokens?: number | undefined,
 ): Promise<void> {
   const contextFileSizes = measureContextFileSizes(getProjectBase(ctx.cwd), config);
   const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void => {
@@ -4635,9 +4655,9 @@ async function configureContextFilesMenu(
   };
   let focusedChoiceId: string | undefined;
   while (true) {
-    const choice = await showPiUsereqSettingsMenu(ctx, "Context Files", buildContextFilesMenuChoices(config, contextFileSizes), {
+    const choice = await showPiUsereqSettingsMenu(ctx, "Context Files", buildContextFilesMenuChoices(config, contextFileSizes, maxContextTokens), {
       initialSelectedId: focusedChoiceId,
-      getChoices: () => buildContextFilesMenuChoices(config, contextFileSizes),
+      getChoices: () => buildContextFilesMenuChoices(config, contextFileSizes, maxContextTokens),
       onChange: (choiceId, newValue) => {
         if (choiceId === "context-files-requirements") {
           setFlag("context-files-requirements", newValue.startsWith("on"));
@@ -4688,12 +4708,14 @@ async function configureContextFilesMenu(
  * @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens used by the `Context Files` occupancy suffix; undefined selects the documented 1,000,000-token fallback.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
- * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376
+ * @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376, REQ-405
  */
 function buildPiUsereqMenuChoices(
   cwd: string,
   config: UseReqConfig,
+  maxContextTokens?: number | undefined,
 ): PiUsereqSettingsMenuChoice[] {
   const autoGitCommitDisabled = config.AUTO_GIT_COMMIT === "disable";
   const effectiveGitWorktreeEnabled = resolveEffectiveGitWorktreeEnabled(
@@ -4722,7 +4744,7 @@ function buildPiUsereqMenuChoices(
     {
       id: "context-files",
       label: "Context Files",
-      value: formatContextFilesSummary(config, measureContextFileSizes(cwd, config)),
+      value: formatContextFilesSummary(config, measureContextFileSizes(cwd, config), maxContextTokens),
       description: "Toggle injection of REQUIREMENTS.md, REFERENCES.md, and WORKFLOW.md into prompt context through `%%CONTEXT_FILES%%`.",
     },
     {
@@ -4865,6 +4887,7 @@ async function configurePiUsereq(
   });
   let config = loadProjectConfig(ctx.cwd);
   const projectBase = getProjectBase(ctx.cwd);
+  const maxContextTokens = resolveModelContextWindowTokens(statusController.state.contextUsage);
   const initialShortcut = config["notify-sound-toggle-shortcut"];
   const persistConfigChange = () => {
     Object.assign(config, normalizeConfigPaths(projectBase, config));
@@ -4878,10 +4901,10 @@ async function configurePiUsereq(
     const choice = await showPiUsereqSettingsMenu(
       ctx,
       "pi-usereq",
-      buildPiUsereqMenuChoices(ctx.cwd, config),
+      buildPiUsereqMenuChoices(ctx.cwd, config, maxContextTokens),
       {
         initialSelectedId: focusedChoiceId,
-        getChoices: () => buildPiUsereqMenuChoices(ctx.cwd, config),
+        getChoices: () => buildPiUsereqMenuChoices(ctx.cwd, config, maxContextTokens),
         onChange: (choiceId, newValue) => {
           if (choiceId === "auto-git-commit") {
             config.AUTO_GIT_COMMIT = newValue === "enable" ? "enable" : "disable";
@@ -4934,7 +4957,7 @@ async function configurePiUsereq(
       continue;
     }
     if (choice === "context-files") {
-      await configureContextFilesMenu(ctx, config, persistConfigChange);
+      await configureContextFilesMenu(ctx, config, persistConfigChange, maxContextTokens);
       continue;
     }
     if (choice === "auto-git-commit") {
@@ -5079,7 +5102,7 @@ async function configurePiUsereq(
           { label: "Document directory", previousValue: config["docs-dir"], nextValue: defaultConfig["docs-dir"] },
           { label: "Source-code directories", previousValue: config["src-dir"].join(", "), nextValue: defaultConfig["src-dir"].join(", ") },
           { label: "Unit tests directory", previousValue: config["tests-dir"], nextValue: defaultConfig["tests-dir"] },
-          { label: "Context Files", previousValue: formatContextFilesSummary(config, measureContextFileSizes(ctx.cwd, config)), nextValue: formatContextFilesSummary(defaultConfig, measureContextFileSizes(ctx.cwd, defaultConfig)) },
+          { label: "Context Files", previousValue: formatContextFilesSummary(config, measureContextFileSizes(ctx.cwd, config), maxContextTokens), nextValue: formatContextFilesSummary(defaultConfig, measureContextFileSizes(ctx.cwd, defaultConfig), maxContextTokens) },
           { label: "Auto git commit", previousValue: config.AUTO_GIT_COMMIT, nextValue: defaultConfig.AUTO_GIT_COMMIT },
           { label: "Git worktree", previousValue: config.GIT_WORKTREE_ENABLED, nextValue: defaultConfig.GIT_WORKTREE_ENABLED },
           { label: "Worktree prefix", previousValue: config.GIT_WORKTREE_PREFIX, nextValue: defaultConfig.GIT_WORKTREE_PREFIX },

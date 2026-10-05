@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.89"
+version: "0.0.90"
 date: "2026-10-05"
 author: "OpenAI Codex"
 scope:
@@ -475,6 +475,18 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-397**: MUST print the resolved latest PI-Prompts release version and the stored version to stdout before requesting update confirmation.
 - **REQ-398**: MUST request update confirmation with an English message accepting `Y` and MUST synchronize only when the confirmation input is exactly `Y`, otherwise aborting without modifications.
 - **REQ-399**: MUST write the resolved latest release version into `src/resources/pi-prompts-version.txt` after successful synchronization.
+- **REQ-400**: MUST expose reusable context-occupancy helpers in `src/core/context-file-size.ts` that sum enabled existing context-file `cl100k_base` tokens and compute the occupancy percentage against the selected model max input context tokens.
+- **REQ-401**: MUST treat the selected model max input context as the normalized context-usage `contextWindow` value and as unknown whenever that value is missing, non-numeric, or non-positive.
+- **REQ-402**: MUST render the occupancy percentage with one decimal place and a removed trailing `.0`, yielding labels such as `36%`, `0.4%`, and `0%`.
+- **REQ-403**: MUST render the occupancy suffix as `[<percent>% context]` when the max input context is known and as `[<percent>%/1.0M* context]` computed against the documented 1,000,000-token fallback when it is unknown.
+- **REQ-404**: MUST omit the occupancy suffix from every context-file surface whenever no enabled existing context file contributes tokens.
+- **REQ-405**: MUST append the occupancy suffix after the last enabled file segment of the top-level `Context Files` summary value.
+- **REQ-406**: MUST append the occupancy suffix after the measured size facts of every `Context Files` submenu row value.
+- **REQ-407**: MUST append the occupancy suffix after the last enabled context-file segment of the command invocation summary `context files` field.
+- **REQ-408**: MUST run a context-occupancy early check in every bundled prompt-backed `req-<prompt>` command after git validation and before worktree preparation and prompt dispatch.
+- **REQ-409**: MUST abort bundled prompt-backed `req-<prompt>` orchestration with workflow state `error` when the early-check enabled context-file token total strictly exceeds the selected model max input context tokens or the documented 1,000,000-token fallback when that max is unknown.
+- **REQ-410**: MUST surface one early-check error diagnostic listing every enabled existing context file as `name(<chars>c/<tokens>t)`, the aggregate token total, and the occupancy suffix.
+- **REQ-411**: MUST create no worktree and dispatch no prompt message when the context-occupancy early check fails.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.

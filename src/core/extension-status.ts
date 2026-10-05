@@ -365,6 +365,22 @@ function normalizeContextUsage(
 }
 
 /**
+ * @brief Resolves the selected model max input context tokens from one normalized context-usage snapshot.
+ * @details Accepts only finite positive `contextWindow` numbers so missing, non-numeric, and non-positive runtime values degrade to `undefined`, which every context-occupancy consumer treats as the documented unknown basis. Runtime is O(1). No external state is mutated.
+ * @param[in] contextUsage {ContextUsage | undefined} Normalized context-usage snapshot from the status controller state.
+ * @return {number | undefined} Selected model max input context tokens, or undefined when unknown.
+ * @satisfies REQ-401
+ */
+export function resolveModelContextWindowTokens(
+  contextUsage: ContextUsage | undefined,
+): number | undefined {
+  const contextWindow = contextUsage?.contextWindow;
+  return typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
+    ? contextWindow
+    : undefined;
+}
+
+/**
  * @brief Refreshes the stored context-usage snapshot from the active extension context.
  * @details Calls `ctx.getContextUsage()` on every intercepted event so the
  * controller retains the newest context-usage facts available from the pi

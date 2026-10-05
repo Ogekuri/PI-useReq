@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { ReqError } from "./errors.js";
+import { enforceContextOccupancyLimit, measureContextFileSizes } from "./context-file-size.js";
 import { classifyPiNotifyOutcome, type PiNotifyOutcome } from "./pi-notify.js";
 import {
   normalizeGitWorktreePrefix,
@@ -1695,7 +1696,7 @@ export function validatePromptRequiredDocs(
 
 /**
  * @brief Prepares prompt-command execution for one bundled prompt.
- * @details Runs slash-command-owned git validation, enforces the prompt-specific required-doc matrix, resolves persisted origin and execution session files, applies the effective worktree policy, generates and verifies a dedicated worktree when enabled, and returns the execution plan consumed by prompt rendering plus lifecycle hooks. Worktree-backed execution reuses the active session directory for the forked session file. Runtime is dominated by git subprocesses, worktree creation, and optional session-file cloning. Side effects include worktree creation, session-file creation, filesystem reads, and optional prompt debug-log writes.
+ * @details Runs slash-command-owned git validation, enforces the context-occupancy early check against the selected model max input context, enforces the prompt-specific required-doc matrix, resolves persisted origin and execution session files, applies the effective worktree policy, generates and verifies a dedicated worktree when enabled, and returns the execution plan consumed by prompt rendering plus lifecycle hooks. Worktree-backed execution reuses the active session directory for the forked session file. Runtime is dominated by git subprocesses, worktree creation, and optional session-file cloning. Side effects include worktree creation, session-file creation, filesystem reads, and optional prompt debug-log writes.
  * @param[in] promptName {PromptCommandName} Bundled prompt identifier.
  * @param[in] promptArgs {string} Raw prompt argument string.
  * @param[in] projectBase {string} Absolute current project base.
@@ -1706,9 +1707,10 @@ export function validatePromptRequiredDocs(
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
  * @param[in] originalModel {PromptCommandModelSelection | undefined} Active model provider plus identifier captured by the command handler for later re-application.
  * @param[in] originalThinkingLevel {string | undefined} Active thinking level captured by the command handler for later re-application.
+ * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens consumed by the early occupancy check; undefined selects the documented 1,000,000-token fallback.
  * @return {PromptCommandExecutionPlan} Prepared execution plan.
- * @throws {ReqError} Throws when repository validation, required-doc validation, worktree creation, or session preparation fails.
- * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271, REQ-366
+ * @throws {ReqError} Throws when repository validation, the context-occupancy early check, required-doc validation, worktree creation, or session preparation fails.
+ * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271, REQ-366, REQ-408, REQ-409, REQ-410, REQ-411
  */
 export function preparePromptCommandExecution(
   promptName: PromptCommandName,
@@ -1721,8 +1723,10 @@ export function preparePromptCommandExecution(
   debugOptions?: PromptCommandDebugOptions,
   originalModel?: PromptCommandModelSelection,
   originalThinkingLevel?: string,
+  maxContextTokens?: number | undefined,
 ): PromptCommandExecutionPlan {
   const gitPath = validatePromptGitState(projectBase, config);
+  enforceContextOccupancyLimit(config, measureContextFileSizes(projectBase, config), maxContextTokens);
   const reuseCurrentSessionFile = isUsablePromptSessionFile(currentSessionFile, projectBase);
   const originalSessionFile = resolvePromptSessionFile(
     reuseCurrentSessionFile ? currentSessionFile : undefined,
