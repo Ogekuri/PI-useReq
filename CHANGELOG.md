@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.65.0](https://github.com/Ogekuri/PI-useReq/compare/v0.64.0..v0.65.0) - 2026-10-05
+### ⛰️  Features
+- Add pi-prompts-version.txt file.
+- Update pi cli docs and src.
+- add pi-cli reference updater script [useReq] *(scripts)*
+  - Add scripts/pi-cli-update-src-docs.sh (DES-023): clones the official pi
+  - CLI repository with .git/.git fallback URLs (REQ-385), resolves the
+  - newest release tag merged into the default branch (REQ-386), prints
+  - latest plus stored versions with unknown for missing or empty
+  - markers (REQ-387, REQ-388), and proceeds only on exact Y
+  - confirmation (REQ-389).
+  - Fully synchronize read-only pi.dev-src/pi excluding every
+  - dot-prefixed entry with exact file-set match and preserved
+  - timestamps (REQ-390, REQ-391), refresh docs/pi.dev
+  - coding-agent-docs, coding-agent-examples, and durable-docs
+  - (REQ-392, REQ-393, REQ-394), and write the resolved version into
+  - both version marker files (REQ-395).
+  - Document the new PROC:pi-cli-update execution unit in WORKFLOW.md.
+
+### 🐛  Bug Fixes
+- preserve EOL-only reference files in pi CLI updater [useReq] *(scripts)*
+  - sync_directory now keeps existing target files whose bytes differ from the staged upstream file only in carriage-return line-ending characters, via staged_copy_replaces_existing, so consecutive runs against an unchanged pi CLI release leave the git working tree clean (pi.dev-src/pi/pi-test.bat, pi-test.ps1). Real content changes, added entries, and error paths are unchanged. Adds tests/pi-cli-update-sync.test.ts covering clean consecutive runs, applied content changes, added entries, and missing-source failure. Updates WORKFLOW.md PROC:pi-cli-update runtime model. [useReq]
+- Update docs.
+
+### 🚜  Changes
+- add context-occupancy percentage display and early prompt dispatch check [useReq] *(context)*
+  - Add reusable context-occupancy helpers (sum, percent label, suffix,
+  - exceeded diagnostic) in src/core/context-file-size.ts (REQ-400..REQ-411).
+  - Append '[<pct>% context]' or '[<pct>%/1.0M* context]' to the Context
+  - Files top-level summary, submenu rows, and command invocation summary.
+  - Resolve the selected model max input context from the normalized
+  - contextUsage.contextWindow with the documented 1,000,000-token
+  - fallback (REQ-401, REQ-403).
+  - Enforce a prompt-dispatch early check in preparePromptCommandExecution
+  - after git validation and before worktree creation; exceeding runs abort
+  - with workflow error, a diagnostic listing per-file sizes, total tokens,
+  - and the occupancy suffix, no worktree, and no prompt dispatch.
+  - Update SRS to v0.0.90 (REQ-400..REQ-411), WORKFLOW call traces, and
+  - regenerate REFERENCES.md.
+- add version marker and Y-confirmation flow to pi-prompts-update.sh [useReq] *(scripts)*
+  - Requirements: add REQ-396..REQ-399 covering the PI-Prompts version marker read/print/confirm/write contract and bump SRS version to 0.0.89.
+  - Source: scripts/pi-prompts-update.sh now reads src/resources/pi-prompts-version.txt (missing or empty files report unknown), prints the resolved latest release version plus the stored version, requires an exact 'Y' confirmation before any modification, moves the release-ref checkout after confirmation, and writes the resolved version into src/resources/pi-prompts-version.txt after successful synchronization, mirroring pi-cli-update-src-docs.sh behavior.
+  - Docs: WORKFLOW.md PROC:pi-prompts-update index role, lifecycle, call-trace, and external boundaries updated.
+
+### ✨  Refactor
+- Cache tokenizer and context-file size measurements [useReq] *(token-counter)*
+  - Memoize js-tiktoken encoders per encoding name so TokenCounter construction is O(1) after first use (files-tokens and tokens tools).
+  - Clear the encoder cache on test loader swaps to keep dependency-failure behavior deterministic.
+  - Memoize context-file size facts keyed by mtimeMs+size in a bounded cache; re-measure only changed files.
+  - pi-usereq menu renders drop from ~1384ms to ~0.05ms warm; one-time first measurement per process.
+  - Update WORKFLOW.md call traces and regenerate REFERENCES.md; counts verified identical.
+
 ## [0.64.0](https://github.com/Ogekuri/PI-useReq/compare/v0.63.0..v0.64.0) - 2026-10-05
 ### ⛰️  Features
 - Update prompts.
@@ -848,6 +900,7 @@
 - \[0.62.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.62.0
 - \[0.63.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.63.0
 - \[0.64.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.64.0
+- \[0.65.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.65.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -911,3 +964,4 @@
 [0.62.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.61.0..v0.62.0
 [0.63.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.62.0..v0.63.0
 [0.64.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.63.0..v0.64.0
+[0.65.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.64.0..v0.65.0
