@@ -63,6 +63,13 @@
     - `main(...)` [`scripts/pi-prompts-update.sh`]
   - Parent Process: none
   - Threads: no explicit threads detected
+- ID: `PROC:pi-cli-update`
+  - Type: Process
+  - Role: Bash updater that clones the latest pi CLI release reachable from the upstream default branch and fully synchronizes the read-only `pi.dev-src/pi` sources plus the three `docs/pi.dev` documentation targets after explicit user confirmation.
+  - Entrypoints:
+    - `main(...)` [`scripts/pi-cli-update-src-docs.sh`]
+  - Parent Process: none
+  - Threads: no explicit threads detected
 
 ## Execution Units
 ### `PROC:main`
@@ -1430,6 +1437,32 @@
   - `mktemp`, `find`, `cp -p`, `mv`, and `rm` filesystem operations for staging, backup, and swap.
   - Bash process stdout, stderr, and exit code.
 
+### `PROC:pi-cli-update`
+- Entrypoints:
+  - `main(...)`: pi CLI reference updater runtime root [`scripts/pi-cli-update-src-docs.sh`]
+- Lifecycle/trigger:
+  - Start trigger: Bash executes `scripts/pi-cli-update-src-docs.sh` as a one-shot updater.
+  - Stop trigger: returns numeric exit status after one clone, release-tag resolution, explicit user confirmation, and the ordered target synchronizations, or after a caught updater failure.
+  - Looping model: single-pass clone plus ordered per-target synchronization loop.
+  - Threads: no explicit threads detected.
+  - Startup invariant: the `EXIT` trap is installed before `main(...)` so `cleanup(...)` removes the upstream working tree and any pending staging directory on every exit path.
+- Internal Call-Trace Tree:
+  - `main(...)`: validate required tools, read stored version markers, allocate the upstream working tree, clone and resolve the latest release tag, require explicit user confirmation, then synchronize the read-only source target and every ordered documentation pair plus both version markers [`scripts/pi-cli-update-src-docs.sh`]
+    - `require_tool(...)`: probe one required external tool and abort through `fail(...)` on miss [`scripts/pi-cli-update-src-docs.sh`]
+    - `read_version_file(...)`: read the first version marker line and report `unknown` for missing or empty marker files [`scripts/pi-cli-update-src-docs.sh`]
+    - `clone_upstream(...)`: clone the default branch from the primary repository URL and retry once with the fallback URL, emitting the resolved URL on stdout [`scripts/pi-cli-update-src-docs.sh`]
+      - `fail(...)`: emit one `ERROR:` diagnostic to stderr and exit with status `1` [`scripts/pi-cli-update-src-docs.sh`]
+    - `resolve_release_tag(...)`: prefer the origin HEAD ref, fall back to `origin/master` then `origin/main`, and select the newest version-sorted release tag merged into that ref, aborting through `fail(...)` when none is resolvable [`scripts/pi-cli-update-src-docs.sh`]
+    - `confirm_update(...)`: print the latest plus stored versions, prompt one English `Y/n` confirmation, and succeed only for the exact `Y` input [`scripts/pi-cli-update-src-docs.sh`]
+      - `log(...)`: emit one progress line on stdout [`scripts/pi-cli-update-src-docs.sh`]
+    - `sync_directory(...)`: stage every upstream non-dot entry with timestamp-preserving copies, excluding every dot-prefixed entry and its subtree at every tree level, and swap the staged tree into the target directory through a backup-and-swap sequence so the file sets match exactly [`scripts/pi-cli-update-src-docs.sh`]
+      - `fail(...)`: emit one `ERROR:` diagnostic to stderr and exit with status `1` [`scripts/pi-cli-update-src-docs.sh`]
+  - `cleanup(...)`: remove the upstream working tree and any pending staging directory registered on the `EXIT` trap [`scripts/pi-cli-update-src-docs.sh`]
+- External Boundaries:
+  - `git clone` plus `git checkout` subprocesses and `git tag` ref enumeration against the cloned repository.
+  - `mktemp`, `find`, `cp -p`, `mv`, and `rm` filesystem operations for staging, backup, and swap.
+  - Bash process stdin confirmation reading plus stdout, stderr, and exit code.
+
 ## Communication Edges
 - `PROC:req-debug` -> `PROC:tool-args-to-params`
   - Mechanism: child-process spawn through resolved `tsx` executable.
@@ -1444,4 +1477,4 @@
   - Endpoint/channel: `is_master` job output and shared tag-run context.
   - Payload/data-shape: boolean branch-gate flag derived from `origin/master` containment for the tagged commit [`.github/workflows/release-npm.yml`]
 - Internal thread communication edges: none.
-- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, `PROC:pi-host`, `PROC:install-static-checkers`, `PROC:pi-prompts-update`, `PROC:gh-release-check`, and `PROC:gh-release-build` are distinct runtime entry modes; only `PROC:req-debug`, `PROC:install-static-checkers`, and `PROC:pi-prompts-update` directly spawn child processes, while the GitHub Actions units coordinate through workflow job dependencies.
+- Relationship note: `PROC:main`, `PROC:req-debug`, `PROC:tool-args-to-params`, `PROC:debug-ext`, `PROC:pi-host`, `PROC:install-static-checkers`, `PROC:pi-prompts-update`, `PROC:pi-cli-update`, `PROC:gh-release-check`, and `PROC:gh-release-build` are distinct runtime entry modes; only `PROC:req-debug`, `PROC:install-static-checkers`, `PROC:pi-prompts-update`, and `PROC:pi-cli-update` directly spawn child processes, while the GitHub Actions units coordinate through workflow job dependencies.

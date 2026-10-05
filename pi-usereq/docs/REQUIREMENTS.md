@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.87"
+version: "0.0.88"
 date: "2026-10-05"
 author: "OpenAI Codex"
 scope:
@@ -36,7 +36,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, and the bundled-resource prompt updater. `.github/workflows/` contains the npm release workflow in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, and the pi CLI reference updater. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -101,6 +101,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-020**: MUST extend `scripts/install-static-checkers.ts` to best-effort approve pending npm install scripts for bundled checker dependencies before probing bundled executables.
 - **DES-021**: MUST implement the guarded model-selection reapply helper in `src/core/prompt-command-runtime.ts` without importing extension custom-tool executors from `src/core/tool-runner.ts`.
 - **DES-022**: MUST implement the bundled-resource updater in `scripts/pi-prompts-update.sh` as a standalone bash process using `git` plus core shell utilities only.
+- **DES-023**: MUST implement the pi CLI reference updater in `scripts/pi-cli-update-src-docs.sh` as a standalone bash process using `git` plus core shell utilities only.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -459,6 +460,17 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-382**: MUST fully synchronize `src/resources/prompts` from upstream `src/prompts`, overwriting existing files and removing files absent upstream.
 - **REQ-383**: MUST fully synchronize `src/resources/templates` from upstream `src/templates`, overwriting existing files and removing files absent upstream.
 - **REQ-384**: SHOULD preserve upstream access and modification timestamps for every synchronized resource file.
+- **REQ-385**: MUST resolve the upstream pi CLI repository by trying `https://github.com/earendil-works/pi.git` first and retrying with `https://github.com/earendil-works/pi` on clone failure.
+- **REQ-386**: MUST select the latest pi CLI release as the newest version-sorted release tag reachable from the upstream default branch and MUST fail deterministically when none is resolvable.
+- **REQ-387**: MUST read stored pi CLI versions from `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt` and MUST treat missing or empty files as `unknown`.
+- **REQ-388**: MUST print the resolved latest pi CLI version and both stored versions to stdout before requesting update confirmation.
+- **REQ-389**: MUST request update confirmation with an English message accepting `Y` and MUST synchronize only when the confirmation input is exactly `Y`, otherwise aborting without modifications.
+- **REQ-390**: MUST fully synchronize `pi.dev-src/pi` from the upstream repository root, excluding every dot-prefixed entry, and MUST remove local entries absent upstream so the file sets match exactly.
+- **REQ-391**: MUST preserve upstream access and modification timestamps for every synchronized `pi.dev-src/pi` entry.
+- **REQ-392**: MUST synchronize `docs/pi.dev/coding-agent-docs` from `pi.dev-src/pi/packages/coding-agent/docs`, overwriting existing files and removing files absent upstream.
+- **REQ-393**: MUST synchronize `docs/pi.dev/coding-agent-examples` from `pi.dev-src/pi/packages/coding-agent/examples`, overwriting existing files and removing files absent upstream.
+- **REQ-394**: MUST synchronize `docs/pi.dev/durable-docs` from `pi.dev-src/pi/packages/durable/docs`, overwriting existing files and removing files absent upstream.
+- **REQ-395**: MUST write the resolved latest release version into both `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt` after successful synchronization.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -615,6 +627,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
+- `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@earendil-works/pi-coding-agent` (>=1.0.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
