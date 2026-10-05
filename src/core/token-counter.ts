@@ -196,14 +196,34 @@ function defaultJsTiktokenModuleLoader(): JsTiktokenModule {
 
 let jsTiktokenModuleLoader: () => JsTiktokenModule = defaultJsTiktokenModuleLoader;
 
+const cachedTokenCounterEncodings = new Map<string, TokenCounterEncoding>();
+
+/**
+ * @brief Resolves one shared tokenizer encoding for a `TokenCounter` construction.
+ * @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the module-local encoding cache on first resolution per encoding name.
+ * @param[in] encodingName {string} `js-tiktoken` encoding identifier.
+ * @return {TokenCounterEncoding} Cached or newly constructed tokenizer encoding.
+ * @throws {ReqError} Propagates the deterministic unavailable-dependency failure when `js-tiktoken` cannot be loaded.
+ */
+function resolveTokenCounterEncoding(encodingName: string): TokenCounterEncoding {
+  const cachedEncoding = cachedTokenCounterEncodings.get(encodingName);
+  if (cachedEncoding) {
+    return cachedEncoding;
+  }
+  const encoding = loadJsTiktokenModule().getEncoding(encodingName);
+  cachedTokenCounterEncodings.set(encodingName, encoding);
+  return encoding;
+}
+
 /**
  * @brief Overrides the `js-tiktoken` loader for tests.
- * @details Enables deterministic dependency-failure tests without mutating repository dependencies on disk. Runtime is O(1). Side effects are limited to module-local test state.
+ * @details Enables deterministic dependency-failure tests without mutating repository dependencies on disk. Clears the process-scoped encoding cache so every loader swap observes fresh module behavior instead of encoders constructed by the previous loader. Runtime is O(e) in cached encoding count. Side effects are limited to module-local test state and cache reset.
  * @param[in] loader {(() => JsTiktokenModule) | undefined} Replacement loader, or `undefined` to restore the default loader.
  * @return {void} No return value.
  */
 export function setJsTiktokenModuleLoaderForTests(loader?: () => JsTiktokenModule): void {
   jsTiktokenModuleLoader = loader ?? defaultJsTiktokenModuleLoader;
+  cachedTokenCounterEncodings.clear();
 }
 
 /**
@@ -233,23 +253,23 @@ function loadJsTiktokenModule(): JsTiktokenModule {
 
 /**
  * @brief Encapsulates one tokenizer instance for repeated token counting.
- * @details Caches a `js-tiktoken` encoding object so multiple documents can be counted without repeated encoding lookup. Counting cost is O(n) in content length. The class mutates only instance state during construction.
+ * @details Resolves the process-scoped shared encoder for the requested encoding so multiple documents and multiple counter instances are counted without repeated encoding construction; the first construction per encoding name parses the BPE ranks once and every later `TokenCounter` reuses it through the module-local cache. Counting cost is O(n) in content length. The class mutates only instance state during construction.
  */
 export class TokenCounter {
   /**
    * @brief Stores the tokenizer implementation used for subsequent counts.
-   * @details The field holds the encoder returned by `getEncoding`. Access complexity is O(1). The value is initialized once per instance.
+   * @details Holds the cached encoder resolved through the per-encoding process cache. Access complexity is O(1); construction is O(1) after the first resolution for the encoding name.
    */
   private encoding: TokenCounterEncoding;
 
   /**
    * @brief Initializes a token counter for one encoding family.
-   * @details Resolves the named tokenizer once and reuses it across `countTokens` calls. Construction complexity is O(1) relative to caller-controlled input size. Side effects are limited to instance initialization.
+   * @details Resolves the shared cached tokenizer for the encoding name, constructing the underlying `js-tiktoken` encoding at most once per encoding name per process so repeated constructions from token tools and context-file measurement are constant-time cache hits. Side effects are limited to instance initialization plus the optional first-time encoding cache mutation.
    * @param[in] encodingName {string} `js-tiktoken` encoding identifier. Defaults to `cl100k_base`.
    * @return {TokenCounter} New token counter instance.
    */
   constructor(encodingName = TOKEN_COUNTER_ENCODING) {
-    this.encoding = loadJsTiktokenModule().getEncoding(encodingName);
+    this.encoding = resolveTokenCounterEncoding(encodingName);
   }
 
   /**
@@ -427,7 +447,7 @@ function buildCountFileMetricsResult(filePath: string, content: string, counter:
 
 /**
  * @brief Counts tokens, characters, bytes, and lines for one in-memory content string.
- * @details Instantiates a `TokenCounter`, tokenizes the supplied text, and pairs the result with raw character length, UTF-8 byte size, and logical line count. Runtime is O(n). No filesystem I/O occurs.
+ * @details Resolves the process-cached shared `TokenCounter` encoder for the encoding, tokenizes the supplied text once, and pairs the result with raw character length, UTF-8 byte size, and logical line count. Runtime is O(n) after the one-time per-encoding encoder construction. No filesystem I/O occurs.
  * @param[in] content {string} Text payload to measure.
  * @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
  * @return {{ tokens: number; chars: number; bytes: number; lines: number }} Aggregate metrics for the supplied content.

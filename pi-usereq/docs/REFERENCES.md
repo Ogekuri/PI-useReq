@@ -930,10 +930,10 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 
 ---
 
-# context-file-size.ts | TypeScript | 109L | 6 symbols | 5 imports | 9 comments
+# context-file-size.ts | TypeScript | 146L | 7 symbols | 5 imports | 12 comments
 > Path: `src/core/context-file-size.ts`
 - @brief Measures runtime character and token sizes of the canonical context files.
-- @details Provides reusable helpers that compute character and `cl100k_base` token estimates for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` under `<base-path>/<docs-dir>` so configuration menus and command summaries share one measurement contract. Runtime is O(n) in aggregate context-file size. Side effects are limited to filesystem reads.
+- @details Provides reusable helpers that compute character and `cl100k_base` token estimates for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` under `<base-path>/<docs-dir>` so configuration menus and command summaries share one measurement contract. Measurements are memoized per resolved path against the file `mtimeMs` plus `size` signature and reuses the process-cached shared tokenizer, so repeated menu renders resolve unchanged files through filesystem stats only. Runtime is O(n) on first measurement per content revision and O(1) per unchanged remeasure. Side effects are limited to filesystem reads and module-local cache mutation.
 
 ## Imports
 ```
@@ -954,7 +954,11 @@ import { countFileMetrics } from "./token-counter.js";
 - @details Stores the filesystem existence flag plus the exact character count and the `cl100k_base` token estimate computed from the file content. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-374
 
-### fn `export function resolveContextFilePath(` (L53-60)
+### iface `interface CachedContextFileSizeEntry` (L48-51)
+- @brief Stores one memoized context-file measurement with its staleness signature.
+- @details Pairs the measured facts with the `mtimeMs` plus `size` filesystem signature observed at measurement time so later probes can decide, through one stat call, whether the cached facts still describe the current file content. The interface is compile-time only and introduces no runtime cost.
+
+### fn `export function resolveContextFilePath(` (L74-81)
 - @brief Resolves one canonical context-file absolute path for one project base.
 - @details Joins the project base with the trailing-slash-free configured `docs-dir` (falling back to `DEFAULT_DOCS_DIR`) and the supplied canonical file name so menus, summaries, and the `%%CONTEXT_FILES%%` renderer address identical targets. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] projectBase {string} Absolute project root path.
@@ -963,22 +967,22 @@ import { countFileMetrics } from "./token-counter.js";
 - @return {string} Absolute context-file path.
 - @satisfies REQ-373
 
-### fn `export function measureContextFileSize(filePath: string): ContextFileSizeFacts` (L69-79)
+### fn `export function measureContextFileSize(filePath: string): ContextFileSizeFacts` (L90-116)
 - @brief Measures one context file into deterministic size facts.
-- @details Probes filesystem existence and file kind, reads UTF-8 content, and reuses the shared `countFileMetrics` tokenizer for the `cl100k_base` token estimate. Missing, non-file, and unreadable targets return `MISSING_CONTEXT_FILE_SIZE` facts without throwing. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+- @details Probes the target with one `stat` call, returns the memoized facts when the observed `mtimeMs` plus `size` signature matches the cached entry, and otherwise reads UTF-8 content and reuses the process-cached shared tokenizer behind `countFileMetrics` for the `cl100k_base` token estimate before storing the fresh facts in the bounded cache. Missing, non-file, and unreadable targets return `MISSING_CONTEXT_FILE_SIZE` facts without throwing and without caching. Runtime is O(1) for unchanged remeasures and O(n) in file size on first measurement per content revision. Side effects are limited to filesystem reads and module-local cache mutation.
 - @param[in] filePath {string} Absolute context-file path to measure.
 - @return {ContextFileSizeFacts} Measured size facts for the target.
 - @satisfies REQ-373, REQ-374
 
-### fn `export function measureContextFileSizes(` (L89-98)
+### fn `export function measureContextFileSizes(` (L126-135)
 - @brief Measures every canonical context file for one project base.
-- @details Iterates `CONTEXT_FILE_NAMES` in documented order, resolves each configured `<base-path>/<docs-dir>` target through `resolveContextFilePath`, and returns the keyed facts record consumed by configuration menus and command summaries. Runtime is O(n) in aggregate context-file size. Side effects are limited to filesystem reads.
+- @details Iterates `CONTEXT_FILE_NAMES` in documented order, resolves each configured `<base-path>/<docs-dir>` target through `resolveContextFilePath`, and returns the keyed facts record consumed by configuration menus and command summaries. Repeated invocations with unchanged files resolve through the stat-signed measurement cache. Runtime is O(n) in aggregate context-file size on first measurement per content revision and O(1) per unchanged remeasure. Side effects are limited to filesystem reads and module-local cache mutation.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Effective project configuration supplying the docs directory.
 - @return {Record<ContextFileName, ContextFileSizeFacts>} Measured size facts keyed by canonical file name.
 - @satisfies REQ-373, REQ-374
 
-### fn `export function formatContextFileSize(facts: ContextFileSizeFacts): string` (L107-109)
+### fn `export function formatContextFileSize(facts: ContextFileSizeFacts): string` (L144-146)
 - @brief Formats one measured context-file size as a compact character and token estimate.
 - @details Emits the deterministic `<chars>c/<tokens>t` shape reused by menu rows, the top-level summary, and the command invocation summary so every surface exposes identical size facts. Runtime is O(n) in rendered length. No external state is mutated.
 - @param[in] facts {ContextFileSizeFacts} Measured context-file size facts.
@@ -990,10 +994,11 @@ import { countFileMetrics } from "./token-counter.js";
 |---|---|---|---|---|
 |`ContextFileName`|type||24||
 |`ContextFileSizeFacts`|iface||31-35|export interface ContextFileSizeFacts|
-|`resolveContextFilePath`|fn||53-60|export function resolveContextFilePath(|
-|`measureContextFileSize`|fn||69-79|export function measureContextFileSize(filePath: string):...|
-|`measureContextFileSizes`|fn||89-98|export function measureContextFileSizes(|
-|`formatContextFileSize`|fn||107-109|export function formatContextFileSize(facts: ContextFileS...|
+|`CachedContextFileSizeEntry`|iface||48-51|interface CachedContextFileSizeEntry|
+|`resolveContextFilePath`|fn||74-81|export function resolveContextFilePath(|
+|`measureContextFileSize`|fn||90-116|export function measureContextFileSize(filePath: string):...|
+|`measureContextFileSizes`|fn||126-135|export function measureContextFileSizes(|
+|`formatContextFileSize`|fn||144-146|export function formatContextFileSize(facts: ContextFileS...|
 
 
 ---
@@ -4472,7 +4477,7 @@ import { getInstallationPath } from "./path-context.js";
 
 ---
 
-# token-counter.ts | TypeScript | 593L | 32 symbols | 6 imports | 35 comments
+# token-counter.ts | TypeScript | 613L | 33 symbols | 6 imports | 36 comments
 > Path: `src/core/token-counter.ts`
 - @brief Provides token, size, and structure counting utilities for agent-oriented file payloads.
 - @details Wraps `js-tiktoken` encoding lookup, extracts per-file structural facts, and builds machine-oriented JSON payloads for token-centric tools. Runtime is linear in processed text size plus sort cost for derived ordering hints. Side effects are limited to filesystem reads in file-based helpers.
@@ -4547,69 +4552,76 @@ import { ReqError } from "./errors.js";
 - type `type JsTiktokenModule = {` (L187)
 ### fn `function defaultJsTiktokenModuleLoader(): JsTiktokenModule` (L193-195)
 
-### fn `export function setJsTiktokenModuleLoaderForTests(loader?: () => JsTiktokenModule): void` (L205-207)
+### fn `function resolveTokenCounterEncoding(encodingName: string): TokenCounterEncoding` (L208-216)
+- @brief Resolves one shared tokenizer encoding for a `TokenCounter` construction.
+- @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the module-local encoding cache on first resolution per encoding name.
+- @param[in] encodingName {string} `js-tiktoken` encoding identifier.
+- @return {TokenCounterEncoding} Cached or newly constructed tokenizer encoding.
+- @throws {ReqError} Propagates the deterministic unavailable-dependency failure when `js-tiktoken` cannot be loaded.
+
+### fn `export function setJsTiktokenModuleLoaderForTests(loader?: () => JsTiktokenModule): void` (L224-227)
 - @brief Overrides the `js-tiktoken` loader for tests.
-- @details Enables deterministic dependency-failure tests without mutating repository dependencies on disk. Runtime is O(1). Side effects are limited to module-local test state.
+- @details Enables deterministic dependency-failure tests without mutating repository dependencies on disk. Clears the process-scoped encoding cache so every loader swap observes fresh module behavior instead of encoders constructed by the previous loader. Runtime is O(e) in cached encoding count. Side effects are limited to module-local test state and cache reset.
 - @param[in] loader {(() => JsTiktokenModule) | undefined} Replacement loader, or `undefined` to restore the default loader.
 - @return {void} No return value.
 
-### fn `function loadJsTiktokenModule(): JsTiktokenModule` (L215-232)
+### fn `function loadJsTiktokenModule(): JsTiktokenModule` (L235-252)
 - @brief Loads the `js-tiktoken` module on demand.
 - @details Defers dependency resolution until token counting is requested so extension registration can succeed even when the optional runtime dependency has not yet been installed. Runtime is O(1) plus module resolution cost. Side effects are limited to Node module loading.
 - @return {JsTiktokenModule} Loaded tokenizer module.
 - @throws {ReqError} Throws when `js-tiktoken` is unavailable.
 
-### class `export class TokenCounter` (L238-278)
+### class `export class TokenCounter` (L258-298)
 - @brief Encapsulates one tokenizer instance for repeated token counting.
 - @brief Stores the tokenizer implementation used for subsequent counts.
-- @details Caches a `js-tiktoken` encoding object so multiple documents can be counted without repeated encoding lookup. Counting cost is O(n) in content length. The class mutates only instance state during construction.
-- @details The field holds the encoder returned by `getEncoding`. Access complexity is O(1). The value is initialized once per instance.
+- @details Resolves the process-scoped shared encoder for the requested encoding so multiple documents and multiple counter instances are counted without repeated encoding construction; the first construction per encoding name parses the BPE ranks once and every later `TokenCounter` reuses it through the module-local cache. Counting cost is O(n) in content length. The class mutates only instance state during construction.
+- @details Holds the cached encoder resolved through the per-encoding process cache. Access complexity is O(1); construction is O(1) after the first resolution for the encoding name.
 
-### fn `function canonicalizeTokenPath(filePath: string, baseDir: string): string` (L287-295)
+### fn `function canonicalizeTokenPath(filePath: string, baseDir: string): string` (L307-315)
 - @brief Converts one filesystem path into the canonical token-payload path form.
 - @details Emits a slash-normalized relative path when the target is under the supplied base directory; otherwise emits a slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] filePath {string} Candidate absolute or relative filesystem path.
 - @param[in] baseDir {string} Reference directory used for relative canonicalization.
 - @return {string} Canonicalized path string.
 
-### fn `function countLines(content: string): number` (L303-309)
+### fn `function countLines(content: string): number` (L323-329)
 - @brief Counts logical lines in one text payload.
 - @details Counts newline separators while treating a trailing newline as line termination instead of an extra empty logical line. Runtime is O(n) in text length. No side effects occur.
 - @param[in] content {string} Text payload.
 - @return {number} Logical line count; `0` for empty content.
 
-### fn `function stripMarkdownFrontMatter(content: string): string` (L317-320)
+### fn `function stripMarkdownFrontMatter(content: string): string` (L337-340)
 - @brief Strips YAML front matter from markdown content before heading extraction.
 - @details Removes the first `--- ... ---` block only when it appears at the file start so heading detection can operate on semantic markdown content instead of metadata. Runtime is O(n) in content length. No side effects occur.
 - @param[in] content {string} Markdown payload.
 - @return {string} Markdown body without the leading front matter block.
 
-### fn `function extractPrimaryHeadingText(content: string, filePath: string): string | undefined` (L329-336)
+### fn `function extractPrimaryHeadingText(content: string, filePath: string): string | undefined` (L349-356)
 - @brief Extracts the first level-one markdown heading when present.
 - @details Restricts extraction to markdown-like files, skips YAML front matter, and returns the first `# ` heading payload without surrounding whitespace. Runtime is O(n) in content length. No side effects occur.
 - @param[in] content {string} File content.
 - @param[in] filePath {string} Source path used for extension-based markdown detection.
 - @return {string | undefined} First heading text, or `undefined` when absent or the file is not markdown-like.
 
-### fn `function inferLanguageName(filePath: string): string | undefined` (L344-353)
+### fn `function inferLanguageName(filePath: string): string | undefined` (L364-373)
 - @brief Infers a file language label optimized for agent payloads.
 - @details Reuses source-language detection when available, normalizes markdown extensions explicitly, and falls back to the lowercase extension name without the leading dot. Runtime is O(1). No side effects occur.
 - @param[in] filePath {string} File path whose extension should be classified.
 - @return {string | undefined} Normalized language label, or `undefined` when the path has no usable extension.
 
-### fn `function extractLeadingDoxygenFields(content: string): DoxygenFieldMap | undefined` (L361-379)
+### fn `function extractLeadingDoxygenFields(content: string): DoxygenFieldMap | undefined` (L381-399)
 - @brief Extracts leading Doxygen file fields when present.
 - @details Tests common leading-comment syntaxes, normalizes an optional shebang away before matching, and returns the first non-empty parsed Doxygen map. Runtime is O(n) in comment length. No side effects occur.
 - @param[in] content {string} File content.
 - @return {DoxygenFieldMap | undefined} Parsed Doxygen field map, or `undefined` when no supported file-level fields are present.
 
-### fn `function probeRequestedPath(absolutePath: string): { exists: boolean; isFile: boolean; reason?: string }` (L387-401)
+### fn `function probeRequestedPath(absolutePath: string): { exists: boolean; isFile: boolean; reason?: string }` (L407-421)
 - @brief Probes one requested path before token counting.
 - @details Resolves whether the target exists and is a regular file while capturing a stable skip reason for missing or non-file inputs. Runtime is dominated by one filesystem stat. Side effects are limited to filesystem reads.
 - @param[in] absolutePath {string} Absolute path to inspect.
 - @return {{ exists: boolean; isFile: boolean; reason?: string }} Path probe result.
 
-### fn `function buildCountFileMetricsResult(filePath: string, content: string, counter: TokenCounter): CountFileMetricsResult` (L411-426)
+### fn `function buildCountFileMetricsResult(filePath: string, content: string, counter: TokenCounter): CountFileMetricsResult` (L431-446)
 - @brief Builds one rich per-file metrics record from readable content.
 - @details Combines token, character, byte, and line counts with file-extension, inferred-language, heading, and Doxygen metadata extraction so agents can consume direct-access facts without reparsing the raw file. Runtime is O(n) in content length. No external state is mutated.
 - @param[in] filePath {string} Absolute or project-local file path.
@@ -4617,14 +4629,14 @@ import { ReqError } from "./errors.js";
 - @param[in] counter {TokenCounter} Reused token counter instance.
 - @return {CountFileMetricsResult} Structured per-file metrics record.
 
-### fn `export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING):` (L435-448)
+### fn `export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING):` (L455-468)
 - @brief Counts tokens, characters, bytes, and lines for one in-memory content string.
-- @details Instantiates a `TokenCounter`, tokenizes the supplied text, and pairs the result with raw character length, UTF-8 byte size, and logical line count. Runtime is O(n). No filesystem I/O occurs.
+- @details Resolves the process-cached shared `TokenCounter` encoder for the encoding, tokenizes the supplied text once, and pairs the result with raw character length, UTF-8 byte size, and logical line count. Runtime is O(n) after the one-time per-encoding encoder construction. No filesystem I/O occurs.
 - @param[in] content {string} Text payload to measure.
 - @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
 - @return {{ tokens: number; chars: number; bytes: number; lines: number }} Aggregate metrics for the supplied content.
 
-### fn `export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUNTER_ENCODING): CountFileMetricsResult[]` (L458-479)
+### fn `export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUNTER_ENCODING): CountFileMetricsResult[]` (L478-499)
 - @brief Counts tokens, characters, bytes, and lines for multiple files.
 - @details Reuses a single `TokenCounter`, reads each file as UTF-8, and returns per-file metrics plus direct-access metadata such as heading and Doxygen file fields. Read failures are captured as error strings instead of aborting the entire batch. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] filePaths {string[]} File paths to measure.
@@ -4632,14 +4644,14 @@ import { ReqError } from "./errors.js";
 - @return {CountFileMetricsResult[]} Per-file metrics and optional read errors.
 - @satisfies REQ-010, REQ-070, REQ-073
 
-### fn `export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): TokenToolPayload` (L488-561)
+### fn `export function buildTokenToolPayload(options: BuildTokenToolPayloadOptions): TokenToolPayload` (L508-581)
 - @brief Builds the agent-oriented JSON payload for token-centric tools.
 - @details Validates requested paths against the filesystem, counts token metrics for processable files, preserves caller order in the file table, and emits direct-access file facts such as sizes, headings, and optional Doxygen file fields while omitting request echoes and derived guidance. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] options {BuildTokenToolPayloadOptions} Payload-construction options.
 - @return {TokenToolPayload} Structured token payload ordered as summary then files.
 - @satisfies REQ-010, REQ-017, REQ-069, REQ-070, REQ-071, REQ-073, REQ-074, REQ-075
 
-### fn `export function formatPackSummary(results: CountFileMetricsResult[]): string` (L569-593)
+### fn `export function formatPackSummary(results: CountFileMetricsResult[]): string` (L589-613)
 - @brief Formats per-file token metrics as a human-readable summary block.
 - @details Aggregates totals, emits one status line per file, and appends a summary footer containing file, token, and character counts. Runtime is O(n). No external state is mutated.
 - @param[in] results {CountFileMetricsResult[]} Per-file metric records.
@@ -4665,21 +4677,22 @@ import { ReqError } from "./errors.js";
 |`TokenCounterEncoding`|type||183||
 |`JsTiktokenModule`|type||187||
 |`defaultJsTiktokenModuleLoader`|fn||193-195|function defaultJsTiktokenModuleLoader(): JsTiktokenModule|
-|`setJsTiktokenModuleLoaderForTests`|fn||205-207|export function setJsTiktokenModuleLoaderForTests(loader?...|
-|`loadJsTiktokenModule`|fn||215-232|function loadJsTiktokenModule(): JsTiktokenModule|
-|`TokenCounter`|class||238-278|export class TokenCounter|
-|`canonicalizeTokenPath`|fn||287-295|function canonicalizeTokenPath(filePath: string, baseDir:...|
-|`countLines`|fn||303-309|function countLines(content: string): number|
-|`stripMarkdownFrontMatter`|fn||317-320|function stripMarkdownFrontMatter(content: string): string|
-|`extractPrimaryHeadingText`|fn||329-336|function extractPrimaryHeadingText(content: string, fileP...|
-|`inferLanguageName`|fn||344-353|function inferLanguageName(filePath: string): string | un...|
-|`extractLeadingDoxygenFields`|fn||361-379|function extractLeadingDoxygenFields(content: string): Do...|
-|`probeRequestedPath`|fn||387-401|function probeRequestedPath(absolutePath: string): { exis...|
-|`buildCountFileMetricsResult`|fn||411-426|function buildCountFileMetricsResult(filePath: string, co...|
-|`countFileMetrics`|fn||435-448|export function countFileMetrics(content: string, encodin...|
-|`countFilesMetrics`|fn||458-479|export function countFilesMetrics(filePaths: string[], en...|
-|`buildTokenToolPayload`|fn||488-561|export function buildTokenToolPayload(options: BuildToken...|
-|`formatPackSummary`|fn||569-593|export function formatPackSummary(results: CountFileMetri...|
+|`resolveTokenCounterEncoding`|fn||208-216|function resolveTokenCounterEncoding(encodingName: string...|
+|`setJsTiktokenModuleLoaderForTests`|fn||224-227|export function setJsTiktokenModuleLoaderForTests(loader?...|
+|`loadJsTiktokenModule`|fn||235-252|function loadJsTiktokenModule(): JsTiktokenModule|
+|`TokenCounter`|class||258-298|export class TokenCounter|
+|`canonicalizeTokenPath`|fn||307-315|function canonicalizeTokenPath(filePath: string, baseDir:...|
+|`countLines`|fn||323-329|function countLines(content: string): number|
+|`stripMarkdownFrontMatter`|fn||337-340|function stripMarkdownFrontMatter(content: string): string|
+|`extractPrimaryHeadingText`|fn||349-356|function extractPrimaryHeadingText(content: string, fileP...|
+|`inferLanguageName`|fn||364-373|function inferLanguageName(filePath: string): string | un...|
+|`extractLeadingDoxygenFields`|fn||381-399|function extractLeadingDoxygenFields(content: string): Do...|
+|`probeRequestedPath`|fn||407-421|function probeRequestedPath(absolutePath: string): { exis...|
+|`buildCountFileMetricsResult`|fn||431-446|function buildCountFileMetricsResult(filePath: string, co...|
+|`countFileMetrics`|fn||455-468|export function countFileMetrics(content: string, encodin...|
+|`countFilesMetrics`|fn||478-499|export function countFilesMetrics(filePaths: string[], en...|
+|`buildTokenToolPayload`|fn||508-581|export function buildTokenToolPayload(options: BuildToken...|
+|`formatPackSummary`|fn||589-613|export function formatPackSummary(results: CountFileMetri...|
 
 
 ---
