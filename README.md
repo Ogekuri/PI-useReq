@@ -13,7 +13,7 @@
 It turns a User Request into a living <em>Software Requirements Specification</em> (SRS), implements the corresponding
 source code, and keeps the project documentation (<code>WORKFLOW.md</code>, <code>REFERENCES.md</code>, <code>FLOWCHART.md</code>, <code>README.md</code>)
 in sync with the repository. All capabilities are exposed as slash commands and agent tools inside
-<a href="https://pi.dev"><strong>pi</strong></a> (<code>pi-coding-agent</code> 0.80.4+).
+<a href="https://pi.dev"><strong>pi</strong></a> (<code>pi-coding-agent</code> 1.0.0+).
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 
 ## Requirements
 
-- **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 0.80.4 or newer (Node.js 22.19+, per the pi CLI requirement).
+- **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 1.0.0 or newer (Node.js 22.19+, per the pi CLI requirement).
 - **Git repository** - every `req-*` command runs slash-command-owned git validation: the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
 - **Requirements documentation** - the configured `docs-dir` (default `pi-usereq/docs`) must contain the canonical documents required by each command (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); commands such as `/req-write`, `/req-create`, and `/req-workflow` are the entry points that generate them.
 - **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install automatically through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
@@ -63,6 +63,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 - **Automatic commit guidance** - `AUTO_GIT_COMMIT=enable` (default) injects structured commit instructions (`<TYPE>(<COMPONENT>): <DESCRIPTION> [useReq]`) into every prompt; disabling it forces read-only git behavior and turns worktree orchestration off.
 - **Notifications** - desktop notify command, sound effects (levels `none`/`low`/`mid`/`high`, default `alt+s` toggle) and Pushover push messages on prompt completion, interruption, or failure.
 - **Runtime status bar** - the extension renders its workflow state, current branch, context usage, elapsed time, and sound level in the pi status line.
+- **Context-occupancy guardrails** - the `Context Files` settings row and every command invocation summary show the measured `[<percent>% context]` occupancy of the enabled context files against the selected model's max input context (or the documented 1,000,000-token fallback); prompt dispatch is aborted before worktree creation when the enabled context files exceed that limit.
 - **Debug surface** - config-gated `debug-*` slash commands and a standalone debug harness (`scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`) for offline inspection and replay.
 
 
@@ -83,7 +84,9 @@ creating a worktree.
 > reference, and workflow documents in the prompt context by enabling the `Context Files` toggles for `REQUIREMENTS.md`,
 > `REFERENCES.md`, and `WORKFLOW.md` (the settings-menu row then reads `Context Files  requirements:on • references:on • workflow:on`).
 > The enabled canonical documents are injected into every bundled prompt through `%%CONTEXT_FILES%%`, so the agent analyzes
-> the requirements, the reference index, and the workflow documentation together with the source code.
+> the requirements, the reference index, and the workflow documentation together with the source code. When at least one
+> context file is enabled, the measured occupancy is reported as a `[<percent>% context]` suffix, and prompt dispatch aborts
+> before worktree creation if the enabled context files exceed the selected model's max input context (or the 1,000,000-token fallback).
 
 | Command | Description | Required docs |
 | --- | --- | --- |
@@ -279,13 +282,13 @@ Project-scoped commands (`--summarize`, `--compress`, `--tokens`, `--find`, `--s
 The interactive configuration menu exposes every user-facing setting; changes are persisted automatically:
 
 - **Documentation directory** — `docs-dir` (default `pi-usereq/docs`) used for the canonical documents.
-- **Unit tests directory** — `tests-dir` (default `tests`).
 - **Source directories** — `src-dir` (default `["src"]`) used by the analysis tools.
-- **Context Files** — toggles to inject `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` into the prompt context through `%%CONTEXT_FILES%%`. It is recommended to keep all three toggles enabled (`requirements:on • references:on • workflow:on`) so the analysis commands receive the canonical documents in their context.
+- **Unit tests directory** — `tests-dir` (default `tests`).
+- **Context Files** — toggles to inject `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` into the prompt context through `%%CONTEXT_FILES%%`. Each toggle shows the measured file size (`<chars>c/<tokens>t`) plus its occupancy share, and the summary row appends the overall `[<percent>% context]` suffix. It is recommended to keep all three toggles enabled (`requirements:on • references:on • workflow:on`) so the analysis commands receive the canonical documents in their context.
 - **Auto git commit** — `enable` (default) injects git commit instructions into every prompt; `disable` forces read-only git behavior (`git_read-only.md`) and turns worktree orchestration off.
 - **Git worktree** / **Worktree prefix** — enable/disable prompt-command worktree isolation and set the name prefix (default `PI-useReq-`).
 - **Language static code checkers** — per-language `enable`/`disable` flags and the global `Command`-module checker definitions (view/remove/reset with confirmation).
-- **Enable tools** — the subset of configurable startup tools activated for the project (`files-*` and project tools plus the embedded `read`, `bash`, `edit`, `write` quartet).
+- **Enable tools** — the subset of configurable startup tools activated for the project: the `files-*` and project tools plus the embedded pi tools (`read`, `bash`, `edit`, `write` enabled by default; `find`, `grep`, `ls` configurable and disabled by default).
 - **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed).
 - **Debug** — local debug logging: log file, log-on-status filter, status-change/workflow-event toggles, enabled tools/prompts, and `Enable debug commands for tools`.
 - **Show local/global configuration** — write the exact config file contents into the editor.
