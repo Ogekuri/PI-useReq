@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.86"
-date: "2026-10-02"
+version: "0.0.87"
+date: "2026-10-05"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -36,7 +36,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, and support modules. `.github/workflows/` contains the npm release workflow in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, and the bundled-resource prompt updater. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -100,6 +100,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-019**: MUST resolve the `%%INSTALLATION_PATH%%` keyword inside static-check `Command` `cmd` fields to the runtime installation path within `resolveCheckerExecutable` before executable probing.
 - **DES-020**: MUST extend `scripts/install-static-checkers.ts` to best-effort approve pending npm install scripts for bundled checker dependencies before probing bundled executables.
 - **DES-021**: MUST implement the guarded model-selection reapply helper in `src/core/prompt-command-runtime.ts` without importing extension custom-tool executors from `src/core/tool-runner.ts`.
+- **DES-022**: MUST implement the bundled-resource updater in `scripts/pi-prompts-update.sh` as a standalone bash process using `git` plus core shell utilities only.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -452,6 +453,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-375**: MUST render each `Context Files` submenu row value as `on|off • <chars>c/<tokens>t` derived from the measured facts of the targeted file.
 - **REQ-376**: MUST append `(<chars>c/<tokens>t)` to each enabled segment and render disabled segments as `name:off` in the top-level `Context Files` summary.
 - **REQ-377**: MUST append `(<chars>c/<tokens>t)` to each enabled context file in the command invocation summary `context files` field when that file exists.
+- **REQ-379**: MUST resolve the upstream PI-Prompts repository by trying `https://github.com/Ogekuri/PI-Prompts.git` first and retrying with `https://github.com/Ogekuri/PI-Prompts` on clone failure.
+- **REQ-380**: MUST select the synchronization ref as the newest PI-Prompts release tag reachable from `master` and MUST fall back to the `master` head when no release is resolvable.
+- **REQ-381**: MUST fully synchronize `src/resources/instructions` from upstream `src/instructions`, overwriting existing files and removing files absent upstream.
+- **REQ-382**: MUST fully synchronize `src/resources/prompts` from upstream `src/prompts`, overwriting existing files and removing files absent upstream.
+- **REQ-383**: MUST fully synchronize `src/resources/templates` from upstream `src/templates`, overwriting existing files and removing files absent upstream.
+- **REQ-384**: SHOULD preserve upstream access and modification timestamps for every synchronized resource file.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -607,6 +614,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, home-resource synchronization, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
+- `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@earendil-works/pi-coding-agent` (>=1.0.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
@@ -671,6 +679,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── req/docs/
 ├── scripts/
 │   ├── debug-extension.ts
+│   ├── pi-prompts-update.sh
 │   ├── pi-usereq-debug.sh
 │   └── lib/{extension-debug-harness.ts,recording-extension-api.ts,sdk-smoke.ts}
 ├── .github/
