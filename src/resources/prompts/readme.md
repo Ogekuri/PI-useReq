@@ -39,7 +39,7 @@ In scope: static analysis of user-visible behavior from %%SRC_PATHS%% and relate
 - Write root `README.md` in English.
 - Do not perform unrelated edits.
 - Analyze user-visible implementation changes, including new features, CLI parameters/options, GUI interactions, distributed APIs, and configuration-file schema updates when present.
-- Validate whether the current root `README.md` is aligned with implementation evidence; identify exact sections to update first, then update only missing, outdated, or incorrect user-facing content in those sections.
+- Validate the current root `README.md` exhaustively against implementation evidence: enumerate every section, validate each sentence, and record a per-sentence conformance outcome before editing; then update only missing, outdated, or incorrect user-facing content.
 - Parse [User Request](#users-request) (`%%ARGS%%`) as explicit additional-edit directives, using the same anchor-based reference model used by `write.md`, and execute those directives in the same scoped README update pass.
 - Keep non-analysis documentary sections unchanged, including document headers, versioning metadata, context/scope descriptions, personal motivations, related projects, and high-level conceptual or graphical descriptions that do not alter interface usage.
 - Preserve existing README structure and formatting patterns (section order, heading hierarchy, bullet/list style, table style) whenever possible.
@@ -136,9 +136,12 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Use repository evidence only; for each finding, collect file paths and line ranges.
    - Derive a compact "README coverage list" of user-visible behavior that MUST appear in root `README.md`.
 2. Validate and update root `README.md`
-   - Read the current root `README.md` and compare it with the README coverage list from Step 1.
-   - Identify and list the exact `README.md` sections impacted by the detected user-visible implementation changes and explicit additional edits from [User Request](#users-request) before editing.
+   - Read the current root `README.md` and enumerate ALL its sections and headings in document order to fix the complete validation surface.
+   - Validate `README.md` sentence by sentence, section by section, in document order: for every sentence, verify its content against repository implementation evidence and record exactly one outcome: `CONFORMING`, `OUTDATED`, or `UNSUPPORTED`.
+   - Classify non-analysis documentary sections (headers, versioning, motivations, related projects, high-level graphics) as `NOT-ANALYZED-BY-DESIGN` instead of sentence-level validation; never skip any other part or section.
+   - Identify and list the exact `README.md` sections impacted by the detected user-visible implementation changes, the recorded validation outcomes, and explicit additional edits from [User Request](#users-request) before editing.
    - Update only the identified sections so `README.md` reflects the current externally visible behavior and usage flows.
+   - Completeness gate: do NOT proceed to Step 3 until every enumerated section and every sentence has a recorded outcome and every `OUTDATED` or `UNSUPPORTED` sentence in analysis sections is corrected or removed.
    - Keep all non-analysis documentary sections unchanged (e.g., headers, versioning, context/scope narratives, motivations, related projects, high-level graphics/descriptions not tied to interface behavior).
    - Keep content focused on user interaction, setup, commands, interfaces, and observable outputs.
    - Do NOT add internal implementation details, internal architecture, private symbol names, or algorithm internals.
