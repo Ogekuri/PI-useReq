@@ -8,13 +8,19 @@
 #     `src/resources/templates` targets. Full synchronization overwrites every
 #     present file and removes every file that no longer exists upstream by
 #     replacing each target directory with a freshly staged copy. Upstream file
-#     access and modification timestamps are preserved through `cp -p`.
-#     Runtime is dominated by one git clone plus one ref checkout and per-file
-#     copies. Side effects include temporary-directory creation, git
-#     subprocesses, one optional GitHub Releases API request, and replacement of
-#     the three target resource directories. No other repository content is
-#     modified.
-# @satisfies DES-022, REQ-379, REQ-380, REQ-381, REQ-382, REQ-383, REQ-384
+#     access and modification timestamps are preserved through `cp -p`. Before
+#     any modification, the updater prints the resolved latest PI-Prompts
+#     release version and the stored version read from
+#     `src/resources/pi-prompts-version.txt` (missing or empty files report
+#     `unknown`), then requires an explicit `Y` confirmation; any other input
+#     aborts without modifications. On success, the resolved version is written
+#     into `src/resources/pi-prompts-version.txt`. Runtime is dominated by one
+#     git clone plus one ref checkout and per-file copies. Side effects include
+#     temporary-directory creation, git subprocesses, one optional GitHub
+#     Releases API request, replacement of the three target resource
+#     directories, and overwrite of the one version marker file. No other
+#     repository content is modified.
+# @satisfies DES-022, REQ-379, REQ-380, REQ-381, REQ-382, REQ-383, REQ-384, REQ-396, REQ-397, REQ-398, REQ-399
 
 set -euo pipefail
 
@@ -26,6 +32,12 @@ PROMPTS_BRANCH="master"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TARGET_ROOT="${REPO_ROOT}/src/resources"
+
+## @brief Stores the PI-Prompts version marker path relative to the repository root.
+## @details Read before the update and overwritten with the resolved version after
+##     successful synchronization. The constant is immutable at runtime.
+## @satisfies REQ-396, REQ-399
+PROMPTS_VERSION_REL="src/resources/pi-prompts-version.txt"
 
 ## @brief Stores the ordered `upstream-relative:target-relative` synchronization pairs.
 ## @details Each entry maps one upstream repository directory to one bundled
@@ -85,6 +97,73 @@ cleanup() {
 ## @return {void} No return value.
 require_tool() {
   command -v "$1" >/dev/null 2>&1 || fail "Required tool not found: $1"
+}
+
+## @brief Reads one stored PI-Prompts version marker file.
+## @details Returns the first line of the marker file with all surrounding
+##     whitespace removed when the file exists and is non-empty; otherwise
+##     returns the literal `unknown` so missing or empty version markers are
+##     handled deterministically. Runtime is O(n) in file size. Side effects are
+##     limited to filesystem reads.
+## @param[in] marker_path {string} Absolute version marker file path.
+## @return {string} Trimmed stored version or `unknown` on `stdout`.
+## @satisfies REQ-396
+read_version_file() {
+  local marker_path="$1"
+  local version=""
+  if [ -f "${marker_path}" ] && [ -s "${marker_path}" ]; then
+    version="$(head -n 1 "${marker_path}" | tr -d '[:space:]' || true)"
+  fi
+  if [ -z "${version}" ]; then
+    version="unknown"
+  fi
+  printf '%s\n' "${version}"
+}
+
+## @brief Derives the release version from one resolved upstream synchronization ref.
+## @details Strips the `refs/tags/` prefix from a release-tag ref and the
+##     `refs/heads/` prefix from a branch-head ref so the printed version and
+##     the stored version marker share one deterministic release identity.
+##     Runtime is O(n) in ref length. No external state is mutated.
+## @param[in] release_ref {string} Resolved `refs/tags/<tag>` or `refs/heads/<branch>` ref.
+## @return {string} Release version on `stdout`.
+resolve_release_version() {
+  local release_ref="$1"
+  case "${release_ref}" in
+    refs/tags/*)
+      printf '%s\n' "${release_ref#refs/tags/}"
+      ;;
+    refs/heads/*)
+      printf '%s\n' "${release_ref#refs/heads/}"
+      ;;
+    *)
+      printf '%s\n' "${release_ref}"
+      ;;
+  esac
+}
+
+## @brief Requests explicit user confirmation before any modification.
+## @details Prints the resolved latest PI-Prompts release version plus the stored
+##     version and one English confirmation sentence, reads one line from
+##     `stdin`, and returns success only when the confirmation input is exactly
+##     `Y`; any other input, including end-of-stream input, returns failure so
+##     callers abort without modifications. Runtime is O(1) plus one user
+##     interaction. Side effects include `stdout` and `stderr` writes.
+## @param[in] latest_version {string} Resolved upstream release version.
+## @param[in] stored_version {string} Stored version of `${PROMPTS_VERSION_REL}`.
+## @return {integer} `0` when the user confirmed with exactly `Y`; `1` otherwise.
+## @satisfies REQ-397, REQ-398
+confirm_update() {
+  local latest_version="$1"
+  local stored_version="$2"
+  local answer=""
+
+  log "Latest PI-Prompts release : ${latest_version}"
+  log "Stored version (${PROMPTS_VERSION_REL}): ${stored_version}"
+  log "This update replaces the bundled prompt resources in src/resources/instructions, src/resources/prompts, and src/resources/templates with the content of the latest PI-Prompts release."
+  printf 'Proceed with the update? [Y/n] '
+  read -r answer || answer=""
+  [ "${answer}" = "Y" ]
 }
 
 ## @brief Clones the upstream PI-Prompts master branch into one target directory.
@@ -194,21 +273,29 @@ sync_directory() {
 }
 
 ## @brief Executes one full bundled-resource update run.
-## @details Validates required tools, allocates the temporary upstream working
-##     tree, clones the PI-Prompts master branch, resolves and checks out the
-##     newest release ref, then synchronizes every ordered pair declared in
-##     `SYNC_SPECS`. Runtime is dominated by the upstream clone plus the three
-##     directory synchronizations. Side effects include temporary-directory
-##     creation and removal, git subprocesses, one optional GitHub Releases API
-##     request, and replacement of the three bundled target directories.
+## @details Validates required tools, reads the stored PI-Prompts version marker,
+##     allocates the temporary upstream working tree, clones the PI-Prompts
+##     master branch, resolves the newest release ref plus its release version,
+##     prints the resolved plus stored versions and requires an explicit `Y`
+##     confirmation, checks out the resolved release ref, synchronizes every
+##     ordered pair declared in `SYNC_SPECS`, and writes the resolved version
+##     into the version marker file. Runtime is dominated by the upstream clone
+##     plus the three directory synchronizations. Side effects include
+##     temporary-directory creation and removal, git subprocesses, one optional
+##     GitHub Releases API request, replacement of the three bundled target
+##     directories, and overwrite of the version marker file.
 ## @return {void} No return value.
 ## @throws Exits through `fail(...)` when any required tool, clone, checkout, or
 ##     synchronization step fails.
+## @satisfies REQ-396, REQ-397, REQ-398, REQ-399
 main() {
   require_tool git
   require_tool find
   require_tool mkdir
   require_tool cp
+
+  local prompts_version
+  prompts_version="$(read_version_file "${REPO_ROOT}/${PROMPTS_VERSION_REL}")"
 
   mkdir -p "${TARGET_ROOT}"
 
@@ -222,6 +309,15 @@ main() {
 
   local release_ref
   release_ref="$(resolve_release_ref "${repository}")"
+
+  local release_version
+  release_version="$(resolve_release_version "${release_ref}")"
+
+  if ! confirm_update "${release_version}" "${prompts_version}"; then
+    log "Update aborted; no repository content was modified."
+    return 0
+  fi
+
   git -C "${repository}" checkout --quiet --detach "${release_ref}" \
     || fail "Unable to check out ${release_ref}."
   log "Synchronizing from ref: ${release_ref}"
@@ -233,7 +329,9 @@ main() {
     sync_directory "${repository}/${source_rel}" "${REPO_ROOT}/${target_rel}"
   done
 
-  log "Bundled prompt resources updated."
+  printf '%s\n' "${release_version}" > "${REPO_ROOT}/${PROMPTS_VERSION_REL}"
+
+  log "Bundled prompt resources updated to ${release_version}."
 }
 
 trap cleanup EXIT

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.88"
+version: "0.0.89"
 date: "2026-10-05"
 author: "OpenAI Codex"
 scope:
@@ -471,6 +471,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-393**: MUST synchronize `docs/pi.dev/coding-agent-examples` from `pi.dev-src/pi/packages/coding-agent/examples`, overwriting existing files and removing files absent upstream.
 - **REQ-394**: MUST synchronize `docs/pi.dev/durable-docs` from `pi.dev-src/pi/packages/durable/docs`, overwriting existing files and removing files absent upstream.
 - **REQ-395**: MUST write the resolved latest release version into both `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt` after successful synchronization.
+- **REQ-396**: MUST read the stored PI-Prompts version from `src/resources/pi-prompts-version.txt` and MUST treat a missing or empty file as `unknown`.
+- **REQ-397**: MUST print the resolved latest PI-Prompts release version and the stored version to stdout before requesting update confirmation.
+- **REQ-398**: MUST request update confirmation with an English message accepting `Y` and MUST synchronize only when the confirmation input is exactly `Y`, otherwise aborting without modifications.
+- **REQ-399**: MUST write the resolved latest release version into `src/resources/pi-prompts-version.txt` after successful synchronization.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.

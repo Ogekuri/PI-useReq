@@ -58,7 +58,7 @@
   - Threads: no explicit threads detected
 - ID: `PROC:pi-prompts-update`
   - Type: Process
-  - Role: Bash updater that clones the latest PI-Prompts release reachable from `master` and fully synchronizes upstream instructions, prompts, and templates into the bundled `src/resources` targets.
+  - Role: Bash updater that clones the latest PI-Prompts release reachable from `master`, prints the resolved release version plus the stored `src/resources/pi-prompts-version.txt` marker, requires explicit `Y` confirmation, fully synchronizes upstream instructions, prompts, and templates into the bundled `src/resources` targets, and writes the resolved version into `src/resources/pi-prompts-version.txt`.
   - Entrypoints:
     - `main(...)` [`scripts/pi-prompts-update.sh`]
   - Parent Process: none
@@ -1417,16 +1417,20 @@
   - `main(...)`: bundled-resource updater runtime root [`scripts/pi-prompts-update.sh`]
 - Lifecycle/trigger:
   - Start trigger: Bash executes `scripts/pi-prompts-update.sh` as a one-shot updater.
-  - Stop trigger: returns numeric exit status after one clone, release-ref resolution, and the three ordered target synchronizations, or after a caught updater failure.
+  - Stop trigger: returns numeric exit status after one clone, release-ref resolution, explicit user confirmation, and the three ordered target synchronizations plus the version-marker write, or after a caught updater failure.
   - Looping model: single-pass clone plus ordered per-target synchronization loop.
   - Threads: no explicit threads detected.
   - Startup invariant: the `EXIT` trap is installed before `main(...)` so `cleanup(...)` removes the upstream working tree and any pending staging directory on every exit path.
 - Internal Call-Trace Tree:
-  - `main(...)`: validate required tools, allocate the upstream working tree, clone and resolve the release ref, and run the ordered synchronization pairs [`scripts/pi-prompts-update.sh`]
+  - `main(...)`: validate required tools, read the stored version marker, allocate the upstream working tree, clone and resolve the release ref plus its release version, require explicit user confirmation, then run the ordered synchronization pairs and write the resolved version marker [`scripts/pi-prompts-update.sh`]
     - `require_tool(...)`: probe one required external tool and abort through `fail(...)` on miss [`scripts/pi-prompts-update.sh`]
+    - `read_version_file(...)`: read the stored PI-Prompts version marker and report `unknown` for missing or empty marker files [`scripts/pi-prompts-update.sh`]
     - `clone_upstream(...)`: clone the master branch from the primary repository URL and retry once with the fallback URL, emitting the resolved URL on stdout [`scripts/pi-prompts-update.sh`]
       - `fail(...)`: emit one `ERROR:` diagnostic to stderr and exit with status `1` [`scripts/pi-prompts-update.sh`]
     - `resolve_release_ref(...)`: prefer the GitHub Releases API tag, fall back to the newest version-sorted tag reachable from `master`, and fall back to the `master` head, emitting the resolved ref on stdout [`scripts/pi-prompts-update.sh`]
+      - `log(...)`: emit one progress line on stdout [`scripts/pi-prompts-update.sh`]
+    - `resolve_release_version(...)`: derive the release version from the resolved `refs/tags/<tag>` or `refs/heads/<branch>` ref [`scripts/pi-prompts-update.sh`]
+    - `confirm_update(...)`: print the latest plus stored versions, prompt one English `Y/n` confirmation, and succeed only for the exact `Y` input [`scripts/pi-prompts-update.sh`]
       - `log(...)`: emit one progress line on stdout [`scripts/pi-prompts-update.sh`]
     - `sync_directory(...)`: stage every upstream file with timestamp-preserving copies and swap the staged tree into the bundled target directory, emitting one per-target progress line on stdout [`scripts/pi-prompts-update.sh`]
       - `fail(...)`: emit one `ERROR:` diagnostic to stderr and exit with status `1` [`scripts/pi-prompts-update.sh`]
@@ -1435,7 +1439,7 @@
   - `git clone` plus `git checkout` subprocesses and `git tag` ref enumeration against the cloned repository.
   - Optional `curl` HTTPS request to the GitHub Releases API.
   - `mktemp`, `find`, `cp -p`, `mv`, and `rm` filesystem operations for staging, backup, and swap.
-  - Bash process stdout, stderr, and exit code.
+  - Bash process stdin confirmation reading plus stdout, stderr, and exit code.
 
 ### `PROC:pi-cli-update`
 - Entrypoints:
