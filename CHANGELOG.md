@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.68.0](https://github.com/Ogekuri/PI-useReq/compare/v0.67.0..v0.68.0) - 2026-10-06
+### ✨  Refactor
+- move tokenizer warm-up and context-file encoding off the menu critical path [useReq] *(core)*
+  - Pre-warm the shared cl100k_base encoder and canonical context-file
+  - measurements during idle time at extension bind and session_start via
+  - chained setImmediate slices (prewarmTokenCounterEncoder,
+  - prewarmContextFileMeasurements), so the one-time js-tiktoken require
+  - plus BPE-rank parse and first content encodes never execute inside the
+  - synchronous menu-building critical path.
+  - Persist the encoding cache, the stat-signed context-file measurement
+  - cache, and a new stat-signed countFilesMetrics metrics cache on
+  - globalThis so session rebinds never re-trigger the heavy path.
+  - Add lean countTextTokensAndChars (tokens+chars only) and yielding
+  - async measureContextFileSize(s)Async used by the async menu, submenu,
+  - and req-* summary call sites; collapse the top-level reset preview to
+  - a single measurement batch.
+  - Token and character estimates stay bit-identical (135873c/31128t for
+  - REQUIREMENTS.md verified); REQ-010, REQ-017, REQ-373-REQ-377,
+  - REQ-400-REQ-412 outputs unchanged; prompt preflight (REQ-408) keeps
+  - synchronous stat-signature-fresh measurement.
+
 ## [0.66.0](https://github.com/Ogekuri/PI-useReq/compare/v0.65.0..v0.66.0) - 2026-10-05
 ### 🚜  Changes
 - render per-file occupancy suffix in Context Files submenu [useReq] *(context-files)*
@@ -912,6 +933,7 @@
 - \[0.65.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.65.0
 - \[0.66.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.66.0
 - \[0.67.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.67.0
+- \[0.68.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.68.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -978,3 +1000,4 @@
 [0.65.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.64.0..v0.65.0
 [0.66.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.65.0..v0.66.0
 [0.67.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.66.0..v0.67.0
+[0.68.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.67.0..v0.68.0
