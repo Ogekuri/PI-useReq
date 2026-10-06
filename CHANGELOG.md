@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.70.0](https://github.com/Ogekuri/PI-useReq/compare/v0.69.0..v0.70.0) - 2026-10-06
+### 🚜  Changes
+- default Context Files flags to enabled [useReq] *(config)*
+  - REQ-328: context-files-requirements, context-files-references and
+  - context-files-workflow now default to enabled for new projects and
+  - missing or malformed persisted payloads.
+  - REQ-333: Context Files subtree reset restores the enabled default.
+  - Updated REQUIREMENTS.md, regenerated REFERENCES.md, and refreshed
+  - Doxygen docs for DEFAULT_CONTEXT_FILES_FLAG and
+  - normalizeContextFilesFlag in src/core/config.ts.
+
 ## [0.69.0](https://github.com/Ogekuri/PI-useReq/compare/v0.68.0..v0.69.0) - 2026-10-06
 ### 🐛  Bug Fixes
 - Update version in package-lock.json.
@@ -939,6 +950,7 @@
 - \[0.67.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.67.0
 - \[0.68.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.68.0
 - \[0.69.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.69.0
+- \[0.70.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.70.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1007,3 +1019,4 @@
 [0.67.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.66.0..v0.67.0
 [0.68.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.67.0..v0.68.0
 [0.69.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.68.0..v0.69.0
+[0.70.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.69.0..v0.70.0
