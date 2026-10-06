@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.69.0](https://github.com/Ogekuri/PI-useReq/compare/v0.68.0..v0.69.0) - 2026-10-06
+### 🐛  Bug Fixes
+- Update version in package-lock.json.
+
 ## [0.68.0](https://github.com/Ogekuri/PI-useReq/compare/v0.67.0..v0.68.0) - 2026-10-06
 ### ✨  Refactor
 - move tokenizer warm-up and context-file encoding off the menu critical path [useReq] *(core)*
@@ -934,6 +938,7 @@
 - \[0.66.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.66.0
 - \[0.67.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.67.0
 - \[0.68.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.68.0
+- \[0.69.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.69.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1001,3 +1006,4 @@
 [0.66.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.65.0..v0.66.0
 [0.67.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.66.0..v0.67.0
 [0.68.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.67.0..v0.68.0
+[0.69.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.68.0..v0.69.0
