@@ -196,22 +196,42 @@ function defaultJsTiktokenModuleLoader(): JsTiktokenModule {
 
 let jsTiktokenModuleLoader: () => JsTiktokenModule = defaultJsTiktokenModuleLoader;
 
-const cachedTokenCounterEncodings = new Map<string, TokenCounterEncoding>();
+/**
+ * @brief Describes the process-scoped tokenizer state persisted across extension rebinds.
+ * @details Stores the per-encoding shared encoders on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, while the hosting process persists across those operations, so session rebinds reuse already parsed encoders instead of re-parsing the bundled BPE ranks. The interface is compile-time only and introduces no runtime cost.
+ */
+interface ProcessScopedTokenCounterStore {
+  readonly cachedTokenCounterEncodings: Map<string, TokenCounterEncoding>;
+}
+
+/**
+ * @brief Returns the process-scoped tokenizer encoding cache.
+ * @details Lazily initializes one `globalThis` record so session rebinds never re-trigger the heavy encoder construction. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @return {ProcessScopedTokenCounterStore} Mutable process-scoped tokenizer store.
+ */
+function getProcessScopedTokenCounterStore(): ProcessScopedTokenCounterStore {
+  const globalScope = globalThis as typeof globalThis & { __piUsereqTokenCounterStore?: ProcessScopedTokenCounterStore };
+  if (!globalScope.__piUsereqTokenCounterStore) {
+    globalScope.__piUsereqTokenCounterStore = { cachedTokenCounterEncodings: new Map<string, TokenCounterEncoding>() };
+  }
+  return globalScope.__piUsereqTokenCounterStore;
+}
 
 /**
  * @brief Resolves one shared tokenizer encoding for a `TokenCounter` construction.
- * @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the module-local encoding cache on first resolution per encoding name.
+ * @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the process-scoped encoding cache on first resolution per encoding name.
  * @param[in] encodingName {string} `js-tiktoken` encoding identifier.
  * @return {TokenCounterEncoding} Cached or newly constructed tokenizer encoding.
  * @throws {ReqError} Propagates the deterministic unavailable-dependency failure when `js-tiktoken` cannot be loaded.
  */
 function resolveTokenCounterEncoding(encodingName: string): TokenCounterEncoding {
-  const cachedEncoding = cachedTokenCounterEncodings.get(encodingName);
+  const encodings = getProcessScopedTokenCounterStore().cachedTokenCounterEncodings;
+  const cachedEncoding = encodings.get(encodingName);
   if (cachedEncoding) {
     return cachedEncoding;
   }
   const encoding = loadJsTiktokenModule().getEncoding(encodingName);
-  cachedTokenCounterEncodings.set(encodingName, encoding);
+  encodings.set(encodingName, encoding);
   return encoding;
 }
 
@@ -223,7 +243,23 @@ function resolveTokenCounterEncoding(encodingName: string): TokenCounterEncoding
  */
 export function setJsTiktokenModuleLoaderForTests(loader?: () => JsTiktokenModule): void {
   jsTiktokenModuleLoader = loader ?? defaultJsTiktokenModuleLoader;
-  cachedTokenCounterEncodings.clear();
+  getProcessScopedTokenCounterStore().cachedTokenCounterEncodings.clear();
+}
+
+/**
+ * @brief Pre-warms the shared tokenizer encoder during idle time.
+ * @details Schedules one `setImmediate` task that resolves the shared encoding through the process-scoped cache, so the one-time `require("js-tiktoken")` plus bundled BPE-rank parse never executes inside a synchronous menu or preflight critical path. The task is best-effort: loader and encoding failures are swallowed because real failures still surface deterministically at measurement time. Runtime is O(1) for scheduling plus the deferred one-time construction cost. Side effect: schedules one process task and mutates the process-scoped encoding cache when the construction succeeds.
+ * @param[in] encodingName {string} `js-tiktoken` encoding identifier. Defaults to `cl100k_base`.
+ * @return {void} No return value.
+ */
+export function prewarmTokenCounterEncoder(encodingName = TOKEN_COUNTER_ENCODING): void {
+  setImmediate(() => {
+    try {
+      resolveTokenCounterEncoding(encodingName);
+    } catch {
+      // Best-effort pre-warm: dependency failures surface unchanged at measurement time.
+    }
+  });
 }
 
 /**
@@ -446,30 +482,62 @@ function buildCountFileMetricsResult(filePath: string, content: string, counter:
 }
 
 /**
- * @brief Counts tokens, characters, bytes, and lines for one in-memory content string.
- * @details Resolves the process-cached shared `TokenCounter` encoder for the encoding, tokenizes the supplied text once, and pairs the result with raw character length, UTF-8 byte size, and logical line count. Runtime is O(n) after the one-time per-encoding encoder construction. No filesystem I/O occurs.
+ * @brief Counts only tokenizer tokens and characters for one in-memory content string.
+ * @details Lean variant of the former full-metrics counter used by context-file sizing: resolves the process-cached shared `TokenCounter` encoder, tokenizes the supplied text once, and pairs the result with the raw character length while skipping UTF-8 byte sizing and the logical-line regex allocation. Token and character semantics are bit-identical to the full metrics contract. Runtime is O(n) after the one-time per-encoding encoder construction. No filesystem I/O occurs.
  * @param[in] content {string} Text payload to measure.
  * @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
- * @return {{ tokens: number; chars: number; bytes: number; lines: number }} Aggregate metrics for the supplied content.
+ * @return {{ tokens: number; chars: number }} Token estimate and character count for the supplied content.
  */
-export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_ENCODING): {
+export function countTextTokensAndChars(content: string, encodingName = TOKEN_COUNTER_ENCODING): {
   tokens: number;
   chars: number;
-  bytes: number;
-  lines: number;
 } {
   const counter = new TokenCounter(encodingName);
   return {
     tokens: counter.countTokens(content),
     chars: TokenCounter.countChars(content),
-    bytes: Buffer.byteLength(content, "utf8"),
-    lines: countLines(content),
   };
 }
 
 /**
+ * @brief Describes one stat-signed full-metrics cache entry.
+ * @details Pairs one computed `CountFileMetricsResult` with the `mtimeMs` plus `size` filesystem signature observed at computation time so later invocations can reuse the record through one stat call. The interface is compile-time only and introduces no runtime cost.
+ */
+interface FileMetricsCacheEntry {
+  readonly statSignature: string;
+  readonly result: CountFileMetricsResult;
+}
+
+/**
+ * @brief Bounds the process-scoped per-file metrics cache.
+ * @details Explicit-file and canonical-doc token requests measure bounded path sets per invocation, so unbounded caching would accumulate stale entries in long-lived pi hosts. Exceeding the bound clears the cache completely, which only costs one re-measurement per live path. Lookup complexity is O(1).
+ */
+const FILE_METRICS_CACHE_LIMIT = 128;
+
+/**
+ * @brief Describes the process-scoped per-file metrics state persisted across extension rebinds.
+ * @details Stores the stat-signed full-metric records on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, while the hosting process persists across those operations, so repeated `files-tokens` and canonical-doc `tokens` invocations reuse already encoded documents instead of re-encoding unchanged content. The interface is compile-time only and introduces no runtime cost.
+ */
+interface ProcessScopedFileMetricsStore {
+  readonly statSignedMetrics: Map<string, FileMetricsCacheEntry>;
+}
+
+/**
+ * @brief Returns the process-scoped per-file metrics cache.
+ * @details Lazily initializes one `globalThis` record so session rebinds never re-trigger the heavy per-file encode path. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @return {ProcessScopedFileMetricsStore} Mutable process-scoped metrics store.
+ */
+function getProcessScopedFileMetricsStore(): ProcessScopedFileMetricsStore {
+  const globalScope = globalThis as typeof globalThis & { __piUsereqFileMetricsStore?: ProcessScopedFileMetricsStore };
+  if (!globalScope.__piUsereqFileMetricsStore) {
+    globalScope.__piUsereqFileMetricsStore = { statSignedMetrics: new Map<string, FileMetricsCacheEntry>() };
+  }
+  return globalScope.__piUsereqFileMetricsStore;
+}
+
+/**
  * @brief Counts tokens, characters, bytes, and lines for multiple files.
- * @details Reuses a single `TokenCounter`, reads each file as UTF-8, and returns per-file metrics plus direct-access metadata such as heading and Doxygen file fields. Read failures are captured as error strings instead of aborting the entire batch. Runtime is O(F + S). Side effects are limited to filesystem reads.
+ * @details Reuses a single `TokenCounter`, reuses stat-signed cached metric records for unchanged files through one stat call per path, reads changed files as UTF-8, and returns per-file metrics plus direct-access metadata such as heading and Doxygen file fields. Read failures are captured as error strings instead of aborting the entire batch, and failed targets are never cached. Runtime is O(F + S) on first measurement per content revision and O(F) in stat calls per unchanged remeasure. Side effects are limited to filesystem reads and process-scoped cache mutation.
  * @param[in] filePaths {string[]} File paths to measure.
  * @param[in] encodingName {string} Tokenizer identifier. Defaults to `cl100k_base`.
  * @return {CountFileMetricsResult[]} Per-file metrics and optional read errors.
@@ -477,10 +545,31 @@ export function countFileMetrics(content: string, encodingName = TOKEN_COUNTER_E
  */
 export function countFilesMetrics(filePaths: string[], encodingName = TOKEN_COUNTER_ENCODING): CountFileMetricsResult[] {
   const counter = new TokenCounter(encodingName);
+  const metricsCache = getProcessScopedFileMetricsStore().statSignedMetrics;
   return filePaths.map((filePath) => {
+    let statSignature: string | undefined;
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) {
+        statSignature = `${stat.mtimeMs}:${stat.size}`;
+        const cachedEntry = metricsCache.get(filePath);
+        if (cachedEntry && cachedEntry.statSignature === statSignature) {
+          return { ...cachedEntry.result };
+        }
+      }
+    } catch {
+      statSignature = undefined;
+    }
     try {
       const content = fs.readFileSync(filePath, "utf8");
-      return buildCountFileMetricsResult(filePath, content, counter);
+      const result = buildCountFileMetricsResult(filePath, content, counter);
+      if (statSignature !== undefined) {
+        if (metricsCache.size >= FILE_METRICS_CACHE_LIMIT) {
+          metricsCache.clear();
+        }
+        metricsCache.set(filePath, { statSignature, result });
+      }
+      return result;
     } catch (error) {
       return {
         file: filePath,

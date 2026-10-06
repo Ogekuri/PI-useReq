@@ -1,14 +1,14 @@
 /**
  * @file
  * @brief Measures runtime character and token sizes of the canonical context files.
- * @details Provides reusable helpers that compute character and `cl100k_base` token estimates for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` under `<base-path>/<docs-dir>` so configuration menus and command summaries share one measurement contract. Measurements are memoized per resolved path against the file `mtimeMs` plus `size` signature and reuses the process-cached shared tokenizer, so repeated menu renders resolve unchanged files through filesystem stats only. Runtime is O(n) on first measurement per content revision and O(1) per unchanged remeasure. Side effects are limited to filesystem reads and module-local cache mutation.
+ * @details Provides reusable helpers that compute character and `cl100k_base` token estimates for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` under `<base-path>/<docs-dir>` so configuration menus and command summaries share one measurement contract. Measurements are memoized per resolved path against the file `mtimeMs` plus `size` signature inside a process-scoped cache that survives extension rebinds, reuse the lean process-cached shared tokenizer counter, and expose idle-time pre-warm scheduling plus a yielding async measurement variant so the one-time tokenizer module load and per-revision content encodes never execute inside a synchronous menu critical path. Runtime is O(n) on first measurement per content revision and O(1) per unchanged remeasure. Side effects are limited to filesystem reads and process-scoped cache mutation.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_DOCS_DIR, type UseReqConfig } from "./config.js";
 import { normalizeRelativeDirContract } from "./path-context.js";
-import { countFileMetrics } from "./token-counter.js";
+import { countTextTokensAndChars, prewarmTokenCounterEncoder } from "./token-counter.js";
 import { ReqError } from "./errors.js";
 
 /**
@@ -58,10 +58,29 @@ interface CachedContextFileSizeEntry {
 const CONTEXT_FILE_SIZE_CACHE_LIMIT = 64;
 
 /**
- * @brief Stores the module-local context-file measurement cache keyed by resolved path.
- * @details Maps each measured absolute context-file path to its stat-signed facts so repeated configuration-menu renders and command summaries reuse identical measurements while any content revision invalidates only the affected entry. Cache state is module-local and never serialized into configuration.
+ * @brief Describes the process-scoped context-file measurement state persisted across extension rebinds.
+ * @details Stores the stat-signed measurement cache plus the pending pre-warm schedule guards on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, while the hosting process persists across those operations, so session rebinds never re-trigger the heavy first-measurement path for unchanged context files. The interface is compile-time only and introduces no runtime cost.
  */
-const contextFileSizeCache = new Map<string, CachedContextFileSizeEntry>();
+interface ProcessScopedContextFileSizeStore {
+  readonly contextFileSizeCache: Map<string, CachedContextFileSizeEntry>;
+  readonly scheduledPrewarmBases: Set<string>;
+}
+
+/**
+ * @brief Returns the process-scoped context-file measurement store.
+ * @details Lazily initializes one `globalThis` record so session rebinds reuse already measured facts and never double-schedule the idle-time pre-warm for one project base. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @return {ProcessScopedContextFileSizeStore} Mutable process-scoped measurement store.
+ */
+function getProcessScopedContextFileSizeStore(): ProcessScopedContextFileSizeStore {
+  const globalScope = globalThis as typeof globalThis & { __piUsereqContextFileSizeStore?: ProcessScopedContextFileSizeStore };
+  if (!globalScope.__piUsereqContextFileSizeStore) {
+    globalScope.__piUsereqContextFileSizeStore = {
+      contextFileSizeCache: new Map<string, CachedContextFileSizeEntry>(),
+      scheduledPrewarmBases: new Set<string>(),
+    };
+  }
+  return globalScope.__piUsereqContextFileSizeStore;
+}
 
 /**
  * @brief Resolves one canonical context-file absolute path for one project base.
@@ -83,7 +102,7 @@ export function resolveContextFilePath(
 
 /**
  * @brief Measures one context file into deterministic size facts.
- * @details Probes the target with one `stat` call, returns the memoized facts when the observed `mtimeMs` plus `size` signature matches the cached entry, and otherwise reads UTF-8 content and reuses the process-cached shared tokenizer behind `countFileMetrics` for the `cl100k_base` token estimate before storing the fresh facts in the bounded cache. Missing, non-file, and unreadable targets return `MISSING_CONTEXT_FILE_SIZE` facts without throwing and without caching. Runtime is O(1) for unchanged remeasures and O(n) in file size on first measurement per content revision. Side effects are limited to filesystem reads and module-local cache mutation.
+ * @details Probes the target with one `stat` call, returns the memoized facts when the observed `mtimeMs` plus `size` signature matches the cached entry, and otherwise reads UTF-8 content and reuses the lean process-cached shared tokenizer counter behind `countTextTokensAndChars` for the `cl100k_base` token estimate before storing the fresh facts in the bounded process-scoped cache. Missing, non-file, and unreadable targets return `MISSING_CONTEXT_FILE_SIZE` facts without throwing and without caching. Runtime is O(1) for unchanged remeasures and O(n) in file size on first measurement per content revision. Side effects are limited to filesystem reads and process-scoped cache mutation.
  * @param[in] filePath {string} Absolute context-file path to measure.
  * @return {ContextFileSizeFacts} Measured size facts for the target.
  * @satisfies REQ-373, REQ-374
@@ -99,17 +118,18 @@ export function measureContextFileSize(filePath: string): ContextFileSizeFacts {
     return MISSING_CONTEXT_FILE_SIZE;
   }
   const statSignature = `${stat.mtimeMs}:${stat.size}`;
-  const cachedEntry = contextFileSizeCache.get(filePath);
+  const cache = getProcessScopedContextFileSizeStore().contextFileSizeCache;
+  const cachedEntry = cache.get(filePath);
   if (cachedEntry && cachedEntry.statSignature === statSignature) {
     return cachedEntry.facts;
   }
   try {
-    const metrics = countFileMetrics(fs.readFileSync(filePath, "utf8"));
+    const metrics = countTextTokensAndChars(fs.readFileSync(filePath, "utf8"));
     const facts: ContextFileSizeFacts = { exists: true, chars: metrics.chars, tokens: metrics.tokens };
-    if (contextFileSizeCache.size >= CONTEXT_FILE_SIZE_CACHE_LIMIT) {
-      contextFileSizeCache.clear();
+    if (cache.size >= CONTEXT_FILE_SIZE_CACHE_LIMIT) {
+      cache.clear();
     }
-    contextFileSizeCache.set(filePath, { statSignature, facts });
+    cache.set(filePath, { statSignature, facts });
     return facts;
   } catch {
     return MISSING_CONTEXT_FILE_SIZE;
@@ -118,7 +138,7 @@ export function measureContextFileSize(filePath: string): ContextFileSizeFacts {
 
 /**
  * @brief Measures every canonical context file for one project base.
- * @details Iterates `CONTEXT_FILE_NAMES` in documented order, resolves each configured `<base-path>/<docs-dir>` target through `resolveContextFilePath`, and returns the keyed facts record consumed by configuration menus and command summaries. Repeated invocations with unchanged files resolve through the stat-signed measurement cache. Runtime is O(n) in aggregate context-file size on first measurement per content revision and O(1) per unchanged remeasure. Side effects are limited to filesystem reads and module-local cache mutation.
+ * @details Iterates `CONTEXT_FILE_NAMES` in documented order, resolves each configured `<base-path>/<docs-dir>` target through `resolveContextFilePath`, and returns the keyed facts record consumed by configuration menus and command summaries. Repeated invocations with unchanged files resolve through the process-scoped stat-signed measurement cache. Runtime is O(n) in aggregate context-file size on first measurement per content revision and O(1) per unchanged remeasure. Side effects are limited to filesystem reads and process-scoped cache mutation.
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] config {UseReqConfig} Effective project configuration supplying the docs directory.
  * @return {Record<ContextFileName, ContextFileSizeFacts>} Measured size facts keyed by canonical file name.
@@ -133,6 +153,107 @@ export function measureContextFileSizes(
     facts[fileName] = measureContextFileSize(resolveContextFilePath(projectBase, config, fileName));
   }
   return facts;
+}
+
+/**
+ * @brief Yields one macrotask turn to the host event loop.
+ * @details Resolves after `setImmediate`, letting pending UI renders, lifecycle callbacks, and input events process between CPU-bound measurement slices. Runtime is O(1). Side effect: schedules one process task.
+ * @return {Promise<void>} Promise resolved on the next macrotask turn.
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+/**
+ * @brief Measures one context file into deterministic size facts with an event-loop yield before re-encoding.
+ * @details Applies the identical stat-signature freshness contract as `measureContextFileSize`, but awaits one macrotask yield between the stat probe and the read-plus-encode slice when the signature misses, so the TUI can process pending events instead of blocking for the full CPU-bound encode. Cache hits resolve synchronously without yielding. Missing, non-file, and unreadable targets return `MISSING_CONTEXT_FILE_SIZE` facts without throwing and without caching. Runtime is O(1) for unchanged remeasures and O(n) in file size on first measurement per content revision, plus one deferred macrotask per re-encode. Side effects are limited to filesystem reads and process-scoped cache mutation.
+ * @param[in] filePath {string} Absolute context-file path to measure.
+ * @return {Promise<ContextFileSizeFacts>} Measured size facts for the target.
+ * @satisfies REQ-373, REQ-374
+ */
+export async function measureContextFileSizeAsync(filePath: string): Promise<ContextFileSizeFacts> {
+  let stat: fs.Stats | undefined;
+  try {
+    stat = fs.statSync(filePath);
+  } catch {
+    stat = undefined;
+  }
+  if (!stat || !stat.isFile()) {
+    return MISSING_CONTEXT_FILE_SIZE;
+  }
+  const statSignature = `${stat.mtimeMs}:${stat.size}`;
+  const cache = getProcessScopedContextFileSizeStore().contextFileSizeCache;
+  const cachedEntry = cache.get(filePath);
+  if (cachedEntry && cachedEntry.statSignature === statSignature) {
+    return cachedEntry.facts;
+  }
+  await yieldToEventLoop();
+  try {
+    const metrics = countTextTokensAndChars(fs.readFileSync(filePath, "utf8"));
+    const facts: ContextFileSizeFacts = { exists: true, chars: metrics.chars, tokens: metrics.tokens };
+    if (cache.size >= CONTEXT_FILE_SIZE_CACHE_LIMIT) {
+      cache.clear();
+    }
+    cache.set(filePath, { statSignature, facts });
+    return facts;
+  } catch {
+    return MISSING_CONTEXT_FILE_SIZE;
+  }
+}
+
+/**
+ * @brief Measures every canonical context file for one project base with event-loop yields between files.
+ * @details Iterates `CONTEXT_FILE_NAMES` in documented order, resolves each configured `<base-path>/<docs-dir>` target through `resolveContextFilePath`, and awaits `measureContextFileSizeAsync` per file so CPU-bound re-encode slices are separated by macrotask turns consumed by configuration-menu and command-summary rendering. Returned facts are bit-identical to `measureContextFileSizes`. Runtime is O(n) in aggregate context-file size on first measurement per content revision and O(1) per unchanged remeasure. Side effects are limited to filesystem reads and process-scoped cache mutation.
+ * @param[in] projectBase {string} Absolute project root path.
+ * @param[in] config {UseReqConfig} Effective project configuration supplying the docs directory.
+ * @return {Promise<Record<ContextFileName, ContextFileSizeFacts>>} Measured size facts keyed by canonical file name.
+ * @satisfies REQ-373, REQ-374
+ */
+export async function measureContextFileSizesAsync(
+  projectBase: string,
+  config: UseReqConfig,
+): Promise<Record<ContextFileName, ContextFileSizeFacts>> {
+  const facts = {} as Record<ContextFileName, ContextFileSizeFacts>;
+  for (const fileName of CONTEXT_FILE_NAMES) {
+    facts[fileName] = await measureContextFileSizeAsync(resolveContextFilePath(projectBase, config, fileName));
+  }
+  return facts;
+}
+
+/**
+ * @brief Schedules idle-time pre-warm measurement of the canonical context files for one project base.
+ * @details Chains one `setImmediate` task per canonical context file plus one encoder pre-warm task, so the one-time `js-tiktoken` module load, bundled BPE-rank parse, and first per-file content encodes execute outside any synchronous menu or preflight critical path and later menu renders resolve through stat-signed cache hits. Duplicate scheduling for one resolved project base is suppressed through a process-scoped pending set until the chain completes. The operation is best-effort: every measurement failure is swallowed because measurement already degrades to `MISSING_CONTEXT_FILE_SIZE` facts and later renders re-measure through the identical stat-signature contract. Runtime is O(1) for scheduling; deferred cost is the standard first-measurement cost per file. Side effects include scheduled process tasks, filesystem reads, encoder construction, and process-scoped cache mutation.
+ * @param[in] projectBase {string} Absolute project root path whose canonical context files should pre-warm.
+ * @param[in] config {UseReqConfig} Effective project configuration supplying the docs directory.
+ * @return {void} No return value.
+ */
+export function prewarmContextFileMeasurements(projectBase: string, config: UseReqConfig): void {
+  const store = getProcessScopedContextFileSizeStore();
+  const normalizedBase = path.resolve(projectBase);
+  if (store.scheduledPrewarmBases.has(normalizedBase)) {
+    return;
+  }
+  store.scheduledPrewarmBases.add(normalizedBase);
+  const releaseSchedule = (): void => {
+    store.scheduledPrewarmBases.delete(normalizedBase);
+  };
+  prewarmTokenCounterEncoder();
+  const filePaths = CONTEXT_FILE_NAMES.map((fileName) => resolveContextFilePath(normalizedBase, config, fileName));
+  const measureRemaining = (index: number): void => {
+    if (index >= filePaths.length) {
+      releaseSchedule();
+      return;
+    }
+    setImmediate(() => {
+      try {
+        measureContextFileSize(filePaths[index]);
+      } catch {
+        // Best-effort pre-warm: measurement failures surface unchanged at render time.
+      }
+      measureRemaining(index + 1);
+    });
+  };
+  measureRemaining(0);
 }
 
 /**

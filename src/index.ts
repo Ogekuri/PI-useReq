@@ -87,6 +87,8 @@ import {
   computeContextOccupancyFacts,
   formatContextFileSize,
   measureContextFileSizes,
+  measureContextFileSizesAsync,
+  prewarmContextFileMeasurements,
   sumEnabledContextFileTokens,
   type ContextFileName,
   type ContextFileSizeFacts,
@@ -1436,7 +1438,7 @@ async function finalizeMatchedPromptSuccess(
 
 /**
  * @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
- * @details Applies session-start-specific resource validation, project-config refresh, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
@@ -1468,6 +1470,7 @@ async function handleExtensionStatusEvent(
       gitPath: resolveRuntimeGitPath(startupCwd),
     });
     const config = loadProjectConfig(startupCwd);
+    prewarmContextFileMeasurements(startupCwd, config);
     applyConfiguredPiUsereqTools(pi, config);
     setPiUsereqStatusConfig(statusController, config);
     const missingCheckers = checkDefaultCheckersAvailability(config);
@@ -3474,7 +3477,7 @@ function registerPromptCommands(
             promptName,
             args,
             config,
-            measureContextFileSizes(projectBase, config),
+            await measureContextFileSizesAsync(projectBase, config),
             maxContextTokens,
           );
           const promptDelivery = deliverPromptCommand(pi, content, commandSummary, promptContext);
@@ -4632,7 +4635,7 @@ function buildContextFilesMenuChoices(
 
 /**
  * @brief Runs the `Context Files` configuration submenu.
- * @details Loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
+ * @details Measures the context files through the yielding async measurement helper, then loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable effective project configuration.
  * @param[in] onConfigChange {() => void} Shared persistence-plus-status callback.
@@ -4646,7 +4649,7 @@ async function configureContextFilesMenu(
   onConfigChange: () => void,
   maxContextTokens?: number | undefined,
 ): Promise<void> {
-  const contextFileSizes = measureContextFileSizes(getProjectBase(ctx.cwd), config);
+  const contextFileSizes = await measureContextFileSizesAsync(getProjectBase(ctx.cwd), config);
   const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void => {
     config[flagKey] = enabled;
     onConfigChange();
@@ -4869,7 +4872,7 @@ function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuCh
 
 /**
  * @brief Runs the top-level pi-usereq configuration menu.
- * @details Loads the effective merged config, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
+ * @details Loads the effective merged config, performs one yielding async context-file measurement warm pass so menu renders resolve through stat-signed cache hits instead of first-measurement encodes, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
@@ -4887,6 +4890,7 @@ async function configurePiUsereq(
   let config = loadProjectConfig(ctx.cwd);
   const projectBase = getProjectBase(ctx.cwd);
   const maxContextTokens = resolveModelContextWindowTokens(statusController.state.contextUsage);
+  await measureContextFileSizesAsync(projectBase, config);
   const initialShortcut = config["notify-sound-toggle-shortcut"];
   const persistConfigChange = () => {
     Object.assign(config, normalizeConfigPaths(projectBase, config));
@@ -5094,6 +5098,7 @@ async function configurePiUsereq(
     }
     if (choice === "reset-defaults") {
       const defaultConfig = getDefaultConfig(projectBase);
+      const resetContextFileSizes = measureContextFileSizes(ctx.cwd, config);
       const approved = await confirmResetChanges(
         ctx,
         "Confirm pi-usereq reset",
@@ -5101,7 +5106,7 @@ async function configurePiUsereq(
           { label: "Document directory", previousValue: config["docs-dir"], nextValue: defaultConfig["docs-dir"] },
           { label: "Source-code directories", previousValue: config["src-dir"].join(", "), nextValue: defaultConfig["src-dir"].join(", ") },
           { label: "Unit tests directory", previousValue: config["tests-dir"], nextValue: defaultConfig["tests-dir"] },
-          { label: "Context Files", previousValue: formatContextFilesSummary(config, measureContextFileSizes(ctx.cwd, config), maxContextTokens), nextValue: formatContextFilesSummary(defaultConfig, measureContextFileSizes(ctx.cwd, defaultConfig), maxContextTokens) },
+          { label: "Context Files", previousValue: formatContextFilesSummary(config, resetContextFileSizes, maxContextTokens), nextValue: formatContextFilesSummary(defaultConfig, resetContextFileSizes, maxContextTokens) },
           { label: "Auto git commit", previousValue: config.AUTO_GIT_COMMIT, nextValue: defaultConfig.AUTO_GIT_COMMIT },
           { label: "Git worktree", previousValue: config.GIT_WORKTREE_ENABLED, nextValue: defaultConfig.GIT_WORKTREE_ENABLED },
           { label: "Worktree prefix", previousValue: config.GIT_WORKTREE_PREFIX, nextValue: defaultConfig.GIT_WORKTREE_PREFIX },
@@ -5159,7 +5164,7 @@ function registerConfigCommands(
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, then validates installation-owned bundled resources, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
+ * @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-002, DES-015, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327
@@ -5168,6 +5173,11 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
   writePersistedPromptCommandRuntimeApi(pi as unknown as PersistedPromptCommandRuntimeApi);
   const statusController = createPiUsereqStatusController();
   ensureBundledResourcesAccessible();
+  try {
+    prewarmContextFileMeasurements(getProcessCwdSafe(), loadProjectConfig(getProcessCwdSafe()));
+  } catch {
+    // Best-effort idle-time pre-warm: measurement failures surface unchanged at render time.
+  }
   registerReqResetCommand(pi, statusController);
   registerReqReferencesCommand(pi, statusController);
   registerPromptCommands(pi, statusController);
