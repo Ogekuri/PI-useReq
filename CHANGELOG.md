@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.71.0](https://github.com/Ogekuri/PI-useReq/compare/v0.70.0..v0.71.0) - 2026-10-09
+### ⛰️  Features
+- save dispatched prompt content for pi CLI replay [useReq] *(debug)*
+  - Add gated prompt-content debug logging (REQ-413..REQ-420): DEBUG_PROMPTS_ENABLED plus DEBUG_PROMPTS_LOG_PATH local config, new Debug submenu rows 'Enable debug prompts' and 'Log path for prompts' right after the global Debug toggle, one <timestamp>-<req-command> file per dispatched prompt written under the configured path with the exact sendMessage/sendUserMessage payload, README replay instructions, SRS/WORKFLOW/REFERENCES updates, and TST-143..TST-145 coverage.
+- Pi CLI reference sources and documentation updated to v1.1.0.
+
 ## [0.70.0](https://github.com/Ogekuri/PI-useReq/compare/v0.69.0..v0.70.0) - 2026-10-06
 ### 🚜  Changes
 - default Context Files flags to enabled [useReq] *(config)*
@@ -951,6 +957,7 @@
 - \[0.68.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.68.0
 - \[0.69.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.69.0
 - \[0.70.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.70.0
+- \[0.71.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.71.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1020,3 +1027,4 @@
 [0.68.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.67.0..v0.68.0
 [0.69.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.68.0..v0.69.0
 [0.70.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.69.0..v0.70.0
+[0.71.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.70.0..v0.71.0
