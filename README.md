@@ -290,7 +290,7 @@ The interactive configuration menu exposes every user-facing setting; changes ar
 - **Language static code checkers** — per-language `enable`/`disable` flags and the global `Command`-module checker definitions (view/remove/reset with confirmation).
 - **Enable tools** — the subset of configurable startup tools activated for the project: the `files-*` and project tools plus the embedded pi tools (`read`, `bash`, `edit`, `write` enabled by default; `find`, `grep`, `ls` configurable and disabled by default).
 - **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed).
-- **Debug** — local debug logging: log file, log-on-status filter, status-change/workflow-event toggles, enabled tools/prompts, and `Enable debug commands for tools`.
+- **Debug** — local debug logging: global enablement, prompt-content logging (`Enable debug prompts` plus `Log path for prompts`), log file, log-on-status filter, status-change/workflow-event toggles, enabled tools/prompts, and `Enable debug commands for tools`.
 - **Show local/global configuration** — write the exact config file contents into the editor.
 - **Reset defaults** — restore the default configuration with a confirmation preview.
 - **Models** (not a setting) — the menu exposes no model management: models, custom providers, and authentication are configured at the pi client level and simply shared with pi-usereq commands at runtime.
@@ -320,6 +320,20 @@ The extension renders a status field in the pi status line showing: extension id
 - Config-gated slash commands that run the project tools and write the output into the editor: `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, `debug-tokens`.
 - Standalone debug harness: `scripts/pi-usereq-debug.sh` (bash wrapper) and `scripts/debug-extension.ts` with subcommands `inspect`, `session-start`, `command`, `tool`, and `sdk-smoke`.
 - Debug logging writes to the configured `DEBUG_LOG_FILE`, filtered by prompt/tool name and workflow status.
+- **Prompt content logging** — when both `Debug` and `Enable debug prompts` are enabled (the `Debug > Enable debug prompts` menu entry), the exact rendered prompt delivered to the LLM agent through `sendMessage`/`sendUserMessage` is saved under `Log path for prompts` (`DEBUG_PROMPTS_LOG_PATH`, default `/tmp/PI-useReq`). Each run writes one file named `<timestamp>-<command>` (a `YYYYMMDDHHMMSSmmm` timestamp plus the `/req-*` command used, e.g. `20261009072235123-req-implement`) whose content is byte-identical to what reached the model. Prompt logging is subordinate to the global `Debug` flag and to the `Log on status` workflow filter; nothing is written while `Debug` is disabled. Relative log paths resolve against the project root, and trailing slashes are stripped from the configured path.
+
+  Because the saved file contains exactly what pi-usereq sent, you can replicate the same send from the `pi` CLI, outside pi-usereq and without the extension installed:
+
+  ```bash
+  # Replay the exact saved prompt as a one-shot task argument
+  pi -p "$(cat /tmp/PI-useReq/20261009072235123-req-implement)"
+
+  # Feed extra material on stdin while replaying an analysis request
+  cat errors.log | pi -p "Analyze these errors and suggest how to fix them"
+
+  # Reuse a saved prompt as coding-style guidance through an appended system prompt
+  pi -p "Rewrite this function" --append-system-prompt /tmp/PI-useReq/20261009072235123-req-implement
+  ```
 
 
 ## Note on Git usage

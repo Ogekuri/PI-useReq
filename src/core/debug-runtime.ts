@@ -53,6 +53,20 @@ export const DEFAULT_DEBUG_WORKFLOW_EVENTS = "disable" as const;
 export const DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED = "disable" as const;
 
 /**
+ * @brief Defines the default debug-prompt content logging mode.
+ * @details New configs do not save dispatched prompt content until the user explicitly enables prompt debug logging from the `Debug` submenu. Access complexity is O(1).
+ * @satisfies CTN-013, REQ-413
+ */
+export const DEFAULT_DEBUG_PROMPTS_ENABLED = "disable" as const;
+
+/**
+ * @brief Defines the default debug prompt log path.
+ * @details New configurations write dispatched prompt content files under `/tmp/PI-useReq` unless the user overrides the path; trailing separators are stripped per CTN-014. Access complexity is O(1).
+ * @satisfies CTN-013, CTN-014, REQ-414
+ */
+export const DEFAULT_DEBUG_PROMPTS_LOG_PATH = "/tmp/PI-useReq";
+
+/**
  * @brief Defines the default workflow-status filter used by debug logging.
  * @details New configs log only entries whose workflow state equals `running` until the user selects a broader or different workflow-state filter. Access complexity is O(1).
  * @satisfies CTN-013, REQ-238
@@ -110,6 +124,12 @@ export type DebugWorkflowEvents = "enable" | "disable";
  * @details Restricts debug slash-command wrapper registration to the documented `enable|disable` domain. The alias is compile-time only and introduces no runtime cost.
  */
 export type DebugToolCommandsEnabled = "enable" | "disable";
+
+/**
+ * @brief Represents one persisted debug-prompt content logging flag.
+ * @details Restricts prompt-content debug file emission to the documented `enable|disable` domain. The alias is compile-time only and introduces no runtime cost.
+ */
+export type DebugPromptsEnabled = "enable" | "disable";
 
 /**
  * @brief Represents one persisted workflow-status filter value.
@@ -216,6 +236,32 @@ export function normalizeDebugToolCommandsEnabled(value: unknown): DebugToolComm
 }
 
 /**
+ * @brief Normalizes one persisted debug-prompt content logging flag.
+ * @details Accepts only the documented `enable|disable` values and falls back to `DEFAULT_DEBUG_PROMPTS_ENABLED` for all other payloads. Runtime is O(1). No external state is mutated.
+ * @param[in] value {unknown} Candidate persisted prompt-debug enable payload.
+ * @return {DebugPromptsEnabled} Canonical prompt-debug enable value.
+ * @satisfies REQ-413
+ */
+export function normalizeDebugPromptsEnabled(value: unknown): DebugPromptsEnabled {
+  return value === "enable" ? "enable" : DEFAULT_DEBUG_PROMPTS_ENABLED;
+}
+
+/**
+ * @brief Normalizes one persisted debug prompt log path value.
+ * @details Accepts only non-empty strings, trims surrounding whitespace, strips every trailing separator so persisted paths stay trailing-slash-free per CTN-014, and falls back to `DEFAULT_DEBUG_PROMPTS_LOG_PATH` when the candidate is absent or blank. Runtime is O(n) in path length. No external state is mutated.
+ * @param[in] value {unknown} Candidate persisted prompt-log path payload.
+ * @return {string} Canonical trailing-slash-free prompt-log path value.
+ * @satisfies CTN-014, REQ-414
+ */
+export function normalizeDebugPromptsLogPath(value: unknown): string {
+  if (typeof value !== "string") {
+    return DEFAULT_DEBUG_PROMPTS_LOG_PATH;
+  }
+  const trimmedValue = value.trim().replace(/[\\/]+$/g, "");
+  return trimmedValue === "" ? DEFAULT_DEBUG_PROMPTS_LOG_PATH : trimmedValue;
+}
+
+/**
  * @brief Normalizes one persisted debug workflow-status filter.
  * @details Accepts only the documented `any` token or one explicit workflow state and falls back to `DEFAULT_DEBUG_LOG_ON_STATUS` for all other payloads. Runtime is O(1). No external state is mutated.
  * @param[in] value {unknown} Candidate persisted debug workflow-status filter.
@@ -306,6 +352,21 @@ export function resolveDebugLogPath(projectBase: string, config: UseReqConfig): 
 }
 
 /**
+ * @brief Resolves the absolute debug prompt log directory for one project base.
+ * @details Preserves absolute configured paths and otherwise resolves relative values against the original project base so prompt-worktree cleanup cannot discard accumulated prompt debug evidence. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Absolute debug prompt log directory path.
+ * @satisfies REQ-414
+ */
+export function resolveDebugPromptsLogPath(projectBase: string, config: UseReqConfig): string {
+  const configuredPath = normalizeDebugPromptsLogPath(config.DEBUG_PROMPTS_LOG_PATH);
+  return path.isAbsolute(configuredPath)
+    ? path.normalize(configuredPath)
+    : path.resolve(projectBase, configuredPath);
+}
+
+/**
  * @brief Tests whether one tool execution should be appended to the debug log.
  * @details Requires global debug enablement, membership in `DEBUG_ENABLED_TOOLS`, and a matching workflow-state filter before any filesystem work occurs. Runtime is O(n) in configured selector count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -377,6 +438,25 @@ export function shouldLogDebugPromptWorkflowEvent(
 ): boolean {
   return shouldLogDebugPrompt(config, workflowState, promptName)
     && normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS) === "enable";
+}
+
+/**
+ * @brief Tests whether one dispatched prompt content file should be written.
+ * @details Requires global debug enablement, explicit prompt-content debug enablement, and a matching workflow-state filter before any filesystem work occurs; prompt-content logging is therefore fully subordinate to the global `Debug` flag. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @return {boolean} `true` when the prompt content file should be written.
+ * @satisfies REQ-413, REQ-416
+ */
+export function shouldLogDebugPromptContent(
+  config: UseReqConfig,
+  workflowState: DebugWorkflowState,
+  promptName: PromptCommandName,
+): boolean {
+  return normalizeDebugEnabled(config.DEBUG_ENABLED) === "enable"
+    && normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED) === "enable"
+    && matchesDebugWorkflowState(normalizeDebugLogOnStatus(config.DEBUG_LOG_ON_STATUS), workflowState);
 }
 
 /**
@@ -563,4 +643,70 @@ export function logDebugPromptWorkflowEvent(
     ...(result === undefined ? {} : { result }),
     is_error: isError,
   });
+}
+
+/**
+ * @brief Formats one write-time timestamp as the `YYYYMMDDHHMMSSmmm` prompt debug prefix.
+ * @details Zero-pads calendar fields to their canonical widths, appends three millisecond digits, and joins every segment without separators so generated prompt debug filenames stay lexicographically sortable and collision-resistant within one second. Runtime is O(1). No external state is mutated.
+ * @param[in] date {Date} Write-time timestamp to encode.
+ * @return {string} `YYYYMMDDHHMMSSmmm` timestamp prefix.
+ * @satisfies REQ-417
+ */
+export function formatPromptDebugTimestamp(date: Date): string {
+  const pad = (value: number, length = 2): string => String(value).padStart(length, "0");
+  return [
+    pad(date.getFullYear(), 4),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+    pad(date.getMilliseconds(), 3),
+  ].join("");
+}
+
+/**
+ * @brief Builds one prompt debug filename for one bundled prompt.
+ * @details Combines the write-time `YYYYMMDDHHMMSSmmm` timestamp with the invokable `req-*` command name so every saved file can be replayed from the pi CLI and attributed to the originating `/req-*` prompt. Runtime is O(1). No external state is mutated.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
+ * @return {string} Prompt debug filename in the `<timestamp>-<req-command>` shape.
+ * @satisfies REQ-417
+ */
+export function formatPromptDebugFileName(
+  promptName: PromptCommandName,
+  date = new Date(),
+): string {
+  return `${formatPromptDebugTimestamp(date)}-${getDebugPromptName(promptName)}`;
+}
+
+/**
+ * @brief Writes one dispatched prompt content file when prompt debug logging is enabled.
+ * @details Applies global-debug, prompt-debug, and workflow-state gating before creating the configured prompt log directory and writing the exact delivered prompt content into one `<timestamp>-<req-command>` file so the send can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] content {string} Exact rendered prompt content delivered through `sendMessage` or `sendUserMessage`.
+ * @return {boolean} `true` when the prompt content file is written; otherwise `false`.
+ * @satisfies REQ-416, REQ-417, REQ-418
+ */
+export function logDebugPromptContent(
+  projectBase: string,
+  config: UseReqConfig,
+  workflowState: DebugWorkflowState,
+  promptName: PromptCommandName,
+  content: string,
+): boolean {
+  if (!shouldLogDebugPromptContent(config, workflowState, promptName)) {
+    return false;
+  }
+  const logDirectory = resolveDebugPromptsLogPath(projectBase, config);
+  try {
+    fs.mkdirSync(logDirectory, { recursive: true });
+    fs.writeFileSync(path.join(logDirectory, formatPromptDebugFileName(promptName)), content, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
 }

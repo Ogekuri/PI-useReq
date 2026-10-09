@@ -128,9 +128,12 @@ import {
   DEBUG_WORKFLOW_STATES,
   DEFAULT_DEBUG_LOG_FILE,
   DEFAULT_DEBUG_LOG_ON_STATUS,
+  DEFAULT_DEBUG_PROMPTS_ENABLED,
+  DEFAULT_DEBUG_PROMPTS_LOG_PATH,
   DEFAULT_DEBUG_STATUS_CHANGES,
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
+  logDebugPromptContent,
   logDebugPromptEvent,
   logDebugPromptWorkflowEvent,
   logDebugToolExecution,
@@ -138,6 +141,8 @@ import {
   normalizeDebugEnabledTools,
   normalizeDebugLogFile,
   normalizeDebugLogOnStatus,
+  normalizeDebugPromptsEnabled,
+  normalizeDebugPromptsLogPath,
   normalizeDebugStatusChanges,
   normalizeDebugToolCommandsEnabled,
   normalizeDebugWorkflowEvents,
@@ -1778,14 +1783,16 @@ function getDebugToolToggleNames(): PiUsereqStartupToolName[] {
 
 /**
  * @brief Restores the debug configuration subtree to its documented defaults.
- * @details Resets global debug enablement, log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config`.
+ * @details Resets global debug enablement, log path, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config`.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {void} No return value.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322, REQ-413, REQ-414, REQ-420
  */
 function resetDebugConfigToDefaults(config: UseReqConfig): void {
   config.DEBUG_ENABLED = "disable";
   config.DEBUG_LOG_FILE = DEFAULT_DEBUG_LOG_FILE;
+  config.DEBUG_PROMPTS_ENABLED = DEFAULT_DEBUG_PROMPTS_ENABLED;
+  config.DEBUG_PROMPTS_LOG_PATH = DEFAULT_DEBUG_PROMPTS_LOG_PATH;
   config.DEBUG_STATUS_CHANGES = DEFAULT_DEBUG_STATUS_CHANGES;
   config.DEBUG_WORKFLOW_EVENTS = DEFAULT_DEBUG_WORKFLOW_EVENTS;
   config.DEBUG_TOOL_COMMANDS_ENABLED = DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED;
@@ -1870,10 +1877,10 @@ async function selectDebugLogOnStatus(
 
 /**
  * @brief Builds the shared settings-menu choices for debug logging configuration.
- * @details Serializes global debug controls plus tool-wrapper command registration, workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists and dimming locked rows while debug is disabled. Runtime is O(t + p). No external state is mutated.
+ * @details Serializes global debug controls plus prompt-content debug controls, tool-wrapper command registration, workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists and dimming locked rows while debug is disabled. Runtime is O(t + p). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered debug-menu choices.
- * @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277, REQ-321, REQ-322
+ * @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277, REQ-321, REQ-322, REQ-415
  */
 function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const debugEnabled = config.DEBUG_ENABLED === "enable";
@@ -1887,6 +1894,25 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
       values: ["enable", "disable"],
       description: "Enable or disable all debug logging behavior and unlock the remaining Debug rows.",
     },
+    buildDebugMenuChoice(
+      {
+        id: "debug-prompts-enabled",
+        label: "Enable debug prompts",
+        value: normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED),
+        values: ["enable", "disable"],
+        description: "Enable or disable saving the exact dispatched prompt content into the debug prompt log path.",
+      },
+      debugEnabled,
+    ),
+    buildDebugMenuChoice(
+      {
+        id: "debug-prompts-log-path",
+        label: "Log path for prompts",
+        value: config.DEBUG_PROMPTS_LOG_PATH,
+        description: "Edit the directory where dispatched prompt contents are saved as `<timestamp>-<req-command>` files. Relative paths resolve against the original project base.",
+      },
+      debugEnabled,
+    ),
     buildDebugMenuChoice(
       {
         id: "debug-tool-commands-enabled",
@@ -1965,12 +1991,12 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
 
 /**
  * @brief Runs the interactive Debug submenu.
- * @details Lets the user toggle global debug enablement, tool-wrapper command registration, debug file and workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates, config mutation, and optional debug command registration.
+ * @details Lets the user toggle global debug enablement, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, debug file and workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates, config mutation, and optional debug command registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the submenu closes.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323, REQ-413, REQ-414, REQ-415, REQ-420
  */
 async function configureDebugMenu(
   pi: ExtensionAPI,
@@ -1997,6 +2023,12 @@ async function configureDebugMenu(
           config.DEBUG_ENABLED = newValue === "enable" ? "enable" : "disable";
           onConfigChange();
           ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
+          return;
+        }
+        if (choiceId === "debug-prompts-enabled") {
+          config.DEBUG_PROMPTS_ENABLED = normalizeDebugPromptsEnabled(newValue);
+          onConfigChange();
+          ctx.ui.notify(`Debug prompts ${config.DEBUG_PROMPTS_ENABLED}`, "info");
           return;
         }
         if (choiceId === "debug-tool-commands-enabled") {
@@ -2063,6 +2095,8 @@ async function configureDebugMenu(
       const resetPreview: ResetConfirmationChange[] = [
         { label: "Debug", previousValue: config.DEBUG_ENABLED, nextValue: "disable" },
         { label: "Log file", previousValue: config.DEBUG_LOG_FILE, nextValue: DEFAULT_DEBUG_LOG_FILE },
+        { label: "Enable debug prompts", previousValue: normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED), nextValue: DEFAULT_DEBUG_PROMPTS_ENABLED },
+        { label: "Log path for prompts", previousValue: config.DEBUG_PROMPTS_LOG_PATH, nextValue: DEFAULT_DEBUG_PROMPTS_LOG_PATH },
         { label: "Enable debug commands for tools", previousValue: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED), nextValue: DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED },
         { label: "Status changes", previousValue: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES), nextValue: DEFAULT_DEBUG_STATUS_CHANGES },
         { label: "Workflow events", previousValue: normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS), nextValue: DEFAULT_DEBUG_WORKFLOW_EVENTS },
@@ -2088,6 +2122,23 @@ async function configureDebugMenu(
     }
     if (config.DEBUG_ENABLED !== "enable") {
       ctx.ui.notify("Debug rows are locked while Debug is disabled", "info");
+      continue;
+    }
+    if (choice === "debug-prompts-enabled") {
+      config.DEBUG_PROMPTS_ENABLED = normalizeDebugPromptsEnabled(
+        config.DEBUG_PROMPTS_ENABLED === "enable" ? "disable" : "enable",
+      );
+      onConfigChange();
+      ctx.ui.notify(`Debug prompts ${config.DEBUG_PROMPTS_ENABLED}`, "info");
+      continue;
+    }
+    if (choice === "debug-prompts-log-path") {
+      const value = await ctx.ui.input("Log path for prompts", config.DEBUG_PROMPTS_LOG_PATH);
+      if (value !== undefined) {
+        config.DEBUG_PROMPTS_LOG_PATH = normalizeDebugPromptsLogPath(value);
+        onConfigChange();
+        ctx.ui.notify(`Debug prompt log path set to ${config.DEBUG_PROMPTS_LOG_PATH}`, "info");
+      }
       continue;
     }
     if (choice === "debug-log-file") {
@@ -3379,11 +3430,11 @@ function registerReqReferencesCommand(
 
 /**
  * @brief Registers bundled prompt-backed commands with the extension.
- * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, user-message delivery during execution, and optional debug-log writes.
+ * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact delivered prompt content into the debug prompt log path when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-content debug file creation, user-message delivery during execution, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418
  */
 function registerPromptCommands(
   pi: ExtensionAPI,
@@ -3488,6 +3539,13 @@ function registerPromptCommands(
             config,
             promptName,
             "running",
+          );
+          logDebugPromptContent(
+            projectBase,
+            config,
+            statusController.state.workflowState,
+            promptName,
+            content,
           );
           await promptDelivery;
         } catch (error) {

@@ -24,8 +24,14 @@ import {
   DEBUG_PROMPT_NAMES,
   DEFAULT_DEBUG_LOG_FILE,
   DEFAULT_DEBUG_LOG_ON_STATUS,
+  DEFAULT_DEBUG_PROMPTS_ENABLED,
+  DEFAULT_DEBUG_PROMPTS_LOG_PATH,
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
+  formatPromptDebugFileName,
+  logDebugPromptContent,
+  normalizeDebugPromptsLogPath,
+  shouldLogDebugPromptContent,
 } from "../src/core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "../src/core/prompt-command-catalog.js";
 import {
@@ -2085,6 +2091,8 @@ test("debug menu rows derive from canonical tool and prompt inventories", async 
 
   assert.deepEqual(ctx.__state.selectCalls[1]?.items ?? [], [
     "Debug",
+    "Enable debug prompts",
+    "Log path for prompts",
     "Enable debug commands for tools",
     "Log file",
     "Log on status",
@@ -2265,6 +2273,108 @@ test("prompt debug logging captures failing and successful prompt orchestration 
   assert.ok(successLog.some((entry: any) => entry.action === "worktree_delete" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "merging"));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "idle"));
+});
+
+/**
+ * @brief Verifies Debug submenu persistence and reset behavior for prompt content logging settings.
+ * @details Covers the documented default `DEBUG_PROMPTS_ENABLED=disable` plus `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq` values, the `Debug` submenu ordering of `Enable debug prompts` then `Log path for prompts` before `Enable debug commands for tools`, immediate-save with trailing-slash stripping, and the approved subtree reset back to documented defaults.
+ * @satisfies TST-143, TST-145
+ */
+test("debug menu persists prompt content logging settings and resets them to defaults", async () => {
+  const cwd = createTempDir("pi-usereq-menu-debug-prompts-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const defaultConfig = getDefaultConfig(cwd);
+  assert.equal(defaultConfig.DEBUG_PROMPTS_ENABLED, "disable");
+  assert.equal(defaultConfig.DEBUG_PROMPTS_LOG_PATH, "/tmp/PI-useReq");
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+  const ctx = createFakeCtx(cwd, {
+    selects: ["Debug", "Debug", "Enable debug prompts", "Log path for prompts", "Save and close"],
+    inputs: ["logs/saved-prompts/"],
+  });
+
+  await command!.handler("", ctx);
+
+  const persistedConfig = readProjectConfigJson(cwd);
+  assert.equal(persistedConfig.DEBUG_PROMPTS_ENABLED, "enable");
+  assert.equal(persistedConfig.DEBUG_PROMPTS_LOG_PATH, "logs/saved-prompts");
+  const debugCalls = ctx.__state.selectCalls.filter((call: any) => call.title === "Debug");
+  assert.deepEqual(debugCalls[0]?.items?.slice(0, 4), [
+    "Debug",
+    "Enable debug prompts",
+    "Log path for prompts",
+    "Enable debug commands for tools",
+  ]);
+
+  const resetCtx = createFakeCtx(cwd, {
+    selects: ["Debug", "Reset defaults", "Approve reset", "Save and close"],
+  });
+  await command!.handler("", resetCtx);
+  const resetConfig = readProjectConfigJson(cwd);
+  assert.equal(resetConfig.DEBUG_PROMPTS_ENABLED, DEFAULT_DEBUG_PROMPTS_ENABLED);
+  assert.equal(resetConfig.DEBUG_PROMPTS_LOG_PATH, DEFAULT_DEBUG_PROMPTS_LOG_PATH);
+});
+
+/**
+ * @brief Verifies gated prompt content debug file writes for dispatched prompts.
+ * @details Covers the end-to-end write of the exact delivered prompt into one `<timestamp>-req-implement` file under the configured prompt log path when global debug plus prompt debug logging are enabled, the absence of any prompt log directory when global debug is disabled, the workflow-state gating contract, and the trailing-slash-stripping path normalizer plus the `YYYYMMDDHHMMSSmmm` filename shape.
+ * @satisfies TST-144
+ */
+test("prompt content debug logging saves dispatched prompts gated by debug enablement", async () => {
+  const activeFixture = initFixtureRepo();
+  writeProjectConfigOverrides(activeFixture.projectBase, {
+    DEBUG_ENABLED: "enable",
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  const activePi = createFakePi();
+  piUsereqExtension(activePi);
+  const activeCtx = createFakeCtx(activeFixture.projectBase);
+  await activePi.emit("session_start", { reason: "startup" }, activeCtx);
+  const activeCommand = activePi.commands.get("req-implement");
+  assert.ok(activeCommand);
+  await activeCommand!.handler("debug prompts", activeCtx);
+  const promptLogDir = path.join(activeFixture.projectBase, "logs", "saved-prompts");
+  const savedFiles = fs.readdirSync(promptLogDir);
+  assert.equal(savedFiles.length, 1);
+  assert.match(savedFiles[0]!, /^\d{17}-req-implement$/u);
+  assert.equal(
+    formatPromptDebugFileName("implement", new Date(2026, 0, 2, 3, 4, 5, 6)),
+    "20260102030405006-req-implement",
+  );
+  const savedPromptText = fs.readFileSync(path.join(promptLogDir, savedFiles[0]!), "utf8");
+  const deliveredPromptText = String(activePi.sentUserMessages.at(-1)?.content ?? "");
+  assert.ok(deliveredPromptText.length > 0);
+  assert.equal(savedPromptText, deliveredPromptText);
+
+  const gatingConfig = loadConfig(activeFixture.projectBase);
+  gatingConfig.DEBUG_PROMPTS_ENABLED = "enable";
+  gatingConfig.DEBUG_ENABLED = "enable";
+  assert.equal(shouldLogDebugPromptContent(gatingConfig, "running", "implement"), true);
+  assert.equal(shouldLogDebugPromptContent(gatingConfig, "checking", "implement"), false);
+  gatingConfig.DEBUG_ENABLED = "disable";
+  assert.equal(shouldLogDebugPromptContent(gatingConfig, "running", "implement"), false);
+  assert.equal(normalizeDebugPromptsLogPath("custom/dir/"), "custom/dir");
+  assert.equal(normalizeDebugPromptsLogPath(""), DEFAULT_DEBUG_PROMPTS_LOG_PATH);
+
+  const disabledFixture = initFixtureRepo();
+  writeProjectConfigOverrides(disabledFixture.projectBase, {
+    DEBUG_ENABLED: "disable",
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  const disabledPi = createFakePi();
+  piUsereqExtension(disabledPi);
+  const disabledCtx = createFakeCtx(disabledFixture.projectBase);
+  await disabledPi.emit("session_start", { reason: "startup" }, disabledCtx);
+  const disabledCommand = disabledPi.commands.get("req-implement");
+  assert.ok(disabledCommand);
+  await disabledCommand!.handler("debug prompts", disabledCtx);
+  assert.equal(fs.existsSync(path.join(disabledFixture.projectBase, "logs", "saved-prompts")), false);
 });
 
 test("notifications menu preserves focus on toggled and edited rows", async () => {
