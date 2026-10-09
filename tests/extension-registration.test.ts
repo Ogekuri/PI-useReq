@@ -2042,7 +2042,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.match(renderedInitialDebugMenu, /<dim>Status changes/);
   assert.match(renderedInitialDebugMenu, /<dim>Workflow events/);
   assert.match(renderedInitialDebugMenu, /<dim>compress/);
-  assert.equal(persistedConfig.DEBUG_ENABLED, "enable");
+  assert.equal(persistedConfig.DEBUG_ENABLED, undefined);
   assert.equal(persistedConfig.DEBUG_LOG_FILE, "logs/debug-output.json");
   assert.equal(persistedConfig.DEBUG_TOOL_COMMANDS_ENABLED, "enable");
   assert.equal(persistedConfig.DEBUG_STATUS_CHANGES, "enable");
@@ -2069,7 +2069,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   });
   await command!.handler("", resetCtx);
   const resetConfig = readProjectConfigJson(cwd);
-  assert.equal(resetConfig.DEBUG_ENABLED, "disable");
+  assert.equal(resetConfig.DEBUG_ENABLED, undefined);
   assert.equal(resetConfig.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
   assert.equal(resetConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.equal(resetConfig.DEBUG_STATUS_CHANGES, "disable");
@@ -2077,6 +2077,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.equal(resetConfig.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
   assert.deepEqual(resetConfig.DEBUG_ENABLED_TOOLS, []);
   assert.deepEqual(resetConfig.DEBUG_ENABLED_PROMPTS, []);
+  setRuntimeDebugEnabled("disable");
 });
 
 test("debug menu rows derive from canonical tool and prompt inventories", async () => {
@@ -2119,11 +2120,11 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   fs.mkdirSync(path.dirname(getProjectConfigPath(idleBase)), { recursive: true });
   saveFixtureConfigs(idleBase, {
     ...getDefaultConfig(idleBase),
-    DEBUG_ENABLED: "enable",
     DEBUG_LOG_FILE: "tool-debug.json",
     DEBUG_LOG_ON_STATUS: "any",
     DEBUG_ENABLED_TOOLS: ["bash"],
   });
+  setRuntimeDebugEnabled("enable");
   const idlePi = createFakePi();
   piUsereqExtension(idlePi);
   const idleCtx = createFakeCtx(idleBase);
@@ -2150,7 +2151,6 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   const runningFixture = initFixtureRepo();
   writeProjectConfigOverrides(runningFixture.projectBase, {
     GIT_WORKTREE_ENABLED: "disable",
-    DEBUG_ENABLED: "enable",
     DEBUG_LOG_FILE: "tool-debug.json",
     DEBUG_LOG_ON_STATUS: "running",
     DEBUG_ENABLED_TOOLS: ["files-tokens"],
@@ -2186,11 +2186,11 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   fs.mkdirSync(path.dirname(getProjectConfigPath(disabledBase)), { recursive: true });
   saveFixtureConfigs(disabledBase, {
     ...getDefaultConfig(disabledBase),
-    DEBUG_ENABLED: "disable",
     DEBUG_LOG_FILE: "tool-debug.json",
     DEBUG_LOG_ON_STATUS: "any",
     DEBUG_ENABLED_TOOLS: ["bash"],
   });
+  setRuntimeDebugEnabled("disable");
   const disabledPi = createFakePi();
   piUsereqExtension(disabledPi);
   const disabledCtx = createFakeCtx(disabledBase);
@@ -2214,13 +2214,13 @@ test("prompt debug logging captures failing and successful prompt orchestration 
     0,
   );
   writeProjectConfigOverrides(failingFixture.projectBase, {
-    DEBUG_ENABLED: "enable",
     DEBUG_LOG_FILE: "prompt-debug.json",
     DEBUG_STATUS_CHANGES: "enable",
     DEBUG_WORKFLOW_EVENTS: "enable",
     DEBUG_LOG_ON_STATUS: "any",
     DEBUG_ENABLED_PROMPTS: ["req-change"],
   });
+  setRuntimeDebugEnabled("enable");
   const failingPi = createFakePi();
   piUsereqExtension(failingPi);
   const failingCtx = createFakeCtx(failingFixture.projectBase);
@@ -2235,7 +2235,6 @@ test("prompt debug logging captures failing and successful prompt orchestration 
 
   const successFixture = initFixtureRepo();
   writeProjectConfigOverrides(successFixture.projectBase, {
-    DEBUG_ENABLED: "enable",
     DEBUG_LOG_FILE: "prompt-debug.json",
     DEBUG_STATUS_CHANGES: "enable",
     DEBUG_WORKFLOW_EVENTS: "enable",
@@ -2276,6 +2275,7 @@ test("prompt debug logging captures failing and successful prompt orchestration 
   assert.ok(successLog.some((entry: any) => entry.action === "worktree_delete" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "merging"));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "idle"));
+  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2328,11 +2328,11 @@ test("debug menu persists prompt content logging settings and resets them to def
 test("prompt content debug logging saves dispatched prompts gated by debug enablement", async () => {
   const activeFixture = initFixtureRepo();
   writeProjectConfigOverrides(activeFixture.projectBase, {
-    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
+  setRuntimeDebugEnabled("enable");
   const activePi = createFakePi();
   piUsereqExtension(activePi);
   const activeCtx = createFakeCtx(activeFixture.projectBase);
@@ -2341,14 +2341,19 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
   assert.ok(activeCommand);
   await activeCommand!.handler("debug prompts", activeCtx);
   const promptLogDir = path.join(activeFixture.projectBase, "logs", "saved-prompts");
-  const savedFiles = fs.readdirSync(promptLogDir);
-  assert.equal(savedFiles.length, 1);
-  assert.match(savedFiles[0]!, /^\d{17}-req-implement$/u);
+  const savedFiles = fs.readdirSync(promptLogDir).sort();
+  assert.equal(savedFiles.length, 2);
+  const savedRequestFile = savedFiles.find((fileName) => fileName.endsWith("-request"));
+  const savedPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
+  assert.ok(savedRequestFile);
+  assert.ok(savedPromptFile);
+  assert.match(savedRequestFile!, /^\d{17}-req-implement-request$/u);
+  assert.match(savedPromptFile!, /^\d{17}-req-implement-prompt$/u);
   assert.equal(
     formatPromptDebugFileName("implement", new Date(2026, 0, 2, 3, 4, 5, 6)),
     "20260102030405006-req-implement",
   );
-  const savedPromptText = fs.readFileSync(path.join(promptLogDir, savedFiles[0]!), "utf8");
+  const savedPromptText = fs.readFileSync(path.join(promptLogDir, savedPromptFile!), "utf8");
   const deliveredPromptText = String(activePi.sentUserMessages.at(-1)?.content ?? "");
   assert.ok(deliveredPromptText.length > 0);
   assert.equal(savedPromptText, deliveredPromptText);
@@ -2357,7 +2362,7 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
   gatingConfig.DEBUG_PROMPTS_ENABLED = "enable";
   gatingConfig.DEBUG_ENABLED = "enable";
   assert.equal(shouldLogDebugPromptContent(gatingConfig, "running", "implement"), true);
-  assert.equal(shouldLogDebugPromptContent(gatingConfig, "checking", "implement"), false);
+  assert.equal(shouldLogDebugPromptContent(gatingConfig, "checking", "implement"), true);
   gatingConfig.DEBUG_ENABLED = "disable";
   assert.equal(shouldLogDebugPromptContent(gatingConfig, "running", "implement"), false);
   assert.equal(normalizeDebugPromptsLogPath("custom/dir/"), "custom/dir");
@@ -2365,11 +2370,11 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
 
   const disabledFixture = initFixtureRepo();
   writeProjectConfigOverrides(disabledFixture.projectBase, {
-    DEBUG_ENABLED: "disable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
+  setRuntimeDebugEnabled("disable");
   const disabledPi = createFakePi();
   piUsereqExtension(disabledPi);
   const disabledCtx = createFakeCtx(disabledFixture.projectBase);
@@ -2388,11 +2393,11 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
 test("provider error payload debug logging saves failing request payload beside initial prompt", async () => {
   const fixture = initFixtureRepo();
   writeProjectConfigOverrides(fixture.projectBase, {
-    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
+  setRuntimeDebugEnabled("enable");
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(fixture.projectBase);
@@ -2415,12 +2420,12 @@ test("provider error payload debug logging saves failing request payload beside 
   }, ctx);
   const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
   const savedFiles = fs.readdirSync(promptLogDir).sort();
-  assert.equal(savedFiles.length, 2);
-  const initialPromptFile = savedFiles.find((fileName) => !fileName.includes("-error-"));
+  assert.equal(savedFiles.length, 3);
+  const initialPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
   const errorPayloadFile = savedFiles.find((fileName) => fileName.endsWith("-error-400"));
   assert.ok(initialPromptFile);
   assert.ok(errorPayloadFile);
-  assert.match(initialPromptFile, /^\d{17}-req-implement$/u);
+  assert.match(initialPromptFile, /^\d{17}-req-implement-prompt$/u);
   assert.match(errorPayloadFile, /^\d{17}-req-implement-error-400$/u);
   assert.deepEqual(
     JSON.parse(fs.readFileSync(path.join(promptLogDir, errorPayloadFile), "utf8")) as unknown,
@@ -2430,6 +2435,7 @@ test("provider error payload debug logging saves failing request payload beside 
     formatPromptDebugErrorFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
     "20260102030405006-req-implement-error-400",
   );
+  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2440,11 +2446,11 @@ test("provider error payload debug logging saves failing request payload beside 
 test("provider error payload debug logging stays silent when disabled or status below 400", async () => {
   const disabledFixture = initFixtureRepo();
   writeProjectConfigOverrides(disabledFixture.projectBase, {
-    DEBUG_ENABLED: "disable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
+  setRuntimeDebugEnabled("disable");
   const disabledPi = createFakePi();
   piUsereqExtension(disabledPi);
   const disabledCtx = createFakeCtx(disabledFixture.projectBase);
@@ -2463,11 +2469,11 @@ test("provider error payload debug logging stays silent when disabled or status 
 
   const belowFixture = initFixtureRepo();
   writeProjectConfigOverrides(belowFixture.projectBase, {
-    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
+  setRuntimeDebugEnabled("enable");
   const belowPi = createFakePi();
   piUsereqExtension(belowPi);
   const belowCtx = createFakeCtx(belowFixture.projectBase);
@@ -2483,9 +2489,11 @@ test("provider error payload debug logging stays silent when disabled or status 
     messages: [{ role: "assistant", stopReason: "end_turn" }],
   }, belowCtx);
   const belowLogDir = path.join(belowFixture.projectBase, "logs", "saved-prompts");
-  const belowFiles = fs.readdirSync(belowLogDir);
-  assert.equal(belowFiles.length, 1);
-  assert.match(belowFiles[0], /^\d{17}-req-implement$/u);
+  const belowFiles = fs.readdirSync(belowLogDir).sort();
+  assert.equal(belowFiles.length, 2);
+  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-request$/u.test(fileName)));
+  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-prompt$/u.test(fileName)));
+  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2695,6 +2703,131 @@ test("provider error payload debug logging survives the host compact-and-retry a
       "error payload request fail-1",
       "error payload request fail-2",
     ]);
+  } finally {
+    setRuntimeDebugEnabled("disable");
+    discardCapturedPromptErrorPayload();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies provider error payload capture follows the original base configuration when the worktree checkout lacks the local project config.
+ * @details Reproduces the live pi runtime flow reported for `/tmp/PI-useReq/20261009174607538-req-analyze-prompt`: the real repository keeps `.pi-usereq.json` untracked and git-ignored, so the prompt-command worktree checkout does not contain the local project configuration and the rebound extension instance operating from `worktree-path` resolves `DEBUG_PROMPTS_ENABLED=disable` defaults from the missing config file. The test proves the `before_provider_request` capture gate MUST resolve its gating configuration from the prompt execution plan's original `base-path` — the same configuration that wrote the `-request` and `-prompt` debug files — so a mid-run 400 still writes exactly one `<timestamp>-<req-command>-error-<status>` file beside them even though the worktree checkout itself has no `.pi-usereq.json`.
+ * @satisfies REQ-416, REQ-421, REQ-422, REQ-423, REQ-424, REQ-425, TST-146, TST-149
+ */
+test("provider error payload capture follows base config when the worktree checkout lacks the local project config", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    // Mirror the real repository layout: `.pi-usereq.json` is untracked and git-ignored at the
+    // original base, so `git worktree add` cannot materialize it inside the execution checkout.
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "pi-usereq",
+      GIT_AUTHOR_EMAIL: "pi-usereq@example.com",
+      GIT_COMMITTER_NAME: "pi-usereq",
+      GIT_COMMITTER_EMAIL: "pi-usereq@example.com",
+    };
+    assert.equal(
+      spawnSync("git", ["rm", "--cached", ".pi-usereq.json"], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    fs.writeFileSync(path.join(projectBase, ".gitignore"), ".pi-usereq.json\n.req/\n", "utf8");
+    assert.equal(spawnSync("git", ["add", ".gitignore"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).status, 0);
+    assert.equal(spawnSync("git", ["commit", "-m", "untrack local config"], {
+      cwd: projectBase,
+      encoding: "utf8",
+      env: gitEnv,
+    }).status, 0);
+    // Enable prompt debug logging only at the original base through the now-ignored local
+    // config file, exactly like the real `/tmp/PI-useReq` setup that produced the defect.
+    const localConfigPath = getProjectConfigPath(projectBase);
+    const localConfig = JSON.parse(fs.readFileSync(localConfigPath, "utf8")) as Record<string, unknown>;
+    localConfig.DEBUG_PROMPTS_ENABLED = "enable";
+    localConfig.DEBUG_PROMPTS_LOG_PATH = "logs/saved-prompts";
+    localConfig.DEBUG_ENABLED_PROMPTS = ["req-implement"];
+    fs.writeFileSync(localConfigPath, `${JSON.stringify(localConfig, null, 2)}\n`, "utf8");
+
+    setRuntimeDebugEnabled("enable");
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(projectBase);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+
+    const originalSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+    const originalSwitchSession = firstCtx.switchSession.bind(firstCtx);
+    let reboundPi: FakePi | undefined;
+    let reboundCtx: any;
+    firstCtx.switchSession = async (sessionPath: string) => {
+      const executionSessionCwd = readFakeSessionFileCwd(sessionPath, firstCtx.cwd);
+      await firstPi.emit("session_shutdown", {
+        reason: "resume",
+        targetSessionFile: sessionPath,
+      }, firstCtx);
+      if (!reboundPi) {
+        reboundPi = createFakePi();
+        piUsereqExtension(reboundPi);
+        reboundCtx = createFakeCtx(executionSessionCwd);
+        reboundCtx.sessionManager.getSessionFile = () => sessionPath;
+        reboundCtx.sessionManager.getSessionDir = () => path.dirname(sessionPath);
+        reboundCtx.sessionManager.getCwd = () => executionSessionCwd;
+        reboundCtx.cwd = executionSessionCwd;
+        await reboundPi.emit("session_start", {
+          reason: "fork",
+          previousSessionFile: originalSessionFile,
+        }, reboundCtx);
+      }
+      return originalSwitchSession(sessionPath);
+    };
+
+    await firstPi.commands.get("req-implement")!.handler("error payload", firstCtx);
+    assert.ok(reboundPi);
+    assert.ok(reboundCtx);
+
+    const buildProviderPayload = (marker: string) => ({
+      messages: [{ role: "user", content: `error payload request ${marker}` }],
+      maxTokens: 4096,
+    });
+    const buildErrorMessage = () =>
+      `400: {"message":"This endpoint's maximum context length is 1048576 tokens. However, you requested about 1056266 tokens (221479 of text input, 2749 of tool input, 832038 in the output). Please reduce the length of either one, or use the context-compression plugin to compress your prompt automatically.","code":400,"metadata":{"provider_name":null}}`;
+
+    // Agent run inside the worktree: the first provider request succeeds, the second fails with
+    // the recorded context-length 400 that only reaches the extension through `message_end`.
+    await reboundPi!.emit("before_agent_start", {}, reboundCtx);
+    await reboundPi!.emit("agent_start", {}, reboundCtx);
+    await reboundPi!.emit("before_provider_request", { payload: buildProviderPayload("ok") }, reboundCtx);
+    await reboundPi!.emit("message_end", {
+      message: { role: "assistant", stopReason: "stop", content: [] },
+    }, reboundCtx);
+    await reboundPi!.emit("before_provider_request", { payload: buildProviderPayload("fail") }, reboundCtx);
+    await reboundPi!.emit("message_end", {
+      message: { role: "assistant", stopReason: "error", errorMessage: buildErrorMessage() },
+    }, reboundCtx);
+    await reboundPi!.emit("turn_end", { message: {}, toolResults: [] }, reboundCtx);
+    await reboundPi!.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, reboundCtx);
+
+    const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
+    const savedFiles = fs.readdirSync(promptLogDir).sort();
+    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400"));
+    assert.equal(
+      errorPayloadFiles.length,
+      1,
+      `expected one -error-400 file beside [${savedFiles.join(", ")}]`,
+    );
+    const errorPayloadText = fs.readFileSync(
+      path.join(promptLogDir, errorPayloadFiles[0]!),
+      "utf8",
+    );
+    assert.match(errorPayloadText, /error payload request fail/u);
   } finally {
     setRuntimeDebugEnabled("disable");
     discardCapturedPromptErrorPayload();
@@ -5328,13 +5461,13 @@ test("switch-triggered session_shutdown preserves prompt state for same-runtime 
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_ENABLED: "enable",
       DEBUG_LOG_FILE: "prompt-debug.json",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
+    setRuntimeDebugEnabled("enable");
     const pi = createFakePi();
     piUsereqExtension(pi);
     const ctx = createFakeCtx(projectBase);
@@ -5392,6 +5525,7 @@ test("switch-triggered session_shutdown preserves prompt state for same-runtime 
     assert.equal(fs.existsSync(executionBasePath), false);
     assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {
+    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -5409,13 +5543,13 @@ test("replacement-session runtime resynchronizes persisted running state before 
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_ENABLED: "enable",
       DEBUG_LOG_FILE: "prompt-debug.json",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
+    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -5481,6 +5615,7 @@ test("replacement-session runtime resynchronizes persisted running state before 
     assert.equal(fs.existsSync(path.join(projectBase, "src", "rebound-running.ts")), true);
     assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {
+    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -5498,13 +5633,13 @@ test("replacement-session prompt delivery persists running before async sendUser
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_ENABLED: "enable",
       DEBUG_LOG_FILE: "prompt-debug.json",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
+    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -5628,6 +5763,7 @@ test("replacement-session prompt delivery persists running before async sendUser
     assert.equal(fs.existsSync(path.join(projectBase, "src", "delayed-running.ts")), true);
     assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {
+    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -5645,13 +5781,13 @@ test("replacement-session prompt delivery persists running before async sendUser
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_ENABLED: "enable",
       DEBUG_LOG_FILE: "prompt-debug.json",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
+    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -5786,6 +5922,7 @@ test("replacement-session prompt delivery persists running before async sendUser
     );
     assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {
+    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -6060,13 +6197,13 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_ENABLED: "enable",
       DEBUG_LOG_FILE: "prompt-debug.json",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
+    setRuntimeDebugEnabled("enable");
     const pi = createFakePi();
     piUsereqExtension(pi);
     const commandCtx = createFakeCtx(projectBase);
@@ -6133,6 +6270,7 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     );
     assert.equal(eventCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {
+    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -6150,13 +6288,13 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_ENABLED: "enable",
       DEBUG_LOG_FILE: "prompt-debug.json",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
+    setRuntimeDebugEnabled("enable");
     const pi = createFakePi();
     piUsereqExtension(pi);
     const commandCtx = createFakeCtx(projectBase);
@@ -6222,6 +6360,7 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     );
     assert.equal(eventCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
   } finally {
+    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
