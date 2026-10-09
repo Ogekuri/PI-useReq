@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.76.0](https://github.com/Ogekuri/PI-useReq/compare/v0.75.0..v0.76.0) - 2026-10-09
+### ⛰️  Features
+- capture provider error payloads for prompt debug [useReq] *(debug-runtime)*
+  - Add REQ-421..REQ-425 and TST-146..TST-147 to the SRS; extend REQ-114 with the after_provider_response wrapper.
+  - Capture the exact before_provider_request provider payload for active req-* prompt runs when DEBUG_ENABLED and DEBUG_PROMPTS_ENABLED are enable.
+  - Dump the captured payload beside the initial prompt file as <timestamp>-<req-command>-error-<status> when after_provider_response reports status >= 400.
+  - Store captures in a process-scoped globalThis store so payloads survive the forked execution-session switch, and discard them after every write attempt.
+  - Update WORKFLOW.md runtime model and regenerate REFERENCES.md; extend hook-wrappers and prompt-debug tests.
+
 ## [0.75.0](https://github.com/Ogekuri/PI-useReq/compare/v0.74.0..v0.75.0) - 2026-10-09
 ### ⛰️  Features
 - Bundled prompt resources updated to v0.9.0 and change version.
@@ -983,6 +992,7 @@
 - \[0.73.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.73.0
 - \[0.74.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.74.0
 - \[0.75.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.75.0
+- \[0.76.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.76.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1057,3 +1067,4 @@
 [0.73.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.72.0..v0.73.0
 [0.74.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.73.0..v0.74.0
 [0.75.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.74.0..v0.75.0
+[0.76.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.75.0..v0.76.0
