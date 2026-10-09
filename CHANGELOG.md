@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.79.0](https://github.com/Ogekuri/PI-useReq/compare/v0.78.0..v0.79.0) - 2026-10-09
+### 🐛  Bug Fixes
+- preserve prompt run across compact-and-retry; flush retried 400 payloads [useReq] *(extension-status)*
+  - Promote pendingPromptRequest into activePromptRequest on agent_start only
+  - when a pending request exists, keeping the in-flight /req-* prompt run in
+  - controller state and process-scoped persistence across the pi host overflow
+  - compact-and-retry agent restart (agent_end -> session_before_compact ->
+  - session_compact -> agent_start -> retried provider request).
+  - Root cause: the unconditional promotion wiped the active request, so every
+  - retried before_provider_request skipped the provider payload capture and a
+  - 400 on the retried request wrote no <timestamp>-<req-command>-error-<status>
+  - file beside -request/-prompt (REQ-421/422/424), and matched-success closure
+  - lost the run (retained worktree/branch).
+  - Accept the raw SDK error.message shape '<status> <body>' in
+  - resolveProviderErrorFlushStatusFromMessage as an additional flush trigger.
+  - Add reproducer test replaying the recorded compact-and-retry sequence;
+  - verified end-to-end against the real pi 1.1.0 runtime; update WORKFLOW.md
+  - and REFERENCES.md.
+
 ## [0.78.0](https://github.com/Ogekuri/PI-useReq/compare/v0.77.0..v0.78.0) - 2026-10-09
 ### 🐛  Bug Fixes
 - flush provider error payloads from message_end fallback [useReq] *(debug-runtime)*
@@ -1015,6 +1034,7 @@
 - \[0.76.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.76.0
 - \[0.77.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.77.0
 - \[0.78.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.78.0
+- \[0.79.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.79.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1092,3 +1112,4 @@
 [0.76.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.75.0..v0.76.0
 [0.77.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.76.0..v0.77.0
 [0.78.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.77.0..v0.78.0
+[0.79.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.78.0..v0.79.0
