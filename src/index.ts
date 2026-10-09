@@ -134,9 +134,11 @@ import {
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
   capturePromptProviderRequestForDebug,
+  discardCapturedPromptErrorPayload,
   flushCapturedPromptErrorPayload,
   logDebugPromptContent,
   logDebugPromptEvent,
+  logDebugPromptRequest,
   logDebugPromptWorkflowEvent,
   logDebugToolExecution,
   normalizeDebugEnabledPrompts,
@@ -148,6 +150,7 @@ import {
   normalizeDebugStatusChanges,
   normalizeDebugToolCommandsEnabled,
   normalizeDebugWorkflowEvents,
+  setRuntimeDebugEnabled,
   shouldLogDebugPromptWorkflowState,
   type DebugLogOnStatus,
   type DebugWorkflowState,
@@ -1445,14 +1448,14 @@ async function finalizeMatchedPromptSuccess(
 
 /**
  * @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
- * @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. After the status update, captures the exact `before_provider_request` provider payload for the live active or pending prompt run with a fresh config fallback when the controller has no cached config, flushes the process-scoped captured payload as one `<timestamp>-<req-command>-error-<status>` file whenever `after_provider_response` reports a status >= 400 without requiring live workflow state, and discards the capture at prompt-run end so stale payloads never reach later runs. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -1511,26 +1514,30 @@ async function handleExtensionStatusEvent(
       }
     : undefined;
   updateExtensionStatus(statusController, hookName, event, ctx);
-  if (hookName === "before_provider_request" && activePromptRequest !== undefined && statusController.config) {
+  // Provider payload capture and error flush read the LIVE post-update controller state and fall
+  // back to a fresh config load: after switchSession rebinds the extension, the entry-read
+  // `activePromptRequest` snapshot can be stale, `agent_start` promotion may lag one hook, and the
+  // replacement-session instance may not have cached config yet. The process-scoped capture store
+  // carries everything the error-stage write needs, so the flush itself is state-independent.
+  const livePromptRequest = statusController.state.activePromptRequest
+    ?? statusController.state.pendingPromptRequest;
+  if (hookName === "before_provider_request" && livePromptRequest !== undefined) {
     const providerRequestEvent = event as { payload?: unknown };
     capturePromptProviderRequestForDebug(
-      statusController.config,
-      statusController.state.workflowState,
-      activePromptRequest.promptName,
+      statusController.config ?? loadProjectConfig(resolveLiveBootstrapCwd(ctx.cwd)),
+      livePromptRequest.promptName,
+      livePromptRequest.basePath,
       providerRequestEvent.payload,
     );
   }
-  if (hookName === "after_provider_response" && activePromptRequest !== undefined && statusController.config) {
+  if (hookName === "after_provider_response") {
     const providerResponseEvent = event as { status?: unknown };
     if (typeof providerResponseEvent.status === "number" && providerResponseEvent.status >= 400) {
-      flushCapturedPromptErrorPayload(
-        activePromptRequest.basePath,
-        statusController.config,
-        statusController.state.workflowState,
-        activePromptRequest.promptName,
-        providerResponseEvent.status,
-      );
+      flushCapturedPromptErrorPayload(providerResponseEvent.status);
     }
+  }
+  if (hookName === "agent_end" || hookName === "agent_settled") {
+    discardCapturedPromptErrorPayload();
   }
   if (hookName === "tool_result" && statusController.config) {
     const toolEvent = event as {
@@ -1806,13 +1813,14 @@ function getDebugToolToggleNames(): PiUsereqStartupToolName[] {
 
 /**
  * @brief Restores the debug configuration subtree to its documented defaults.
- * @details Resets global debug enablement, log path, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config`.
+ * @details Resets runtime debug enablement in both the effective config object and the process-scoped runtime debug store, then resets log path, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config` and process-scoped runtime debug state.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {void} No return value.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322, REQ-413, REQ-414, REQ-420
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322, REQ-413, REQ-414, REQ-420, REQ-426
  */
 function resetDebugConfigToDefaults(config: UseReqConfig): void {
   config.DEBUG_ENABLED = "disable";
+  setRuntimeDebugEnabled("disable");
   config.DEBUG_LOG_FILE = DEFAULT_DEBUG_LOG_FILE;
   config.DEBUG_PROMPTS_ENABLED = DEFAULT_DEBUG_PROMPTS_ENABLED;
   config.DEBUG_PROMPTS_LOG_PATH = DEFAULT_DEBUG_PROMPTS_LOG_PATH;
@@ -2014,12 +2022,12 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
 
 /**
  * @brief Runs the interactive Debug submenu.
- * @details Lets the user toggle global debug enablement, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, debug file and workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates, config mutation, and optional debug command registration.
+ * @details Lets the user toggle runtime global debug enablement (stored only in the process-scoped runtime debug store and never persisted), prompt-content debug enablement plus prompt log path, tool-wrapper command registration, debug file and workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates, config mutation, process-scoped runtime debug state mutation, and optional debug command registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the submenu closes.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323, REQ-413, REQ-414, REQ-415, REQ-420
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323, REQ-413, REQ-414, REQ-415, REQ-420, REQ-426
  */
 async function configureDebugMenu(
   pi: ExtensionAPI,
@@ -2044,6 +2052,7 @@ async function configureDebugMenu(
       onChange: (choiceId, newValue) => {
         if (choiceId === "debug-enabled") {
           config.DEBUG_ENABLED = newValue === "enable" ? "enable" : "disable";
+          setRuntimeDebugEnabled(config.DEBUG_ENABLED);
           onConfigChange();
           ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
           return;
@@ -2110,6 +2119,7 @@ async function configureDebugMenu(
 
     if (choice === "debug-enabled") {
       config.DEBUG_ENABLED = config.DEBUG_ENABLED === "enable" ? "disable" : "enable";
+      setRuntimeDebugEnabled(config.DEBUG_ENABLED);
       onConfigChange();
       ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
       continue;
@@ -3453,11 +3463,11 @@ function registerReqReferencesCommand(
 
 /**
  * @brief Registers bundled prompt-backed commands with the extension.
- * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact delivered prompt content into the debug prompt log path when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-content debug file creation, user-message delivery during execution, and optional debug-log writes.
+ * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact command invocation summary plus the delivered prompt content into the debug prompt log path as separate `-request` and `-prompt` files when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-debug file creation, user-message delivery during execution, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428
  */
 function registerPromptCommands(
   pi: ExtensionAPI,
@@ -3562,6 +3572,13 @@ function registerPromptCommands(
             config,
             promptName,
             "running",
+          );
+          logDebugPromptRequest(
+            projectBase,
+            config,
+            statusController.state.workflowState,
+            promptName,
+            commandSummary,
           );
           logDebugPromptContent(
             projectBase,

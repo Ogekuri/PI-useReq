@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Declares debug inventories, normalizers, and JSON log persistence helpers.
- * @details Centralizes debug-menu selector inventories, config-field normalization, workflow-status gating, append-only JSON log writing for tool, prompt, and dedicated workflow debug events, process-scoped capture of the exact `before_provider_request` provider payload for active prompt runs, and error-stage provider payload dumps gated by `after_provider_response` error statuses. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
+ * @details Centralizes debug-menu selector inventories, config-field normalization, the process-scoped runtime debug-enable state, workflow-status gating, append-only JSON log writing for tool, prompt, and dedicated workflow debug events, process-scoped capture of the exact `before_provider_request` provider payload for active prompt runs, and error-stage provider payload dumps gated by `after_provider_response` error statuses. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
  */
 
 import fs from "node:fs";
@@ -23,6 +23,49 @@ import {
  * @satisfies CTN-013, REQ-236
  */
 export const DEFAULT_DEBUG_ENABLED = "disable" as const;
+
+/**
+ * @brief Describes the process-scoped runtime debug-enable state persisted across session rebinds.
+ * @details Stores the user-toggled runtime `Debug` flag on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` while the hosting process persists across those operations; the flag therefore survives ctrl+N session forks and `req-reset` but resets to `disable` when a fresh pi CLI process starts. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-236, REQ-426
+ */
+interface ProcessScopedDebugEnabledStore {
+  runtimeDebugEnabled: "enable" | "disable" | undefined;
+}
+
+/**
+ * @brief Returns the process-scoped runtime debug-enable store.
+ * @details Lazily initializes one `globalThis` record so session rebinds reuse the toggled runtime debug mode instead of resetting it to the persisted default. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @return {ProcessScopedDebugEnabledStore} Mutable process-scoped runtime debug store.
+ */
+function getProcessScopedDebugEnabledStore(): ProcessScopedDebugEnabledStore {
+  const globalScope = globalThis as typeof globalThis & { __piUsereqDebugEnabledStore?: ProcessScopedDebugEnabledStore };
+  if (!globalScope.__piUsereqDebugEnabledStore) {
+    globalScope.__piUsereqDebugEnabledStore = { runtimeDebugEnabled: undefined };
+  }
+  return globalScope.__piUsereqDebugEnabledStore;
+}
+
+/**
+ * @brief Resolves the runtime debug-enable mode for the current pi host process.
+ * @details Returns the process-scoped toggled value when present and the documented `disable` default otherwise, so every fresh pi CLI process starts with debug logging disabled regardless of any stale persisted payload. Runtime is O(1). No external state is mutated.
+ * @return {"enable" | "disable"} Effective runtime debug-enable mode.
+ * @satisfies REQ-236
+ */
+export function getRuntimeDebugEnabled(): "enable" | "disable" {
+  return getProcessScopedDebugEnabledStore().runtimeDebugEnabled ?? DEFAULT_DEBUG_ENABLED;
+}
+
+/**
+ * @brief Stores one user-toggled runtime debug-enable mode for the current pi host process.
+ * @details Mutates only the process-scoped runtime store so `Debug` menu toggles survive session rebinds without reaching persisted local or global configuration files. Runtime is O(1). Side effect: mutates process-scoped runtime state.
+ * @param[in] runtimeDebugEnabled {"enable" | "disable"} Next runtime debug-enable mode.
+ * @return {void} No return value.
+ * @satisfies REQ-236, REQ-426
+ */
+export function setRuntimeDebugEnabled(runtimeDebugEnabled: "enable" | "disable"): void {
+  getProcessScopedDebugEnabledStore().runtimeDebugEnabled = runtimeDebugEnabled;
+}
 
 /**
  * @brief Defines the default debug log file value.
@@ -442,10 +485,10 @@ export function shouldLogDebugPromptWorkflowEvent(
 
 /**
  * @brief Tests whether one dispatched prompt content file should be written.
- * @details Requires global debug enablement, explicit prompt-content debug enablement, and a matching workflow-state filter before any filesystem work occurs; prompt-content logging is therefore fully subordinate to the global `Debug` flag. Runtime is O(1). No external state is mutated.
+ * @details Requires global debug enablement plus explicit prompt-content debug enablement before any filesystem work occurs; prompt-content logging is fully subordinate to the global `Debug` flag and exempt from the `DEBUG_LOG_ON_STATUS` workflow-state filter so enabled runs always save their debug files. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @param[in] workflowState {DebugWorkflowState} Current workflow state.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state; retained for signature compatibility and excluded from gating per REQ-416.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name; retained for signature compatibility.
  * @return {boolean} `true` when the prompt content file should be written.
  * @satisfies REQ-413, REQ-416
  */
@@ -455,8 +498,7 @@ export function shouldLogDebugPromptContent(
   promptName: PromptCommandName,
 ): boolean {
   return normalizeDebugEnabled(config.DEBUG_ENABLED) === "enable"
-    && normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED) === "enable"
-    && matchesDebugWorkflowState(normalizeDebugLogOnStatus(config.DEBUG_LOG_ON_STATUS), workflowState);
+    && normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED) === "enable";
 }
 
 /**
@@ -681,21 +723,53 @@ export function formatPromptDebugFileName(
 }
 
 /**
- * @brief Writes one dispatched prompt content file when prompt debug logging is enabled.
- * @details Applies global-debug, prompt-debug, and workflow-state gating before creating the configured prompt log directory and writing the exact delivered prompt content into one `<timestamp>-<req-command>` file so the send can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+ * @brief Builds one command-invocation summary debug filename for one bundled prompt.
+ * @details Appends the `-request` suffix to the shared `<timestamp>-<req-command>` base so every saved command invocation summary stays attributable to the originating `/req-*` prompt. Runtime is O(1). No external state is mutated.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
+ * @return {string} Prompt debug filename in the `<timestamp>-<req-command>-request` shape.
+ * @satisfies REQ-417, REQ-427
+ */
+export function formatPromptDebugRequestFileName(
+  promptName: PromptCommandName,
+  date = new Date(),
+): string {
+  return `${formatPromptDebugFileName(promptName, date)}-request`;
+}
+
+/**
+ * @brief Builds one dispatched-prompt content debug filename for one bundled prompt.
+ * @details Appends the `-prompt` suffix to the shared `<timestamp>-<req-command>` base so every saved initial LLM prompt stays attributable to the originating `/req-*` prompt. Runtime is O(1). No external state is mutated.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
+ * @return {string} Prompt debug filename in the `<timestamp>-<req-command>-prompt` shape.
+ * @satisfies REQ-417, REQ-418
+ */
+export function formatPromptDebugPromptFileName(
+  promptName: PromptCommandName,
+  date = new Date(),
+): string {
+  return `${formatPromptDebugFileName(promptName, date)}-prompt`;
+}
+
+/**
+ * @brief Writes one gated prompt debug file under the configured prompt log directory.
+ * @details Applies the global-debug plus prompt-debug gating, creates the configured prompt log directory, and writes the supplied text into the requested filename so dispatched-prompt artifacts can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
  * @param[in] projectBase {string} Absolute original project base path.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @param[in] workflowState {DebugWorkflowState} Current workflow state.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state; excluded from gating per REQ-416.
  * @param[in] promptName {PromptCommandName} Bundled prompt name.
- * @param[in] content {string} Exact rendered prompt content delivered through `sendMessage` or `sendUserMessage`.
- * @return {boolean} `true` when the prompt content file is written; otherwise `false`.
- * @satisfies REQ-416, REQ-417, REQ-418
+ * @param[in] fileName {string} Target filename under the resolved prompt log directory.
+ * @param[in] content {string} Exact text to persist.
+ * @return {boolean} `true` when the file is written; otherwise `false`.
+ * @satisfies REQ-416
  */
-export function logDebugPromptContent(
+function writePromptDebugFile(
   projectBase: string,
   config: UseReqConfig,
   workflowState: DebugWorkflowState,
   promptName: PromptCommandName,
+  fileName: string,
   content: string,
 ): boolean {
   if (!shouldLogDebugPromptContent(config, workflowState, promptName)) {
@@ -704,7 +778,7 @@ export function logDebugPromptContent(
   const logDirectory = resolveDebugPromptsLogPath(projectBase, config);
   try {
     fs.mkdirSync(logDirectory, { recursive: true });
-    fs.writeFileSync(path.join(logDirectory, formatPromptDebugFileName(promptName)), content, "utf8");
+    fs.writeFileSync(path.join(logDirectory, fileName), content, "utf8");
     return true;
   } catch {
     return false;
@@ -712,12 +786,71 @@ export function logDebugPromptContent(
 }
 
 /**
+ * @brief Writes one command invocation summary debug file when prompt debug logging is enabled.
+ * @details Persists the exact summary text displayed on screen into one `<timestamp>-<req-command>-request` file so the `/req-*` invocation headers survive beside the dispatched prompt. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state; excluded from gating per REQ-416.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] requestText {string} Exact command invocation summary text displayed on screen.
+ * @return {boolean} `true` when the request file is written; otherwise `false`.
+ * @satisfies REQ-416, REQ-417, REQ-427, REQ-428
+ */
+export function logDebugPromptRequest(
+  projectBase: string,
+  config: UseReqConfig,
+  workflowState: DebugWorkflowState,
+  promptName: PromptCommandName,
+  requestText: string,
+): boolean {
+  return writePromptDebugFile(
+    projectBase,
+    config,
+    workflowState,
+    promptName,
+    formatPromptDebugRequestFileName(promptName),
+    requestText,
+  );
+}
+
+/**
+ * @brief Writes one dispatched prompt content file when prompt debug logging is enabled.
+ * @details Persists the exact rendered prompt content delivered through `sendMessage` or `sendUserMessage` into one `<timestamp>-<req-command>-prompt` file so the send can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state; excluded from gating per REQ-416.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] content {string} Exact rendered prompt content delivered through `sendMessage` or `sendUserMessage`.
+ * @return {boolean} `true` when the prompt content file is written; otherwise `false`.
+ * @satisfies REQ-416, REQ-417, REQ-418, REQ-428
+ */
+export function logDebugPromptContent(
+  projectBase: string,
+  config: UseReqConfig,
+  workflowState: DebugWorkflowState,
+  promptName: PromptCommandName,
+  content: string,
+): boolean {
+  return writePromptDebugFile(
+    projectBase,
+    config,
+    workflowState,
+    promptName,
+    formatPromptDebugPromptFileName(promptName),
+    content,
+  );
+}
+
+/**
  * @brief Describes one process-scoped captured provider request payload bound to an active prompt run.
- * @details Pairs the bundled prompt name with the JSON serialization of the exact `before_provider_request` payload so a later `after_provider_response` error status can dump the failing request verbatim without retaining live provider objects. The interface is compile-time only and introduces no runtime cost.
+ * @details Pairs the bundled prompt name, the serialization of the exact `before_provider_request` payload, the original project base, and the resolved prompt log directory so a later `after_provider_response` error status can dump the failing request verbatim without live controller state, cached configuration, or live provider objects. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-421
  */
 interface CapturedPromptErrorPayload {
   promptName: PromptCommandName;
   payloadText: string;
+  projectBase: string;
+  logDirectory: string;
 }
 
 /**
@@ -759,65 +892,76 @@ export function formatPromptDebugErrorFileName(
 }
 
 /**
+ * @brief Serializes one provider request payload into deterministic text.
+ * @details Pretty-prints the payload as JSON while degrading circular references into one `[Circular]` token and bigint values into decimal strings so serialization failures never discard the capture. Runtime is O(n) in serialized payload size. No external state is mutated.
+ * @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
+ * @return {string} Serialized payload text; the empty string when the payload serializes to nothing.
+ */
+function serializePromptProviderPayload(payload: unknown): string {
+  const seenObjects = new WeakSet<object>();
+  return JSON.stringify(
+    payload,
+    (_key: string, value: unknown) => {
+      if (typeof value === "bigint") {
+        return value.toString();
+      }
+      if (typeof value === "object" && value !== null) {
+        if (seenObjects.has(value)) {
+          return "[Circular]";
+        }
+        seenObjects.add(value);
+      }
+      return value;
+    },
+    2,
+  ) ?? "";
+}
+
+/**
  * @brief Captures one exact provider request payload for the active prompt run when prompt debug logging is enabled.
- * @details Applies the identical global-debug, prompt-debug, and workflow-state gating used by dispatched prompt content files, serializes the exact `before_provider_request` payload as pretty-printed JSON, and stores it in the process-scoped capture store keyed by the bundled prompt name so the payload survives session replacement until an error response flushes it. Runtime is O(n) in serialized payload size when enabled and O(1) otherwise. Side effect: mutates the process-scoped capture store for enabled matching requests.
+ * @details Applies the global-debug plus prompt-debug gating, serializes the exact `before_provider_request` payload through the cycle-safe serializer, and stores the prompt name, payload text, original project base, and resolved prompt log directory in the process-scoped capture store so the payload survives session replacement and later error-stage writes require no live workflow state or cached configuration. Runtime is O(n) in serialized payload size when enabled and O(1) otherwise. Side effect: mutates the process-scoped capture store for enabled matching requests.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @param[in] workflowState {DebugWorkflowState} Current workflow state.
  * @param[in] promptName {PromptCommandName} Active bundled prompt name.
+ * @param[in] projectBase {string} Absolute original project base path used to resolve the prompt log directory.
  * @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
  * @return {void} No return value.
  * @satisfies REQ-416, REQ-421
  */
 export function capturePromptProviderRequestForDebug(
   config: UseReqConfig,
-  workflowState: DebugWorkflowState,
   promptName: PromptCommandName,
+  projectBase: string,
   payload: unknown,
 ): void {
-  if (!shouldLogDebugPromptContent(config, workflowState, promptName)) {
+  if (!shouldLogDebugPromptContent(config, "unknown", promptName)) {
     return;
   }
-  let payloadText: string;
-  try {
-    payloadText = JSON.stringify(payload, null, 2) ?? "";
-  } catch {
-    return;
-  }
-  getProcessScopedPromptErrorCaptureStore().capturedPromptErrorPayload = { promptName, payloadText };
+  getProcessScopedPromptErrorCaptureStore().capturedPromptErrorPayload = {
+    promptName,
+    payloadText: serializePromptProviderPayload(payload),
+    projectBase,
+    logDirectory: resolveDebugPromptsLogPath(projectBase, config),
+  };
 }
 
 /**
  * @brief Writes the captured provider request payload as one error-stage prompt debug file for the failing prompt.
- * @details Consumes the process-scoped capture for the supplied prompt, discards it after every write attempt so stale payloads never reach later runs, applies the identical global-debug, prompt-debug, and workflow-state gating used by dispatched prompt content files, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file beside the initial dispatched prompt file under the configured prompt log path. Runtime is dominated by one directory creation plus one file write when a matching capture exists and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching failures.
- * @param[in] projectBase {string} Absolute original project base path.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @param[in] workflowState {DebugWorkflowState} Current workflow state.
- * @param[in] promptName {PromptCommandName} Active bundled prompt name.
+ * @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file inside the captured log directory beside the initial dispatched prompt artifacts. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus one file write when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
  * @return {boolean} `true` when the provider error payload file is written; otherwise `false`.
  * @satisfies REQ-422, REQ-423, REQ-424, REQ-425
  */
-export function flushCapturedPromptErrorPayload(
-  projectBase: string,
-  config: UseReqConfig,
-  workflowState: DebugWorkflowState,
-  promptName: PromptCommandName,
-  errorCode: number,
-): boolean {
+export function flushCapturedPromptErrorPayload(errorCode: number): boolean {
   const captureStore = getProcessScopedPromptErrorCaptureStore();
   const captured = captureStore.capturedPromptErrorPayload;
   captureStore.capturedPromptErrorPayload = undefined;
-  if (!captured || captured.promptName !== promptName) {
+  if (!captured || !Number.isFinite(errorCode) || errorCode < 400) {
     return false;
   }
-  if (!shouldLogDebugPromptContent(config, workflowState, promptName)) {
-    return false;
-  }
-  const logDirectory = resolveDebugPromptsLogPath(projectBase, config);
   try {
-    fs.mkdirSync(logDirectory, { recursive: true });
+    fs.mkdirSync(captured.logDirectory, { recursive: true });
     fs.writeFileSync(
-      path.join(logDirectory, formatPromptDebugErrorFileName(promptName, errorCode)),
+      path.join(captured.logDirectory, formatPromptDebugErrorFileName(captured.promptName, errorCode)),
       captured.payloadText,
       "utf8",
     );
@@ -825,4 +969,14 @@ export function flushCapturedPromptErrorPayload(
   } catch {
     return false;
   }
+}
+
+/**
+ * @brief Discards any captured provider request payload for the ended prompt run.
+ * @details Clears the process-scoped capture unconditionally so leftover payloads from a finished `req-*` prompt run never flush into later provider errors raised outside extension-owned prompt orchestration. Runtime is O(1). Side effect: mutates the process-scoped capture store.
+ * @return {void} No return value.
+ * @satisfies REQ-421, REQ-425
+ */
+export function discardCapturedPromptErrorPayload(): void {
+  getProcessScopedPromptErrorCaptureStore().capturedPromptErrorPayload = undefined;
 }

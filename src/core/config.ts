@@ -32,7 +32,6 @@ import {
   normalizePiNotifyTemplateValue,
 } from "./pi-notify.js";
 import {
-  DEFAULT_DEBUG_ENABLED,
   DEFAULT_DEBUG_LOG_FILE,
   DEFAULT_DEBUG_LOG_ON_STATUS,
   DEFAULT_DEBUG_PROMPTS_ENABLED,
@@ -40,7 +39,7 @@ import {
   DEFAULT_DEBUG_STATUS_CHANGES,
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
-  normalizeDebugEnabled,
+  getRuntimeDebugEnabled,
   normalizeDebugEnabledPrompts,
   normalizeDebugEnabledTools,
   normalizeDebugLogFile,
@@ -149,7 +148,8 @@ interface GlobalStaticCheckLanguageConfig {
 
 /**
  * @brief Defines the persisted local pi-usereq configuration schema.
- * @details Captures project-scoped directory, debug, and static-check enablement fields written to `<base-path>/.pi-usereq.json` while excluding global notification, tool, git, and checker-command settings. The interface is compile-time only and introduces no runtime side effects.
+ * @details Captures project-scoped directory, debug, and static-check enablement fields written to `<base-path>/.pi-usereq.json` while excluding the runtime-only `DEBUG_ENABLED` flag and global notification, tool, git, and checker-command settings. The interface is compile-time only and introduces no runtime side effects.
+ * @satisfies REQ-426
  */
 interface UseReqLocalConfig {
   "docs-dir": string;
@@ -159,7 +159,6 @@ interface UseReqLocalConfig {
   "context-files-references": boolean;
   "context-files-workflow": boolean;
   "static-check": Record<string, LocalStaticCheckLanguageConfig>;
-  DEBUG_ENABLED: "enable" | "disable";
   DEBUG_LOG_FILE: string;
   DEBUG_PROMPTS_ENABLED: DebugPromptsEnabled;
   DEBUG_PROMPTS_LOG_PATH: string;
@@ -587,7 +586,7 @@ export function getGlobalConfigPath(): string {
  * @details Populates canonical docs/test/source directories, derives local static-check enable defaults from the supplied global checker definitions, and seeds documented debug defaults including tool-wrapper command registration without any cross-project fields. Runtime is O(l). No filesystem side effects occur.
  * @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker definitions used to derive local enable defaults.
  * @return {UseReqLocalConfig} Fresh default local configuration object.
- * @satisfies CTN-019, REQ-328, REQ-413, REQ-414
+ * @satisfies CTN-013, CTN-019, REQ-328, REQ-413, REQ-414, REQ-426
  */
 function getDefaultLocalConfig(
   globalStaticCheckConfig: Record<string, GlobalStaticCheckLanguageConfig>,
@@ -600,7 +599,6 @@ function getDefaultLocalConfig(
     "context-files-references": DEFAULT_CONTEXT_FILES_FLAG,
     "context-files-workflow": DEFAULT_CONTEXT_FILES_FLAG,
     "static-check": getDefaultLocalStaticCheckConfig(globalStaticCheckConfig),
-    DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
     DEBUG_LOG_FILE: DEFAULT_DEBUG_LOG_FILE,
     DEBUG_PROMPTS_ENABLED: DEFAULT_DEBUG_PROMPTS_ENABLED,
     DEBUG_PROMPTS_LOG_PATH: DEFAULT_DEBUG_PROMPTS_LOG_PATH,
@@ -652,11 +650,11 @@ function getDefaultGlobalConfig(): UseReqGlobalConfig {
 
 /**
  * @brief Merges persisted local and global configuration scopes into the effective runtime config.
- * @details Normalizes local directories, combines local static-check enable flags with global checker arrays, resolves effective worktree disablement when automatic git commit is off, normalizes debug and notification fields including tool-wrapper command registration, and disables Pushover until both credentials are populated. Runtime is O(l + c + p). No external state is mutated.
+ * @details Normalizes local directories, combines local static-check enable flags with global checker arrays, resolves effective worktree disablement when automatic git commit is off, normalizes debug and notification fields including tool-wrapper command registration, sources the runtime-only `DEBUG_ENABLED` flag from the process-scoped debug store, and disables Pushover until both credentials are populated. Runtime is O(l + c + p). No external state is mutated.
  * @param[in] localConfig {UseReqLocalConfig} Persisted local configuration.
  * @param[in] globalConfig {UseReqGlobalConfig} Persisted global configuration.
  * @return {UseReqConfig} Effective merged configuration.
- * @satisfies REQ-328, REQ-413, REQ-414
+ * @satisfies REQ-236, REQ-328, REQ-413, REQ-414, REQ-426
  */
 function mergeConfigScopes(
   localConfig: UseReqLocalConfig,
@@ -691,7 +689,7 @@ function mergeConfigScopes(
     AUTO_GIT_COMMIT: autoGitCommit,
     GIT_WORKTREE_ENABLED: gitWorktreeEnabled,
     GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(globalConfig.GIT_WORKTREE_PREFIX),
-    DEBUG_ENABLED: normalizeDebugEnabled(localConfig.DEBUG_ENABLED),
+    DEBUG_ENABLED: getRuntimeDebugEnabled(),
     DEBUG_LOG_FILE: normalizeDebugLogFile(localConfig.DEBUG_LOG_FILE),
     DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(localConfig.DEBUG_PROMPTS_ENABLED),
     DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(localConfig.DEBUG_PROMPTS_LOG_PATH),
@@ -862,11 +860,11 @@ function normalizeGlobalStaticCheckConfig(
 
 /**
  * @brief Loads and sanitizes the persisted local configuration.
- * @details Returns defaults when `<base-path>/.pi-usereq.json` is absent. Otherwise parses the local JSON payload, normalizes project-scoped directory, debug, tool-wrapper command registration, and static-check enable fields, and ignores misplaced global keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when `<base-path>/.pi-usereq.json` is absent. Otherwise parses the local JSON payload, normalizes project-scoped directory, debug, tool-wrapper command registration, and static-check enable fields, ignores any persisted `DEBUG_ENABLED` payload, and ignores misplaced global keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] defaultStaticCheckConfig {Record<string, LocalStaticCheckLanguageConfig>} Local static-check enable defaults derived from the current global checker map.
  * @return {UseReqLocalConfig} Sanitized local configuration.
- * @satisfies CTN-019, REQ-328, REQ-413, REQ-414
+ * @satisfies CTN-019, REQ-328, REQ-413, REQ-414, REQ-426
  */
 function loadLocalConfig(
   projectBase: string,
@@ -883,7 +881,6 @@ function loadLocalConfig(
       "context-files-references": DEFAULT_CONTEXT_FILES_FLAG,
       "context-files-workflow": DEFAULT_CONTEXT_FILES_FLAG,
       "static-check": normalizeLocalStaticCheckConfig(undefined, defaultStaticCheckConfig),
-      DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
       DEBUG_LOG_FILE: DEFAULT_DEBUG_LOG_FILE,
       DEBUG_PROMPTS_ENABLED: DEFAULT_DEBUG_PROMPTS_ENABLED,
       DEBUG_PROMPTS_LOG_PATH: DEFAULT_DEBUG_PROMPTS_LOG_PATH,
@@ -915,7 +912,6 @@ function loadLocalConfig(
     "context-files-references": normalizeContextFilesFlag(data["context-files-references"]),
     "context-files-workflow": normalizeContextFilesFlag(data["context-files-workflow"]),
     "static-check": normalizeLocalStaticCheckConfig(data["static-check"], defaultStaticCheckConfig),
-    DEBUG_ENABLED: normalizeDebugEnabled(data.DEBUG_ENABLED),
     DEBUG_LOG_FILE: normalizeDebugLogFile(data.DEBUG_LOG_FILE),
     DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(data.DEBUG_PROMPTS_ENABLED),
     DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(data.DEBUG_PROMPTS_LOG_PATH),
@@ -995,10 +991,10 @@ export function loadConfig(projectBase: string): UseReqConfig {
 
 /**
  * @brief Builds the persisted local configuration payload.
- * @details Copies only project-scoped keys into a fresh object so runtime-derived metadata plus global checker, tool, git, and notification fields never reach `.pi-usereq.json`, while preserving the debug tool-wrapper command flag beside other local debug settings. Runtime is O(n) in config size. No external state is mutated.
+ * @details Copies only project-scoped keys into a fresh object so runtime-derived metadata, the runtime-only `DEBUG_ENABLED` flag, and global checker, tool, git, and notification fields never reach `.pi-usereq.json`, while preserving the debug tool-wrapper command flag beside other persisted local debug settings. Runtime is O(n) in config size. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective configuration object.
  * @return {UseReqLocalConfig} Persistable local configuration payload.
- * @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-249, REQ-316, REQ-277, REQ-328, REQ-413, REQ-414
+ * @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-249, REQ-316, REQ-277, REQ-328, REQ-413, REQ-414, REQ-426
  */
 function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig {
   const normalizedSrcDir = config["src-dir"]
@@ -1022,7 +1018,6 @@ function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig {
         ),
       ]),
     ),
-    DEBUG_ENABLED: normalizeDebugEnabled(config.DEBUG_ENABLED),
     DEBUG_LOG_FILE: normalizeDebugLogFile(config.DEBUG_LOG_FILE),
     DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED),
     DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(config.DEBUG_PROMPTS_LOG_PATH),
