@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.77.0](https://github.com/Ogekuri/PI-useReq/compare/v0.76.0..v0.77.0) - 2026-10-09
+### 🚜  Changes
+- make Debug flag runtime-only and save request/prompt/error debug files [useReq] *(debug)*
+  - REQ-236/REQ-426: DEBUG_ENABLED is process-scoped runtime state, reset to disable at pi CLI start, surviving ctrl+N sessions and req-reset, never persisted
+  - REQ-417/418/427/428: save <timestamp>-<req-command>-request (on-screen summary) and -prompt (delivered prompt) files for every enabled /req-* run
+  - REQ-416: prompt-content debug files are exempt from the DEBUG_LOG_ON_STATUS workflow-state filter
+  - REQ-421/422/425: robust error-stage capture/flush (live prompt state, config fallback, capture-carried write inputs, run-end discard) so provider 400s always dump the last payload
+  - Update WORKFLOW.md, regenerate REFERENCES.md, SRS version 0.0.95
+
 ## [0.76.0](https://github.com/Ogekuri/PI-useReq/compare/v0.75.0..v0.76.0) - 2026-10-09
 ### ⛰️  Features
 - capture provider error payloads for prompt debug [useReq] *(debug-runtime)*
@@ -993,6 +1002,7 @@
 - \[0.74.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.74.0
 - \[0.75.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.75.0
 - \[0.76.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.76.0
+- \[0.77.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.77.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1068,3 +1078,4 @@
 [0.74.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.73.0..v0.74.0
 [0.75.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.74.0..v0.75.0
 [0.76.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.75.0..v0.76.0
+[0.77.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.76.0..v0.77.0
