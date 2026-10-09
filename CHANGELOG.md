@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.78.0](https://github.com/Ogekuri/PI-useReq/compare/v0.77.0..v0.78.0) - 2026-10-09
+### 🐛  Bug Fixes
+- flush provider error payloads from message_end fallback [useReq] *(debug-runtime)*
+  - Add resolveProviderErrorFlushStatusFromMessage to extract the leading HTTP
+  - status from finalized assistant error messages (pi formatProviderError shapes).
+  - Trigger flushCapturedPromptErrorPayload on message_end so OpenAI-compatible
+  - providers (zai) whose SDK clients throw before onResponse still save
+  - <timestamp>-<req-command>-error-<status> files beside -request/-prompt.
+  - Add reproducer test covering the switchSession rebind plus two failing
+  - provider requests; update WORKFLOW.md and REFERENCES.md.
+
 ## [0.77.0](https://github.com/Ogekuri/PI-useReq/compare/v0.76.0..v0.77.0) - 2026-10-09
 ### 🚜  Changes
 - make Debug flag runtime-only and save request/prompt/error debug files [useReq] *(debug)*
@@ -1003,6 +1014,7 @@
 - \[0.75.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.75.0
 - \[0.76.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.76.0
 - \[0.77.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.77.0
+- \[0.78.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.78.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1079,3 +1091,4 @@
 [0.75.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.74.0..v0.75.0
 [0.76.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.75.0..v0.76.0
 [0.77.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.76.0..v0.77.0
+[0.78.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.77.0..v0.78.0
