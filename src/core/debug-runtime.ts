@@ -893,7 +893,7 @@ export function formatPromptDebugErrorFileName(
 
 /**
  * @brief Resolves the failing HTTP status carried by one finalized agent message.
- * @details Extracts the leading provider error status from one `message_end` assistant message whose `stopReason` equals `error`, accepting both pi `formatProviderError` display shapes (`"<status>: <body>"` and `"<prefix> (<status>): <body>"`) so provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses (the OpenAI-compatible family, including `zai`) still flush the captured provider request payload through the message lifecycle channel. Runtime is O(n) in the inspected error-message prefix length. No external state is mutated.
+ * @details Extracts the leading provider error status from one `message_end` assistant message whose `stopReason` equals `error`, accepting the pi `formatProviderError` display shapes (`"<status>: <body>"` and `"<prefix> (<status>): <body>"`) plus the raw SDK `error.message` shape (`"<status> <body>"`) surfaced unchanged by the agent run-failure path, so provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses (the OpenAI-compatible family, including `zai`) still flush the captured provider request payload through the message lifecycle channel. Runtime is O(n) in the inspected error-message prefix length. No external state is mutated.
  * @param[in] message {unknown} Finalized agent message forwarded by one `message_end` lifecycle event.
  * @return {number | undefined} Failing HTTP status greater than or equal to `400`, or `undefined` when the message carries no provider error status.
  * @satisfies REQ-422, REQ-423, REQ-425
@@ -911,7 +911,8 @@ export function resolveProviderErrorFlushStatusFromMessage(message: unknown): nu
   }
   const unprefixedStatus = /^(\d{3}):/.exec(candidateMessage.errorMessage)?.[1];
   const prefixedStatus = /^[^(]+\((\d{3})\): /.exec(candidateMessage.errorMessage)?.[1];
-  const statusText = unprefixedStatus ?? prefixedStatus;
+  const rawSdkStatus = /^(\d{3})\s/.exec(candidateMessage.errorMessage)?.[1];
+  const statusText = unprefixedStatus ?? prefixedStatus ?? rawSdkStatus;
   if (statusText === undefined) {
     return undefined;
   }

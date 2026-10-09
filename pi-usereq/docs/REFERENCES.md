@@ -1113,7 +1113,7 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# debug-runtime.ts | TypeScript | 1010L | 54 symbols | 5 imports | 66 comments
+# debug-runtime.ts | TypeScript | 1011L | 54 symbols | 5 imports | 66 comments
 > Path: `src/core/debug-runtime.ts`
 - @brief Declares debug inventories, normalizers, and JSON log persistence helpers.
 - @details Centralizes debug-menu selector inventories, config-field normalization, the process-scoped runtime debug-enable state, workflow-status gating, append-only JSON log writing for tool, prompt, and dedicated workflow debug events, process-scoped capture of the exact `before_provider_request` provider payload for active prompt runs, and error-stage provider payload dumps gated by `after_provider_response` error statuses. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
@@ -1470,20 +1470,20 @@ import {
 - @return {string} Provider error payload filename in the `<timestamp>-<req-command>-error-<status>` shape.
 - @satisfies REQ-423
 
-### fn `export function resolveProviderErrorFlushStatusFromMessage(message: unknown): number | undefined` (L901-920)
+### fn `export function resolveProviderErrorFlushStatusFromMessage(message: unknown): number | undefined` (L901-921)
 - @brief Resolves the failing HTTP status carried by one finalized agent message.
-- @details Extracts the leading provider error status from one `message_end` assistant message whose `stopReason` equals `error`, accepting both pi `formatProviderError` display shapes (`"<status>: <body>"` and `"<prefix> (<status>): <body>"`) so provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses (the OpenAI-compatible family, including `zai`) still flush the captured provider request payload through the message lifecycle channel. Runtime is O(n) in the inspected error-message prefix length. No external state is mutated.
+- @details Extracts the leading provider error status from one `message_end` assistant message whose `stopReason` equals `error`, accepting the pi `formatProviderError` display shapes (`"<status>: <body>"` and `"<prefix> (<status>): <body>"`) plus the raw SDK `error.message` shape (`"<status> <body>"`) surfaced unchanged by the agent run-failure path, so provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses (the OpenAI-compatible family, including `zai`) still flush the captured provider request payload through the message lifecycle channel. Runtime is O(n) in the inspected error-message prefix length. No external state is mutated.
 - @param[in] message {unknown} Finalized agent message forwarded by one `message_end` lifecycle event.
 - @return {number | undefined} Failing HTTP status greater than or equal to `400`, or `undefined` when the message carries no provider error status.
 - @satisfies REQ-422, REQ-423, REQ-425
 
-### fn `function serializePromptProviderPayload(payload: unknown): string` (L928-946)
+### fn `function serializePromptProviderPayload(payload: unknown): string` (L929-947)
 - @brief Serializes one provider request payload into deterministic text.
 - @details Pretty-prints the payload as JSON while degrading circular references into one `[Circular]` token and bigint values into decimal strings so serialization failures never discard the capture. Runtime is O(n) in serialized payload size. No external state is mutated.
 - @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
 - @return {string} Serialized payload text; the empty string when the payload serializes to nothing.
 
-### fn `export function capturePromptProviderRequestForDebug(` (L958-973)
+### fn `export function capturePromptProviderRequestForDebug(` (L959-974)
 - @brief Captures one exact provider request payload for the active prompt run when prompt debug logging is enabled.
 - @details Applies the global-debug plus prompt-debug gating, serializes the exact `before_provider_request` payload through the cycle-safe serializer, and stores the prompt name, payload text, original project base, and resolved prompt log directory in the process-scoped capture store so the payload survives session replacement and later error-stage writes require no live workflow state or cached configuration. Runtime is O(n) in serialized payload size when enabled and O(1) otherwise. Side effect: mutates the process-scoped capture store for enabled matching requests.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -1493,14 +1493,14 @@ import {
 - @return {void} No return value.
 - @satisfies REQ-416, REQ-421
 
-### fn `export function flushCapturedPromptErrorPayload(errorCode: number): boolean` (L982-1000)
+### fn `export function flushCapturedPromptErrorPayload(errorCode: number): boolean` (L983-1001)
 - @brief Writes the captured provider request payload as one error-stage prompt debug file for the failing prompt.
 - @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file inside the captured log directory beside the initial dispatched prompt artifacts. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus one file write when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
 - @param[in] errorCode {number} Failing provider response status, such as `400`.
 - @return {boolean} `true` when the provider error payload file is written; otherwise `false`.
 - @satisfies REQ-422, REQ-423, REQ-424, REQ-425
 
-### fn `export function discardCapturedPromptErrorPayload(): void` (L1008-1010)
+### fn `export function discardCapturedPromptErrorPayload(): void` (L1009-1011)
 - @brief Discards any captured provider request payload for the ended prompt run.
 - @details Clears the process-scoped capture unconditionally so leftover payloads from a finished `req-*` prompt run never flush into later provider errors raised outside extension-owned prompt orchestration. Runtime is O(1). Side effect: mutates the process-scoped capture store.
 - @return {void} No return value.
@@ -1558,11 +1558,11 @@ import {
 |`ProcessScopedPromptErrorCaptureStore`|iface||860-862|interface ProcessScopedPromptErrorCaptureStore|
 |`getProcessScopedPromptErrorCaptureStore`|fn||869-875|function getProcessScopedPromptErrorCaptureStore(): Proce...|
 |`formatPromptDebugErrorFileName`|fn||886-892|export function formatPromptDebugErrorFileName(|
-|`resolveProviderErrorFlushStatusFromMessage`|fn||901-920|export function resolveProviderErrorFlushStatusFromMessag...|
-|`serializePromptProviderPayload`|fn||928-946|function serializePromptProviderPayload(payload: unknown)...|
-|`capturePromptProviderRequestForDebug`|fn||958-973|export function capturePromptProviderRequestForDebug(|
-|`flushCapturedPromptErrorPayload`|fn||982-1000|export function flushCapturedPromptErrorPayload(errorCode...|
-|`discardCapturedPromptErrorPayload`|fn||1008-1010|export function discardCapturedPromptErrorPayload(): void|
+|`resolveProviderErrorFlushStatusFromMessage`|fn||901-921|export function resolveProviderErrorFlushStatusFromMessag...|
+|`serializePromptProviderPayload`|fn||929-947|function serializePromptProviderPayload(payload: unknown)...|
+|`capturePromptProviderRequestForDebug`|fn||959-974|export function capturePromptProviderRequestForDebug(|
+|`flushCapturedPromptErrorPayload`|fn||983-1001|export function flushCapturedPromptErrorPayload(errorCode...|
+|`discardCapturedPromptErrorPayload`|fn||1009-1011|export function discardCapturedPromptErrorPayload(): void|
 
 
 ---
@@ -1690,7 +1690,7 @@ import {
 
 ---
 
-# extension-status.ts | TypeScript | 924L | 48 symbols | 7 imports | 50 comments
+# extension-status.ts | TypeScript | 934L | 48 symbols | 7 imports | 57 comments
 > Path: `src/core/extension-status.ts`
 - @brief Tracks pi-usereq extension status state and renders status-bar telemetry.
 - @details Centralizes hook interception, context-usage snapshots, active-branch lookup, run timing, and deterministic status-bar formatting for the pi-usereq extension. Runtime
@@ -2041,17 +2041,17 @@ mutates `controller.config`.
 - @return {void} No return value.
 - @satisfies REQ-221, REQ-222, REQ-223
 
-### fn `export function updateExtensionStatus(` (L835-908)
+### fn `export function updateExtensionStatus(` (L835-918)
 - @brief Updates mutable status state for one intercepted lifecycle hook.
-- @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing on `agent_start`, promotes pending prompt-request metadata into the active run, captures non-aborted run duration on `agent_end` or `agent_settled`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+- @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, captures non-aborted run duration on `agent_end` or `agent_settled`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
 - @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
 - @param[in] event {unknown} Hook payload forwarded from the wrapper.
 - @param[in] ctx {ExtensionContext} Active extension context.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
-- @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285
+- @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421
 
-### fn `export function disposePiUsereqStatusController(` (L919-924)
+### fn `export function disposePiUsereqStatusController(` (L929-934)
 - @brief Disposes the pi-usereq status controller.
 - @details Stops the live ticker, clears the cached context pointer, and leaves
 the last captured status snapshot available for inspection until the
@@ -2109,8 +2109,8 @@ limited to interval disposal and in-memory state mutation.
 |`setPiUsereqRuntimeSoundLevel`|fn||750-760|export function setPiUsereqRuntimeSoundLevel(|
 |`renderPiUsereqStatus`|fn||770-801|export function renderPiUsereqStatus(|
 |`setPiUsereqWorkflowState`|fn||812-823|export function setPiUsereqWorkflowState(|
-|`updateExtensionStatus`|fn||835-908|export function updateExtensionStatus(|
-|`disposePiUsereqStatusController`|fn||919-924|export function disposePiUsereqStatusController(|
+|`updateExtensionStatus`|fn||835-918|export function updateExtensionStatus(|
+|`disposePiUsereqStatusController`|fn||929-934|export function disposePiUsereqStatusController(|
 
 
 ---

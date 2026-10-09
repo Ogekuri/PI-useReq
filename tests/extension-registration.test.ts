@@ -2592,6 +2592,117 @@ test("provider error payload debug logging survives the switchSession extension 
   }
 });
 
+/**
+ * @brief Verifies provider error payload debug capture across the pi host overflow compact-and-retry continuation.
+ * @details Reproduces the live pi runtime flow reported for `/tmp/PI-useReq/20261009162721215-req-analyze-prompt`: the OpenAI-compatible provider fails a mid-run request with a context-length 400 surfaced only through `message_end`, the pi host then omits the failed attempt, auto-compacts, and RESTARTS the agent run (`agent_end` -> `session_before_compact` -> `session_compact` -> `agent_start` -> retried provider request) while the originating `/req-*` prompt run is still the same in-flight orchestration. The test proves the extension MUST keep the active prompt request promoted across the restarted run so every retried `before_provider_request` still captures its exact payload and every failing `message_end` writes one `<timestamp>-<req-command>-error-<status>` file beside the initial dispatched prompt artifacts, exactly as the host emits them for the compact-and-retry sequence.
+ * @satisfies REQ-421, REQ-422, REQ-423, REQ-424, REQ-425, TST-146, TST-149
+ */
+test("provider error payload debug logging survives the host compact-and-retry agent restart", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      DEBUG_PROMPTS_ENABLED: "enable",
+      DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts",
+      DEBUG_ENABLED_PROMPTS: ["req-implement"],
+    });
+    setRuntimeDebugEnabled("enable");
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(projectBase);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+
+    const originalSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+    const originalSwitchSession = firstCtx.switchSession.bind(firstCtx);
+    let reboundPi: FakePi | undefined;
+    let reboundCtx: any;
+    firstCtx.switchSession = async (sessionPath: string) => {
+      const executionSessionCwd = readFakeSessionFileCwd(sessionPath, firstCtx.cwd);
+      await firstPi.emit("session_shutdown", {
+        reason: "resume",
+        targetSessionFile: sessionPath,
+      }, firstCtx);
+      if (!reboundPi) {
+        reboundPi = createFakePi();
+        piUsereqExtension(reboundPi);
+        reboundCtx = createFakeCtx(executionSessionCwd);
+        reboundCtx.sessionManager.getSessionFile = () => sessionPath;
+        reboundCtx.sessionManager.getSessionDir = () => path.dirname(sessionPath);
+        reboundCtx.sessionManager.getCwd = () => executionSessionCwd;
+        reboundCtx.cwd = executionSessionCwd;
+        await reboundPi.emit("session_start", {
+          reason: "resume",
+          previousSessionFile: originalSessionFile,
+        }, reboundCtx);
+      }
+      return originalSwitchSession(sessionPath);
+    };
+
+    await firstPi.commands.get("req-implement")!.handler("error payload", firstCtx);
+    assert.ok(reboundPi);
+    assert.ok(reboundCtx);
+
+    const buildProviderPayload = (marker: string) => ({
+      messages: [{ role: "user", content: `error payload request ${marker}` }],
+      maxTokens: 4096,
+    });
+    const buildErrorMessage = (marker: string) =>
+      `400: {"message":"This endpoint's maximum context length is 1048576 tokens. However, you requested about 1048941 tokens (${marker})","code":400,"metadata":{"provider_name":null}}`;
+
+    // First agent run: the initial provider request succeeds with a tool call.
+    await reboundPi!.emit("before_agent_start", {}, reboundCtx);
+    await reboundPi!.emit("agent_start", {}, reboundCtx);
+    await reboundPi!.emit("before_provider_request", { payload: buildProviderPayload("ok") }, reboundCtx);
+    await reboundPi!.emit("after_provider_response", { status: 200, headers: {} }, reboundCtx);
+    // The request after the tool result fails with the recorded context-length 400 that
+    // triggers the host overflow recovery: only `message_end` reaches the extension.
+    await reboundPi!.emit("before_provider_request", { payload: buildProviderPayload("fail-1") }, reboundCtx);
+    await reboundPi!.emit("message_end", {
+      message: { role: "assistant", stopReason: "error", errorMessage: buildErrorMessage("fail-1") },
+    }, reboundCtx);
+    // Host overflow recovery exactly as pi 1.1.0 emits it: the failed attempt is omitted,
+    // the session is compacted, and the SAME agent run is restarted through agent_start
+    // before the retried provider request is dispatched.
+    await reboundPi!.emit("turn_end", { message: {}, toolResults: [] }, reboundCtx);
+    await reboundPi!.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, reboundCtx);
+    await reboundPi!.emit("session_before_compact", { preparation: {}, branchEntries: [] }, reboundCtx);
+    await reboundPi!.emit("session_compact", { preparation: {} }, reboundCtx);
+    await reboundPi!.emit("agent_start", {}, reboundCtx);
+    // The retried provider request fails with the same context-length 400.
+    await reboundPi!.emit("before_provider_request", { payload: buildProviderPayload("fail-2") }, reboundCtx);
+    await reboundPi!.emit("message_end", {
+      message: { role: "assistant", stopReason: "error", errorMessage: buildErrorMessage("fail-2") },
+    }, reboundCtx);
+    await reboundPi!.emit("turn_end", { message: {}, toolResults: [] }, reboundCtx);
+    await reboundPi!.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, reboundCtx);
+
+    const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
+    const savedFiles = fs.readdirSync(promptLogDir).sort();
+    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400"));
+    assert.equal(
+      errorPayloadFiles.length,
+      2,
+      `expected two -error-400 files beside [${savedFiles.join(", ")}]`,
+    );
+    const errorPayloadMarkers = errorPayloadFiles.map((fileName) =>
+      String(JSON.parse(fs.readFileSync(path.join(promptLogDir, fileName), "utf8")).messages[0]?.content),
+    ).sort();
+    assert.deepEqual(errorPayloadMarkers, [
+      "error payload request fail-1",
+      "error payload request fail-2",
+    ]);
+  } finally {
+    setRuntimeDebugEnabled("disable");
+    discardCapturedPromptErrorPayload();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("notifications menu preserves focus on toggled and edited rows", async () => {
   const cwd = createTempDir("pi-usereq-menu-focus-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });

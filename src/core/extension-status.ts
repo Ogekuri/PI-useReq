@@ -824,13 +824,13 @@ export function setPiUsereqWorkflowState(
 
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing on `agent_start`, promotes pending prompt-request metadata into the active run, captures non-aborted run duration on `agent_end` or `agent_settled`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, captures non-aborted run duration on `agent_end` or `agent_settled`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285
+ * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421
  */
 export function updateExtensionStatus(
   controller: PiUsereqStatusController,
@@ -869,8 +869,18 @@ export function updateExtensionStatus(
 
   if (hookName === "agent_start") {
     controller.state.runStartTimeMs = nowMs;
-    controller.state.activePromptRequest = controller.state.pendingPromptRequest;
-    controller.state.pendingPromptRequest = undefined;
+    // Promote only when a pending request exists: the pi host restarts the agent run for
+    // overflow compact-and-retry recovery (agent_end -> session_before_compact ->
+    // session_compact -> agent_start -> retried provider request) while the originating
+    // prompt-command orchestration stays in flight. Overwriting the already-promoted
+    // active request with an undefined pending request would drop the run from controller
+    // state and process-scoped persistence, silencing every retried before_provider_request
+    // capture (REQ-421) and the later matched-success or matched-failure closure handling.
+    const pendingPromptRequest = controller.state.pendingPromptRequest;
+    if (pendingPromptRequest !== undefined) {
+      controller.state.activePromptRequest = pendingPromptRequest;
+      controller.state.pendingPromptRequest = undefined;
+    }
   }
 
   if (
