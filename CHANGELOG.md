@@ -958,6 +958,7 @@
 - \[0.69.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.69.0
 - \[0.70.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.70.0
 - \[0.71.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.71.0
+- \[0.72.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.72.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1028,3 +1029,4 @@
 [0.69.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.68.0..v0.69.0
 [0.70.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.69.0..v0.70.0
 [0.71.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.70.0..v0.71.0
+[0.72.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.71.0..v0.72.0
