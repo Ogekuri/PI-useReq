@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.80.0](https://github.com/Ogekuri/PI-useReq/compare/v0.79.0..v0.80.0) - 2026-10-09
+### 🐛  Bug Fixes
+- anchor provider error capture gate to prompt base config [useReq] *(index)*
+  - Load the before_provider_request capture gating config from the prompt
+  - execution plan's original base-path via loadPromptRunBaseConfig, bypassing
+  - the runtime path state that resolves to the worktree checkout whose
+  - untracked .pi-usereq.json is absent (REQ-416, REQ-421, REQ-422, REQ-424).
+  - Root cause of the missing <timestamp>-<req-command>-error-400 file beside
+  - -request/-prompt in /tmp/PI-useReq runs 20261009162721215 and
+  - 20261009174607538: the rebound worktree-session extension loaded default
+  - DEBUG_PROMPTS_ENABLED=disable, skipping capture; commits 698ebd9c and
+  - a066aa7b fixed state-preservation gaps but not the config divergence.
+  - Add reproducer test with the git-ignored local config; repair 12 stale
+  - debug tests to the runtime-only DEBUG_ENABLED contract (REQ-236/REQ-426,
+  - TST-144/146/147/149); update WORKFLOW.md and REFERENCES.md.
+
 ## [0.79.0](https://github.com/Ogekuri/PI-useReq/compare/v0.78.0..v0.79.0) - 2026-10-09
 ### 🐛  Bug Fixes
 - preserve prompt run across compact-and-retry; flush retried 400 payloads [useReq] *(extension-status)*
@@ -1035,6 +1051,7 @@
 - \[0.77.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.77.0
 - \[0.78.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.78.0
 - \[0.79.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.79.0
+- \[0.80.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.80.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1113,3 +1130,4 @@
 [0.77.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.76.0..v0.77.0
 [0.78.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.77.0..v0.78.0
 [0.79.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.78.0..v0.79.0
+[0.80.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.79.0..v0.80.0
