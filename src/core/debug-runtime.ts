@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Declares debug inventories, normalizers, and JSON log persistence helpers.
- * @details Centralizes debug-menu selector inventories, config-field normalization, workflow-status gating, and append-only JSON log writing for tool, prompt, and dedicated workflow debug events. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
+ * @details Centralizes debug-menu selector inventories, config-field normalization, workflow-status gating, append-only JSON log writing for tool, prompt, and dedicated workflow debug events, process-scoped capture of the exact `before_provider_request` provider payload for active prompt runs, and error-stage provider payload dumps gated by `after_provider_response` error statuses. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
  */
 
 import fs from "node:fs";
@@ -705,6 +705,122 @@ export function logDebugPromptContent(
   try {
     fs.mkdirSync(logDirectory, { recursive: true });
     fs.writeFileSync(path.join(logDirectory, formatPromptDebugFileName(promptName)), content, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @brief Describes one process-scoped captured provider request payload bound to an active prompt run.
+ * @details Pairs the bundled prompt name with the JSON serialization of the exact `before_provider_request` payload so a later `after_provider_response` error status can dump the failing request verbatim without retaining live provider objects. The interface is compile-time only and introduces no runtime cost.
+ */
+interface CapturedPromptErrorPayload {
+  promptName: PromptCommandName;
+  payloadText: string;
+}
+
+/**
+ * @brief Describes the process-scoped provider error payload capture state persisted across extension rebinds.
+ * @details Stores the latest captured prompt error payload on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` between prompt dispatch and provider execution, while the hosting process persists across those operations, so the capture survives the forked execution-session switch. The interface is compile-time only and introduces no runtime cost.
+ */
+interface ProcessScopedPromptErrorCaptureStore {
+  capturedPromptErrorPayload: CapturedPromptErrorPayload | undefined;
+}
+
+/**
+ * @brief Returns the process-scoped provider error payload capture store.
+ * @details Lazily initializes one `globalThis` record so session rebinds never discard an already captured failing provider request. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @return {ProcessScopedPromptErrorCaptureStore} Mutable process-scoped capture store.
+ */
+function getProcessScopedPromptErrorCaptureStore(): ProcessScopedPromptErrorCaptureStore {
+  const globalScope = globalThis as typeof globalThis & { __piUsereqPromptErrorCaptureStore?: ProcessScopedPromptErrorCaptureStore };
+  if (!globalScope.__piUsereqPromptErrorCaptureStore) {
+    globalScope.__piUsereqPromptErrorCaptureStore = { capturedPromptErrorPayload: undefined };
+  }
+  return globalScope.__piUsereqPromptErrorCaptureStore;
+}
+
+/**
+ * @brief Builds one provider error payload debug filename for one bundled prompt.
+ * @details Combines the write-time `YYYYMMDDHHMMSSmmm` timestamp, the invokable `req-*` command name, and the failing provider response status into the `<timestamp>-<req-command>-error-<status>` shape so every saved error-stage prompt payload stays attributable to the originating `/req-*` prompt and its session error code. Runtime is O(1). No external state is mutated.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] errorCode {number} Failing provider response status, such as `400`.
+ * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
+ * @return {string} Provider error payload filename in the `<timestamp>-<req-command>-error-<status>` shape.
+ * @satisfies REQ-423
+ */
+export function formatPromptDebugErrorFileName(
+  promptName: PromptCommandName,
+  errorCode: number,
+  date = new Date(),
+): string {
+  return `${formatPromptDebugTimestamp(date)}-${getDebugPromptName(promptName)}-error-${errorCode}`;
+}
+
+/**
+ * @brief Captures one exact provider request payload for the active prompt run when prompt debug logging is enabled.
+ * @details Applies the identical global-debug, prompt-debug, and workflow-state gating used by dispatched prompt content files, serializes the exact `before_provider_request` payload as pretty-printed JSON, and stores it in the process-scoped capture store keyed by the bundled prompt name so the payload survives session replacement until an error response flushes it. Runtime is O(n) in serialized payload size when enabled and O(1) otherwise. Side effect: mutates the process-scoped capture store for enabled matching requests.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state.
+ * @param[in] promptName {PromptCommandName} Active bundled prompt name.
+ * @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
+ * @return {void} No return value.
+ * @satisfies REQ-416, REQ-421
+ */
+export function capturePromptProviderRequestForDebug(
+  config: UseReqConfig,
+  workflowState: DebugWorkflowState,
+  promptName: PromptCommandName,
+  payload: unknown,
+): void {
+  if (!shouldLogDebugPromptContent(config, workflowState, promptName)) {
+    return;
+  }
+  let payloadText: string;
+  try {
+    payloadText = JSON.stringify(payload, null, 2) ?? "";
+  } catch {
+    return;
+  }
+  getProcessScopedPromptErrorCaptureStore().capturedPromptErrorPayload = { promptName, payloadText };
+}
+
+/**
+ * @brief Writes the captured provider request payload as one error-stage prompt debug file for the failing prompt.
+ * @details Consumes the process-scoped capture for the supplied prompt, discards it after every write attempt so stale payloads never reach later runs, applies the identical global-debug, prompt-debug, and workflow-state gating used by dispatched prompt content files, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file beside the initial dispatched prompt file under the configured prompt log path. Runtime is dominated by one directory creation plus one file write when a matching capture exists and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching failures.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] workflowState {DebugWorkflowState} Current workflow state.
+ * @param[in] promptName {PromptCommandName} Active bundled prompt name.
+ * @param[in] errorCode {number} Failing provider response status, such as `400`.
+ * @return {boolean} `true` when the provider error payload file is written; otherwise `false`.
+ * @satisfies REQ-422, REQ-423, REQ-424, REQ-425
+ */
+export function flushCapturedPromptErrorPayload(
+  projectBase: string,
+  config: UseReqConfig,
+  workflowState: DebugWorkflowState,
+  promptName: PromptCommandName,
+  errorCode: number,
+): boolean {
+  const captureStore = getProcessScopedPromptErrorCaptureStore();
+  const captured = captureStore.capturedPromptErrorPayload;
+  captureStore.capturedPromptErrorPayload = undefined;
+  if (!captured || captured.promptName !== promptName) {
+    return false;
+  }
+  if (!shouldLogDebugPromptContent(config, workflowState, promptName)) {
+    return false;
+  }
+  const logDirectory = resolveDebugPromptsLogPath(projectBase, config);
+  try {
+    fs.mkdirSync(logDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(logDirectory, formatPromptDebugErrorFileName(promptName, errorCode)),
+      captured.payloadText,
+      "utf8",
+    );
     return true;
   } catch {
     return false;

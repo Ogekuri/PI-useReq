@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.93"
+version: "0.0.94"
 date: "2026-10-09"
 author: "OpenAI Codex"
 scope:
@@ -190,7 +190,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
 - **REQ-112**: MUST render status-bar field names with the active theme `accent` token and non-error field values with the active theme `warning` token unless a field-specific requirement overrides the value token.
 - **REQ-113**: MUST register shared event wrappers for `resources_discover`, `session_start`, `session_before_switch`, `session_before_fork`, `session_before_compact`, `session_compact`, and `session_shutdown`.
-- **REQ-114**: MUST register shared event wrappers for `session_before_tree`, `session_tree`, `context`, `before_provider_request`, `before_agent_start`, `agent_start`, and `agent_end`.
+- **REQ-114**: MUST register shared event wrappers for `session_before_tree`, `session_tree`, `context`, `before_provider_request`, `after_provider_response`, `before_agent_start`, `agent_start`, and `agent_end`.
 - **REQ-115**: MUST register shared event wrappers for `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, and `tool_execution_update`.
 - **REQ-116**: MUST register shared event wrappers for `tool_execution_end`, `model_select`, `tool_call`, `tool_result`, `user_bash`, and `input`.
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
@@ -496,6 +496,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-418**: MUST write exactly the rendered prompt content delivered through `sendMessage` or `sendUserMessage` into each prompt debug file under `DEBUG_PROMPTS_LOG_PATH`.
 - **REQ-419**: MUST document in `README.md` the pi CLI replay commands that replicate a saved prompt delivery outside pi-usereq without the installed extension.
 - **REQ-420**: MUST restore `DEBUG_PROMPTS_ENABLED=disable` and `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq` when the `Debug` subtree `Reset defaults` is approved.
+- **REQ-421**: MUST capture the exact provider request payload from `before_provider_request` while a bundled `req-*` prompt run is active and `DEBUG_ENABLED=enable` and `DEBUG_PROMPTS_ENABLED=enable`.
+- **REQ-422**: MUST write the latest captured provider request payload under `DEBUG_PROMPTS_LOG_PATH` when `after_provider_response` reports a response status >= 400.
+- **REQ-423**: MUST name each saved provider error payload file `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>` from the write-time timestamp, invokable command name, and failing response status.
+- **REQ-424**: MUST keep the initial dispatched prompt file and the failing provider request payload file together in the prompt log folder for the failing run.
+- **REQ-425**: MUST discard the captured provider request payload after each error-payload write attempt so stale payloads never reach later runs.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -633,6 +638,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-143**: MUST verify default local configuration persists `DEBUG_PROMPTS_ENABLED=disable` plus `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq`, and the `Debug` submenu renders `Enable debug prompts` then `Log path for prompts` between `Debug` and `Enable debug commands for tools`.
 - **TST-144**: MUST verify prompt debug logging writes one `<timestamp>-req-<prompt>` file containing the exact rendered prompt under `DEBUG_PROMPTS_LOG_PATH` only when `DEBUG_ENABLED=enable` plus `DEBUG_PROMPTS_ENABLED=enable`, and writes no prompt debug files when `DEBUG_ENABLED=disable`.
 - **TST-145**: MUST verify `Debug` submenu edits plus the approved `Debug` subtree reset persist `DEBUG_PROMPTS_ENABLED` and `DEBUG_PROMPTS_LOG_PATH` immediately with documented defaults.
+- **TST-146**: MUST verify enabled prompt debug capture writes the exact provider payload into one `error-<status>` file beside the initial prompt file for a 400 response.
+- **TST-147**: MUST verify provider error payload capture writes nothing when prompt debug logging is disabled or the response status is below 400.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.
 - **TST-125**: MUST verify `session_start` emits one warning notification for missing enabled checkers without aborting or transitioning workflow state.

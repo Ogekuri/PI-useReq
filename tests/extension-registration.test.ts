@@ -28,6 +28,7 @@ import {
   DEFAULT_DEBUG_PROMPTS_LOG_PATH,
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
+  formatPromptDebugErrorFileName,
   formatPromptDebugFileName,
   logDebugPromptContent,
   normalizeDebugPromptsLogPath,
@@ -2375,6 +2376,114 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
   assert.ok(disabledCommand);
   await disabledCommand!.handler("debug prompts", disabledCtx);
   assert.equal(fs.existsSync(path.join(disabledFixture.projectBase, "logs", "saved-prompts")), false);
+});
+
+/**
+ * @brief Verifies provider error payload debug capture for failing prompt runs.
+ * @details Covers the end-to-end capture of the exact `before_provider_request` provider payload during an active `req-implement` run, the dump of that exact payload into one `<timestamp>-req-implement-error-400` file beside the initial dispatched prompt file when `after_provider_response` reports status 400, and the deterministic `-error-<status>` filename shape.
+ * @satisfies TST-146
+ */
+test("provider error payload debug logging saves failing request payload beside initial prompt", async () => {
+  const fixture = initFixtureRepo();
+  writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_ENABLED: "enable",
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(fixture.projectBase);
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+  const command = pi.commands.get("req-implement");
+  assert.ok(command);
+  await command.handler("error payload", ctx);
+  await pi.emit("before_agent_start", {}, ctx);
+  await pi.emit("agent_start", {}, ctx);
+  const providerPayload = {
+    messages: [{ role: "user", content: "error payload request" }],
+    system: [{ type: "text", text: "system prompt" }],
+    tools: [{ name: "read" }],
+    maxTokens: 4096,
+  };
+  await pi.emit("before_provider_request", { payload: providerPayload }, ctx);
+  await pi.emit("after_provider_response", { status: 400, headers: {} }, ctx);
+  await pi.emit("agent_end", {
+    messages: [{ role: "assistant", stopReason: "error" }],
+  }, ctx);
+  const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
+  const savedFiles = fs.readdirSync(promptLogDir).sort();
+  assert.equal(savedFiles.length, 2);
+  const initialPromptFile = savedFiles.find((fileName) => !fileName.includes("-error-"));
+  const errorPayloadFile = savedFiles.find((fileName) => fileName.endsWith("-error-400"));
+  assert.ok(initialPromptFile);
+  assert.ok(errorPayloadFile);
+  assert.match(initialPromptFile, /^\d{17}-req-implement$/u);
+  assert.match(errorPayloadFile, /^\d{17}-req-implement-error-400$/u);
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(promptLogDir, errorPayloadFile), "utf8")) as unknown,
+    providerPayload,
+  );
+  assert.equal(
+    formatPromptDebugErrorFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
+    "20260102030405006-req-implement-error-400",
+  );
+});
+
+/**
+ * @brief Verifies silence guarantees of provider error payload debug capture.
+ * @details Covers the absence of any prompt log directory when global debug is disabled even though `after_provider_response` reports status 400, and the absence of any `-error-<status>` file when prompt debug logging is enabled but the reported response status stays below 400 while the initial dispatched prompt file remains.
+ * @satisfies TST-147
+ */
+test("provider error payload debug logging stays silent when disabled or status below 400", async () => {
+  const disabledFixture = initFixtureRepo();
+  writeProjectConfigOverrides(disabledFixture.projectBase, {
+    DEBUG_ENABLED: "disable",
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  const disabledPi = createFakePi();
+  piUsereqExtension(disabledPi);
+  const disabledCtx = createFakeCtx(disabledFixture.projectBase);
+  await disabledPi.emit("session_start", { reason: "startup" }, disabledCtx);
+  const disabledCommand = disabledPi.commands.get("req-implement");
+  assert.ok(disabledCommand);
+  await disabledCommand.handler("error payload", disabledCtx);
+  await disabledPi.emit("before_agent_start", {}, disabledCtx);
+  await disabledPi.emit("agent_start", {}, disabledCtx);
+  await disabledPi.emit("before_provider_request", { payload: { messages: [] } }, disabledCtx);
+  await disabledPi.emit("after_provider_response", { status: 400, headers: {} }, disabledCtx);
+  await disabledPi.emit("agent_end", {
+    messages: [{ role: "assistant", stopReason: "error" }],
+  }, disabledCtx);
+  assert.equal(fs.existsSync(path.join(disabledFixture.projectBase, "logs", "saved-prompts")), false);
+
+  const belowFixture = initFixtureRepo();
+  writeProjectConfigOverrides(belowFixture.projectBase, {
+    DEBUG_ENABLED: "enable",
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  const belowPi = createFakePi();
+  piUsereqExtension(belowPi);
+  const belowCtx = createFakeCtx(belowFixture.projectBase);
+  await belowPi.emit("session_start", { reason: "startup" }, belowCtx);
+  const belowCommand = belowPi.commands.get("req-implement");
+  assert.ok(belowCommand);
+  await belowCommand.handler("error payload", belowCtx);
+  await belowPi.emit("before_agent_start", {}, belowCtx);
+  await belowPi.emit("agent_start", {}, belowCtx);
+  await belowPi.emit("before_provider_request", { payload: { messages: [] } }, belowCtx);
+  await belowPi.emit("after_provider_response", { status: 200, headers: {} }, belowCtx);
+  await belowPi.emit("agent_end", {
+    messages: [{ role: "assistant", stopReason: "end_turn" }],
+  }, belowCtx);
+  const belowLogDir = path.join(belowFixture.projectBase, "logs", "saved-prompts");
+  const belowFiles = fs.readdirSync(belowLogDir);
+  assert.equal(belowFiles.length, 1);
+  assert.match(belowFiles[0], /^\d{17}-req-implement$/u);
 });
 
 test("notifications menu preserves focus on toggled and edited rows", async () => {
@@ -6127,6 +6236,7 @@ test("extension registers wrappers for all pi-usereq status hooks", () => {
   assert.deepEqual(
     [...pi.eventHandlers.keys()].sort(),
     [
+      "after_provider_response",
       "agent_end",
       "agent_settled",
       "agent_start",

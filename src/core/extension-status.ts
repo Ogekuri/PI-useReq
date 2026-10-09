@@ -74,6 +74,7 @@ export const PI_USEREQ_STATUS_HOOK_NAMES = [
   "session_tree",
   "context",
   "before_provider_request",
+  "after_provider_response",
   "before_agent_start",
   "agent_start",
   "agent_end",

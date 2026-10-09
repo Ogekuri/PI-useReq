@@ -133,6 +133,8 @@ import {
   DEFAULT_DEBUG_STATUS_CHANGES,
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
+  capturePromptProviderRequestForDebug,
+  flushCapturedPromptErrorPayload,
   logDebugPromptContent,
   logDebugPromptEvent,
   logDebugPromptWorkflowEvent,
@@ -1509,6 +1511,27 @@ async function handleExtensionStatusEvent(
       }
     : undefined;
   updateExtensionStatus(statusController, hookName, event, ctx);
+  if (hookName === "before_provider_request" && activePromptRequest !== undefined && statusController.config) {
+    const providerRequestEvent = event as { payload?: unknown };
+    capturePromptProviderRequestForDebug(
+      statusController.config,
+      statusController.state.workflowState,
+      activePromptRequest.promptName,
+      providerRequestEvent.payload,
+    );
+  }
+  if (hookName === "after_provider_response" && activePromptRequest !== undefined && statusController.config) {
+    const providerResponseEvent = event as { status?: unknown };
+    if (typeof providerResponseEvent.status === "number" && providerResponseEvent.status >= 400) {
+      flushCapturedPromptErrorPayload(
+        activePromptRequest.basePath,
+        statusController.config,
+        statusController.state.workflowState,
+        activePromptRequest.promptName,
+        providerResponseEvent.status,
+      );
+    }
+  }
   if (hookName === "tool_result" && statusController.config) {
     const toolEvent = event as {
       toolName?: string;
