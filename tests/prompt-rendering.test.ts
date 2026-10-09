@@ -108,36 +108,3 @@ test("pi.dev-aware prompts stay unchanged when the coding-agent-docs tree is abs
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
-
-/**
- * @brief Verifies the context-files block replaces only the dedicated trailing `%%CONTEXT_FILES%%` placeholder.
- * @details Renders `req-analyze`, whose bundled template contains one inline backticked reference to the token inside the Iteration and Context Economy rules plus the dedicated placeholder terminating the `## Context Files` section, and asserts that the inline prose reference stays verbatim while each context-file section appears exactly once in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order after the Context Files preamble. Runtime is dominated by bundled prompt and context-file reads. No external state is mutated.
- * @pre The installation-owned bundled resources are accessible and the canonical context files exist under the configured docs directory.
- * @param[in] none {void} No parameters; the test arranges default configuration with all three context-file flags enabled.
- * @return {void} Passes when the inline token reference survives and the injected sections are unique, ordered, and positioned after `## Context Files`; fails otherwise.
- * @satisfies REQ-329, REQ-332
- */
-test("context files injection replaces only the dedicated trailing placeholder and preserves inline prose references", () => {
-  ensureBundledResourcesAccessible();
-  const projectBase = process.cwd();
-  const config = getDefaultConfig(projectBase);
-  const rendered = renderPrompt("analyze", "Inspect context-file injection", projectBase, config);
-  assert.match(
-    rendered,
-    /provided as injected `%%CONTEXT_FILES%%` context or already read in the current session; reuse prior tool-output evidence instead\./,
-  );
-  const contextFilesHeadingIndex = rendered.indexOf("## Context Files");
-  const requirementsIndex = rendered.indexOf("### REQUIREMENTS.md");
-  const referencesIndex = rendered.indexOf("### REFERENCES.md");
-  const workflowIndex = rendered.indexOf("### WORKFLOW.md");
-  assert.ok(contextFilesHeadingIndex !== -1);
-  assert.ok(requirementsIndex !== -1);
-  assert.ok(referencesIndex !== -1);
-  assert.ok(workflowIndex !== -1);
-  assert.ok(contextFilesHeadingIndex < requirementsIndex);
-  assert.ok(requirementsIndex < referencesIndex);
-  assert.ok(referencesIndex < workflowIndex);
-  assert.equal(rendered.indexOf("### REQUIREMENTS.md", requirementsIndex + 1), -1);
-  assert.equal(rendered.indexOf("### REFERENCES.md", referencesIndex + 1), -1);
-  assert.equal(rendered.indexOf("### WORKFLOW.md", workflowIndex + 1), -1);
-});

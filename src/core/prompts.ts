@@ -196,23 +196,6 @@ function buildContextFilesBlock(projectBase: string, config: UseReqConfig): stri
 }
 
 /**
- * @brief Injects the context-files block in place of the dedicated trailing `%%CONTEXT_FILES%%` placeholder.
- * @details Replaces only the last occurrence of the `%%CONTEXT_FILES%%` token, which every bundled prompt places as the dedicated injection point at the end of its `## Context Files` section, so inline backticked references to the token inside prompt prose stay verbatim and no prompt content is overwritten by the injected block. Returns the input unchanged when the token is absent. Runs after every other prompt replacement so literal `%%...%%` tokens inside context-file content are never substituted. Time complexity O(n) in prompt length. No external state is mutated.
- * @param[in] text {string} Prompt markdown after every other replacement, block injection, and tool-reference rewrite.
- * @param[in] block {string} Rendered context-files markdown block, or the empty string when no enabled context file exists.
- * @return {string} Prompt markdown whose dedicated trailing placeholder is replaced by the supplied block while all earlier occurrences of the token remain untouched.
- * @satisfies REQ-329, REQ-331, REQ-332
- */
-function injectContextFilesBlock(text: string, block: string): string {
-  const token = "%%CONTEXT_FILES%%";
-  const lastIndex = text.lastIndexOf(token);
-  if (lastIndex === -1) {
-    return text;
-  }
-  return text.slice(0, lastIndex) + block + text.slice(lastIndex + token.length);
-}
-
-/**
  * @brief Rewrites bundled prompt tool references from legacy `req --...` syntax to internal tool names.
  * @details Applies deterministic global regex replacements so prompt text matches the extension-registered tool surface instead of the standalone CLI spelling. Time complexity O(p*r) where p is pattern count and r is prompt length.
  * @param[in] text {string} Prompt markdown before tool-reference normalization.
@@ -388,7 +371,11 @@ export function renderPrompt(
     projectBase,
   );
   const adapted = adaptPromptForInternalTools(withPiDevConformance);
-  return injectContextFilesBlock(adapted, buildContextFilesBlock(projectBase, config));
+  const contextFilesBlock = buildContextFilesBlock(projectBase, config);
+  if (contextFilesBlock) {
+    return adapted.split("%%CONTEXT_FILES%%").join(contextFilesBlock);
+  }
+  return adapted.split("%%CONTEXT_FILES%%").join("");
 }
 
 /**

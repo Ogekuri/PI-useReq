@@ -1,19 +1,5 @@
 # Changelog
 
-## [0.74.0](https://github.com/Ogekuri/PI-useReq/compare/v0.73.0..v0.74.0) - 2026-10-09
-### ⛰️  Features
-- Bundled prompt resources updated to v0.9.0.
-
-## [0.73.0](https://github.com/Ogekuri/PI-useReq/compare/v0.72.0..v0.73.0) - 2026-10-09
-### 🐛  Bug Fixes
-- inject context files only at the trailing placeholder [useReq] *(prompts)*
-  - renderPrompt replaced every %%CONTEXT_FILES%% occurrence, so bundled
-  - prompts carrying an inline backticked token reference were corrupted
-  - mid-sentence and the context-file block was duplicated. Inject the
-  - block in place of only the last (dedicated) placeholder so inline
-  - prompt prose stays verbatim. Adds a failing-first reproducer test and
-  - updates WORKFLOW/REFERENCES documents.
-
 ## [0.71.0](https://github.com/Ogekuri/PI-useReq/compare/v0.70.0..v0.71.0) - 2026-10-09
 ### ⛰️  Features
 - save dispatched prompt content for pi CLI replay [useReq] *(debug)*
@@ -973,8 +959,6 @@
 - \[0.70.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.70.0
 - \[0.71.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.71.0
 - \[0.72.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.72.0
-- \[0.73.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.73.0
-- \[0.74.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.74.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1046,5 +1030,3 @@
 [0.70.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.69.0..v0.70.0
 [0.71.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.70.0..v0.71.0
 [0.72.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.71.0..v0.72.0
-[0.73.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.72.0..v0.73.0
-[0.74.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.73.0..v0.74.0
