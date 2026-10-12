@@ -1113,7 +1113,7 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# debug-runtime.ts | TypeScript | 1315L | 66 symbols | 5 imports | 78 comments
+# debug-runtime.ts | TypeScript | 1332L | 67 symbols | 5 imports | 79 comments
 > Path: `src/core/debug-runtime.ts`
 - @brief Declares debug inventories, normalizers, and JSON log persistence helpers.
 - @details Centralizes debug-menu selector inventories, config-field normalization, the process-scoped runtime debug-enable state, workflow-status gating, append-only JSON log writing for tool, prompt, and dedicated workflow debug events, process-scoped capture of the exact `before_provider_request` provider payload for active prompt runs, and error-stage provider payload dumps gated by `after_provider_response` error statuses. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
@@ -1399,19 +1399,19 @@ import {
 
 ### fn `export function formatPromptDebugRequestFileName(` (L733-738)
 - @brief Builds one command-invocation summary debug filename for one bundled prompt.
-- @details Appends the `-request` suffix to the shared `<timestamp>-<req-command>` base so every saved command invocation summary stays attributable to the originating `/req-*` prompt. Runtime is O(1). No external state is mutated.
+- @details Appends the `-request.md` suffix to the shared `<timestamp>-<req-command>` base so every saved command invocation summary stays attributable to the originating `/req-*` prompt, with the `.md` extension coherent with the persisted markdown summary content per REQ-435. Runtime is O(1). No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
 - @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
-- @return {string} Prompt debug filename in the `<timestamp>-<req-command>-request` shape.
-- @satisfies REQ-417, REQ-427
+- @return {string} Prompt debug filename in the `<timestamp>-<req-command>-request.md` shape.
+- @satisfies REQ-417, REQ-427, REQ-435
 
 ### fn `export function formatPromptDebugPromptFileName(` (L748-753)
 - @brief Builds one dispatched-prompt content debug filename for one bundled prompt.
-- @details Appends the `-prompt` suffix to the shared `<timestamp>-<req-command>` base so every saved initial LLM prompt stays attributable to the originating `/req-*` prompt. Runtime is O(1). No external state is mutated.
+- @details Appends the `-prompt.md` suffix to the shared `<timestamp>-<req-command>` base so every saved initial LLM prompt stays attributable to the originating `/req-*` prompt, with the `.md` extension coherent with the persisted markdown prompt content per REQ-435. Runtime is O(1). No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
 - @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
-- @return {string} Prompt debug filename in the `<timestamp>-<req-command>-prompt` shape.
-- @satisfies REQ-417, REQ-418
+- @return {string} Prompt debug filename in the `<timestamp>-<req-command>-prompt.md` shape.
+- @satisfies REQ-417, REQ-418, REQ-435
 
 ### fn `function writePromptDebugFile(` (L767-786)
 - @brief Writes one gated prompt debug file under the configured prompt log directory.
@@ -1427,25 +1427,25 @@ import {
 
 ### fn `export function logDebugPromptRequest(` (L799-814)
 - @brief Writes one command invocation summary debug file when prompt debug logging is enabled.
-- @details Persists the exact summary text displayed on screen into one `<timestamp>-<req-command>-request` file so the `/req-*` invocation headers survive beside the dispatched prompt. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+- @details Persists the exact summary text displayed on screen into one `<timestamp>-<req-command>-request.md` file so the `/req-*` invocation headers survive beside the dispatched prompt. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
 - @param[in] projectBase {string} Absolute original project base path.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] workflowState {DebugWorkflowState} Current workflow state; excluded from gating per REQ-416.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
 - @param[in] requestText {string} Exact command invocation summary text displayed on screen.
 - @return {boolean} `true` when the request file is written; otherwise `false`.
-- @satisfies REQ-416, REQ-417, REQ-427, REQ-428
+- @satisfies REQ-416, REQ-417, REQ-427, REQ-428, REQ-435
 
 ### fn `export function logDebugPromptContent(` (L827-847)
 - @brief Writes one dispatched prompt content file when prompt debug logging is enabled.
-- @details Persists the exact rendered prompt content delivered through `sendMessage` or `sendUserMessage` into one `<timestamp>-<req-command>-prompt` file so the send can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+- @details Persists the exact rendered prompt content delivered through `sendMessage` or `sendUserMessage` into one `<timestamp>-<req-command>-prompt.md` file so the send can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
 - @param[in] projectBase {string} Absolute original project base path.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] workflowState {DebugWorkflowState} Current workflow state; excluded from gating per REQ-416.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
 - @param[in] content {string} Exact rendered prompt content delivered through `sendMessage` or `sendUserMessage`.
 - @return {boolean} `true` when the prompt content file is written; otherwise `false`.
-- @satisfies REQ-416, REQ-417, REQ-418, REQ-428
+- @satisfies REQ-416, REQ-417, REQ-418, REQ-428, REQ-435
 
 ### iface `export interface PromptErrorReplayFacts` (L854-863)
 - @brief Describes replay facts captured beside one provider request payload for reproduction.
@@ -1459,7 +1459,7 @@ import {
 
 ### iface `interface FlushedPromptErrorRecord` (L884-889)
 - @brief Describes the location of one already flushed provider error payload file set.
-- @details Stores the prompt name, failing status, resolved log directory, and payload base filename of the most recent error-stage flush so a later finalized `message_end` error message can still append the `-response` file beside the already written payload when the provider fired `after_provider_response` before surfacing its error text. The interface is compile-time only and introduces no runtime cost.
+- @details Stores the prompt name, failing status, resolved log directory, and shared extensionless error base filename of the most recent error-stage flush so a later finalized `message_end` error message can still append the `-response.txt` file beside the already written payload when the provider fired `after_provider_response` before surfacing its error text. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-429
 
 ### iface `interface ProcessScopedPromptErrorCaptureStore` (L895-899)
@@ -1472,24 +1472,33 @@ import {
 - @return {ProcessScopedPromptErrorCaptureStore} Mutable process-scoped capture store.
 
 ### fn `export function formatPromptDebugErrorFileName(` (L927-933)
-- @brief Builds one provider error payload debug filename for one bundled prompt.
-- @details Combines the write-time `YYYYMMDDHHMMSSmmm` timestamp, the invokable `req-*` command name, and the failing provider response status into the `<timestamp>-<req-command>-error-<status>` shape so every saved error-stage prompt payload stays attributable to the originating `/req-*` prompt and its session error code. Runtime is O(1). No external state is mutated.
+- @brief Builds the shared extensionless provider error base filename for one bundled prompt.
+- @details Combines the write-time `YYYYMMDDHHMMSSmmm` timestamp, the invokable `req-*` command name, and the failing provider response status into the `<timestamp>-<req-command>-error-<status>` base shape so every saved error-stage prompt artifact stays attributable to the originating `/req-*` prompt and its session error code. This extensionless base is the suffix-attachment anchor for the `-response.txt`, `-replay.json`, and `-session.jsonl` variants; the flushed raw provider-request JSON payload appends its content-coherent `.json` extension through `formatPromptDebugErrorPayloadFileName(...)`. Runtime is O(1). No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
 - @param[in] errorCode {number} Failing provider response status, such as `400`.
 - @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
-- @return {string} Provider error payload filename in the `<timestamp>-<req-command>-error-<status>` shape.
+- @return {string} Extensionless provider error base filename in the `<timestamp>-<req-command>-error-<status>` shape.
 - @satisfies REQ-423
 
-### fn `export function formatPromptDebugErrorResponseFileName(` (L944-950)
+### fn `export function formatPromptDebugErrorPayloadFileName(` (L944-950)
+- @brief Builds one provider error payload debug filename for one bundled prompt.
+- @details Appends the `.json` extension to the shared extensionless `<timestamp>-<req-command>-error-<status>` base so the flushed raw provider-request JSON payload keeps a filename extension coherent with its JSON content per REQ-435 while staying attributable to the exact failing request. Runtime is O(1). No external state is mutated.
+- @param[in] promptName {PromptCommandName} Bundled prompt name.
+- @param[in] errorCode {number} Failing provider response status, such as `400`.
+- @param[in] date {Date} Write-time timestamp shared with the sibling error artifacts. Defaults to the current wall-clock time.
+- @return {string} Provider error payload filename in the `<timestamp>-<req-command>-error-<status>.json` shape.
+- @satisfies REQ-423, REQ-431, REQ-435
+
+### fn `export function formatPromptDebugErrorResponseFileName(` (L961-967)
 - @brief Builds one provider error response debug filename for one bundled prompt.
-- @details Appends the `-response` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the persisted provider error text stays attributable to the exact failing request payload file written with the identical write-time timestamp. Runtime is O(1). No external state is mutated.
+- @details Appends the `-response.txt` suffix to the shared extensionless `<timestamp>-<req-command>-error-<status>` shape so the persisted plain-text provider error message keeps a filename extension coherent with its text content per REQ-435 and stays attributable to the exact failing request payload file written with the identical write-time timestamp. Runtime is O(1). No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
 - @param[in] errorCode {number} Failing provider response status, such as `400`.
 - @param[in] date {Date} Write-time timestamp shared with the payload file. Defaults to the current wall-clock time.
-- @return {string} Provider error response filename in the `<timestamp>-<req-command>-error-<status>-response` shape.
-- @satisfies REQ-423, REQ-429
+- @return {string} Provider error response filename in the `<timestamp>-<req-command>-error-<status>-response.txt` shape.
+- @satisfies REQ-423, REQ-429, REQ-435
 
-### fn `export function formatPromptDebugErrorReplayFileName(` (L961-967)
+### fn `export function formatPromptDebugErrorReplayFileName(` (L978-984)
 - @brief Builds one provider error replay sidecar debug filename for one bundled prompt.
 - @details Appends the `-replay.json` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the persisted replay metadata sidecar stays attributable to the exact failing request payload file written with the identical write-time timestamp. Runtime is O(1). No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
@@ -1498,7 +1507,7 @@ import {
 - @return {string} Provider error replay sidecar filename in the `<timestamp>-<req-command>-error-<status>-replay.json` shape.
 - @satisfies REQ-423, REQ-430
 
-### fn `export function formatPromptDebugErrorSessionFileName(` (L978-984)
+### fn `export function formatPromptDebugErrorSessionFileName(` (L995-1001)
 - @brief Builds one provider error session-snapshot debug filename for one bundled prompt.
 - @details Appends the `-session.jsonl` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the byte-for-byte execution-session copy stays attributable to the exact failing request payload file written with the identical write-time timestamp and remains directly consumable by `pi --fork` without files outside the prompt log directory. Runtime is O(1). No external state is mutated.
 - @param[in] promptName {PromptCommandName} Bundled prompt name.
@@ -1507,26 +1516,26 @@ import {
 - @return {string} Provider error session-snapshot filename in the `<timestamp>-<req-command>-error-<status>-session.jsonl` shape.
 - @satisfies REQ-423, REQ-432
 
-### fn `export function resolveProviderErrorFlushStatusFromMessage(message: unknown): number | undefined` (L993-1013)
+### fn `export function resolveProviderErrorFlushStatusFromMessage(message: unknown): number | undefined` (L1010-1030)
 - @brief Resolves the failing HTTP status carried by one finalized agent message.
 - @details Extracts the leading provider error status from one `message_end` assistant message whose `stopReason` equals `error`, accepting the pi `formatProviderError` display shapes (`"<status>: <body>"` and `"<prefix> (<status>): <body>"`) plus the raw SDK `error.message` shape (`"<status> <body>"`) surfaced unchanged by the agent run-failure path, so provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses (the OpenAI-compatible family, including `zai`) still flush the captured provider request payload through the message lifecycle channel. Runtime is O(n) in the inspected error-message prefix length. No external state is mutated.
 - @param[in] message {unknown} Finalized agent message forwarded by one `message_end` lifecycle event.
 - @return {number | undefined} Failing HTTP status greater than or equal to `400`, or `undefined` when the message carries no provider error status.
 - @satisfies REQ-422, REQ-423, REQ-425
 
-### fn `function serializePromptProviderPayload(payload: unknown): string` (L1021-1039)
+### fn `function serializePromptProviderPayload(payload: unknown): string` (L1038-1056)
 - @brief Serializes one provider request payload into deterministic text.
 - @details Pretty-prints the payload as JSON while degrading circular references into one `[Circular]` token and bigint values into decimal strings so serialization failures never discard the capture. Runtime is O(n) in serialized payload size. No external state is mutated.
 - @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
 - @return {string} Serialized payload text; the empty string when the payload serializes to nothing.
 
-### fn `function resolveProviderPayloadModelId(payload: unknown): string | undefined` (L1047-1053)
+### fn `function resolveProviderPayloadModelId(payload: unknown): string | undefined` (L1064-1070)
 - @brief Resolves the model identifier embedded in one provider request payload.
 - @details Reads the string `model` field of the serialized request payload so the replay sidecar can still name the failing model when the live runtime model object was unavailable at capture time. Runtime is O(1). No external state is mutated.
 - @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
 - @return {string | undefined} Payload model identifier when present as a string; otherwise `undefined`.
 
-### fn `export function capturePromptProviderRequestForDebug(` (L1066-1080)
+### fn `export function capturePromptProviderRequestForDebug(` (L1083-1097)
 - @brief Captures one exact provider request payload for the active prompt run when prompt debug logging is enabled.
 - @details Applies the global-debug plus prompt-debug gating, serializes the exact `before_provider_request` payload through the cycle-safe serializer, resolves the dispatched prompt debug filename of the same run from the process-scoped correlation map, and stores the prompt name, payload text, original project base, resolved prompt log directory, replay facts, and prompt debug filename in the process-scoped capture store so the payload, its error text, and its replay sidecar survive session replacement and later error-stage writes require no live workflow state or cached configuration. Falls back to the payload `model` field when the supplied replay facts omit the model identifier. Runtime is O(n) in serialized payload size when enabled and O(1) otherwise. Side effect: mutates the process-scoped capture store for enabled matching requests.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -1537,19 +1546,19 @@ import {
 - @return {void} No return value.
 - @satisfies REQ-416, REQ-421, REQ-430
 
-### fn `function normalizeProviderEnvToken(provider: string): string` (L1106-1109)
+### fn `function normalizeProviderEnvToken(provider: string): string` (L1123-1126)
 - @brief Normalizes one provider name into an uppercase environment-variable token.
 - @details Uppercases the provider name and replaces every non-alphanumeric character with `_` so the generated replay command can reference a deterministic `<PROVIDER>_API_KEY` environment variable. Runtime is O(n) in provider-name length. No external state is mutated.
 - @param[in] provider {string} Provider identifier, such as `openrouter`.
 - @return {string} Uppercase alphanumeric environment-variable token.
 
-### fn `function resolveProviderReplayEndpoint(facts: PromptErrorReplayFacts): string | undefined` (L1117-1128)
+### fn `function resolveProviderReplayEndpoint(facts: PromptErrorReplayFacts): string | undefined` (L1134-1145)
 - @brief Resolves the provider HTTP endpoint targeted by one captured provider request payload.
 - @details Appends the canonical chat-completions path for `openai-completions` APIs and the canonical messages path for `anthropic-messages` APIs, and preserves the raw base URL for every other API so the generated provider replay command never fabricates an endpoint it cannot derive. Runtime is O(p) in URL length. No external state is mutated.
 - @param[in] facts {PromptErrorReplayFacts} Captured replay facts supplying the API and base URL.
 - @return {string | undefined} Replay endpoint URL when a base URL exists; otherwise `undefined`.
 
-### fn `function buildPromptErrorReplaySidecarText(` (L1139-1177)
+### fn `function buildPromptErrorReplaySidecarText(` (L1156-1194)
 - @brief Builds the replay sidecar JSON text for one flushed provider error payload.
 - @details Serializes the captured provider, base URL, API, model identifier, thinking level, context-window and max-output-token facts, the execution-session file, the dispatched prompt debug file, the flushed request payload file, and ready-to-use replay command lines: one `curl --data @` provider replay of the exact failing request, one pi one-shot replay of the dispatched prompt file, and one `pi --fork` replay that targets the log-local `-session.jsonl` snapshot when supplied and falls back to the retained execution session otherwise. Command lines are emitted only when their supporting facts exist so every emitted command is directly executable. Runtime is O(n) in serialized sidecar size. No external state is mutated.
 - @param[in] captured {CapturedPromptErrorPayload} Consumed capture supplying replay facts and artifact paths.
@@ -1558,15 +1567,15 @@ import {
 - @return {string} Newline-terminated replay sidecar JSON text.
 - @satisfies REQ-430, REQ-433
 
-### fn `export function flushCapturedPromptErrorPayload(errorCode: number, errorResponseText?: string): boolean` (L1187-1229)
+### fn `export function flushCapturedPromptErrorPayload(errorCode: number, errorResponseText?: string): boolean` (L1204-1246)
 - @brief Writes the captured provider request payload plus its response text and replay sidecar as error-stage prompt debug files.
-- @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file that stays raw provider-request JSON usable with `curl --data @`, the provider error text into one identically timestamped `-response` file when supplied, one identically timestamped byte-for-byte `-session.jsonl` copy of the retained execution session so `pi --fork` can resume the exact failing state from the prompt log directory alone, and the replay sidecar into one identically timestamped `-replay.json` file inside the captured log directory beside the initial dispatched prompt artifacts. Records the flushed location so a later finalized `message_end` error message can still append the `-response` file when `after_provider_response` fired first without error text. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus at most four file writes when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
+- @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>.json` file that stays raw provider-request JSON usable with `curl --data @`, the provider error text into one identically timestamped `-response.txt` file when supplied, one identically timestamped byte-for-byte `-session.jsonl` copy of the retained execution session so `pi --fork` can resume the exact failing state from the prompt log directory alone, and the replay sidecar into one identically timestamped `-replay.json` file inside the captured log directory beside the initial dispatched prompt artifacts. Records the flushed location so a later finalized `message_end` error message can still append the `-response.txt` file when `after_provider_response` fired first without error text. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus at most four file writes when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
 - @param[in] errorCode {number} Failing provider response status, such as `400`.
 - @param[in] errorResponseText {string | undefined} Finalized provider error message text when already available; the `-response` file is written later when omitted.
 - @return {boolean} `true` when the provider error payload file set is written; otherwise `false`.
-- @satisfies REQ-422, REQ-423, REQ-424, REQ-425, REQ-429, REQ-430, REQ-431, REQ-432, REQ-433
+- @satisfies REQ-422, REQ-423, REQ-424, REQ-425, REQ-429, REQ-430, REQ-431, REQ-432, REQ-433, REQ-435
 
-### fn `function writePromptProviderErrorResponseFile(` (L1240-1247)
+### fn `function writePromptProviderErrorResponseFile(` (L1257-1264)
 - @brief Writes one provider error response text file under a resolved log directory.
 - @details Creates the parent directory and writes the finalized provider error text with one trailing newline into the requested response filename so both the flush-time and the late `message_end` response writes share one deterministic serialization. Runtime is dominated by one directory creation plus one file write. Side effects include directory creation and file creation.
 - @param[in] logDirectory {string} Absolute prompt log directory owning the response file.
@@ -1575,7 +1584,7 @@ import {
 - @return {void} No return value.
 - @satisfies REQ-429
 
-### fn `function copyPromptErrorSessionSnapshotFile(` (L1257-1272)
+### fn `function copyPromptErrorSessionSnapshotFile(` (L1274-1289)
 - @brief Copies the retained execution-session file beside one flushed provider error payload.
 - @details Duplicates the captured execution-session file byte-for-byte into the captured log directory under the requested `-session.jsonl` filename synchronously during the error-stage flush, so the snapshot freezes the transcript exactly at the state that produced the failing provider request before pi's `context_edit` or compaction appends further entries and stays directly consumable by `pi --fork` without any file outside the prompt log directory. Degrades to `undefined` on any copy failure so the replay sidecar falls back to the retained execution-session path. Runtime is dominated by one directory creation plus one file copy. Side effects include directory creation and file creation.
 - @param[in] captured {CapturedPromptErrorPayload} Consumed capture supplying the log directory and execution-session replay facts.
@@ -1583,15 +1592,15 @@ import {
 - @return {string | undefined} Written snapshot filename when the copy succeeds; otherwise `undefined`.
 - @satisfies REQ-432
 
-### fn `export function writeFlushedPromptProviderErrorResponse(` (L1282-1303)
+### fn `export function writeFlushedPromptProviderErrorResponse(` (L1299-1320)
 - @brief Appends the provider error response text beside one already flushed error payload file.
-- @details Providers that fire `after_provider_response` before surfacing their error text flush the payload without a `-response` file, so this helper writes the finalized `message_end` error message beside the recorded flush location when the failing status matches. Runtime is dominated by one directory creation plus one file write when a matching record exists and O(1) otherwise. Side effects include directory creation and file creation only for a matching record.
+- @details Providers that fire `after_provider_response` before surfacing their error text flush the payload without a `-response.txt` file, so this helper writes the finalized `message_end` error message beside the recorded flush location when the failing status matches. Runtime is dominated by one directory creation plus one file write when a matching record exists and O(1) otherwise. Side effects include directory creation and file creation only for a matching record.
 - @param[in] errorCode {number} Failing provider response status carried by the finalized error message.
 - @param[in] errorResponseText {string} Finalized provider error message text.
 - @return {boolean} `true` when the response file is written; otherwise `false`.
 - @satisfies REQ-429
 
-### fn `export function discardCapturedPromptErrorPayload(): void` (L1311-1315)
+### fn `export function discardCapturedPromptErrorPayload(): void` (L1328-1332)
 - @brief Discards any captured provider request payload and flushed error record for the ended prompt run.
 - @details Clears the process-scoped capture and the latest flushed error record unconditionally so leftover payloads and flush locations from a finished `req-*` prompt run never flush into later provider errors raised outside extension-owned prompt orchestration. Runtime is O(1). Side effect: mutates the process-scoped capture store.
 - @return {void} No return value.
@@ -1651,21 +1660,22 @@ import {
 |`ProcessScopedPromptErrorCaptureStore`|iface||895-899|interface ProcessScopedPromptErrorCaptureStore|
 |`getProcessScopedPromptErrorCaptureStore`|fn||906-916|function getProcessScopedPromptErrorCaptureStore(): Proce...|
 |`formatPromptDebugErrorFileName`|fn||927-933|export function formatPromptDebugErrorFileName(|
-|`formatPromptDebugErrorResponseFileName`|fn||944-950|export function formatPromptDebugErrorResponseFileName(|
-|`formatPromptDebugErrorReplayFileName`|fn||961-967|export function formatPromptDebugErrorReplayFileName(|
-|`formatPromptDebugErrorSessionFileName`|fn||978-984|export function formatPromptDebugErrorSessionFileName(|
-|`resolveProviderErrorFlushStatusFromMessage`|fn||993-1013|export function resolveProviderErrorFlushStatusFromMessag...|
-|`serializePromptProviderPayload`|fn||1021-1039|function serializePromptProviderPayload(payload: unknown)...|
-|`resolveProviderPayloadModelId`|fn||1047-1053|function resolveProviderPayloadModelId(payload: unknown):...|
-|`capturePromptProviderRequestForDebug`|fn||1066-1080|export function capturePromptProviderRequestForDebug(|
-|`normalizeProviderEnvToken`|fn||1106-1109|function normalizeProviderEnvToken(provider: string): string|
-|`resolveProviderReplayEndpoint`|fn||1117-1128|function resolveProviderReplayEndpoint(facts: PromptError...|
-|`buildPromptErrorReplaySidecarText`|fn||1139-1177|function buildPromptErrorReplaySidecarText(|
-|`flushCapturedPromptErrorPayload`|fn||1187-1229|export function flushCapturedPromptErrorPayload(errorCode...|
-|`writePromptProviderErrorResponseFile`|fn||1240-1247|function writePromptProviderErrorResponseFile(|
-|`copyPromptErrorSessionSnapshotFile`|fn||1257-1272|function copyPromptErrorSessionSnapshotFile(|
-|`writeFlushedPromptProviderErrorResponse`|fn||1282-1303|export function writeFlushedPromptProviderErrorResponse(|
-|`discardCapturedPromptErrorPayload`|fn||1311-1315|export function discardCapturedPromptErrorPayload(): void|
+|`formatPromptDebugErrorPayloadFileName`|fn||944-950|export function formatPromptDebugErrorPayloadFileName(|
+|`formatPromptDebugErrorResponseFileName`|fn||961-967|export function formatPromptDebugErrorResponseFileName(|
+|`formatPromptDebugErrorReplayFileName`|fn||978-984|export function formatPromptDebugErrorReplayFileName(|
+|`formatPromptDebugErrorSessionFileName`|fn||995-1001|export function formatPromptDebugErrorSessionFileName(|
+|`resolveProviderErrorFlushStatusFromMessage`|fn||1010-1030|export function resolveProviderErrorFlushStatusFromMessag...|
+|`serializePromptProviderPayload`|fn||1038-1056|function serializePromptProviderPayload(payload: unknown)...|
+|`resolveProviderPayloadModelId`|fn||1064-1070|function resolveProviderPayloadModelId(payload: unknown):...|
+|`capturePromptProviderRequestForDebug`|fn||1083-1097|export function capturePromptProviderRequestForDebug(|
+|`normalizeProviderEnvToken`|fn||1123-1126|function normalizeProviderEnvToken(provider: string): string|
+|`resolveProviderReplayEndpoint`|fn||1134-1145|function resolveProviderReplayEndpoint(facts: PromptError...|
+|`buildPromptErrorReplaySidecarText`|fn||1156-1194|function buildPromptErrorReplaySidecarText(|
+|`flushCapturedPromptErrorPayload`|fn||1204-1246|export function flushCapturedPromptErrorPayload(errorCode...|
+|`writePromptProviderErrorResponseFile`|fn||1257-1264|function writePromptProviderErrorResponseFile(|
+|`copyPromptErrorSessionSnapshotFile`|fn||1274-1289|function copyPromptErrorSessionSnapshotFile(|
+|`writeFlushedPromptProviderErrorResponse`|fn||1299-1320|export function writeFlushedPromptProviderErrorResponse(|
+|`discardCapturedPromptErrorPayload`|fn||1328-1332|export function discardCapturedPromptErrorPayload(): void|
 
 
 ---

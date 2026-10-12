@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.97"
+version: "0.0.98"
 date: "2026-10-12"
 author: "OpenAI Codex"
 scope:
@@ -493,7 +493,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-414**: MUST persist local `DEBUG_PROMPTS_LOG_PATH` as a non-empty trailing-slash-free path defaulting to `/tmp/PI-useReq`, and MUST resolve relative values against the original project base when writing prompt debug files.
 - **REQ-415**: MUST render `Enable debug prompts` and `Log path for prompts` in `Debug` immediately after `Debug` and before `Enable debug commands for tools`.
 - **REQ-416**: MUST gate prompt-content debug logging on `DEBUG_ENABLED=enable` plus `DEBUG_PROMPTS_ENABLED=enable` only, exempt from the `DEBUG_LOG_ON_STATUS` workflow-state filter.
-- **REQ-417**: MUST name dispatched-prompt debug files `<YYYYMMDDHHMMSSmmm>-<req-command>-request` and `<YYYYMMDDHHMMSSmmm>-<req-command>-prompt` using write-time timestamps and the invokable `req-*` command name.
+- **REQ-417**: MUST name dispatched-prompt debug files `<YYYYMMDDHHMMSSmmm>-<req-command>-request.md` and `<YYYYMMDDHHMMSSmmm>-<req-command>-prompt.md` using write-time timestamps and the invokable `req-*` command name.
 - **REQ-418**: MUST write exactly the rendered prompt content delivered through `sendMessage` or `sendUserMessage` into the `-prompt` debug file under `DEBUG_PROMPTS_LOG_PATH`.
 - **REQ-427**: MUST write the exact command invocation summary text displayed on screen into the `-request` debug file for every dispatched bundled `req-<prompt>` command.
 - **REQ-428**: MUST save both the `-request` and `-prompt` debug files for every dispatched bundled `req-<prompt>` command whenever prompt debug logging is enabled.
@@ -501,15 +501,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-420**: MUST restore `DEBUG_PROMPTS_ENABLED=disable` and `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq` when the `Debug` subtree `Reset defaults` is approved.
 - **REQ-421**: MUST capture the exact provider request payload from `before_provider_request` only while a bundled `req-*` prompt run is active and prompt debug logging is enabled, storing everything needed to write the error-stage file later.
 - **REQ-422**: MUST write the latest captured provider request payload under `DEBUG_PROMPTS_LOG_PATH` whenever `after_provider_response` reports a response status >= 400 and a captured payload exists, without requiring live workflow state or cached configuration.
-- **REQ-423**: MUST name each saved provider error payload file `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>` from the write-time timestamp, invokable command name, and failing response status.
+- **REQ-423**: MUST name each saved provider error payload file `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>.json` from the write-time timestamp, invokable command name, and failing response status.
 - **REQ-424**: MUST keep the initial dispatched prompt file and the failing provider request payload file together in the prompt log folder for the failing run.
 - **REQ-425**: MUST discard the captured provider request payload after each error-payload write attempt and at the end of the capturing prompt run so stale payloads never reach later runs.
-- **REQ-429**: MUST persist the finalized provider error message text as one `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>-response` file beside the flushed error payload file.
+- **REQ-429**: MUST persist the finalized provider error message text as one `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>-response.txt` file beside the flushed error payload file.
 - **REQ-430**: MUST write one `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>-replay.json` sidecar containing provider, baseUrl, model id, thinking level, contextWindow, maxTokens, execution session file, and ready-to-use replay command lines.
-- **REQ-431**: MUST keep each `-error-<status>` payload file raw provider-request JSON so `curl --data @<file>` re-sends the exact failing request.
+- **REQ-431**: MUST keep each `-error-<status>.json` payload file raw provider-request JSON so `curl --data @<file>` re-sends the exact failing request.
 - **REQ-432**: MUST copy the captured execution-session file byte-for-byte into `DEBUG_PROMPTS_LOG_PATH` beside each flushed error payload as `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>-session.jsonl` sharing the payload write-time timestamp.
 - **REQ-433**: MUST reference the REQ-432 log-local session snapshot inside the sidecar `replayCommands.piFork` entry, falling back to the retained execution-session path only when the session copy fails.
 - **REQ-434**: MUST document in `README.md` the exact `pi --fork <snapshot> --model <modelId> --thinking <level> "<message>"` line as the extension-free, log-files-only provider-error reproduction procedure.
+- **REQ-435**: MUST give every debug file under `DEBUG_PROMPTS_LOG_PATH` a filename extension matching its persisted content format: `.md` for markdown, `.json` for JSON, `.jsonl` for JSONL, and `.txt` for plain text.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -645,16 +646,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-141**: MUST verify the `Context Files` submenu rows render `<chars>c/<tokens>t` size facts with per-row token-derived occupancy suffixes, and the top-level summary renders measured size facts from context files.
 - **TST-142**: MUST verify the command invocation summary `context files` field renders size suffixes only for enabled existing context files.
 - **TST-143**: MUST verify default local configuration persists `DEBUG_PROMPTS_ENABLED=disable` plus `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq`, and the `Debug` submenu renders `Enable debug prompts` then `Log path for prompts` between `Debug` and `Enable debug commands for tools`.
-- **TST-144**: MUST verify prompt debug logging writes `<timestamp>-req-<prompt>-request` plus `<timestamp>-req-<prompt>-prompt` files containing the exact summary and rendered prompt under `DEBUG_PROMPTS_LOG_PATH` only when `DEBUG_ENABLED=enable` plus `DEBUG_PROMPTS_ENABLED=enable`.
+- **TST-144**: MUST verify prompt debug logging writes `<timestamp>-req-<prompt>-request.md` plus `<timestamp>-req-<prompt>-prompt.md` files containing the exact summary and rendered prompt under `DEBUG_PROMPTS_LOG_PATH` only when `DEBUG_ENABLED=enable` plus `DEBUG_PROMPTS_ENABLED=enable`.
 - **TST-148**: MUST verify local and global configuration files omit `DEBUG_ENABLED` while fresh processes resolve `DEBUG_ENABLED=disable` and intra-process toggles survive session rebinds.
-- **TST-149**: MUST verify the `-error-<status>` file is written beside the `-request` and `-prompt` files whenever a dispatched `req-<prompt>` run receives a provider response status >= 400.
-- **TST-150**: MUST verify the `-error-<status>-response` file persists the provider error message text beside the flushed `-error-<status>` payload file.
+- **TST-149**: MUST verify the `-error-<status>.json` file is written beside the `-request.md` and `-prompt.md` files whenever a dispatched `req-<prompt>` run receives a provider response status >= 400.
+- **TST-150**: MUST verify the `-error-<status>-response.txt` file persists the provider error message text beside the flushed `-error-<status>.json` payload file.
 - **TST-151**: MUST verify the `-error-<status>-replay.json` sidecar carries provider, baseUrl, model id, thinking level, contextWindow, maxTokens, execution session file, and replay command lines.
-- **TST-152**: MUST verify the `-error-<status>` payload file stays raw provider-request JSON parseable as a direct request body.
+- **TST-152**: MUST verify the `-error-<status>.json` payload file stays raw provider-request JSON parseable as a direct request body.
 - **TST-153**: MUST verify the `-error-<status>-session.jsonl` snapshot is written beside the flushed payload for a 400 response, matches the execution-session content at flush time, and is absent for statuses below 400.
 - **TST-154**: MUST verify the sidecar `replayCommands.piFork` references the log-local `-error-<status>-session.jsonl` snapshot path.
 - **TST-145**: MUST verify `Debug` submenu edits plus the approved `Debug` subtree reset persist `DEBUG_PROMPTS_ENABLED` and `DEBUG_PROMPTS_LOG_PATH` immediately with documented defaults.
-- **TST-146**: MUST verify enabled prompt debug capture writes the exact provider payload into one `error-<status>` file beside the initial prompt file for a 400 response.
+- **TST-146**: MUST verify enabled prompt debug capture writes the exact provider payload into one `error-<status>.json` file beside the initial prompt file for a 400 response.
 - **TST-147**: MUST verify provider error payload capture writes nothing when prompt debug logging is disabled or the response status is below 400.
 - **TST-123**: MUST verify `resolveCheckerExecutable` probes bundled `node_modules/.bin` paths before `PATH` scan.
 - **TST-124**: MUST verify `scripts/install-static-checkers.ts` always returns exit code `0` regardless of probe or install outcomes.

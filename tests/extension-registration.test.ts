@@ -2346,12 +2346,12 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
   const promptLogDir = path.join(activeFixture.projectBase, "logs", "saved-prompts");
   const savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 2);
-  const savedRequestFile = savedFiles.find((fileName) => fileName.endsWith("-request"));
-  const savedPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
+  const savedRequestFile = savedFiles.find((fileName) => fileName.endsWith("-request.md"));
+  const savedPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt.md"));
   assert.ok(savedRequestFile);
   assert.ok(savedPromptFile);
-  assert.match(savedRequestFile!, /^\d{17}-req-implement-request$/u);
-  assert.match(savedPromptFile!, /^\d{17}-req-implement-prompt$/u);
+  assert.match(savedRequestFile!, /^\d{17}-req-implement-request\.md$/u);
+  assert.match(savedPromptFile!, /^\d{17}-req-implement-prompt\.md$/u);
   assert.equal(
     formatPromptDebugFileName("implement", new Date(2026, 0, 2, 3, 4, 5, 6)),
     "20260102030405006-req-implement",
@@ -2424,23 +2424,24 @@ test("provider error payload debug logging saves failing request payload beside 
   const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
   const savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 5);
-  const initialPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
-  const errorPayloadFile = savedFiles.find((fileName) => fileName.endsWith("-error-400") && !fileName.includes("-error-400-"));
+  const initialPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt.md"));
+  const errorPayloadFile = savedFiles.find((fileName) => fileName.endsWith("-error-400.json"));
+  const errorPayloadBase = errorPayloadFile!.replace(/\.json$/u, "");
   const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
   assert.ok(initialPromptFile);
   assert.ok(errorPayloadFile);
   assert.ok(replaySidecarFile);
   assert.ok(
-    savedFiles.includes(`${errorPayloadFile}-session.jsonl`),
+    savedFiles.includes(`${errorPayloadBase}-session.jsonl`),
     "the flush writes the byte-for-byte execution-session snapshot beside the payload",
   );
-  assert.match(initialPromptFile, /^\d{17}-req-implement-prompt$/u);
-  assert.match(errorPayloadFile, /^\d{17}-req-implement-error-400$/u);
+  assert.match(initialPromptFile, /^\d{17}-req-implement-prompt\.md$/u);
+  assert.match(errorPayloadFile, /^\d{17}-req-implement-error-400\.json$/u);
   assert.match(replaySidecarFile, /^\d{17}-req-implement-error-400-replay\.json$/u);
   assert.equal(
-    savedFiles.some((fileName) => fileName.endsWith("-response")),
+    savedFiles.some((fileName) => fileName.endsWith("-response.txt")),
     false,
-    "no -response file exists when the response event carries no error text",
+    "no -response.txt file exists when the response event carries no error text",
   );
   assert.deepEqual(
     JSON.parse(fs.readFileSync(path.join(promptLogDir, errorPayloadFile), "utf8")) as unknown,
@@ -2502,9 +2503,9 @@ test("provider error debug logging writes response text and replay sidecar besid
   const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
   const savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 6);
-  const promptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
-  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
-  const responseFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-response"));
+  const promptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt.md"));
+  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400\.json$/u.test(fileName));
+  const responseFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-response.txt"));
   const sessionSnapshotFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-session.jsonl"));
   const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
   assert.ok(promptFile);
@@ -2522,7 +2523,7 @@ test("provider error debug logging writes response text and replay sidecar besid
   );
   assert.equal(
     formatPromptDebugErrorResponseFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
-    "20260102030405006-req-implement-error-400-response",
+    "20260102030405006-req-implement-error-400-response.txt",
   );
   assert.equal(
     formatPromptDebugErrorReplayFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
@@ -2608,13 +2609,14 @@ test("provider error debug logging snapshots the execution session for log-local
   }, ctx);
   const savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 5);
-  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
+  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400\.json$/u.test(fileName));
+  const errorPayloadBase = errorPayloadFile!.replace(/\.json$/u, "");
   const sessionSnapshotFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-session.jsonl"));
   const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
   assert.ok(errorPayloadFile);
   assert.ok(sessionSnapshotFile);
   assert.ok(replaySidecarFile);
-  assert.equal(sessionSnapshotFile, `${errorPayloadFile}-session.jsonl`);
+  assert.equal(sessionSnapshotFile, `${errorPayloadBase}-session.jsonl`);
   assert.match(sessionSnapshotFile, /^\d{17}-req-implement-error-400-session\.jsonl$/u);
   const replaySidecar = JSON.parse(
     fs.readFileSync(path.join(promptLogDir, replaySidecarFile), "utf8"),
@@ -2672,23 +2674,24 @@ test("provider error debug logging appends response text after an after_provider
   let savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 5);
   assert.equal(
-    savedFiles.some((fileName) => fileName.endsWith("-response")),
+    savedFiles.some((fileName) => fileName.endsWith("-response.txt")),
     false,
-    "no -response file exists before the finalized error message arrives",
+    "no -response.txt file exists before the finalized error message arrives",
   );
   await pi.emit("message_end", {
     message: { role: "assistant", stopReason: "error", errorMessage: providerErrorText },
   }, ctx);
   savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 6);
-  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
+  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400\.json$/u.test(fileName));
+  const errorPayloadBase = errorPayloadFile!.replace(/\.json$/u, "");
   assert.ok(errorPayloadFile);
   assert.ok(
-    savedFiles.includes(`${errorPayloadFile}-response`),
+    savedFiles.includes(`${errorPayloadBase}-response.txt`),
     "the late response append reuses the flushed payload base filename",
   );
   assert.equal(
-    fs.readFileSync(path.join(promptLogDir, `${errorPayloadFile}-response`), "utf8"),
+    fs.readFileSync(path.join(promptLogDir, `${errorPayloadBase}-response.txt`), "utf8"),
     `${providerErrorText}\n`,
   );
   assert.deepEqual(
@@ -2754,8 +2757,8 @@ test("provider error payload debug logging stays silent when disabled or status 
   const belowLogDir = path.join(belowFixture.projectBase, "logs", "saved-prompts");
   const belowFiles = fs.readdirSync(belowLogDir).sort();
   assert.equal(belowFiles.length, 2);
-  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-request$/u.test(fileName)));
-  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-prompt$/u.test(fileName)));
+  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-request\.md$/u.test(fileName)));
+  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-prompt\.md$/u.test(fileName)));
   setRuntimeDebugEnabled("disable");
 });
 
@@ -2837,13 +2840,13 @@ test("provider error payload debug logging survives the switchSession extension 
 
     const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
     const savedFiles = fs.readdirSync(promptLogDir).sort();
-    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400"));
+    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400.json"));
     assert.equal(
       errorPayloadFiles.length,
       2,
-      `expected two -error-400 files beside [${savedFiles.join(", ")}]`,
+      `expected two -error-400.json files beside [${savedFiles.join(", ")}]`,
     );
-    assert.match(errorPayloadFiles[0]!, /^\d{17}-req-implement-error-400$/u);
+    assert.match(errorPayloadFiles[0]!, /^\d{17}-req-implement-error-400\.json$/u);
     const errorPayloadMarkers = errorPayloadFiles.map((fileName) =>
       String(JSON.parse(fs.readFileSync(path.join(promptLogDir, fileName), "utf8")).messages[0]?.content),
     ).sort();
@@ -2953,11 +2956,11 @@ test("provider error payload debug logging survives the host compact-and-retry a
 
     const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
     const savedFiles = fs.readdirSync(promptLogDir).sort();
-    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400"));
+    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400.json"));
     assert.equal(
       errorPayloadFiles.length,
       2,
-      `expected two -error-400 files beside [${savedFiles.join(", ")}]`,
+      `expected two -error-400.json files beside [${savedFiles.join(", ")}]`,
     );
     const errorPayloadMarkers = errorPayloadFiles.map((fileName) =>
       String(JSON.parse(fs.readFileSync(path.join(promptLogDir, fileName), "utf8")).messages[0]?.content),
@@ -3080,11 +3083,11 @@ test("provider error payload capture follows base config when the worktree check
 
     const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
     const savedFiles = fs.readdirSync(promptLogDir).sort();
-    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400"));
+    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400.json"));
     assert.equal(
       errorPayloadFiles.length,
       1,
-      `expected one -error-400 file beside [${savedFiles.join(", ")}]`,
+      `expected one -error-400.json file beside [${savedFiles.join(", ")}]`,
     );
     const errorPayloadText = fs.readFileSync(
       path.join(promptLogDir, errorPayloadFiles[0]!),
