@@ -831,45 +831,86 @@ export function logDebugPromptContent(
   promptName: PromptCommandName,
   content: string,
 ): boolean {
-  return writePromptDebugFile(
+  const fileName = formatPromptDebugPromptFileName(promptName);
+  const written = writePromptDebugFile(
     projectBase,
     config,
     workflowState,
     promptName,
-    formatPromptDebugPromptFileName(promptName),
+    fileName,
     content,
   );
+  if (written) {
+    getProcessScopedPromptErrorCaptureStore().dispatchedPromptDebugFiles.set(promptName, fileName);
+  }
+  return written;
+}
+
+/**
+ * @brief Describes replay facts captured beside one provider request payload for reproduction.
+ * @details Stores the provider, API, base URL, model identifier, thinking level, context-window, max-output-token, and execution-session-file facts resolved from the live pi runtime model plus prompt execution plan so the error-stage replay sidecar can emit ready-to-use replay command lines without live runtime state. Every field stays optional so degraded runtimes and offline replays never abort the capture. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-430
+ */
+export interface PromptErrorReplayFacts {
+  modelId: string | undefined;
+  provider: string | undefined;
+  api: string | undefined;
+  baseUrl: string | undefined;
+  thinkingLevel: string | undefined;
+  contextWindow: number | undefined;
+  maxTokens: number | undefined;
+  executionSessionFile: string | undefined;
 }
 
 /**
  * @brief Describes one process-scoped captured provider request payload bound to an active prompt run.
- * @details Pairs the bundled prompt name, the serialization of the exact `before_provider_request` payload, the original project base, and the resolved prompt log directory so a later `after_provider_response` error status can dump the failing request verbatim without live controller state, cached configuration, or live provider objects. The interface is compile-time only and introduces no runtime cost.
- * @satisfies REQ-421
+ * @details Pairs the bundled prompt name, the serialization of the exact `before_provider_request` payload, the original project base, the resolved prompt log directory, the dispatched prompt debug filename of the same run, and the captured replay facts so a later `after_provider_response` or `message_end` error status can dump the failing request verbatim, its provider error text, and one replay sidecar without live controller state, cached configuration, or live provider objects. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-421, REQ-429, REQ-430
  */
 interface CapturedPromptErrorPayload {
   promptName: PromptCommandName;
   payloadText: string;
   projectBase: string;
   logDirectory: string;
+  promptDebugFile: string | undefined;
+  replayFacts: PromptErrorReplayFacts;
+}
+
+/**
+ * @brief Describes the location of one already flushed provider error payload file set.
+ * @details Stores the prompt name, failing status, resolved log directory, and payload base filename of the most recent error-stage flush so a later finalized `message_end` error message can still append the `-response` file beside the already written payload when the provider fired `after_provider_response` before surfacing its error text. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-429
+ */
+interface FlushedPromptErrorRecord {
+  promptName: PromptCommandName;
+  errorCode: number;
+  logDirectory: string;
+  baseFileName: string;
 }
 
 /**
  * @brief Describes the process-scoped provider error payload capture state persisted across extension rebinds.
- * @details Stores the latest captured prompt error payload on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` between prompt dispatch and provider execution, while the hosting process persists across those operations, so the capture survives the forked execution-session switch. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the latest captured prompt error payload, the latest flushed error record, and the latest dispatched prompt debug filenames on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` between prompt dispatch and provider execution, while the hosting process persists across those operations, so the capture, the late response write, and the dispatched-prompt correlation survive the forked execution-session switch. The interface is compile-time only and introduces no runtime cost.
  */
 interface ProcessScopedPromptErrorCaptureStore {
   capturedPromptErrorPayload: CapturedPromptErrorPayload | undefined;
+  lastFlushedPromptError: FlushedPromptErrorRecord | undefined;
+  dispatchedPromptDebugFiles: Map<PromptCommandName, string>;
 }
 
 /**
  * @brief Returns the process-scoped provider error payload capture store.
- * @details Lazily initializes one `globalThis` record so session rebinds never discard an already captured failing provider request. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @details Lazily initializes one `globalThis` record so session rebinds never discard an already captured failing provider request, its flushed error record, or its dispatched prompt debug filename correlation. Runtime is O(1). Side effect: initializes process-scoped state on first access.
  * @return {ProcessScopedPromptErrorCaptureStore} Mutable process-scoped capture store.
  */
 function getProcessScopedPromptErrorCaptureStore(): ProcessScopedPromptErrorCaptureStore {
   const globalScope = globalThis as typeof globalThis & { __piUsereqPromptErrorCaptureStore?: ProcessScopedPromptErrorCaptureStore };
   if (!globalScope.__piUsereqPromptErrorCaptureStore) {
-    globalScope.__piUsereqPromptErrorCaptureStore = { capturedPromptErrorPayload: undefined };
+    globalScope.__piUsereqPromptErrorCaptureStore = {
+      capturedPromptErrorPayload: undefined,
+      lastFlushedPromptError: undefined,
+      dispatchedPromptDebugFiles: new Map(),
+    };
   }
   return globalScope.__piUsereqPromptErrorCaptureStore;
 }
@@ -889,6 +930,40 @@ export function formatPromptDebugErrorFileName(
   date = new Date(),
 ): string {
   return `${formatPromptDebugTimestamp(date)}-${getDebugPromptName(promptName)}-error-${errorCode}`;
+}
+
+/**
+ * @brief Builds one provider error response debug filename for one bundled prompt.
+ * @details Appends the `-response` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the persisted provider error text stays attributable to the exact failing request payload file written with the identical write-time timestamp. Runtime is O(1). No external state is mutated.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] errorCode {number} Failing provider response status, such as `400`.
+ * @param[in] date {Date} Write-time timestamp shared with the payload file. Defaults to the current wall-clock time.
+ * @return {string} Provider error response filename in the `<timestamp>-<req-command>-error-<status>-response` shape.
+ * @satisfies REQ-423, REQ-429
+ */
+export function formatPromptDebugErrorResponseFileName(
+  promptName: PromptCommandName,
+  errorCode: number,
+  date = new Date(),
+): string {
+  return `${formatPromptDebugErrorFileName(promptName, errorCode, date)}-response`;
+}
+
+/**
+ * @brief Builds one provider error replay sidecar debug filename for one bundled prompt.
+ * @details Appends the `-replay.json` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the persisted replay metadata sidecar stays attributable to the exact failing request payload file written with the identical write-time timestamp. Runtime is O(1). No external state is mutated.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] errorCode {number} Failing provider response status, such as `400`.
+ * @param[in] date {Date} Write-time timestamp shared with the payload file. Defaults to the current wall-clock time.
+ * @return {string} Provider error replay sidecar filename in the `<timestamp>-<req-command>-error-<status>-replay.json` shape.
+ * @satisfies REQ-423, REQ-430
+ */
+export function formatPromptDebugErrorReplayFileName(
+  promptName: PromptCommandName,
+  errorCode: number,
+  date = new Date(),
+): string {
+  return `${formatPromptDebugErrorFileName(promptName, errorCode, date)}-replay.json`;
 }
 
 /**
@@ -947,52 +1022,228 @@ function serializePromptProviderPayload(payload: unknown): string {
 }
 
 /**
+ * @brief Resolves the model identifier embedded in one provider request payload.
+ * @details Reads the string `model` field of the serialized request payload so the replay sidecar can still name the failing model when the live runtime model object was unavailable at capture time. Runtime is O(1). No external state is mutated.
+ * @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
+ * @return {string | undefined} Payload model identifier when present as a string; otherwise `undefined`.
+ */
+function resolveProviderPayloadModelId(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+  const modelId = (payload as { model?: unknown }).model;
+  return typeof modelId === "string" && modelId.length > 0 ? modelId : undefined;
+}
+
+/**
  * @brief Captures one exact provider request payload for the active prompt run when prompt debug logging is enabled.
- * @details Applies the global-debug plus prompt-debug gating, serializes the exact `before_provider_request` payload through the cycle-safe serializer, and stores the prompt name, payload text, original project base, and resolved prompt log directory in the process-scoped capture store so the payload survives session replacement and later error-stage writes require no live workflow state or cached configuration. Runtime is O(n) in serialized payload size when enabled and O(1) otherwise. Side effect: mutates the process-scoped capture store for enabled matching requests.
+ * @details Applies the global-debug plus prompt-debug gating, serializes the exact `before_provider_request` payload through the cycle-safe serializer, resolves the dispatched prompt debug filename of the same run from the process-scoped correlation map, and stores the prompt name, payload text, original project base, resolved prompt log directory, replay facts, and prompt debug filename in the process-scoped capture store so the payload, its error text, and its replay sidecar survive session replacement and later error-stage writes require no live workflow state or cached configuration. Falls back to the payload `model` field when the supplied replay facts omit the model identifier. Runtime is O(n) in serialized payload size when enabled and O(1) otherwise. Side effect: mutates the process-scoped capture store for enabled matching requests.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] promptName {PromptCommandName} Active bundled prompt name.
  * @param[in] projectBase {string} Absolute original project base path used to resolve the prompt log directory.
  * @param[in] payload {unknown} Exact `before_provider_request` provider request payload.
+ * @param[in] replayFacts {PromptErrorReplayFacts} Live runtime replay facts consumed by the error-stage sidecar. Defaults to empty facts.
  * @return {void} No return value.
- * @satisfies REQ-416, REQ-421
+ * @satisfies REQ-416, REQ-421, REQ-430
  */
 export function capturePromptProviderRequestForDebug(
   config: UseReqConfig,
   promptName: PromptCommandName,
   projectBase: string,
   payload: unknown,
+  replayFacts: PromptErrorReplayFacts = {
+    modelId: undefined,
+    provider: undefined,
+    api: undefined,
+    baseUrl: undefined,
+    thinkingLevel: undefined,
+    contextWindow: undefined,
+    maxTokens: undefined,
+    executionSessionFile: undefined,
+  },
 ): void {
   if (!shouldLogDebugPromptContent(config, "unknown", promptName)) {
     return;
   }
+  const logDirectory = resolveDebugPromptsLogPath(projectBase, config);
+  const dispatchedPromptFile = getProcessScopedPromptErrorCaptureStore().dispatchedPromptDebugFiles.get(promptName);
   getProcessScopedPromptErrorCaptureStore().capturedPromptErrorPayload = {
     promptName,
     payloadText: serializePromptProviderPayload(payload),
     projectBase,
-    logDirectory: resolveDebugPromptsLogPath(projectBase, config),
+    logDirectory,
+    promptDebugFile: dispatchedPromptFile === undefined ? undefined : path.join(logDirectory, dispatchedPromptFile),
+    replayFacts: {
+      ...replayFacts,
+      modelId: replayFacts.modelId ?? resolveProviderPayloadModelId(payload),
+    },
   };
 }
 
 /**
- * @brief Writes the captured provider request payload as one error-stage prompt debug file for the failing prompt.
- * @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file inside the captured log directory beside the initial dispatched prompt artifacts. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus one file write when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
- * @param[in] errorCode {number} Failing provider response status, such as `400`.
- * @return {boolean} `true` when the provider error payload file is written; otherwise `false`.
- * @satisfies REQ-422, REQ-423, REQ-424, REQ-425
+ * @brief Normalizes one provider name into an uppercase environment-variable token.
+ * @details Uppercases the provider name and replaces every non-alphanumeric character with `_` so the generated replay command can reference a deterministic `<PROVIDER>_API_KEY` environment variable. Runtime is O(n) in provider-name length. No external state is mutated.
+ * @param[in] provider {string} Provider identifier, such as `openrouter`.
+ * @return {string} Uppercase alphanumeric environment-variable token.
  */
-export function flushCapturedPromptErrorPayload(errorCode: number): boolean {
+function normalizeProviderEnvToken(provider: string): string {
+  const normalized = provider.toUpperCase().replace(/[^A-Z0-9]/gu, "_");
+  return normalized.length > 0 ? normalized : "PROVIDER";
+}
+
+/**
+ * @brief Resolves the provider HTTP endpoint targeted by one captured provider request payload.
+ * @details Appends the canonical chat-completions path for `openai-completions` APIs and the canonical messages path for `anthropic-messages` APIs, and preserves the raw base URL for every other API so the generated provider replay command never fabricates an endpoint it cannot derive. Runtime is O(p) in URL length. No external state is mutated.
+ * @param[in] facts {PromptErrorReplayFacts} Captured replay facts supplying the API and base URL.
+ * @return {string | undefined} Replay endpoint URL when a base URL exists; otherwise `undefined`.
+ */
+function resolveProviderReplayEndpoint(facts: PromptErrorReplayFacts): string | undefined {
+  if (facts.baseUrl === undefined) {
+    return undefined;
+  }
+  if (facts.api === "openai-completions") {
+    return `${facts.baseUrl}/chat/completions`;
+  }
+  if (facts.api === "anthropic-messages") {
+    return `${facts.baseUrl}/v1/messages`;
+  }
+  return facts.baseUrl;
+}
+
+/**
+ * @brief Builds the replay sidecar JSON text for one flushed provider error payload.
+ * @details Serializes the captured provider, base URL, API, model identifier, thinking level, context-window and max-output-token facts, the execution-session file, the dispatched prompt debug file, the flushed request payload file, and ready-to-use replay command lines: one `curl --data @` provider replay of the exact failing request, one pi one-shot replay of the dispatched prompt file, and one `pi --fork` replay of the retained execution session. Command lines are emitted only when their supporting facts exist so every emitted command is directly executable. Runtime is O(n) in serialized sidecar size. No external state is mutated.
+ * @param[in] captured {CapturedPromptErrorPayload} Consumed capture supplying replay facts and artifact paths.
+ * @param[in] requestFileName {string} Payload filename written with the same write-time timestamp.
+ * @return {string} Newline-terminated replay sidecar JSON text.
+ * @satisfies REQ-430
+ */
+function buildPromptErrorReplaySidecarText(
+  captured: CapturedPromptErrorPayload,
+  requestFileName: string,
+): string {
+  const facts = captured.replayFacts;
+  const requestFilePath = path.join(captured.logDirectory, requestFileName);
+  const endpoint = resolveProviderReplayEndpoint(facts);
+  const replayCommands: Record<string, string> = {};
+  if (endpoint !== undefined) {
+    const envToken = facts.provider === undefined ? "PROVIDER_API_KEY" : `${normalizeProviderEnvToken(facts.provider)}_API_KEY`;
+    replayCommands.provider = `curl -sS '${endpoint}' -H 'Authorization: Bearer $${envToken}' -H 'Content-Type: application/json' --data @'${requestFilePath}'`;
+  }
+  if (captured.promptDebugFile !== undefined && facts.modelId !== undefined) {
+    replayCommands.piOneShot = `pi --no-session --model '${facts.modelId}' --thinking ${facts.thinkingLevel ?? "off"} -p "$(cat '${captured.promptDebugFile}')"`;
+  }
+  if (facts.executionSessionFile !== undefined) {
+    const modelFlags = facts.modelId === undefined ? "" : ` --model '${facts.modelId}'`;
+    const thinkingFlags = facts.thinkingLevel === undefined ? "" : ` --thinking ${facts.thinkingLevel}`;
+    replayCommands.piFork = `pi --fork '${facts.executionSessionFile}'${modelFlags}${thinkingFlags}`;
+  }
+  const sidecar = {
+    provider: facts.provider ?? null,
+    baseUrl: facts.baseUrl ?? null,
+    api: facts.api ?? null,
+    modelId: facts.modelId ?? null,
+    thinkingLevel: facts.thinkingLevel ?? null,
+    contextWindow: facts.contextWindow ?? null,
+    maxTokens: facts.maxTokens ?? null,
+    sessionFile: facts.executionSessionFile ?? null,
+    promptFile: captured.promptDebugFile ?? null,
+    requestFile: requestFilePath,
+    replayCommands,
+  };
+  return `${JSON.stringify(sidecar, null, 2)}\n`;
+}
+
+/**
+ * @brief Writes the captured provider request payload plus its response text and replay sidecar as error-stage prompt debug files.
+ * @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file that stays raw provider-request JSON usable with `curl --data @`, the provider error text into one identically timestamped `-response` file when supplied, and the replay sidecar into one identically timestamped `-replay.json` file inside the captured log directory beside the initial dispatched prompt artifacts. Records the flushed location so a later finalized `message_end` error message can still append the `-response` file when `after_provider_response` fired first without error text. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus at most three file writes when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
+ * @param[in] errorCode {number} Failing provider response status, such as `400`.
+ * @param[in] errorResponseText {string | undefined} Finalized provider error message text when already available; the `-response` file is written later when omitted.
+ * @return {boolean} `true` when the provider error payload file set is written; otherwise `false`.
+ * @satisfies REQ-422, REQ-423, REQ-424, REQ-425, REQ-429, REQ-430, REQ-431
+ */
+export function flushCapturedPromptErrorPayload(errorCode: number, errorResponseText?: string): boolean {
   const captureStore = getProcessScopedPromptErrorCaptureStore();
   const captured = captureStore.capturedPromptErrorPayload;
   captureStore.capturedPromptErrorPayload = undefined;
   if (!captured || !Number.isFinite(errorCode) || errorCode < 400) {
     return false;
   }
+  const writeTime = new Date();
+  const payloadFileName = formatPromptDebugErrorFileName(captured.promptName, errorCode, writeTime);
   try {
     fs.mkdirSync(captured.logDirectory, { recursive: true });
     fs.writeFileSync(
-      path.join(captured.logDirectory, formatPromptDebugErrorFileName(captured.promptName, errorCode)),
+      path.join(captured.logDirectory, payloadFileName),
       captured.payloadText,
       "utf8",
+    );
+    if (typeof errorResponseText === "string" && errorResponseText.length > 0) {
+      writePromptProviderErrorResponseFile(
+        captured.logDirectory,
+        formatPromptDebugErrorResponseFileName(captured.promptName, errorCode, writeTime),
+        errorResponseText,
+      );
+    }
+    fs.writeFileSync(
+      path.join(captured.logDirectory, formatPromptDebugErrorReplayFileName(captured.promptName, errorCode, writeTime)),
+      buildPromptErrorReplaySidecarText(captured, payloadFileName),
+      "utf8",
+    );
+    captureStore.lastFlushedPromptError = {
+      promptName: captured.promptName,
+      errorCode,
+      logDirectory: captured.logDirectory,
+      baseFileName: payloadFileName,
+    };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @brief Writes one provider error response text file under a resolved log directory.
+ * @details Creates the parent directory and writes the finalized provider error text with one trailing newline into the requested response filename so both the flush-time and the late `message_end` response writes share one deterministic serialization. Runtime is dominated by one directory creation plus one file write. Side effects include directory creation and file creation.
+ * @param[in] logDirectory {string} Absolute prompt log directory owning the response file.
+ * @param[in] fileName {string} Target response filename under the log directory.
+ * @param[in] errorResponseText {string} Finalized provider error message text.
+ * @return {void} No return value.
+ * @satisfies REQ-429
+ */
+function writePromptProviderErrorResponseFile(
+  logDirectory: string,
+  fileName: string,
+  errorResponseText: string,
+): void {
+  fs.mkdirSync(logDirectory, { recursive: true });
+  fs.writeFileSync(path.join(logDirectory, fileName), `${errorResponseText}\n`, "utf8");
+}
+
+/**
+ * @brief Appends the provider error response text beside one already flushed error payload file.
+ * @details Providers that fire `after_provider_response` before surfacing their error text flush the payload without a `-response` file, so this helper writes the finalized `message_end` error message beside the recorded flush location when the failing status matches. Runtime is dominated by one directory creation plus one file write when a matching record exists and O(1) otherwise. Side effects include directory creation and file creation only for a matching record.
+ * @param[in] errorCode {number} Failing provider response status carried by the finalized error message.
+ * @param[in] errorResponseText {string} Finalized provider error message text.
+ * @return {boolean} `true` when the response file is written; otherwise `false`.
+ * @satisfies REQ-429
+ */
+export function writeFlushedPromptProviderErrorResponse(
+  errorCode: number,
+  errorResponseText: string,
+): boolean {
+  if (typeof errorResponseText !== "string" || errorResponseText.length === 0) {
+    return false;
+  }
+  const record = getProcessScopedPromptErrorCaptureStore().lastFlushedPromptError;
+  if (record === undefined || record.errorCode !== errorCode) {
+    return false;
+  }
+  try {
+    writePromptProviderErrorResponseFile(
+      record.logDirectory,
+      `${record.baseFileName}-response`,
+      errorResponseText,
     );
     return true;
   } catch {
@@ -1001,11 +1252,13 @@ export function flushCapturedPromptErrorPayload(errorCode: number): boolean {
 }
 
 /**
- * @brief Discards any captured provider request payload for the ended prompt run.
- * @details Clears the process-scoped capture unconditionally so leftover payloads from a finished `req-*` prompt run never flush into later provider errors raised outside extension-owned prompt orchestration. Runtime is O(1). Side effect: mutates the process-scoped capture store.
+ * @brief Discards any captured provider request payload and flushed error record for the ended prompt run.
+ * @details Clears the process-scoped capture and the latest flushed error record unconditionally so leftover payloads and flush locations from a finished `req-*` prompt run never flush into later provider errors raised outside extension-owned prompt orchestration. Runtime is O(1). Side effect: mutates the process-scoped capture store.
  * @return {void} No return value.
- * @satisfies REQ-421, REQ-425
+ * @satisfies REQ-421, REQ-425, REQ-429
  */
 export function discardCapturedPromptErrorPayload(): void {
-  getProcessScopedPromptErrorCaptureStore().capturedPromptErrorPayload = undefined;
+  const captureStore = getProcessScopedPromptErrorCaptureStore();
+  captureStore.capturedPromptErrorPayload = undefined;
+  captureStore.lastFlushedPromptError = undefined;
 }

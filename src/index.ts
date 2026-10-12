@@ -153,8 +153,10 @@ import {
   resolveProviderErrorFlushStatusFromMessage,
   setRuntimeDebugEnabled,
   shouldLogDebugPromptWorkflowState,
+  writeFlushedPromptProviderErrorResponse,
   type DebugLogOnStatus,
   type DebugWorkflowState,
+  type PromptErrorReplayFacts,
 } from "./core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "./core/prompt-command-catalog.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
@@ -303,6 +305,31 @@ function syncContextCwdMirror(ctx: { cwd?: string }, cwd: string): void {
  */
 function loadPromptRunBaseConfig(projectBase: string): UseReqConfig {
   return normalizeConfigPaths(projectBase, loadConfig(projectBase));
+}
+
+/**
+ * @brief Builds the replay facts captured beside one provider request payload.
+ * @details Reads the provider, API, base URL, model identifier, thinking level, context-window, and max-output-token facts from the live extension-context model plus the execution-session file from the live prompt execution plan so the error-stage replay sidecar can emit ready-to-use `curl` and `pi` replay command lines without live runtime state at flush time. Degrades every fact to `undefined` when the runtime model is unavailable so the capture never aborts. Runtime is O(1). No external state is mutated.
+ * @param[in] ctx {ExtensionContext} Active extension context supplying the live model and thinking level.
+ * @param[in] executionSessionFile {string | undefined} Persisted execution-session file of the active prompt run retained per REQ-209.
+ * @return {PromptErrorReplayFacts} Replay facts consumed by the error-stage sidecar writer.
+ * @satisfies REQ-430
+ */
+function buildPromptProviderReplayFacts(
+  ctx: ExtensionContext,
+  executionSessionFile: string | undefined,
+): PromptErrorReplayFacts {
+  const model = ctx.model;
+  return {
+    modelId: model?.id,
+    provider: model?.provider,
+    api: model?.api,
+    baseUrl: model?.baseUrl,
+    thinkingLevel: ctx.thinkingLevel,
+    contextWindow: model?.contextWindow,
+    maxTokens: model?.maxTokens,
+    executionSessionFile,
+  };
 }
 
 /**
@@ -1545,11 +1572,15 @@ async function handleExtensionStatusEvent(
       livePromptRequest.promptName,
       livePromptRequest.basePath,
       providerRequestEvent.payload,
+      buildPromptProviderReplayFacts(ctx, livePromptRequest.executionSessionFile),
     );
   }
   if (hookName === "after_provider_response") {
     const providerResponseEvent = event as { status?: unknown };
     if (typeof providerResponseEvent.status === "number" && providerResponseEvent.status >= 400) {
+      // The response event carries status plus headers only, so the provider error text is
+      // appended later by the finalized `message_end` error message through the recorded
+      // flush location.
       flushCapturedPromptErrorPayload(providerResponseEvent.status);
     }
   }
@@ -1560,11 +1591,17 @@ async function handleExtensionStatusEvent(
   // `message_end` for every failed provider request with the HTTP status embedded in
   // `errorMessage` by `formatProviderError`.
   if (hookName === "message_end") {
-    const providerErrorStatus = resolveProviderErrorFlushStatusFromMessage(
-      (event as { message?: unknown }).message,
-    );
+    const finalizedMessage = (event as { message?: unknown }).message as { errorMessage?: unknown } | undefined;
+    const providerErrorStatus = resolveProviderErrorFlushStatusFromMessage(finalizedMessage);
     if (providerErrorStatus !== undefined) {
-      flushCapturedPromptErrorPayload(providerErrorStatus);
+      const providerErrorText = typeof finalizedMessage?.errorMessage === "string"
+        ? finalizedMessage.errorMessage
+        : undefined;
+      if (!flushCapturedPromptErrorPayload(providerErrorStatus, providerErrorText)) {
+        // The capture was already flushed by `after_provider_response`, so the finalized error
+        // text is appended beside the recorded payload location.
+        writeFlushedPromptProviderErrorResponse(providerErrorStatus, providerErrorText ?? "");
+      }
     }
   }
   if (hookName === "agent_end" || hookName === "agent_settled") {

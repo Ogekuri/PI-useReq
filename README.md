@@ -335,6 +335,26 @@ The extension renders a status field in the pi status line showing: extension id
   pi -p "Rewrite this function" --append-system-prompt /tmp/PI-useReq/20261009072235123-req-implement
   ```
 
+- **Provider error logging** — when a dispatched `req-*` run receives a provider response with status >= 400, pi-usereq writes the exact failing request payload into `<timestamp>-<command>-error-<status>` (raw provider-request JSON), the provider error message text into `<timestamp>-<command>-error-<status>-response`, and replay metadata into `<timestamp>-<command>-error-<status>-replay.json`, all beside the run's `-request` and `-prompt` files. The `-replay.json` sidecar carries the provider, base URL, model id, thinking level, context window, max output tokens, the retained execution-session file, and ready-to-use replay commands. You can re-generate the failure for immediate pi CLI debugging:
+
+  ```bash
+  # Re-send the exact failing provider request (the payload file is raw request JSON)
+  curl -sS "$(jq -r '.replayCommands.provider' /tmp/PI-useReq/20261012070707447-req-analyze-error-400-replay.json)"
+
+  # Or replay it directly against the captured body
+  curl -sS https://openrouter.ai/api/v1/chat/completions \
+    -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+    -H "Content-Type: application/json" \
+    --data @/tmp/PI-useReq/20261012070707447-req-analyze-error-400
+
+  # Replay the saved prompt through pi with the same model and thinking level
+  pi --no-session --model '~deepseek/deepseek-flash-latest' --thinking high \
+    -p "$(cat /tmp/PI-useReq/20261012070647580-req-analyze-prompt)"
+
+  # Fork the retained execution session (kept on failed runs) and continue it
+  pi --fork /home/ogekuri/.pi/agent/sessions/--home-ogekuri-Git-PI-useReq--/2026-10-12T05-06-46-788Z_01a12e81-9584-72f4-92e3-19008d04cccf.jsonl
+  ```
+
 
 ## Note on Git usage
 
