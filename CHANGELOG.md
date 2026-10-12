@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.83.0](https://github.com/Ogekuri/PI-useReq/compare/v0.82.0..v0.83.0) - 2026-10-12
+### 🐛  Bug Fixes
+- re-anchor live pi session to base-path before worktree deletion [useReq] *(req-reset)*
+  - Accept reserved-but-unpersisted parentSession links and materialize the
+  - minimal base-path session header (pi lazy persistence) so req-reset can
+  - always switch the pi CLI session off a generated worktree before deletion,
+  - fixing the intermittent branch:unknown status after /req-reset.
+  - Allocate a fresh base session (pi /new semantics) when no original or
+  - recent base session resolves; guard stale getter-only ctx.cwd reads.
+  - Surface session re-anchor failures (REQ-313) and retain the anchoring
+  - worktree plus branch instead of orphaning the session cwd at a deleted
+  - directory; update WORKFLOW.md and regenerate REFERENCES.md; add a
+  - pi-faithful reproducer test (getter-only cwd, stale-after-switch ctx).
+
+### 🚜  Changes
+- add content-coherent extensions to prompt log filenames [useReq] *(debug)*
+  - Update REQ-417, REQ-423, REQ-429, REQ-431 and add REQ-435; align TST-144, TST-146, TST-149, TST-150, TST-152 fixture shapes; bump document version to 0.0.98.
+  - debug-runtime saves prompt logs as .md (request and prompt), provider error payloads as .json via the new formatPromptDebugErrorPayloadFileName helper, and provider error text as .txt; the late response append reuses the extensionless error base.
+  - Align extension-registration test filename fixtures and update README, WORKFLOW.md, and regenerated REFERENCES.md documentation shapes.
+
 ## [0.82.0](https://github.com/Ogekuri/PI-useReq/compare/v0.81.0..v0.82.0) - 2026-10-12
 ### 🚜  Changes
 - snapshot execution session for log-local error replay [useReq] *(debug-runtime)*
@@ -1087,6 +1107,7 @@
 - \[0.80.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.80.0
 - \[0.81.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.81.0
 - \[0.82.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.82.0
+- \[0.83.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.83.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1168,3 +1189,4 @@
 [0.80.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.79.0..v0.80.0
 [0.81.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.80.0..v0.81.0
 [0.82.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.81.0..v0.82.0
+[0.83.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.82.0..v0.83.0
