@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.82.0](https://github.com/Ogekuri/PI-useReq/compare/v0.81.0..v0.82.0) - 2026-10-12
+### 🚜  Changes
+- snapshot execution session for log-local error replay [useReq] *(debug-runtime)*
+  - REQ-432: flush copies the retained execution session byte-for-byte as an identically timestamped -session.jsonl file inside DEBUG_PROMPTS_LOG_PATH.
+  - REQ-433: the -replay.json sidecar piFork command targets the log-local session snapshot with the retained session as fallback.
+  - REQ-434: README documents the pi --fork log-files-only reproduction line.
+  - Tests: add TST-153/TST-154 coverage and update the error-flush family to the new file-set contract.
+  - Docs: REQUIREMENTS 0.0.97, WORKFLOW call-trace nodes, regenerated REFERENCES.
+
 ## [0.81.0](https://github.com/Ogekuri/PI-useReq/compare/v0.80.0..v0.81.0) - 2026-10-12
 ### 🚜  Changes
 - Persist provider error response text and replay sidecar [useReq] *(debug)*
@@ -1077,6 +1086,7 @@
 - \[0.79.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.79.0
 - \[0.80.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.80.0
 - \[0.81.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.81.0
+- \[0.82.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.82.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1157,3 +1167,4 @@
 [0.79.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.78.0..v0.79.0
 [0.80.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.79.0..v0.80.0
 [0.81.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.80.0..v0.81.0
+[0.82.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.81.0..v0.82.0
