@@ -325,7 +325,15 @@ function readReqResetSessionHeader(sessionFile: string): { cwd?: string; parentS
 
 /**
  * @brief Resolves the original base-path session file from the active session header.
- * @details Reads the current session file exposed by the supplied command context, accepts only a persisted `parentSession` link whose own header `cwd` remains inside the main base path, and returns it so `req-reset` can switch the pi CLI back to the original session-backed base path. Runtime is O(n) in session-header size plus bounded filesystem probes. No external state is mutated.
+ * @details Reads the current session file exposed by the supplied command context and accepts one
+ * persisted `parentSession` link as the reserved original base-path session under two conditions:
+ * when the linked file already exists on disk its own header `cwd` must remain inside the main base
+ * path, and when the linked file was never flushed to disk (pi persists session files lazily on the
+ * first entry append) the link itself proves the reserved original-session identity so the caller
+ * can materialize the base session before switching. Unpersisted links are accepted only when their
+ * parent directory already exists so recovery never writes session files into arbitrary locations.
+ * Runtime is O(n) in session-header size plus bounded filesystem probes. No external state is
+ * mutated.
  * @param[in] activeContext {ReqResetCommandContext | undefined} Session-bound command context whose current session file links the base-path session.
  * @param[in] basePath {string} Absolute main repository base path that must contain the parent session cwd.
  * @return {string | undefined} Original base-path session file or `undefined` when unavailable.
@@ -346,10 +354,15 @@ function resolveReqResetParentSessionFile(
     return undefined;
   }
   const header = readReqResetSessionHeader(path.resolve(currentSessionFile));
-  if (header?.parentSession === undefined || !fs.existsSync(header.parentSession)) {
+  if (header?.parentSession === undefined) {
     return undefined;
   }
   const resolvedParentSession = path.resolve(header.parentSession);
+  if (!fs.existsSync(resolvedParentSession)) {
+    return fs.existsSync(path.dirname(resolvedParentSession))
+      ? resolvedParentSession
+      : undefined;
+  }
   const parentHeader = readReqResetSessionHeader(resolvedParentSession);
   if (parentHeader?.cwd === undefined || !fs.existsSync(parentHeader.cwd)) {
     return undefined;
@@ -357,6 +370,93 @@ function resolveReqResetParentSessionFile(
   return isSameOrAncestorPath(path.resolve(basePath), path.resolve(parentHeader.cwd))
     ? resolvedParentSession
     : undefined;
+}
+
+/**
+ * @brief Guarantees one switchable persisted base-path session file for `req-reset` re-anchoring.
+ * @details Leaves existing session files untouched and, when the resolved base session file was
+ * never flushed to disk (pi persists session files lazily on the first entry append), materializes
+ * one minimal pi JSONL session header whose `cwd` equals the main base path using the same header
+ * contract as pi `SessionManager.newSession(...)`/`forkFrom(...)` and the extension-owned execution
+ * session snapshots. Materialization is restricted to existing session directories so recovery
+ * never writes into arbitrary locations, and any write failure degrades to `false` so the caller
+ * surfaces the re-anchor failure instead of silently deleting the anchoring worktree.
+ * Runtime is O(p) in path length plus one bounded filesystem probe and at most one file write.
+ * Side effects include one conditional session-file creation.
+ * @param[in] sessionFile {string} Resolved base-path session file path.
+ * @param[in] basePath {string} Absolute main repository base path recorded in the materialized header.
+ * @return {boolean} `true` when a persisted session file exists or was materialized; `false` when the session directory is missing or the write fails.
+ */
+function ensureReqResetBaseSessionFile(sessionFile: string, basePath: string): boolean {
+  const normalizedSessionFile = path.resolve(sessionFile);
+  if (fs.existsSync(normalizedSessionFile)) {
+    return true;
+  }
+  if (!fs.existsSync(path.dirname(normalizedSessionFile))) {
+    return false;
+  }
+  const sessionHeader = {
+    type: "session",
+    version: 3,
+    id: `req-reset-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`,
+    timestamp: new Date().toISOString(),
+    cwd: path.resolve(basePath),
+  };
+  try {
+    fs.writeFileSync(normalizedSessionFile, `${JSON.stringify(sessionHeader)}\n`, "utf8");
+  } catch {
+    return false;
+  }
+  return fs.existsSync(normalizedSessionFile);
+}
+
+/**
+ * @brief Reads one live session-bound context session directory while tolerating stale contexts.
+ * @details Real pi command contexts resolve `sessionManager` through getter-only accessors whose
+ * reads throw the documented stale-extension-context error after session replacement, so the
+ * session-directory probe must degrade stale reads to `undefined`. Runtime is O(1). No external
+ * state is mutated.
+ * @param[in] activeContext {ReqResetCommandContext | undefined} Candidate session-bound context.
+ * @return {string | undefined} Live session directory when readable; `undefined` when absent or stale.
+ */
+function readReqResetContextSessionDir(activeContext: ReqResetCommandContext | undefined): string | undefined {
+  try {
+    const sessionDir = typeof activeContext?.sessionManager?.getSessionDir === "function"
+      ? activeContext.sessionManager.getSessionDir()
+      : undefined;
+    return typeof sessionDir === "string" && sessionDir !== "" ? sessionDir : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * @brief Allocates one fresh persisted base-path session file for `req-reset` re-anchoring.
+ * @details Mirrors pi `/new` semantics for recovery situations without any resolvable original or
+ * recent base session: reserves one new session file path inside the live session directory
+ * through `SessionManager.create(...)` so the caller can materialize its header with the main base
+ * path and switch the pi CLI onto it before generated worktrees are removed. Allocation is
+ * restricted to existing session directories and any failure degrades to `undefined`. Runtime is
+ * O(p) in path length plus one bounded filesystem probe. No external state is mutated beyond the
+ * pi session-manager reservation.
+ * @param[in] basePath {string} Absolute main repository base path for the reserved session.
+ * @param[in] sessionDir {string | undefined} Live session directory reused for the reserved file.
+ * @return {string | undefined} Reserved session file path or `undefined` when allocation is impossible.
+ */
+function allocateReqResetBaseSessionFile(
+  basePath: string,
+  sessionDir: string | undefined,
+): string | undefined {
+  if (typeof sessionDir !== "string" || sessionDir === "" || !fs.existsSync(sessionDir)) {
+    return undefined;
+  }
+  try {
+    const sessionManager = SessionManager.create(path.resolve(basePath), sessionDir);
+    const sessionFile = sessionManager.getSessionFile();
+    return typeof sessionFile === "string" && sessionFile !== "" ? path.resolve(sessionFile) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -409,19 +509,50 @@ function reqResetExecutionPathNeedsRedirect(
 }
 
 /**
+ * @brief Reads one live session-bound context cwd while tolerating stale contexts.
+ * @details Real pi command contexts expose `cwd` as a getter-only accessor whose read throws the
+ * documented stale-extension-context error after session replacement, so every `req-reset` probe
+ * must degrade stale reads to `undefined` instead of aborting the whole recovery. Runtime is O(1).
+ * No external state is mutated.
+ * @param[in] activeContext {ReqResetCommandContext | undefined} Candidate session-bound context.
+ * @return {string | undefined} Live context cwd when readable; `undefined` when absent or stale.
+ */
+function readReqResetContextCwd(activeContext: ReqResetCommandContext | undefined): string | undefined {
+  try {
+    return typeof activeContext?.cwd === "string" && activeContext.cwd !== ""
+      ? activeContext.cwd
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * @brief Returns the pi CLI to the main base path before generated worktrees are removed.
- * @details When the host process cwd or the supplied context cwd is still anchored inside a generated worktree targeted for deletion or points at a deleted path, best-effort switches the active pi session back to the original or recent base-path session, re-anchors `process.cwd()` and the context `cwd` mirror onto the main base path, and clears the runtime worktree path state so no post-cleanup surface keeps probing the removed worktree directory. Session switching failures are swallowed because the process and context surfaces remain authoritative for cleanup; session switching is skipped entirely when no `switchSession(...)` hook is available or no base-path session exists. Runtime is dominated by one optional session switch plus bounded filesystem probes. Side effects include active-session replacement, host-process cwd mutation, and optional context mirror mutation.
+ * @details When the host process cwd or the supplied context cwd is still anchored inside a
+ * generated worktree targeted for deletion or points at a deleted path, best-effort switches the
+ * active pi session back to the original or recent base-path session, guaranteeing the resolved
+ * base session file is persisted through `ensureReqResetBaseSessionFile(...)` before switching so
+ * lazily-flushed reserved sessions still re-anchor the pi CLI onto the main base path. Re-anchors
+ * `process.cwd()`, clears the runtime worktree path state so no post-cleanup surface keeps probing
+ * the removed worktree directory, and reports any session-switch failure through the returned
+ * re-anchor diagnostic so the caller can surface it and retain anchoring worktrees instead of
+ * silently orphaning the live session at a deleted directory. Context `cwd` mirrors are probed
+ * stale-safely because pi contexts expose getter-only accessors that `Reflect.set(...)` cannot
+ * mutate. Runtime is dominated by one optional session switch plus bounded filesystem probes.
+ * Side effects include active-session replacement, host-process cwd mutation, and one conditional
+ * base-session file materialization.
  * @param[in] basePath {string} Absolute main repository base path.
  * @param[in,out] activeContext {ReqResetCommandContext | undefined} Mutated session context mirror and potential replacement-session context.
  * @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
- * @return {Promise<ReqResetCommandContext | undefined>} Replacement-session context when the runtime provides one; otherwise the caller-supplied context.
- * @satisfies REQ-257, REQ-307
+ * @return {Promise<{ context: ReqResetCommandContext | undefined; reanchorErrorMessage?: string }>} Re-anchored context plus one optional re-anchor failure diagnostic.
+ * @satisfies REQ-257, REQ-307, REQ-308, REQ-313
  */
 async function redirectReqResetExecutionToMainBranch(
   basePath: string,
   activeContext: ReqResetCommandContext | undefined,
   matchingWorktreeRoots: string[],
-): Promise<ReqResetCommandContext | undefined> {
+): Promise<{ context: ReqResetCommandContext | undefined; reanchorErrorMessage?: string }> {
   const normalizedBasePath = path.resolve(basePath);
   let processCwd: string | undefined;
   try {
@@ -429,7 +560,7 @@ async function redirectReqResetExecutionToMainBranch(
   } catch {
     processCwd = undefined;
   }
-  const contextCwd = typeof activeContext?.cwd === "string" ? activeContext.cwd : undefined;
+  const contextCwd = readReqResetContextCwd(activeContext);
   const processNeedsRedirect = reqResetExecutionPathNeedsRedirect(
     processCwd,
     normalizedBasePath,
@@ -441,17 +572,26 @@ async function redirectReqResetExecutionToMainBranch(
     matchingWorktreeRoots,
   );
   if (!processNeedsRedirect && !contextNeedsRedirect) {
-    return activeContext;
+    return { context: activeContext };
   }
+  let reanchorErrorMessage: string | undefined;
   if (typeof activeContext?.switchSession === "function") {
-    const mainSessionFile = resolveReqResetParentSessionFile(activeContext, normalizedBasePath)
+    let mainSessionFile = resolveReqResetParentSessionFile(activeContext, normalizedBasePath)
       ?? resolveReqResetMainSessionFile(normalizedBasePath);
-    if (mainSessionFile !== undefined) {
+    if (mainSessionFile === undefined) {
+      mainSessionFile = allocateReqResetBaseSessionFile(
+        normalizedBasePath,
+        readReqResetContextSessionDir(activeContext),
+      );
+    }
+    if (mainSessionFile !== undefined && ensureReqResetBaseSessionFile(mainSessionFile, normalizedBasePath)) {
       try {
         activeContext = await switchPromptCommandSession(mainSessionFile, activeContext);
-      } catch {
-        // Best-effort; host process and context surfaces below remain authoritative.
+      } catch (error) {
+        reanchorErrorMessage = `ERROR: req-reset could not switch the pi session back to ${normalizedBasePath}: ${error instanceof Error ? error.message : String(error)}`;
       }
+    } else {
+      reanchorErrorMessage = `ERROR: req-reset found no persisted base-path session to restore for ${normalizedBasePath}.`;
     }
   }
   try {
@@ -461,7 +601,7 @@ async function redirectReqResetExecutionToMainBranch(
   }
   if (activeContext !== undefined) {
     try {
-      if (path.resolve(activeContext.cwd ?? "") !== normalizedBasePath) {
+      if (path.resolve(readReqResetContextCwd(activeContext) ?? "") !== normalizedBasePath) {
         Reflect.set(activeContext, "cwd", normalizedBasePath);
       }
     } catch {
@@ -470,7 +610,38 @@ async function redirectReqResetExecutionToMainBranch(
   }
   setRuntimeContextPath(normalizedBasePath);
   setRuntimeWorktreePathState({});
-  return activeContext;
+  return { context: activeContext, reanchorErrorMessage };
+}
+
+/**
+ * @brief Lists matching worktree roots that still anchor the live session cwd.
+ * @details Used only after a failed session re-anchor so `req-reset` retains the worktree directory
+ * the live pi session is still checked out in, preventing the session cwd from being orphaned at a
+ * deleted directory (which renders `branch:unknown`). Stale or unreadable context cwds and paths
+ * that no longer exist yield an empty list because the session cannot be probed reliably. Runtime
+ * is O(r) in matched-worktree count plus one bounded filesystem probe. No external state is
+ * mutated.
+ * @param[in] activeContext {ReqResetCommandContext | undefined} Session-bound context whose live cwd may still anchor one matching worktree.
+ * @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
+ * @return {string[]} Absolute matching worktree roots that still contain the live session cwd.
+ */
+function resolveReqResetAnchoredWorktreeRoots(
+  activeContext: ReqResetCommandContext | undefined,
+  matchingWorktreeRoots: string[],
+): string[] {
+  const contextCwd = readReqResetContextCwd(activeContext);
+  if (contextCwd === undefined) {
+    return [];
+  }
+  const normalizedContextCwd = path.resolve(contextCwd);
+  if (!fs.existsSync(normalizedContextCwd)) {
+    return [];
+  }
+  return matchingWorktreeRoots.filter((worktreeRootPath) => {
+    const normalizedRoot = path.resolve(worktreeRootPath);
+    return normalizedContextCwd === normalizedRoot
+      || normalizedContextCwd.startsWith(`${normalizedRoot}${path.sep}`);
+  });
 }
 
 /**
@@ -547,7 +718,7 @@ export function prepareReqResetCommandExecution(
 
 /**
  * @brief Executes the specialized `req-reset` recovery and cleanup workflow.
- * @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, enumerates every matching sibling worktree, returns the pi CLI execution surfaces to the main base path before any matching worktree directory is removed, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
+ * @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, enumerates every matching sibling worktree, returns the pi CLI execution surfaces to the main base path (materializing the reserved base session when pi never flushed it) before any matching worktree directory is removed, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, retains the worktree plus branch that still anchor the live pi session whenever the session re-anchor fails so the session cwd is never orphaned at a deleted directory, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
  * @param[in] plan {ReqResetCommandPlan} Prepared recovery and cleanup plan.
  * @param[in] ctx {ReqResetCommandContext | undefined} Optional session-bound command context.
  * @return {Promise<ReqResetCommandExecutionResult>} Recovery and cleanup outcome facts.
@@ -604,14 +775,30 @@ export async function executeReqResetCommandExecution(
     errorMessages.push(error instanceof Error ? error.message : String(error));
   }
 
-  activeContext = await redirectReqResetExecutionToMainBranch(
+  const redirectOutcome = await redirectReqResetExecutionToMainBranch(
     plan.basePath,
     activeContext,
     matchingWorktreeRoots,
   );
+  activeContext = redirectOutcome.context;
+  if (redirectOutcome.reanchorErrorMessage !== undefined) {
+    errorMessages.push(redirectOutcome.reanchorErrorMessage);
+  }
+  const retainedWorktreeDirs = new Set(
+    redirectOutcome.reanchorErrorMessage !== undefined
+      ? resolveReqResetAnchoredWorktreeRoots(activeContext, matchingWorktreeRoots)
+        .map((worktreeRootPath) => path.basename(worktreeRootPath))
+      : [],
+  );
 
   for (const worktreeRootPath of matchingWorktreeRoots) {
     const worktreeDir = path.basename(worktreeRootPath);
+    if (retainedWorktreeDirs.has(worktreeDir)) {
+      errorMessages.push(
+        `ERROR: req-reset retained worktree ${worktreeDir} because the pi session could not be re-anchored to ${plan.basePath}.`,
+      );
+      continue;
+    }
     try {
       deletePromptWorktree(plan.basePath, worktreeDir, worktreeRootPath);
       removedWorktreeDirs.push(worktreeDir);
@@ -623,6 +810,12 @@ export async function executeReqResetCommandExecution(
   try {
     const matchingBranchNames = listReqResetMatchingBranchNames(plan.gitPath, plan.worktreeNamePattern);
     for (const branchName of matchingBranchNames) {
+      if (retainedWorktreeDirs.has(branchName)) {
+        errorMessages.push(
+          `ERROR: req-reset retained branch ${branchName} because its worktree still anchors the pi session.`,
+        );
+        continue;
+      }
       const deleteResult = runCapture(["git", "branch", "-D", branchName], plan.gitPath);
       if (deleteResult.error || deleteResult.status !== 0) {
         const diagnostic = deleteResult.stderr.trim()

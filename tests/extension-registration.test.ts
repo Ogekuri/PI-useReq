@@ -55,6 +55,7 @@ import {
   setPromptCommandPostCreateHookForTests,
 } from "../src/core/prompt-command-runtime.js";
 import {
+  clearPersistedPromptCommandRuntimeState,
   readPersistedPromptCommandSessionContext,
 } from "../src/core/prompt-command-state.js";
 import {
@@ -3874,6 +3875,201 @@ test("req-reset removes generated worktrees when invoked from inside a leftover 
     process.chdir(previousCwd);
     fs.rmSync(worktreeRoot, { recursive: true, force: true });
     fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Builds one pi-faithful command context bound to one shared session state.
+ * @details Mirrors the read-only pi client contract from `pi.dev-src`: `cwd` is a getter-only
+ * accessor returning the live session cwd, `switchSession(...)` swaps the shared session anchor,
+ * invalidates the calling context with the documented stale-extension-context error, and exposes
+ * one fresh replacement context through the `withSession` callback. The builder isolates the
+ * defect where `Reflect.set(ctx, "cwd", ...)` silently fails on real pi getter-only contexts.
+ * Runtime is O(1) per context build plus one session-file header read per switch. Side effects
+ * include session-state mutation, host-process cwd mutation, and shared UI-state mutation.
+ * @param[in] sessionState {{ cwd: string; sessionFile: string }} Shared mutable session anchor.
+ * @param[in] sessionDir {string} Session directory exposed through the session manager.
+ * @param[in,out] uiState {{ notifications: Array<{ message: string; level: string }>; statuses: Map<string, string> }} Shared UI recording surface.
+ * @return {any} Fresh live command context whose `cwd` accessor reads the shared session state.
+ */
+function createPiFaithfulCommandContext(
+  sessionState: { cwd: string; sessionFile: string },
+  sessionDir: string,
+  uiState: { notifications: Array<{ message: string; level: string }>; statuses: Map<string, string> },
+): any {
+  const staleMessage = "This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload().";
+  const context: any = {
+    get cwd(): string {
+      if (!context.__piUsereqLive) {
+        throw new Error(staleMessage);
+      }
+      return sessionState.cwd;
+    },
+    get model(): undefined {
+      if (!context.__piUsereqLive) {
+        throw new Error(staleMessage);
+      }
+      return undefined;
+    },
+    get thinkingLevel(): undefined {
+      if (!context.__piUsereqLive) {
+        throw new Error(staleMessage);
+      }
+      return undefined;
+    },
+    __piUsereqLive: true,
+    sessionManager: {
+      getCwd(): string {
+        return sessionState.cwd;
+      },
+      getSessionDir(): string {
+        return sessionDir;
+      },
+      getSessionFile(): string {
+        return sessionState.sessionFile;
+      },
+    },
+    getContextUsage(): undefined {
+      if (!context.__piUsereqLive) {
+        throw new Error(staleMessage);
+      }
+      return undefined;
+    },
+    async switchSession(sessionPath: string, options?: { withSession?: (ctx: unknown) => Promise<void> }) {
+      if (!context.__piUsereqLive) {
+        throw new Error(staleMessage);
+      }
+      sessionState.sessionFile = path.resolve(sessionPath);
+      sessionState.cwd = readFakeSessionFileCwd(sessionState.sessionFile, sessionState.cwd);
+      process.chdir(sessionState.cwd);
+      context.__piUsereqLive = false;
+      const replacement = createPiFaithfulCommandContext(sessionState, sessionDir, uiState);
+      if (options?.withSession) {
+        await options.withSession(replacement);
+      }
+      return { cancelled: false };
+    },
+    ui: {
+      theme: {
+        fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
+        bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
+        bold: (text: string) => `<bold>${text}</bold>`,
+      },
+      notify(message: string, level: string = "info") {
+        uiState.notifications.push({ message, level });
+      },
+      setStatus(key: string, value?: string) {
+        if (value === undefined) {
+          uiState.statuses.delete(key);
+        } else {
+          uiState.statuses.set(key, value);
+        }
+      },
+    },
+  };
+  return context;
+}
+
+/**
+ * @brief Verifies `req-reset` re-anchors the live pi session when the reserved base session was never persisted.
+ * @details Prepares one fixture repository with one generated worktree plus branch, binds one pi-faithful
+ * command context (getter-only `cwd` accessor, stale-after-switch semantics matching `pi.dev-src`) to one
+ * worktree-bound session whose header links a reserved original base session file that was never flushed
+ * to disk, invokes `req-reset` without any persisted prompt state, and verifies the command materializes
+ * the reserved base session, switches the live session onto the main base path before any worktree
+ * directory is removed, force-removes the generated worktree plus branch, and renders the final status
+ * branch from the main repository instead of the deleted worktree path. Runtime is dominated by
+ * temporary git worktree setup. Side effects are limited to temporary repository mutation, session-file
+ * writes under one temporary session directory, process cwd mutation, and shared UI notifications.
+ * @return {Promise<void>} Promise resolved after session-re-anchor assertions complete.
+ * @throws {AssertionError} Throws when `req-reset` deletes the anchoring worktree before re-anchoring
+ * the session, fails to materialize the reserved base session, or renders `branch:unknown`.
+ * @satisfies TST-106
+ */
+test("req-reset re-anchors the live session when the reserved base session was never persisted", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  const parentPath = path.resolve(projectBase, "..");
+  const projectName = path.basename(projectBase);
+  const generatedBranchName = `PI-useReq-${projectName}-master-20260923165521`;
+  const worktreeRoot = path.join(parentPath, generatedBranchName);
+  const sessionDir = path.join(
+    os.tmpdir(),
+    `pi-usereq-test-sessions-reanchor-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
+  const reservedOriginalSessionFile = path.join(sessionDir, "reserved-original-session.jsonl");
+  const worktreeSessionFile = path.join(sessionDir, "worktree-execution-session.jsonl");
+  try {
+    const worktreeAdd = spawnSync(
+      "git",
+      ["worktree", "add", worktreeRoot, "-b", generatedBranchName],
+      { cwd: projectBase, encoding: "utf8" },
+    );
+    assert.equal(worktreeAdd.status, 0, worktreeAdd.stderr);
+
+    fs.mkdirSync(sessionDir, { recursive: true });
+    fs.writeFileSync(
+      worktreeSessionFile,
+      `${JSON.stringify({
+        type: "session",
+        version: 3,
+        id: "worktree-execution-session",
+        timestamp: new Date(0).toISOString(),
+        cwd: worktreeRoot,
+        parentSession: reservedOriginalSessionFile,
+      })}\n`,
+      "utf8",
+    );
+
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    clearPersistedPromptCommandRuntimeState();
+    const sessionState = { cwd: worktreeRoot, sessionFile: worktreeSessionFile };
+    const uiState = {
+      notifications: [] as Array<{ message: string; level: string }>,
+      statuses: new Map<string, string>(),
+    };
+    const ctx = createPiFaithfulCommandContext(sessionState, sessionDir, uiState);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    assert.equal(fs.existsSync(reservedOriginalSessionFile), false);
+
+    await pi.commands.get("req-reset")!.handler("", ctx);
+
+    const mainBranchName = spawnSync("git", ["branch", "--show-current"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).stdout.trim();
+    assert.notEqual(mainBranchName, "");
+
+    assert.equal(sessionState.cwd, projectBase);
+    assert.equal(fs.existsSync(reservedOriginalSessionFile), true);
+    assert.equal(
+      readFakeSessionFileCwd(reservedOriginalSessionFile, ""),
+      projectBase,
+    );
+    assert.equal(fs.existsSync(worktreeRoot), false);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${generatedBranchName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      1,
+    );
+    assert.equal(path.resolve(process.cwd()), path.resolve(projectBase));
+    assert.ok(uiState.notifications.some((entry) => /SUCCESS: req-reset/.test(entry.message)));
+    assert.ok(!uiState.notifications.some((entry) => entry.level === "error"));
+    const finalStatusText = uiState.statuses.get("pi-usereq") ?? "";
+    assert.doesNotMatch(finalStatusText, /branch:unknown/);
+    assert.match(
+      finalStatusText,
+      new RegExp(`branch:<\\/accent><warning>${mainBranchName}<\\/warning>`),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(worktreeRoot, { recursive: true, force: true });
+    fs.rmSync(projectBase, { recursive: true, force: true });
+    fs.rmSync(sessionDir, { recursive: true, force: true });
   }
 });
 

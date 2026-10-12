@@ -4147,7 +4147,7 @@ import { runReferences } from "./tool-runner.js";
 
 ---
 
-# req-reset-command.ts | TypeScript | 653L | 21 symbols | 9 imports | 29 comments
+# req-reset-command.ts | TypeScript | 845L | 26 symbols | 9 imports | 33 comments
 > Path: `src/core/req-reset-command.ts`
 - @brief Implements the specialized `req-reset` slash-command workflow.
 - @details Performs non-agentic prompt-orchestration recovery by preserving the current execution-session transcript when available, restoring the original session-backed `base-path`, force-removing every generated sibling worktree and matching branch, and returning deterministic cleanup facts to the extension command handler. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, worktree deletion, branch deletion, and filesystem removal.
@@ -4258,20 +4258,65 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 - @param[in] sessionFile {string} Absolute session-file path.
 - @return {{ cwd?: string; parentSession?: string } | undefined} Parsed header fields or `undefined` when unreadable.
 
-### fn `function resolveReqResetParentSessionFile(` (L333-360)
+### fn `function resolveReqResetParentSessionFile(` (L341-373)
 - @brief Resolves the original base-path session file from the active session header.
-- @details Reads the current session file exposed by the supplied command context, accepts only a persisted `parentSession` link whose own header `cwd` remains inside the main base path, and returns it so `req-reset` can switch the pi CLI back to the original session-backed base path. Runtime is O(n) in session-header size plus bounded filesystem probes. No external state is mutated.
+- @details Reads the current session file exposed by the supplied command context and accepts one
+persisted `parentSession` link as the reserved original base-path session under two conditions:
+when the linked file already exists on disk its own header `cwd` must remain inside the main base
+path, and when the linked file was never flushed to disk (pi persists session files lazily on the
+first entry append) the link itself proves the reserved original-session identity so the caller
+can materialize the base session before switching. Unpersisted links are accepted only when their
+parent directory already exists so recovery never writes session files into arbitrary locations.
+Runtime is O(n) in session-header size plus bounded filesystem probes. No external state is
+mutated.
 - @param[in] activeContext {ReqResetCommandContext | undefined} Session-bound command context whose current session file links the base-path session.
 - @param[in] basePath {string} Absolute main repository base path that must contain the parent session cwd.
 - @return {string | undefined} Original base-path session file or `undefined` when unavailable.
 
-### fn `function resolveReqResetMainSessionFile(basePath: string): string | undefined` (L368-378)
+### fn `function ensureReqResetBaseSessionFile(sessionFile: string, basePath: string): boolean` (L390-411)
+- @brief Guarantees one switchable persisted base-path session file for `req-reset` re-anchoring.
+- @details Leaves existing session files untouched and, when the resolved base session file was
+never flushed to disk (pi persists session files lazily on the first entry append), materializes
+one minimal pi JSONL session header whose `cwd` equals the main base path using the same header
+contract as pi `SessionManager.newSession(...)`/`forkFrom(...)` and the extension-owned execution
+session snapshots. Materialization is restricted to existing session directories so recovery
+never writes into arbitrary locations, and any write failure degrades to `false` so the caller
+surfaces the re-anchor failure instead of silently deleting the anchoring worktree.
+Runtime is O(p) in path length plus one bounded filesystem probe and at most one file write.
+Side effects include one conditional session-file creation.
+- @param[in] sessionFile {string} Resolved base-path session file path.
+- @param[in] basePath {string} Absolute main repository base path recorded in the materialized header.
+- @return {boolean} `true` when a persisted session file exists or was materialized; `false` when the session directory is missing or the write fails.
+
+### fn `function readReqResetContextSessionDir(activeContext: ReqResetCommandContext | undefined): string | undefined` (L422-431)
+- @brief Reads one live session-bound context session directory while tolerating stale contexts.
+- @details Real pi command contexts resolve `sessionManager` through getter-only accessors whose
+reads throw the documented stale-extension-context error after session replacement, so the
+session-directory probe must degrade stale reads to `undefined`. Runtime is O(1). No external
+state is mutated.
+- @param[in] activeContext {ReqResetCommandContext | undefined} Candidate session-bound context.
+- @return {string | undefined} Live session directory when readable; `undefined` when absent or stale.
+
+### fn `function allocateReqResetBaseSessionFile(` (L446-460)
+- @brief Allocates one fresh persisted base-path session file for `req-reset` re-anchoring.
+- @details Mirrors pi `/new` semantics for recovery situations without any resolvable original or
+recent base session: reserves one new session file path inside the live session directory
+through `SessionManager.create(...)` so the caller can materialize its header with the main base
+path and switch the pi CLI onto it before generated worktrees are removed. Allocation is
+restricted to existing session directories and any failure degrades to `undefined`. Runtime is
+O(p) in path length plus one bounded filesystem probe. No external state is mutated beyond the
+pi session-manager reservation.
+- @param[in] basePath {string} Absolute main repository base path for the reserved session.
+- @param[in] sessionDir {string | undefined} Live session directory reused for the reserved file.
+- @return {string | undefined} Reserved session file path or `undefined` when allocation is impossible.
+
+### fn `function resolveReqResetMainSessionFile(basePath: string): string | undefined` (L468-478)
 - @brief Resolves the most recent persisted session file rooted at the main base path.
 - @details Uses the pi SDK default session discovery for the supplied cwd and returns the persisted session file only when it already exists on disk, so the pi CLI can resume the recent base-path session instead of being created a fresh one. Runtime is O(s) in session-directory listing cost. No external state is mutated.
 - @param[in] basePath {string} Absolute main repository base path.
 - @return {string | undefined} Most recent persisted base-path session file or `undefined` when none exists.
 
-### fn `function reqResetExecutionPathNeedsRedirect(` (L388-409)
+### fn `function reqResetExecutionPathNeedsRedirect(` (L488-509)
 - @brief Tests whether one execution path must be re-anchored to the main base path before cleanup.
 - @details Returns `true` when the path does not exist anymore, or when it is anchored inside any generated worktree root targeted by `req-reset` and the base path is not an ancestor of it. Existing paths already inside the main base path never need a redirect. Runtime is O(r) in matched-worktree count plus bounded filesystem probes. No external state is mutated.
 - @param[in] executionPath {string | undefined} Live process or context execution path.
@@ -4279,23 +4324,55 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 - @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
 - @return {boolean} `true` when the execution path must be switched to the main base path first.
 
-### fn `async function redirectReqResetExecutionToMainBranch(` (L420-474)
+### fn `function readReqResetContextCwd(activeContext: ReqResetCommandContext | undefined): string | undefined` (L520-528)
+- @brief Reads one live session-bound context cwd while tolerating stale contexts.
+- @details Real pi command contexts expose `cwd` as a getter-only accessor whose read throws the
+documented stale-extension-context error after session replacement, so every `req-reset` probe
+must degrade stale reads to `undefined` instead of aborting the whole recovery. Runtime is O(1).
+No external state is mutated.
+- @param[in] activeContext {ReqResetCommandContext | undefined} Candidate session-bound context.
+- @return {string | undefined} Live context cwd when readable; `undefined` when absent or stale.
+
+### fn `async function redirectReqResetExecutionToMainBranch(` (L550-613)
 - @brief Returns the pi CLI to the main base path before generated worktrees are removed.
-- @details When the host process cwd or the supplied context cwd is still anchored inside a generated worktree targeted for deletion or points at a deleted path, best-effort switches the active pi session back to the original or recent base-path session, re-anchors `process.cwd()` and the context `cwd` mirror onto the main base path, and clears the runtime worktree path state so no post-cleanup surface keeps probing the removed worktree directory. Session switching failures are swallowed because the process and context surfaces remain authoritative for cleanup; session switching is skipped entirely when no `switchSession(...)` hook is available or no base-path session exists. Runtime is dominated by one optional session switch plus bounded filesystem probes. Side effects include active-session replacement, host-process cwd mutation, and optional context mirror mutation.
+- @details When the host process cwd or the supplied context cwd is still anchored inside a
+generated worktree targeted for deletion or points at a deleted path, best-effort switches the
+active pi session back to the original or recent base-path session, guaranteeing the resolved
+base session file is persisted through `ensureReqResetBaseSessionFile(...)` before switching so
+lazily-flushed reserved sessions still re-anchor the pi CLI onto the main base path. Re-anchors
+`process.cwd()`, clears the runtime worktree path state so no post-cleanup surface keeps probing
+the removed worktree directory, and reports any session-switch failure through the returned
+re-anchor diagnostic so the caller can surface it and retain anchoring worktrees instead of
+silently orphaning the live session at a deleted directory. Context `cwd` mirrors are probed
+stale-safely because pi contexts expose getter-only accessors that `Reflect.set(...)` cannot
+mutate. Runtime is dominated by one optional session switch plus bounded filesystem probes.
+Side effects include active-session replacement, host-process cwd mutation, and one conditional
+base-session file materialization.
 - @param[in] basePath {string} Absolute main repository base path.
 - @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
 - @param[in,out] activeContext {ReqResetCommandContext | undefined} Mutated session context mirror and potential replacement-session context.
-- @return {Promise<ReqResetCommandContext | undefined>} Replacement-session context when the runtime provides one; otherwise the caller-supplied context.
-- @satisfies REQ-257, REQ-307
+- @return {Promise<{ context: ReqResetCommandContext | undefined; reanchorErrorMessage?: string }>} Re-anchored context plus one optional re-anchor failure diagnostic.
 
-### fn `function restoreReqResetExecutionCwd(basePath: string, activeContext: ReqResetCommandContext | undefined): void` (L483-509)
+### fn `function resolveReqResetAnchoredWorktreeRoots(` (L627-644)
+- @brief Lists matching worktree roots that still anchor the live session cwd.
+- @details Used only after a failed session re-anchor so `req-reset` retains the worktree directory
+the live pi session is still checked out in, preventing the session cwd from being orphaned at a
+deleted directory (which renders `branch:unknown`). Stale or unreadable context cwds and paths
+that no longer exist yield an empty list because the session cannot be probed reliably. Runtime
+is O(r) in matched-worktree count plus one bounded filesystem probe. No external state is
+mutated.
+- @param[in] activeContext {ReqResetCommandContext | undefined} Session-bound context whose live cwd may still anchor one matching worktree.
+- @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
+- @return {string[]} Absolute matching worktree roots that still contain the live session cwd.
+
+### fn `function restoreReqResetExecutionCwd(basePath: string, activeContext: ReqResetCommandContext | undefined): void` (L653-679)
 - @brief Restores live process and context cwd surfaces after worktree removal.
 - @details Best-effort re-points `process.cwd()` and the supplied context `cwd` mirror to the main repository base path when the previously live cwd was removed by `req-reset` cleanup, so subsequent status rendering and notifications never probe deleted worktree paths. Runtime is O(1) plus bounded filesystem probes. Side effects include process cwd mutation and optional context mirror mutation.
 - @param[in] basePath {string} Absolute main repository base path.
 - @param[in,out] activeContext {ReqResetCommandContext | undefined} Mutated session context mirror.
 - @return {void} No return value.
 
-### fn `export function prepareReqResetCommandExecution(` (L521-546)
+### fn `export function prepareReqResetCommandExecution(` (L691-716)
 - @brief Prepares the specialized `req-reset` execution plan.
 - @details Resolves the active project base into a runtime git root, normalizes that root to the main repository worktree so cleanup and branch checks never run from inside a linked worktree, derives the sibling-worktree parent directory and generated-name matcher from the same prefix plus repository-basename contract used by prompt-command worktree generation, and keeps only worktree-backed persisted prompt execution plans for transcript-preserving base-path restoration. Runtime is O(p) in path length plus one git subprocess. No external state is mutated.
 - @param[in] projectBase {string} Absolute project base path.
@@ -4305,9 +4382,9 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 - @throws {ReqError} Throws when the repository root cannot be resolved.
 - @satisfies REQ-306, REQ-309, REQ-310, REQ-311
 
-### fn `export async function executeReqResetCommandExecution(` (L556-653)
+### fn `export async function executeReqResetCommandExecution(` (L726-845)
 - @brief Executes the specialized `req-reset` recovery and cleanup workflow.
-- @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, enumerates every matching sibling worktree, returns the pi CLI execution surfaces to the main base path before any matching worktree directory is removed, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
+- @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, enumerates every matching sibling worktree, returns the pi CLI execution surfaces to the main base path (materializing the reserved base session when pi never flushed it) before any matching worktree directory is removed, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, retains the worktree plus branch that still anchor the live pi session whenever the session re-anchor fails so the session cwd is never orphaned at a deleted directory, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
 - @param[in] plan {ReqResetCommandPlan} Prepared recovery and cleanup plan.
 - @param[in] ctx {ReqResetCommandContext | undefined} Optional session-bound command context.
 - @return {Promise<ReqResetCommandExecutionResult>} Recovery and cleanup outcome facts.
@@ -4330,13 +4407,18 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 |`resolveReqResetMainBranchName`|fn||231-258|function resolveReqResetMainBranchName(gitRoot: string): ...|
 |`ensureReqResetMainBranch`|fn||269-290|function ensureReqResetMainBranch(gitRoot: string, worktr...|
 |`readReqResetSessionHeader`|fn||298-324|function readReqResetSessionHeader(sessionFile: string): ...|
-|`resolveReqResetParentSessionFile`|fn||333-360|function resolveReqResetParentSessionFile(|
-|`resolveReqResetMainSessionFile`|fn||368-378|function resolveReqResetMainSessionFile(basePath: string)...|
-|`reqResetExecutionPathNeedsRedirect`|fn||388-409|function reqResetExecutionPathNeedsRedirect(|
-|`redirectReqResetExecutionToMainBranch`|fn||420-474|async function redirectReqResetExecutionToMainBranch(|
-|`restoreReqResetExecutionCwd`|fn||483-509|function restoreReqResetExecutionCwd(basePath: string, ac...|
-|`prepareReqResetCommandExecution`|fn||521-546|export function prepareReqResetCommandExecution(|
-|`executeReqResetCommandExecution`|fn||556-653|export async function executeReqResetCommandExecution(|
+|`resolveReqResetParentSessionFile`|fn||341-373|function resolveReqResetParentSessionFile(|
+|`ensureReqResetBaseSessionFile`|fn||390-411|function ensureReqResetBaseSessionFile(sessionFile: strin...|
+|`readReqResetContextSessionDir`|fn||422-431|function readReqResetContextSessionDir(activeContext: Req...|
+|`allocateReqResetBaseSessionFile`|fn||446-460|function allocateReqResetBaseSessionFile(|
+|`resolveReqResetMainSessionFile`|fn||468-478|function resolveReqResetMainSessionFile(basePath: string)...|
+|`reqResetExecutionPathNeedsRedirect`|fn||488-509|function reqResetExecutionPathNeedsRedirect(|
+|`readReqResetContextCwd`|fn||520-528|function readReqResetContextCwd(activeContext: ReqResetCo...|
+|`redirectReqResetExecutionToMainBranch`|fn||550-613|async function redirectReqResetExecutionToMainBranch(|
+|`resolveReqResetAnchoredWorktreeRoots`|fn||627-644|function resolveReqResetAnchoredWorktreeRoots(|
+|`restoreReqResetExecutionCwd`|fn||653-679|function restoreReqResetExecutionCwd(basePath: string, ac...|
+|`prepareReqResetCommandExecution`|fn||691-716|export function prepareReqResetCommandExecution(|
+|`executeReqResetCommandExecution`|fn||726-845|export async function executeReqResetCommandExecution(|
 
 
 ---
