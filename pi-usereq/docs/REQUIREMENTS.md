@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.96"
+version: "0.0.97"
 date: "2026-10-12"
 author: "OpenAI Codex"
 scope:
@@ -507,6 +507,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-429**: MUST persist the finalized provider error message text as one `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>-response` file beside the flushed error payload file.
 - **REQ-430**: MUST write one `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>-replay.json` sidecar containing provider, baseUrl, model id, thinking level, contextWindow, maxTokens, execution session file, and ready-to-use replay command lines.
 - **REQ-431**: MUST keep each `-error-<status>` payload file raw provider-request JSON so `curl --data @<file>` re-sends the exact failing request.
+- **REQ-432**: MUST copy the captured execution-session file byte-for-byte into `DEBUG_PROMPTS_LOG_PATH` beside each flushed error payload as `<YYYYMMDDHHMMSSmmm>-<req-command>-error-<status>-session.jsonl` sharing the payload write-time timestamp.
+- **REQ-433**: MUST reference the REQ-432 log-local session snapshot inside the sidecar `replayCommands.piFork` entry, falling back to the retained execution-session path only when the session copy fails.
+- **REQ-434**: MUST document in `README.md` the exact `pi --fork <snapshot> --model <modelId> --thinking <level> "<message>"` line as the extension-free, log-files-only provider-error reproduction procedure.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -648,6 +651,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-150**: MUST verify the `-error-<status>-response` file persists the provider error message text beside the flushed `-error-<status>` payload file.
 - **TST-151**: MUST verify the `-error-<status>-replay.json` sidecar carries provider, baseUrl, model id, thinking level, contextWindow, maxTokens, execution session file, and replay command lines.
 - **TST-152**: MUST verify the `-error-<status>` payload file stays raw provider-request JSON parseable as a direct request body.
+- **TST-153**: MUST verify the `-error-<status>-session.jsonl` snapshot is written beside the flushed payload for a 400 response, matches the execution-session content at flush time, and is absent for statuses below 400.
+- **TST-154**: MUST verify the sidecar `replayCommands.piFork` references the log-local `-error-<status>-session.jsonl` snapshot path.
 - **TST-145**: MUST verify `Debug` submenu edits plus the approved `Debug` subtree reset persist `DEBUG_PROMPTS_ENABLED` and `DEBUG_PROMPTS_LOG_PATH` immediately with documented defaults.
 - **TST-146**: MUST verify enabled prompt debug capture writes the exact provider payload into one `error-<status>` file beside the initial prompt file for a 400 response.
 - **TST-147**: MUST verify provider error payload capture writes nothing when prompt debug logging is disabled or the response status is below 400.

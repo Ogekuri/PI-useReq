@@ -335,7 +335,7 @@ The extension renders a status field in the pi status line showing: extension id
   pi -p "Rewrite this function" --append-system-prompt /tmp/PI-useReq/20261009072235123-req-implement
   ```
 
-- **Provider error logging** — when a dispatched `req-*` run receives a provider response with status >= 400, pi-usereq writes the exact failing request payload into `<timestamp>-<command>-error-<status>` (raw provider-request JSON), the provider error message text into `<timestamp>-<command>-error-<status>-response`, and replay metadata into `<timestamp>-<command>-error-<status>-replay.json`, all beside the run's `-request` and `-prompt` files. The `-replay.json` sidecar carries the provider, base URL, model id, thinking level, context window, max output tokens, the retained execution-session file, and ready-to-use replay commands. You can re-generate the failure for immediate pi CLI debugging:
+- **Provider error logging** — when a dispatched `req-*` run receives a provider response with status >= 400, pi-usereq writes the exact failing request payload into `<timestamp>-<command>-error-<status>` (raw provider-request JSON), the provider error message text into `<timestamp>-<command>-error-<status>-response`, a byte-for-byte snapshot of the retained execution session into `<timestamp>-<command>-error-<status>-session.jsonl`, and replay metadata into `<timestamp>-<command>-error-<status>-replay.json`, all beside the run's `-request` and `-prompt` files. The `-replay.json` sidecar carries the provider, base URL, model id, thinking level, context window, max output tokens, the retained execution-session file, and ready-to-use replay commands; `replayCommands.piFork` targets the log-local `-session.jsonl` snapshot, which freezes the transcript exactly at the failing provider request (before any context edit or compaction). You can re-generate the failure for immediate pi CLI debugging:
 
   ```bash
   # Re-send the exact failing provider request (the payload file is raw request JSON)
@@ -351,8 +351,11 @@ The extension renders a status field in the pi status line showing: extension id
   pi --no-session --model '~deepseek/deepseek-flash-latest' --thinking high \
     -p "$(cat /tmp/PI-useReq/20261012070647580-req-analyze-prompt)"
 
-  # Fork the retained execution session (kept on failed runs) and continue it
-  pi --fork /home/ogekuri/.pi/agent/sessions/--home-ogekuri-Git-PI-useReq--/2026-10-12T05-06-46-788Z_01a12e81-9584-72f4-92e3-19008d04cccf.jsonl
+  # Resume the exact failing state using only log files, then re-trigger the failing request:
+  # the -session.jsonl snapshot is the execution session frozen at the 400, so any
+  # continuation message re-sends the same oversized request and reproduces the error
+  pi --fork /tmp/PI-useReq/20261012091841114-req-analyze-error-400-session.jsonl \
+    --model '~deepseek/deepseek-flash-latest' --thinking high "continue"
   ```
 
 

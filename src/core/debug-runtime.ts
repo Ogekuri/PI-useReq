@@ -967,6 +967,23 @@ export function formatPromptDebugErrorReplayFileName(
 }
 
 /**
+ * @brief Builds one provider error session-snapshot debug filename for one bundled prompt.
+ * @details Appends the `-session.jsonl` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the byte-for-byte execution-session copy stays attributable to the exact failing request payload file written with the identical write-time timestamp and remains directly consumable by `pi --fork` without files outside the prompt log directory. Runtime is O(1). No external state is mutated.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @param[in] errorCode {number} Failing provider response status, such as `400`.
+ * @param[in] date {Date} Write-time timestamp shared with the payload file. Defaults to the current wall-clock time.
+ * @return {string} Provider error session-snapshot filename in the `<timestamp>-<req-command>-error-<status>-session.jsonl` shape.
+ * @satisfies REQ-423, REQ-432
+ */
+export function formatPromptDebugErrorSessionFileName(
+  promptName: PromptCommandName,
+  errorCode: number,
+  date = new Date(),
+): string {
+  return `${formatPromptDebugErrorFileName(promptName, errorCode, date)}-session.jsonl`;
+}
+
+/**
  * @brief Resolves the failing HTTP status carried by one finalized agent message.
  * @details Extracts the leading provider error status from one `message_end` assistant message whose `stopReason` equals `error`, accepting the pi `formatProviderError` display shapes (`"<status>: <body>"` and `"<prefix> (<status>): <body>"`) plus the raw SDK `error.message` shape (`"<status> <body>"`) surfaced unchanged by the agent run-failure path, so provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses (the OpenAI-compatible family, including `zai`) still flush the captured provider request payload through the message lifecycle channel. Runtime is O(n) in the inspected error-message prefix length. No external state is mutated.
  * @param[in] message {unknown} Finalized agent message forwarded by one `message_end` lifecycle event.
@@ -1112,15 +1129,17 @@ function resolveProviderReplayEndpoint(facts: PromptErrorReplayFacts): string | 
 
 /**
  * @brief Builds the replay sidecar JSON text for one flushed provider error payload.
- * @details Serializes the captured provider, base URL, API, model identifier, thinking level, context-window and max-output-token facts, the execution-session file, the dispatched prompt debug file, the flushed request payload file, and ready-to-use replay command lines: one `curl --data @` provider replay of the exact failing request, one pi one-shot replay of the dispatched prompt file, and one `pi --fork` replay of the retained execution session. Command lines are emitted only when their supporting facts exist so every emitted command is directly executable. Runtime is O(n) in serialized sidecar size. No external state is mutated.
+ * @details Serializes the captured provider, base URL, API, model identifier, thinking level, context-window and max-output-token facts, the execution-session file, the dispatched prompt debug file, the flushed request payload file, and ready-to-use replay command lines: one `curl --data @` provider replay of the exact failing request, one pi one-shot replay of the dispatched prompt file, and one `pi --fork` replay that targets the log-local `-session.jsonl` snapshot when supplied and falls back to the retained execution session otherwise. Command lines are emitted only when their supporting facts exist so every emitted command is directly executable. Runtime is O(n) in serialized sidecar size. No external state is mutated.
  * @param[in] captured {CapturedPromptErrorPayload} Consumed capture supplying replay facts and artifact paths.
  * @param[in] requestFileName {string} Payload filename written with the same write-time timestamp.
+ * @param[in] sessionSnapshotFileName {string | undefined} Log-local `-session.jsonl` snapshot filename written with the same write-time timestamp; `undefined` falls back to the retained execution-session path.
  * @return {string} Newline-terminated replay sidecar JSON text.
- * @satisfies REQ-430
+ * @satisfies REQ-430, REQ-433
  */
 function buildPromptErrorReplaySidecarText(
   captured: CapturedPromptErrorPayload,
   requestFileName: string,
+  sessionSnapshotFileName?: string,
 ): string {
   const facts = captured.replayFacts;
   const requestFilePath = path.join(captured.logDirectory, requestFileName);
@@ -1133,10 +1152,13 @@ function buildPromptErrorReplaySidecarText(
   if (captured.promptDebugFile !== undefined && facts.modelId !== undefined) {
     replayCommands.piOneShot = `pi --no-session --model '${facts.modelId}' --thinking ${facts.thinkingLevel ?? "off"} -p "$(cat '${captured.promptDebugFile}')"`;
   }
-  if (facts.executionSessionFile !== undefined) {
+  const sessionForkFile = sessionSnapshotFileName !== undefined
+    ? path.join(captured.logDirectory, sessionSnapshotFileName)
+    : facts.executionSessionFile;
+  if (sessionForkFile !== undefined) {
     const modelFlags = facts.modelId === undefined ? "" : ` --model '${facts.modelId}'`;
     const thinkingFlags = facts.thinkingLevel === undefined ? "" : ` --thinking ${facts.thinkingLevel}`;
-    replayCommands.piFork = `pi --fork '${facts.executionSessionFile}'${modelFlags}${thinkingFlags}`;
+    replayCommands.piFork = `pi --fork '${sessionForkFile}'${modelFlags}${thinkingFlags}`;
   }
   const sidecar = {
     provider: facts.provider ?? null,
@@ -1156,11 +1178,11 @@ function buildPromptErrorReplaySidecarText(
 
 /**
  * @brief Writes the captured provider request payload plus its response text and replay sidecar as error-stage prompt debug files.
- * @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file that stays raw provider-request JSON usable with `curl --data @`, the provider error text into one identically timestamped `-response` file when supplied, and the replay sidecar into one identically timestamped `-replay.json` file inside the captured log directory beside the initial dispatched prompt artifacts. Records the flushed location so a later finalized `message_end` error message can still append the `-response` file when `after_provider_response` fired first without error text. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus at most three file writes when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
+ * @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>` file that stays raw provider-request JSON usable with `curl --data @`, the provider error text into one identically timestamped `-response` file when supplied, one identically timestamped byte-for-byte `-session.jsonl` copy of the retained execution session so `pi --fork` can resume the exact failing state from the prompt log directory alone, and the replay sidecar into one identically timestamped `-replay.json` file inside the captured log directory beside the initial dispatched prompt artifacts. Records the flushed location so a later finalized `message_end` error message can still append the `-response` file when `after_provider_response` fired first without error text. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus at most four file writes when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
  * @param[in] errorResponseText {string | undefined} Finalized provider error message text when already available; the `-response` file is written later when omitted.
  * @return {boolean} `true` when the provider error payload file set is written; otherwise `false`.
- * @satisfies REQ-422, REQ-423, REQ-424, REQ-425, REQ-429, REQ-430, REQ-431
+ * @satisfies REQ-422, REQ-423, REQ-424, REQ-425, REQ-429, REQ-430, REQ-431, REQ-432, REQ-433
  */
 export function flushCapturedPromptErrorPayload(errorCode: number, errorResponseText?: string): boolean {
   const captureStore = getProcessScopedPromptErrorCaptureStore();
@@ -1185,9 +1207,13 @@ export function flushCapturedPromptErrorPayload(errorCode: number, errorResponse
         errorResponseText,
       );
     }
+    const sessionSnapshotFileName = copyPromptErrorSessionSnapshotFile(
+      captured,
+      formatPromptDebugErrorSessionFileName(captured.promptName, errorCode, writeTime),
+    );
     fs.writeFileSync(
       path.join(captured.logDirectory, formatPromptDebugErrorReplayFileName(captured.promptName, errorCode, writeTime)),
-      buildPromptErrorReplaySidecarText(captured, payloadFileName),
+      buildPromptErrorReplaySidecarText(captured, payloadFileName, sessionSnapshotFileName),
       "utf8",
     );
     captureStore.lastFlushedPromptError = {
@@ -1218,6 +1244,31 @@ function writePromptProviderErrorResponseFile(
 ): void {
   fs.mkdirSync(logDirectory, { recursive: true });
   fs.writeFileSync(path.join(logDirectory, fileName), `${errorResponseText}\n`, "utf8");
+}
+
+/**
+ * @brief Copies the retained execution-session file beside one flushed provider error payload.
+ * @details Duplicates the captured execution-session file byte-for-byte into the captured log directory under the requested `-session.jsonl` filename synchronously during the error-stage flush, so the snapshot freezes the transcript exactly at the state that produced the failing provider request before pi's `context_edit` or compaction appends further entries and stays directly consumable by `pi --fork` without any file outside the prompt log directory. Degrades to `undefined` on any copy failure so the replay sidecar falls back to the retained execution-session path. Runtime is dominated by one directory creation plus one file copy. Side effects include directory creation and file creation.
+ * @param[in] captured {CapturedPromptErrorPayload} Consumed capture supplying the log directory and execution-session replay facts.
+ * @param[in] snapshotFileName {string} Session-snapshot filename sharing the payload write-time timestamp.
+ * @return {string | undefined} Written snapshot filename when the copy succeeds; otherwise `undefined`.
+ * @satisfies REQ-432
+ */
+function copyPromptErrorSessionSnapshotFile(
+  captured: CapturedPromptErrorPayload,
+  snapshotFileName: string,
+): string | undefined {
+  const sessionFile = captured.replayFacts.executionSessionFile;
+  if (sessionFile === undefined || sessionFile.length === 0) {
+    return undefined;
+  }
+  try {
+    fs.mkdirSync(captured.logDirectory, { recursive: true });
+    fs.copyFileSync(sessionFile, path.join(captured.logDirectory, snapshotFileName));
+    return snapshotFileName;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

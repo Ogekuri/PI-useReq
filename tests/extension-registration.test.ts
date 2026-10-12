@@ -31,6 +31,7 @@ import {
   formatPromptDebugErrorFileName,
   formatPromptDebugErrorReplayFileName,
   formatPromptDebugErrorResponseFileName,
+  formatPromptDebugErrorSessionFileName,
   formatPromptDebugFileName,
   logDebugPromptContent,
   normalizeDebugPromptsLogPath,
@@ -2422,13 +2423,17 @@ test("provider error payload debug logging saves failing request payload beside 
   }, ctx);
   const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
   const savedFiles = fs.readdirSync(promptLogDir).sort();
-  assert.equal(savedFiles.length, 4);
+  assert.equal(savedFiles.length, 5);
   const initialPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
   const errorPayloadFile = savedFiles.find((fileName) => fileName.endsWith("-error-400") && !fileName.includes("-error-400-"));
   const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
   assert.ok(initialPromptFile);
   assert.ok(errorPayloadFile);
   assert.ok(replaySidecarFile);
+  assert.ok(
+    savedFiles.includes(`${errorPayloadFile}-session.jsonl`),
+    "the flush writes the byte-for-byte execution-session snapshot beside the payload",
+  );
   assert.match(initialPromptFile, /^\d{17}-req-implement-prompt$/u);
   assert.match(errorPayloadFile, /^\d{17}-req-implement-error-400$/u);
   assert.match(replaySidecarFile, /^\d{17}-req-implement-error-400-replay\.json$/u);
@@ -2450,10 +2455,10 @@ test("provider error payload debug logging saves failing request payload beside 
 
 /**
  * @brief Verifies the provider error response text and replay sidecar written beside a directly flushed error payload.
- * @details Covers the `message_end` flush order where the finalized assistant error message supplies both the failing HTTP status and the provider error text: the flush writes the raw-JSON payload file, the identically timestamped `-response` file persisting the exact error message with one trailing newline, and the identically timestamped `-replay.json` sidecar carrying the live model facts (provider, baseUrl, api, model id, thinking level, contextWindow, maxTokens), the retained execution-session file, the dispatched prompt debug file, the flushed request payload file, and ready-to-use provider, pi one-shot, and `pi --fork` replay command lines.
+ * @details Covers the `message_end` flush order where the finalized assistant error message supplies both the failing HTTP status and the provider error text: the flush writes the raw-JSON payload file, the identically timestamped `-response` file persisting the exact error message with one trailing newline, the identically timestamped `-session.jsonl` byte-for-byte execution-session snapshot, and the identically timestamped `-replay.json` sidecar carrying the live model facts (provider, baseUrl, api, model id, thinking level, contextWindow, maxTokens), the retained execution-session file, the dispatched prompt debug file, the flushed request payload file, and ready-to-use provider, pi one-shot, and `pi --fork` replay command lines targeting the log-local session snapshot.
  * @return {Promise<void>} Promise resolved after the prompt run, provider error flush, and sidecar assertions complete.
  * @throws {AssertionError} Throws when the response file, replay sidecar contents, payload raw JSON, or deterministic filename shapes diverge from the documented contracts.
- * @satisfies TST-150, TST-151, TST-152, REQ-429, REQ-430, REQ-431
+ * @satisfies TST-150, TST-151, TST-152, REQ-429, REQ-430, REQ-431, REQ-432, REQ-433
  */
 test("provider error debug logging writes response text and replay sidecar beside flushed payload", async () => {
   const fixture = initFixtureRepo();
@@ -2496,14 +2501,16 @@ test("provider error debug logging writes response text and replay sidecar besid
   }, ctx);
   const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
   const savedFiles = fs.readdirSync(promptLogDir).sort();
-  assert.equal(savedFiles.length, 5);
+  assert.equal(savedFiles.length, 6);
   const promptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
   const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
   const responseFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-response"));
+  const sessionSnapshotFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-session.jsonl"));
   const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
   assert.ok(promptFile);
   assert.ok(errorPayloadFile);
   assert.ok(responseFile);
+  assert.ok(sessionSnapshotFile);
   assert.ok(replaySidecarFile);
   assert.equal(
     fs.readFileSync(path.join(promptLogDir, responseFile), "utf8"),
@@ -2541,7 +2548,91 @@ test("provider error debug logging writes response text and replay sidecar besid
   assert.ok(replayCommands.piOneShot.includes("--model 'openai/gpt-astra-latest'"));
   assert.ok(replayCommands.piOneShot.includes("--thinking high"));
   assert.ok(replayCommands.piOneShot.includes(`$(cat '${path.join(promptLogDir, promptFile)}')`));
-  assert.ok(replayCommands.piFork.startsWith(`pi --fork '${replaySidecar.sessionFile}'`));
+  assert.equal(
+    replayCommands.piFork,
+    `pi --fork '${path.join(promptLogDir, sessionSnapshotFile)}' --model 'openai/gpt-astra-latest' --thinking high`,
+  );
+  setRuntimeDebugEnabled("disable");
+});
+
+/**
+ * @brief Verifies the log-local execution-session snapshot and sidecar fork replay beside a flushed error payload.
+ * @details Covers the error-stage session-snapshot copy for a 400 response: the flush duplicates the retained execution-session file byte-for-byte into one identically timestamped `-error-400-session.jsonl` file inside the captured prompt log directory, the snapshot content equals the retained execution session at flush time, and the `-replay.json` sidecar `replayCommands.piFork` references the log-local snapshot path so the printed `pi --fork` command uses only files under `DEBUG_PROMPTS_LOG_PATH`, while a response status below 400 flushes no error-stage artifacts and no session snapshot at all.
+ * @return {Promise<void>} Promise resolved after the staged below-400 probe, the 400 flush, and the snapshot plus sidecar assertions complete.
+ * @throws {AssertionError} Throws when the snapshot file, the snapshot content equality, the sidecar fork target, or the deterministic filename shapes diverge from the documented contracts.
+ * @satisfies TST-153, TST-154, REQ-432, REQ-433
+ */
+test("provider error debug logging snapshots the execution session for log-local fork replay", async () => {
+  const fixture = initFixtureRepo();
+  writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  setRuntimeDebugEnabled("enable");
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(fixture.projectBase);
+  (ctx as any).model = {
+    provider: "openrouter",
+    id: "openai/gpt-astra-latest",
+    api: "openai-completions",
+    baseUrl: "https://openrouter.ai/api/v1",
+    contextWindow: 1048576,
+    maxTokens: 943718,
+  };
+  (ctx as any).thinkingLevel = "high";
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+  const command = pi.commands.get("req-implement");
+  assert.ok(command);
+  await command.handler("error payload", ctx);
+  await pi.emit("before_agent_start", {}, ctx);
+  await pi.emit("agent_start", {}, ctx);
+  const providerPayload = {
+    model: "openai/gpt-astra-latest",
+    messages: [{ role: "user", content: "error payload request" }],
+    maxTokens: 4096,
+  };
+  const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
+  await pi.emit("before_provider_request", { payload: providerPayload }, ctx);
+  await pi.emit("after_provider_response", { status: 399, headers: {} }, ctx);
+  assert.equal(
+    fs.readdirSync(promptLogDir).filter((fileName) => fileName.includes("-error-")).length,
+    0,
+    "no error-stage artifacts and no session snapshot exist for statuses below 400",
+  );
+  await pi.emit("before_provider_request", { payload: providerPayload }, ctx);
+  await pi.emit("after_provider_response", { status: 400, headers: {} }, ctx);
+  await pi.emit("agent_end", {
+    messages: [{ role: "assistant", stopReason: "error" }],
+  }, ctx);
+  const savedFiles = fs.readdirSync(promptLogDir).sort();
+  assert.equal(savedFiles.length, 5);
+  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
+  const sessionSnapshotFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-session.jsonl"));
+  const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
+  assert.ok(errorPayloadFile);
+  assert.ok(sessionSnapshotFile);
+  assert.ok(replaySidecarFile);
+  assert.equal(sessionSnapshotFile, `${errorPayloadFile}-session.jsonl`);
+  assert.match(sessionSnapshotFile, /^\d{17}-req-implement-error-400-session\.jsonl$/u);
+  const replaySidecar = JSON.parse(
+    fs.readFileSync(path.join(promptLogDir, replaySidecarFile), "utf8"),
+  ) as Record<string, unknown>;
+  assert.deepEqual(
+    fs.readFileSync(path.join(promptLogDir, sessionSnapshotFile)),
+    fs.readFileSync(String(replaySidecar.sessionFile)),
+    "the session snapshot duplicates the retained execution session byte-for-byte at flush time",
+  );
+  const replayCommands = replaySidecar.replayCommands as Record<string, string>;
+  assert.equal(
+    replayCommands.piFork,
+    `pi --fork '${path.join(promptLogDir, sessionSnapshotFile)}' --model 'openai/gpt-astra-latest' --thinking high`,
+  );
+  assert.equal(
+    formatPromptDebugErrorSessionFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
+    "20260102030405006-req-implement-error-400-session.jsonl",
+  );
   setRuntimeDebugEnabled("disable");
 });
 
@@ -2579,7 +2670,7 @@ test("provider error debug logging appends response text after an after_provider
   await pi.emit("after_provider_response", { status: 400, headers: {} }, ctx);
   const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
   let savedFiles = fs.readdirSync(promptLogDir).sort();
-  assert.equal(savedFiles.length, 4);
+  assert.equal(savedFiles.length, 5);
   assert.equal(
     savedFiles.some((fileName) => fileName.endsWith("-response")),
     false,
@@ -2589,7 +2680,7 @@ test("provider error debug logging appends response text after an after_provider
     message: { role: "assistant", stopReason: "error", errorMessage: providerErrorText },
   }, ctx);
   savedFiles = fs.readdirSync(promptLogDir).sort();
-  assert.equal(savedFiles.length, 5);
+  assert.equal(savedFiles.length, 6);
   const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
   assert.ok(errorPayloadFile);
   assert.ok(
