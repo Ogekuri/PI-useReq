@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.81.0](https://github.com/Ogekuri/PI-useReq/compare/v0.80.0..v0.81.0) - 2026-10-12
+### 🚜  Changes
+- Persist provider error response text and replay sidecar [useReq] *(debug)*
+  - Add REQ-429/430/431 and TST-150/151/152; extend REQ-419 replay docs
+  - Write <ts>-<cmd>-error-<status>-response with provider error text
+  - (late message_end append after after_provider_response flush)
+  - Write <ts>-<cmd>-error-<status>-replay.json sidecar with provider,
+  - baseUrl, model id, thinking level, contextWindow, maxTokens, session
+  - file, and ready-to-use curl / pi one-shot / pi --fork commands
+  - Keep -error-<status> payload file raw provider-request JSON
+  - Capture live model facts at before_provider_request; correlate the
+  - dispatched -prompt file for replay; update README, WORKFLOW, REFERENCES
+
+### 🎯  Cover Requirements
+- Cover provider error response and replay sidecar debug files [useReq] *(tests)*
+  - Update TST-146 test for the REQ-430 replay sidecar file set (4 files,
+  - no -response without error text)
+  - Add TST-150 test: -response persists message_end error text in both
+  - flush orders, including the late append beside the flushed payload
+  - Add TST-151 test: -replay.json sidecar carries provider, baseUrl, api,
+  - model id, thinking level, contextWindow, maxTokens, session file,
+  - prompt/request files, and provider/piOneShot/piFork commands
+  - Add TST-152 coverage: -error-<status> stays raw provider-request JSON
+
 ## [0.80.0](https://github.com/Ogekuri/PI-useReq/compare/v0.79.0..v0.80.0) - 2026-10-09
 ### 🐛  Bug Fixes
 - anchor provider error capture gate to prompt base config [useReq] *(index)*
@@ -1052,6 +1076,7 @@
 - \[0.78.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.78.0
 - \[0.79.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.79.0
 - \[0.80.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.80.0
+- \[0.81.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.81.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1131,3 +1156,4 @@
 [0.78.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.77.0..v0.78.0
 [0.79.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.78.0..v0.79.0
 [0.80.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.79.0..v0.80.0
+[0.81.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.80.0..v0.81.0
