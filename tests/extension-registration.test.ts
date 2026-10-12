@@ -29,6 +29,8 @@ import {
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
   formatPromptDebugErrorFileName,
+  formatPromptDebugErrorReplayFileName,
+  formatPromptDebugErrorResponseFileName,
   formatPromptDebugFileName,
   logDebugPromptContent,
   normalizeDebugPromptsLogPath,
@@ -2387,8 +2389,8 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
 
 /**
  * @brief Verifies provider error payload debug capture for failing prompt runs.
- * @details Covers the end-to-end capture of the exact `before_provider_request` provider payload during an active `req-implement` run, the dump of that exact payload into one `<timestamp>-req-implement-error-400` file beside the initial dispatched prompt file when `after_provider_response` reports status 400, and the deterministic `-error-<status>` filename shape.
- * @satisfies TST-146
+ * @details Covers the end-to-end capture of the exact `before_provider_request` provider payload during an active `req-implement` run, the dump of that exact payload into one `<timestamp>-req-implement-error-400` file beside the initial dispatched prompt file when `after_provider_response` reports status 400, the deterministic `-error-<status>` filename shape, and the identically timestamped `-error-<status>-replay.json` sidecar written by the same flush per REQ-430 while no `-response` file exists because the response event carries no error text.
+ * @satisfies TST-146, REQ-430
  */
 test("provider error payload debug logging saves failing request payload beside initial prompt", async () => {
   const fixture = initFixtureRepo();
@@ -2420,13 +2422,21 @@ test("provider error payload debug logging saves failing request payload beside 
   }, ctx);
   const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
   const savedFiles = fs.readdirSync(promptLogDir).sort();
-  assert.equal(savedFiles.length, 3);
+  assert.equal(savedFiles.length, 4);
   const initialPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
-  const errorPayloadFile = savedFiles.find((fileName) => fileName.endsWith("-error-400"));
+  const errorPayloadFile = savedFiles.find((fileName) => fileName.endsWith("-error-400") && !fileName.includes("-error-400-"));
+  const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
   assert.ok(initialPromptFile);
   assert.ok(errorPayloadFile);
+  assert.ok(replaySidecarFile);
   assert.match(initialPromptFile, /^\d{17}-req-implement-prompt$/u);
   assert.match(errorPayloadFile, /^\d{17}-req-implement-error-400$/u);
+  assert.match(replaySidecarFile, /^\d{17}-req-implement-error-400-replay\.json$/u);
+  assert.equal(
+    savedFiles.some((fileName) => fileName.endsWith("-response")),
+    false,
+    "no -response file exists when the response event carries no error text",
+  );
   assert.deepEqual(
     JSON.parse(fs.readFileSync(path.join(promptLogDir, errorPayloadFile), "utf8")) as unknown,
     providerPayload,
@@ -2435,6 +2445,168 @@ test("provider error payload debug logging saves failing request payload beside 
     formatPromptDebugErrorFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
     "20260102030405006-req-implement-error-400",
   );
+  setRuntimeDebugEnabled("disable");
+});
+
+/**
+ * @brief Verifies the provider error response text and replay sidecar written beside a directly flushed error payload.
+ * @details Covers the `message_end` flush order where the finalized assistant error message supplies both the failing HTTP status and the provider error text: the flush writes the raw-JSON payload file, the identically timestamped `-response` file persisting the exact error message with one trailing newline, and the identically timestamped `-replay.json` sidecar carrying the live model facts (provider, baseUrl, api, model id, thinking level, contextWindow, maxTokens), the retained execution-session file, the dispatched prompt debug file, the flushed request payload file, and ready-to-use provider, pi one-shot, and `pi --fork` replay command lines.
+ * @return {Promise<void>} Promise resolved after the prompt run, provider error flush, and sidecar assertions complete.
+ * @throws {AssertionError} Throws when the response file, replay sidecar contents, payload raw JSON, or deterministic filename shapes diverge from the documented contracts.
+ * @satisfies TST-150, TST-151, TST-152, REQ-429, REQ-430, REQ-431
+ */
+test("provider error debug logging writes response text and replay sidecar beside flushed payload", async () => {
+  const fixture = initFixtureRepo();
+  writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  setRuntimeDebugEnabled("enable");
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(fixture.projectBase);
+  (ctx as any).model = {
+    provider: "openrouter",
+    id: "openai/gpt-astra-latest",
+    api: "openai-completions",
+    baseUrl: "https://openrouter.ai/api/v1",
+    contextWindow: 1048576,
+    maxTokens: 943718,
+  };
+  (ctx as any).thinkingLevel = "high";
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+  const command = pi.commands.get("req-implement");
+  assert.ok(command);
+  await command.handler("error payload", ctx);
+  await pi.emit("before_agent_start", {}, ctx);
+  await pi.emit("agent_start", {}, ctx);
+  const providerPayload = {
+    model: "openai/gpt-astra-latest",
+    messages: [{ role: "user", content: "error payload request" }],
+    maxTokens: 4096,
+  };
+  const providerErrorText = '400: {"message":"This endpoint\'s maximum context length is 1048576 tokens","code":400}';
+  await pi.emit("before_provider_request", { payload: providerPayload }, ctx);
+  await pi.emit("message_end", {
+    message: { role: "assistant", stopReason: "error", errorMessage: providerErrorText },
+  }, ctx);
+  await pi.emit("agent_end", {
+    messages: [{ role: "assistant", stopReason: "error" }],
+  }, ctx);
+  const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
+  const savedFiles = fs.readdirSync(promptLogDir).sort();
+  assert.equal(savedFiles.length, 5);
+  const promptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt"));
+  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
+  const responseFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-response"));
+  const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
+  assert.ok(promptFile);
+  assert.ok(errorPayloadFile);
+  assert.ok(responseFile);
+  assert.ok(replaySidecarFile);
+  assert.equal(
+    fs.readFileSync(path.join(promptLogDir, responseFile), "utf8"),
+    `${providerErrorText}\n`,
+  );
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(promptLogDir, errorPayloadFile), "utf8")) as unknown,
+    providerPayload,
+  );
+  assert.equal(
+    formatPromptDebugErrorResponseFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
+    "20260102030405006-req-implement-error-400-response",
+  );
+  assert.equal(
+    formatPromptDebugErrorReplayFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
+    "20260102030405006-req-implement-error-400-replay.json",
+  );
+  const replaySidecar = JSON.parse(
+    fs.readFileSync(path.join(promptLogDir, replaySidecarFile), "utf8"),
+  ) as Record<string, unknown>;
+  assert.equal(replaySidecar.provider, "openrouter");
+  assert.equal(replaySidecar.baseUrl, "https://openrouter.ai/api/v1");
+  assert.equal(replaySidecar.api, "openai-completions");
+  assert.equal(replaySidecar.modelId, "openai/gpt-astra-latest");
+  assert.equal(replaySidecar.thinkingLevel, "high");
+  assert.equal(replaySidecar.contextWindow, 1048576);
+  assert.equal(replaySidecar.maxTokens, 943718);
+  assert.equal(typeof replaySidecar.sessionFile, "string");
+  assert.ok((replaySidecar.sessionFile as string).endsWith(".jsonl"));
+  assert.equal(replaySidecar.promptFile, path.join(promptLogDir, promptFile));
+  assert.equal(replaySidecar.requestFile, path.join(promptLogDir, errorPayloadFile));
+  const replayCommands = replaySidecar.replayCommands as Record<string, string>;
+  assert.ok(replayCommands.provider.includes("https://openrouter.ai/api/v1/chat/completions"));
+  assert.ok(replayCommands.provider.includes(`--data @'${path.join(promptLogDir, errorPayloadFile)}'`));
+  assert.ok(replayCommands.piOneShot.includes("--model 'openai/gpt-astra-latest'"));
+  assert.ok(replayCommands.piOneShot.includes("--thinking high"));
+  assert.ok(replayCommands.piOneShot.includes(`$(cat '${path.join(promptLogDir, promptFile)}')`));
+  assert.ok(replayCommands.piFork.startsWith(`pi --fork '${replaySidecar.sessionFile}'`));
+  setRuntimeDebugEnabled("disable");
+});
+
+/**
+ * @brief Verifies the late provider error response append after an `after_provider_response` flush.
+ * @details Covers the two-stage flush order where `after_provider_response` reports status 400 without error text (the event exposes status plus headers only), the flush writes the payload and replay sidecar without any `-response` file, and the later finalized `message_end` assistant error message appends the `-response` file beside the exact flushed payload base filename with one trailing newline while the payload file keeps its raw provider-request JSON content.
+ * @return {Promise<void>} Promise resolved after the staged flush, the late response append, and the beside-payload assertions complete.
+ * @throws {AssertionError} Throws when a `-response` file exists after the response-event flush, when the late append misses the flushed payload base filename, or when the response or payload contents diverge.
+ * @satisfies TST-150, TST-152, REQ-429, REQ-431
+ */
+test("provider error debug logging appends response text after an after_provider_response flush", async () => {
+  const fixture = initFixtureRepo();
+  writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
+    DEBUG_ENABLED_PROMPTS: ["req-implement"],
+  });
+  setRuntimeDebugEnabled("enable");
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(fixture.projectBase);
+  await pi.emit("session_start", { reason: "startup" }, ctx);
+  const command = pi.commands.get("req-implement");
+  assert.ok(command);
+  await command.handler("error payload", ctx);
+  await pi.emit("before_agent_start", {}, ctx);
+  await pi.emit("agent_start", {}, ctx);
+  const providerPayload = {
+    model: "openai/gpt-astra-latest",
+    messages: [{ role: "user", content: "error payload request" }],
+    maxTokens: 4096,
+  };
+  const providerErrorText = '400: {"message":"rate limited","code":429}';
+  await pi.emit("before_provider_request", { payload: providerPayload }, ctx);
+  await pi.emit("after_provider_response", { status: 400, headers: {} }, ctx);
+  const promptLogDir = path.join(fixture.projectBase, "logs", "saved-prompts");
+  let savedFiles = fs.readdirSync(promptLogDir).sort();
+  assert.equal(savedFiles.length, 4);
+  assert.equal(
+    savedFiles.some((fileName) => fileName.endsWith("-response")),
+    false,
+    "no -response file exists before the finalized error message arrives",
+  );
+  await pi.emit("message_end", {
+    message: { role: "assistant", stopReason: "error", errorMessage: providerErrorText },
+  }, ctx);
+  savedFiles = fs.readdirSync(promptLogDir).sort();
+  assert.equal(savedFiles.length, 5);
+  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400$/u.test(fileName));
+  assert.ok(errorPayloadFile);
+  assert.ok(
+    savedFiles.includes(`${errorPayloadFile}-response`),
+    "the late response append reuses the flushed payload base filename",
+  );
+  assert.equal(
+    fs.readFileSync(path.join(promptLogDir, `${errorPayloadFile}-response`), "utf8"),
+    `${providerErrorText}\n`,
+  );
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(promptLogDir, errorPayloadFile), "utf8")) as unknown,
+    providerPayload,
+  );
+  await pi.emit("agent_end", {
+    messages: [{ role: "assistant", stopReason: "error" }],
+  }, ctx);
   setRuntimeDebugEnabled("disable");
 });
 
