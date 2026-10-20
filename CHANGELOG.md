@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.84.0](https://github.com/Ogekuri/PI-useReq/compare/v0.83.0..v0.84.0) - 2026-10-20
+### 🚜  Changes
+- emit outcome-conformant execution notifications [useReq] *(req-references)*
+  - req-references now reports per-operation outcome facts (references
+  - changed, commit created or skipped) and always emits execution
+  - notifications stating whether REFERENCES.md was updated or unchanged
+  - and whether the fixed-message commit was created or skipped,
+  - regardless of the update and commit outcomes (REQ-436, REQ-437,
+  - REQ-438). Requirements, workflow model, and references docs updated.
+
 ## [0.83.0](https://github.com/Ogekuri/PI-useReq/compare/v0.82.0..v0.83.0) - 2026-10-12
 ### 🐛  Bug Fixes
 - re-anchor live pi session to base-path before worktree deletion [useReq] *(req-reset)*
@@ -1108,6 +1118,7 @@
 - \[0.81.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.81.0
 - \[0.82.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.82.0
 - \[0.83.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.83.0
+- \[0.84.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.84.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1190,3 +1201,4 @@
 [0.81.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.80.0..v0.81.0
 [0.82.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.81.0..v0.82.0
 [0.83.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.82.0..v0.83.0
+[0.84.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.83.0..v0.84.0
