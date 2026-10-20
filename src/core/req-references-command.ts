@@ -5,6 +5,7 @@
  */
 
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import type { UseReqConfig } from "./config.js";
 import { ReqError } from "./errors.js";
@@ -32,6 +33,22 @@ export interface ReqReferencesCommandPlan {
   gitPath: string;
   referencesPath: string;
   commitMessage: string;
+}
+
+/**
+ * @brief Describes the per-operation outcome facts of one completed `req-references` run.
+ * @details Reports whether the regenerated `REFERENCES.md` content differs from the pre-run file and whether the guarded commit created a commit or was skipped, so the extension command handler can emit notifications that conform to the operations actually performed regardless of the update and commit outcomes. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-436
+ */
+export interface ReqReferencesCommandExecutionResult {
+  /** Absolute path of the regenerated `REFERENCES.md` document. */
+  referencesPath: string;
+  /** `true` when the regenerated content differs from the pre-run file content or the file was absent. */
+  referencesChanged: boolean;
+  /** Fixed commit message that a created commit carries. */
+  commitMessage: string;
+  /** `true` when the guarded commit created a commit; `false` when it was skipped because content matched `HEAD`. */
+  commitCreated: boolean;
 }
 
 /**
@@ -135,17 +152,17 @@ function hasStagedChangesForPaths(gitRoot: string, targetPaths: string[]): boole
 
 /**
  * @brief Executes one guarded `git commit` invocation for the staged target paths.
- * @details Runs a staged-changes precheck against the cached index and returns without creating a commit when no staged difference exists for the target paths, preventing empty-commit failures such as `nothing to commit, working tree clean`. When a staged difference exists, delegates to `git commit -m <commitMessage>` and converts any non-zero result into a deterministic `ReqError`. Runtime is dominated by up to two git subprocesses. Side effects include subprocess creation and conditional commit creation.
+ * @details Runs a staged-changes precheck against the cached index and returns `false` without creating a commit when no staged difference exists for the target paths, preventing empty-commit failures such as `nothing to commit, working tree clean`. When a staged difference exists, delegates to `git commit -m <commitMessage>`, converts any non-zero result into a deterministic `ReqError`, and returns `true`. Runtime is dominated by up to two git subprocesses. Side effects include subprocess creation and conditional commit creation.
  * @param[in] gitRoot {string} Absolute git root path.
  * @param[in] targetPaths {string[]} Git-add target paths inspected by the staged-changes precheck.
  * @param[in] commitMessage {string} Commit message used when a staged difference exists.
- * @return {void} No return value.
+ * @return {boolean} `true` when the commit was created; `false` when it was skipped because the cached index held no staged difference for the target paths.
  * @throws {ReqError} Throws when staged-difference inspection or commit creation fails.
  * @satisfies REQ-357, REQ-358
  */
-function runGuardedGitCommit(gitRoot: string, targetPaths: string[], commitMessage: string): void {
+function runGuardedGitCommit(gitRoot: string, targetPaths: string[], commitMessage: string): boolean {
   if (!hasStagedChangesForPaths(gitRoot, targetPaths)) {
-    return;
+    return false;
   }
   const commitResult = runCapture(["git", "commit", "-m", commitMessage], gitRoot);
   if (commitResult.error || commitResult.status !== 0) {
@@ -155,6 +172,7 @@ function runGuardedGitCommit(gitRoot: string, targetPaths: string[], commitMessa
       || "unknown error";
     throw new ReqError(`ERROR: git commit failed: ${diagnostic}`, 1);
   }
+  return true;
 }
 
 /**
@@ -182,28 +200,50 @@ export function prepareReqReferencesCommandExecution(
 }
 
 /**
- * @brief Executes the specialized `req-references` direct-write workflow.
- * @details Regenerates `REFERENCES.md` through the same source-summary path used by the `references` tool, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, and verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out. Runtime is dominated by summary generation plus two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
+ * @brief Executes the specialized `req-references` direct-write workflow and reports per-operation outcome facts.
+ * @details Snapshots the pre-run `REFERENCES.md` content, regenerates the document through the same source-summary path used by the `references` tool, compares the regenerated content against the pre-run snapshot, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out, and returns whether the references content changed and whether the commit was created or skipped so callers can emit outcome-conformant notifications. Runtime is dominated by summary generation plus two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
  * @param[in] plan {ReqReferencesCommandPlan} Prepared direct-write execution plan.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {void} No return value.
- * @throws {ReqError} Throws when reference generation, staging, guarded commit creation, or cleanliness verification fails.
- * @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358
+ * @return {ReqReferencesCommandExecutionResult} Per-operation outcome facts including `referencesChanged` and `commitCreated`.
+ * @throws {ReqError} Throws when reference generation, post-run content readback, staging, guarded commit creation, or cleanliness verification fails.
+ * @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358, REQ-436
  */
 export function executeReqReferencesCommandExecution(
   plan: ReqReferencesCommandPlan,
   config: UseReqConfig,
-): void {
+): ReqReferencesCommandExecutionResult {
+  let previousReferencesContent: string | undefined;
+  try {
+    previousReferencesContent = fs.readFileSync(plan.referencesPath, "utf8");
+  } catch {
+    previousReferencesContent = undefined;
+  }
   runReferences(plan.basePath, config);
+  let regeneratedReferencesContent: string | undefined;
+  try {
+    regeneratedReferencesContent = fs.readFileSync(plan.referencesPath, "utf8");
+  } catch {
+    regeneratedReferencesContent = undefined;
+  }
+  if (regeneratedReferencesContent === undefined) {
+    throw new ReqError(`ERROR: Unable to read the regenerated REFERENCES.md document at ${plan.referencesPath}.`, 1);
+  }
+  const referencesChanged = regeneratedReferencesContent !== previousReferencesContent;
   const addTargetPath = getGitAddTargetPath(plan.gitPath, plan.referencesPath);
   const addResult = runCapture(["git", "add", "--", addTargetPath], plan.gitPath);
   if (addResult.error || addResult.status !== 0) {
     const diagnostic = addResult.stderr.trim() || addResult.error?.message || "unknown error";
     throw new ReqError(`ERROR: git add failed for ${addTargetPath}: ${diagnostic}`, 1);
   }
-  runGuardedGitCommit(plan.gitPath, [addTargetPath], plan.commitMessage);
+  const commitCreated = runGuardedGitCommit(plan.gitPath, [addTargetPath], plan.commitMessage);
   const residualStatusLines = listResidualGitStatusLines(plan.basePath, plan.gitPath, config);
   if (residualStatusLines.length > 0) {
     throw new ReqError("ERROR: Git repository is not clean after req-references commit.", 1);
   }
+  return {
+    referencesPath: plan.referencesPath,
+    referencesChanged,
+    commitMessage: plan.commitMessage,
+    commitCreated,
+  };
 }

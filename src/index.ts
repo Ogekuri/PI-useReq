@@ -3480,11 +3480,11 @@ function registerReqResetCommand(
 
 /**
  * @brief Registers the specialized `req-references` slash command.
- * @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
+ * @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303
+ * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-437, REQ-438
  */
 function registerReqReferencesCommand(
   pi: ExtensionAPI,
@@ -3510,10 +3510,25 @@ function registerReqReferencesCommand(
       try {
         const executionPlan = prepareReqReferencesCommandExecution(projectBase, config);
         setPiUsereqWorkflowState(statusController, "running", ctx);
-        executeReqReferencesCommandExecution(executionPlan, config);
+        const executionResult = executeReqReferencesCommandExecution(executionPlan, config);
         setPiUsereqWorkflowState(statusController, "idle", ctx);
+        const referencesDisplayPath = formatRuntimePathForDisplay(executionResult.referencesPath);
         ctx.ui.notify(
-          `SUCCESS: Updated ${formatRuntimePathForDisplay(executionPlan.referencesPath)} and committed changes.`,
+          executionResult.referencesChanged
+            ? `req-references: Updated ${referencesDisplayPath}.`
+            : `req-references: ${referencesDisplayPath} already matches the generated references content; no file update was needed.`,
+          "info",
+        );
+        ctx.ui.notify(
+          executionResult.commitCreated
+            ? `req-references: Created commit ${executionResult.commitMessage}`
+            : "req-references: Skipped the git commit because the references content already matched HEAD.",
+          "info",
+        );
+        ctx.ui.notify(
+          executionResult.referencesChanged && executionResult.commitCreated
+            ? `SUCCESS: Updated ${referencesDisplayPath} and committed changes.`
+            : `SUCCESS: req-references completed with a clean repository (${executionResult.referencesChanged ? "references updated" : "references unchanged"}; ${executionResult.commitCreated ? "commit created" : "commit skipped"}).`,
           "info",
         );
         notifyContextRetentionReminder(statusController, ctx);

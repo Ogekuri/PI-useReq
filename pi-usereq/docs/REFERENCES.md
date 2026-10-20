@@ -4042,7 +4042,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 
 ---
 
-# req-references-command.ts | TypeScript | 209L | 9 symbols | 6 imports | 12 comments
+# req-references-command.ts | TypeScript | 249L | 10 symbols | 7 imports | 17 comments
 > Path: `src/core/req-references-command.ts`
 - @brief Implements the specialized `req-references` slash-command workflow.
 - @details Performs slash-command-owned git validation reuse, reference-file generation, targeted staging, fixed-message commit creation, and post-commit cleanliness verification without creating a worktree or starting an LLM session. Runtime is dominated by git subprocess execution plus source-summary generation and one documentation write. Side effects include filesystem writes and git index/history mutation.
@@ -4050,6 +4050,7 @@ import { readBundledInstruction, readBundledPrompt } from "./resources.js";
 ## Imports
 ```
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import type { UseReqConfig } from "./config.js";
 import { ReqError } from "./errors.js";
@@ -4059,18 +4060,23 @@ import { runReferences } from "./tool-runner.js";
 
 ## Definitions
 
-### iface `export interface ReqReferencesCommandPlan` (L30-35)
+### iface `export interface ReqReferencesCommandPlan` (L31-36)
 - @brief Describes the prepared execution facts for one `req-references` run.
 - @details Stores the validated project base, resolved git root, target references path, and fixed commit message needed by the specialized direct-write workflow. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function runCapture(command: string[], cwd: string): SpawnSyncReturns<string>` (L44-49)
+### iface `export interface ReqReferencesCommandExecutionResult` (L43-52)
+- @brief Describes the per-operation outcome facts of one completed `req-references` run.
+- @details Reports whether the regenerated `REFERENCES.md` content differs from the pre-run file and whether the guarded commit created a commit or was skipped, so the extension command handler can emit notifications that conform to the operations actually performed regardless of the update and commit outcomes. The interface is compile-time only and introduces no runtime cost.
+- @satisfies REQ-436
+
+### fn `function runCapture(command: string[], cwd: string): SpawnSyncReturns<string>` (L61-66)
 - @brief Executes one synchronous subprocess and captures UTF-8 output.
 - @details Delegates to `spawnSync(...)`, preserves the supplied working directory, and returns the raw result so callers can interpret git exit status plus diagnostics deterministically. Runtime is dominated by external process execution. Side effects include subprocess creation.
 - @param[in] command {string[]} Executable plus argument vector.
 - @param[in] cwd {string} Working directory for the subprocess.
 - @return {SpawnSyncReturns<string>} Captured subprocess result with UTF-8 stdout and stderr.
 
-### fn `function buildIgnoredGitStatusPaths(` (L59-73)
+### fn `function buildIgnoredGitStatusPaths(` (L76-90)
 - @brief Builds the set of git-status paths ignored for cleanliness checks.
 - @details Reuses the configured debug-log path exception already honored by prompt-command git validation so extension-owned debug artifacts do not block `req-references` execution or post-commit cleanliness verification. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] projectBase {string} Absolute project base path.
@@ -4078,7 +4084,7 @@ import { runReferences } from "./tool-runner.js";
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {Set<string>} Slash-normalized relative paths ignored during git-status evaluation.
 
-### fn `function listResidualGitStatusLines(` (L84-102)
+### fn `function listResidualGitStatusLines(` (L101-119)
 - @brief Lists residual git-status rows after ignored extension-owned paths are filtered out.
 - @details Executes `git status --porcelain`, drops the configured debug-log path when present inside the active repository, and returns all remaining staged or unstaged rows used for post-commit cleanliness verification. Runtime is dominated by one git subprocess plus O(n) parsing in status-line count. Side effects include subprocess creation.
 - @param[in] projectBase {string} Absolute project base path.
@@ -4087,14 +4093,14 @@ import { runReferences } from "./tool-runner.js";
 - @return {string[]} Residual status rows after ignored paths are removed.
 - @throws {ReqError} Throws when git status cannot be inspected.
 
-### fn `function getGitAddTargetPath(gitRoot: string, absolutePath: string): string` (L111-117)
+### fn `function getGitAddTargetPath(gitRoot: string, absolutePath: string): string` (L128-134)
 - @brief Converts one absolute repository path into the preferred git-add target syntax.
 - @details Emits a slash-normalized relative path when the target is inside the git root and falls back to the absolute path otherwise, preserving deterministic add semantics across nested project-base layouts. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] gitRoot {string} Absolute git root path.
 - @param[in] absolutePath {string} Absolute path to stage.
 - @return {string} Relative or absolute git-add target path.
 
-### fn `function hasStagedChangesForPaths(gitRoot: string, targetPaths: string[]): boolean` (L128-134)
+### fn `function hasStagedChangesForPaths(gitRoot: string, targetPaths: string[]): boolean` (L145-151)
 - @brief Detects whether the git index holds staged differences for the given target paths.
 - @details Executes `git diff --cached --quiet -- <paths>`; exit code `1` signals at least one staged difference, exit code `0` signals no staged difference for the target paths, and any other status or spawn failure is converted into a deterministic `ReqError`. Runtime is dominated by one git subprocess. Side effects include subprocess creation. No index or worktree mutation occurs.
 - @param[in] gitRoot {string} Absolute git root path.
@@ -4103,17 +4109,17 @@ import { runReferences } from "./tool-runner.js";
 - @throws {ReqError} Throws when staged-difference inspection fails.
 - @satisfies REQ-357
 
-### fn `function runGuardedGitCommit(gitRoot: string, targetPaths: string[], commitMessage: string): void` (L146-158)
+### fn `function runGuardedGitCommit(gitRoot: string, targetPaths: string[], commitMessage: string): boolean` (L163-176)
 - @brief Executes one guarded `git commit` invocation for the staged target paths.
-- @details Runs a staged-changes precheck against the cached index and returns without creating a commit when no staged difference exists for the target paths, preventing empty-commit failures such as `nothing to commit, working tree clean`. When a staged difference exists, delegates to `git commit -m <commitMessage>` and converts any non-zero result into a deterministic `ReqError`. Runtime is dominated by up to two git subprocesses. Side effects include subprocess creation and conditional commit creation.
+- @details Runs a staged-changes precheck against the cached index and returns `false` without creating a commit when no staged difference exists for the target paths, preventing empty-commit failures such as `nothing to commit, working tree clean`. When a staged difference exists, delegates to `git commit -m <commitMessage>`, converts any non-zero result into a deterministic `ReqError`, and returns `true`. Runtime is dominated by up to two git subprocesses. Side effects include subprocess creation and conditional commit creation.
 - @param[in] gitRoot {string} Absolute git root path.
 - @param[in] targetPaths {string[]} Git-add target paths inspected by the staged-changes precheck.
 - @param[in] commitMessage {string} Commit message used when a staged difference exists.
-- @return {void} No return value.
+- @return {boolean} `true` when the commit was created; `false` when it was skipped because the cached index held no staged difference for the target paths.
 - @throws {ReqError} Throws when staged-difference inspection or commit creation fails.
 - @satisfies REQ-357, REQ-358
 
-### fn `export function prepareReqReferencesCommandExecution(` (L169-182)
+### fn `export function prepareReqReferencesCommandExecution(` (L187-200)
 - @brief Prepares the specialized `req-references` execution plan.
 - @details Reuses slash-command-owned git validation, resolves the configured references document path, and returns the fixed commit metadata consumed by the direct-write workflow. Runtime is dominated by git validation subprocesses. Side effects include subprocess creation delegated through `validatePromptGitState(...)`.
 - @param[in] projectBase {string} Absolute project base path.
@@ -4122,32 +4128,33 @@ import { runReferences } from "./tool-runner.js";
 - @throws {ReqError} Throws when git validation fails.
 - @satisfies REQ-200, REQ-299
 
-### fn `export function executeReqReferencesCommandExecution(` (L193-209)
-- @brief Executes the specialized `req-references` direct-write workflow.
-- @details Regenerates `REFERENCES.md` through the same source-summary path used by the `references` tool, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, and verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out. Runtime is dominated by summary generation plus two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
+### fn `export function executeReqReferencesCommandExecution(` (L211-249)
+- @brief Executes the specialized `req-references` direct-write workflow and reports per-operation outcome facts.
+- @details Snapshots the pre-run `REFERENCES.md` content, regenerates the document through the same source-summary path used by the `references` tool, compares the regenerated content against the pre-run snapshot, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out, and returns whether the references content changed and whether the commit was created or skipped so callers can emit outcome-conformant notifications. Runtime is dominated by summary generation plus two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
 - @param[in] plan {ReqReferencesCommandPlan} Prepared direct-write execution plan.
 - @param[in] config {UseReqConfig} Effective project configuration.
-- @return {void} No return value.
-- @throws {ReqError} Throws when reference generation, staging, guarded commit creation, or cleanliness verification fails.
-- @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358
+- @return {ReqReferencesCommandExecutionResult} Per-operation outcome facts including `referencesChanged` and `commitCreated`.
+- @throws {ReqError} Throws when reference generation, post-run content readback, staging, guarded commit creation, or cleanliness verification fails.
+- @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358, REQ-436
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`ReqReferencesCommandPlan`|iface||30-35|export interface ReqReferencesCommandPlan|
-|`runCapture`|fn||44-49|function runCapture(command: string[], cwd: string): Spaw...|
-|`buildIgnoredGitStatusPaths`|fn||59-73|function buildIgnoredGitStatusPaths(|
-|`listResidualGitStatusLines`|fn||84-102|function listResidualGitStatusLines(|
-|`getGitAddTargetPath`|fn||111-117|function getGitAddTargetPath(gitRoot: string, absolutePat...|
-|`hasStagedChangesForPaths`|fn||128-134|function hasStagedChangesForPaths(gitRoot: string, target...|
-|`runGuardedGitCommit`|fn||146-158|function runGuardedGitCommit(gitRoot: string, targetPaths...|
-|`prepareReqReferencesCommandExecution`|fn||169-182|export function prepareReqReferencesCommandExecution(|
-|`executeReqReferencesCommandExecution`|fn||193-209|export function executeReqReferencesCommandExecution(|
+|`ReqReferencesCommandPlan`|iface||31-36|export interface ReqReferencesCommandPlan|
+|`ReqReferencesCommandExecutionResult`|iface||43-52|export interface ReqReferencesCommandExecutionResult|
+|`runCapture`|fn||61-66|function runCapture(command: string[], cwd: string): Spaw...|
+|`buildIgnoredGitStatusPaths`|fn||76-90|function buildIgnoredGitStatusPaths(|
+|`listResidualGitStatusLines`|fn||101-119|function listResidualGitStatusLines(|
+|`getGitAddTargetPath`|fn||128-134|function getGitAddTargetPath(gitRoot: string, absolutePat...|
+|`hasStagedChangesForPaths`|fn||145-151|function hasStagedChangesForPaths(gitRoot: string, target...|
+|`runGuardedGitCommit`|fn||163-176|function runGuardedGitCommit(gitRoot: string, targetPaths...|
+|`prepareReqReferencesCommandExecution`|fn||187-200|export function prepareReqReferencesCommandExecution(|
+|`executeReqReferencesCommandExecution`|fn||211-249|export function executeReqReferencesCommandExecution(|
 
 
 ---
 
-# req-reset-command.ts | TypeScript | 845L | 26 symbols | 9 imports | 33 comments
+# req-reset-command.ts | TypeScript | 846L | 26 symbols | 9 imports | 33 comments
 > Path: `src/core/req-reset-command.ts`
 - @brief Implements the specialized `req-reset` slash-command workflow.
 - @details Performs non-agentic prompt-orchestration recovery by preserving the current execution-session transcript when available, restoring the original session-backed `base-path`, force-removing every generated sibling worktree and matching branch, and returning deterministic cleanup facts to the extension command handler. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, worktree deletion, branch deletion, and filesystem removal.
@@ -4333,7 +4340,7 @@ No external state is mutated.
 - @param[in] activeContext {ReqResetCommandContext | undefined} Candidate session-bound context.
 - @return {string | undefined} Live context cwd when readable; `undefined` when absent or stale.
 
-### fn `async function redirectReqResetExecutionToMainBranch(` (L550-613)
+### fn `async function redirectReqResetExecutionToMainBranch(` (L551-614)
 - @brief Returns the pi CLI to the main base path before generated worktrees are removed.
 - @details When the host process cwd or the supplied context cwd is still anchored inside a
 generated worktree targeted for deletion or points at a deleted path, best-effort switches the
@@ -4352,8 +4359,9 @@ base-session file materialization.
 - @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
 - @param[in,out] activeContext {ReqResetCommandContext | undefined} Mutated session context mirror and potential replacement-session context.
 - @return {Promise<{ context: ReqResetCommandContext | undefined; reanchorErrorMessage?: string }>} Re-anchored context plus one optional re-anchor failure diagnostic.
+- @satisfies REQ-257, REQ-307, REQ-308, REQ-313
 
-### fn `function resolveReqResetAnchoredWorktreeRoots(` (L627-644)
+### fn `function resolveReqResetAnchoredWorktreeRoots(` (L628-645)
 - @brief Lists matching worktree roots that still anchor the live session cwd.
 - @details Used only after a failed session re-anchor so `req-reset` retains the worktree directory
 the live pi session is still checked out in, preventing the session cwd from being orphaned at a
@@ -4365,14 +4373,14 @@ mutated.
 - @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
 - @return {string[]} Absolute matching worktree roots that still contain the live session cwd.
 
-### fn `function restoreReqResetExecutionCwd(basePath: string, activeContext: ReqResetCommandContext | undefined): void` (L653-679)
+### fn `function restoreReqResetExecutionCwd(basePath: string, activeContext: ReqResetCommandContext | undefined): void` (L654-680)
 - @brief Restores live process and context cwd surfaces after worktree removal.
 - @details Best-effort re-points `process.cwd()` and the supplied context `cwd` mirror to the main repository base path when the previously live cwd was removed by `req-reset` cleanup, so subsequent status rendering and notifications never probe deleted worktree paths. Runtime is O(1) plus bounded filesystem probes. Side effects include process cwd mutation and optional context mirror mutation.
 - @param[in] basePath {string} Absolute main repository base path.
 - @param[in,out] activeContext {ReqResetCommandContext | undefined} Mutated session context mirror.
 - @return {void} No return value.
 
-### fn `export function prepareReqResetCommandExecution(` (L691-716)
+### fn `export function prepareReqResetCommandExecution(` (L692-717)
 - @brief Prepares the specialized `req-reset` execution plan.
 - @details Resolves the active project base into a runtime git root, normalizes that root to the main repository worktree so cleanup and branch checks never run from inside a linked worktree, derives the sibling-worktree parent directory and generated-name matcher from the same prefix plus repository-basename contract used by prompt-command worktree generation, and keeps only worktree-backed persisted prompt execution plans for transcript-preserving base-path restoration. Runtime is O(p) in path length plus one git subprocess. No external state is mutated.
 - @param[in] projectBase {string} Absolute project base path.
@@ -4382,7 +4390,7 @@ mutated.
 - @throws {ReqError} Throws when the repository root cannot be resolved.
 - @satisfies REQ-306, REQ-309, REQ-310, REQ-311
 
-### fn `export async function executeReqResetCommandExecution(` (L726-845)
+### fn `export async function executeReqResetCommandExecution(` (L727-846)
 - @brief Executes the specialized `req-reset` recovery and cleanup workflow.
 - @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, enumerates every matching sibling worktree, returns the pi CLI execution surfaces to the main base path (materializing the reserved base session when pi never flushed it) before any matching worktree directory is removed, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, retains the worktree plus branch that still anchor the live pi session whenever the session re-anchor fails so the session cwd is never orphaned at a deleted directory, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
 - @param[in] plan {ReqResetCommandPlan} Prepared recovery and cleanup plan.
@@ -4414,11 +4422,11 @@ mutated.
 |`resolveReqResetMainSessionFile`|fn||468-478|function resolveReqResetMainSessionFile(basePath: string)...|
 |`reqResetExecutionPathNeedsRedirect`|fn||488-509|function reqResetExecutionPathNeedsRedirect(|
 |`readReqResetContextCwd`|fn||520-528|function readReqResetContextCwd(activeContext: ReqResetCo...|
-|`redirectReqResetExecutionToMainBranch`|fn||550-613|async function redirectReqResetExecutionToMainBranch(|
-|`resolveReqResetAnchoredWorktreeRoots`|fn||627-644|function resolveReqResetAnchoredWorktreeRoots(|
-|`restoreReqResetExecutionCwd`|fn||653-679|function restoreReqResetExecutionCwd(basePath: string, ac...|
-|`prepareReqResetCommandExecution`|fn||691-716|export function prepareReqResetCommandExecution(|
-|`executeReqResetCommandExecution`|fn||726-845|export async function executeReqResetCommandExecution(|
+|`redirectReqResetExecutionToMainBranch`|fn||551-614|async function redirectReqResetExecutionToMainBranch(|
+|`resolveReqResetAnchoredWorktreeRoots`|fn||628-645|function resolveReqResetAnchoredWorktreeRoots(|
+|`restoreReqResetExecutionCwd`|fn||654-680|function restoreReqResetExecutionCwd(basePath: string, ac...|
+|`prepareReqResetCommandExecution`|fn||692-717|export function prepareReqResetCommandExecution(|
+|`executeReqResetCommandExecution`|fn||727-846|export async function executeReqResetCommandExecution(|
 
 
 ---
@@ -5562,7 +5570,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 5357L | 122 symbols | 28 imports | 171 comments
+# index.ts | TypeScript | 5372L | 122 symbols | 28 imports | 171 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -6253,15 +6261,15 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313
 
-### fn `function registerReqReferencesCommand(` (L3489-3530)
+### fn `function registerReqReferencesCommand(` (L3489-3545)
 - @brief Registers the specialized `req-references` slash command.
-- @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
+- @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, and emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, and user notifications.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
-- @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303
+- @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-437, REQ-438
 
-### fn `function registerPromptCommands(` (L3540-3691)
+### fn `function registerPromptCommands(` (L3555-3706)
 - @brief Registers bundled prompt-backed commands with the extension.
 - @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact command invocation summary plus the delivered prompt content into the debug prompt log path as separate `-request` and `-prompt` files when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-debug file creation, user-message delivery during execution, and optional debug-log writes.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6269,14 +6277,14 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428
 
-### fn `function registerAgentTools(pi: ExtensionAPI): void` (L3701-4000)
+### fn `function registerAgentTools(pi: ExtensionAPI): void` (L3716-4015)
 - @brief Registers pi-usereq agent tools exposed to the model.
 - @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102, REQ-293, REQ-294, REQ-295, REQ-296, REQ-297
 
-### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4045-4070)
+### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4060-4085)
 - @brief Builds the shared settings-menu choices for startup-tool management.
 - @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting the removed status-reference action. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6284,7 +6292,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
 - @satisfies REQ-007, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4080-4094)
+### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4095-4109)
 - @brief Builds the shared settings-menu choices for per-tool startup toggles.
 - @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends a value-less subtree-local `Reset defaults` row. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6292,7 +6300,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
 - @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-231, REQ-232
 
-### fn `async function configurePiUsereqToolsMenu(` (L4105-4222)
+### fn `async function configurePiUsereqToolsMenu(` (L4120-4237)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with the effective config, renders startup-tool actions through the shared settings-menu UI, persists enablement changes into global configuration, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6301,78 +6309,78 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-231, REQ-232
 
-### fn `function getStaticCheckLanguageConfigForMenu(` (L4231-4236)
+### fn `function getStaticCheckLanguageConfigForMenu(` (L4246-4251)
 - @brief Resolves one static-check language config for menu rendering.
 - @details Returns the configured per-language static-check object when present and otherwise synthesizes a disabled empty-language object so menu code can render all supported languages deterministically. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {StaticCheckLanguageConfig} Resolved per-language config object.
 
-### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4244-4246)
+### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4259-4261)
 - @brief Counts languages that currently expose at least one configured checker.
 - @details Treats configured-but-disabled languages as configured when their checker list is non-empty so removal actions remain deterministic. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of languages with at least one configured checker.
 
-### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4254-4256)
+### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4269-4271)
 - @brief Counts languages whose static-check enable flag is on.
 - @details Counts only languages whose persisted per-language config explicitly sets `enabled=enable`, regardless of checker count. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of enabled languages.
 
-### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4265-4267)
+### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4280-4282)
 - @brief Restores the documented static-check default configuration.
 - @details Replaces the mutable config subtree with a fresh clone of the documented per-language defaults so menu reset actions restore both enable flags and checker lists in one step. Runtime is O(l + c). Side effect: mutates `config`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 - @satisfies REQ-250, REQ-251, REQ-252
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4275-4277)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4290-4292)
 - @brief Summarizes enabled and configured static-check languages.
 - @details Counts enabled languages and languages with at least one checker, then emits one compact summary string suitable for the top-level configuration menu. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string.
 
-### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4286-4330)
+### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4301-4345)
 - @brief Builds the shared settings-menu choices for static-check management.
 - @details Serializes guided Command-oriented add and remove actions, renders one direct on/off toggle row for every supported language, and appends canonical terminal rows while omitting raw-spec and reference-only actions. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
 - @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248, REQ-345, REQ-347
 
-### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4338-4355)
+### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4353-4370)
 - @brief Builds the shared settings-menu choices for supported static-check languages.
 - @details Exposes every supported language as one row whose right-side value reports extensions, enablement, and configured checker count for guided Command configuration flows, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
 
-### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4363-4380)
+### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4378-4395)
 - @brief Builds the shared settings-menu choices for configured static-check languages.
 - @details Exposes only languages whose checker lists are non-empty so removal remains deterministic, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
 
-### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4388-4392)
+### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4403-4407)
 - @brief Formats one static-check checker entry as a compact command summary.
 - @details Joins the module command plus its parameter list into a single shell-like token sequence so inspection and confirmation menus can render checker identity deterministically. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Compact command summary string.
 
-### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4401-4407)
+### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4416-4422)
 - @brief Summarizes every configured checker for one language as a delimited command list.
 - @details Joins each checker entry summary with `; ` so the value column exposes the full language configuration in one row. Runtime is O(c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {string} Delimited checker summary string, or `(none)` when no checkers are configured.
 
-### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4416-4461)
+### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4431-4476)
 - @brief Builds the shared settings-menu choices for the read-only static-check inspection submenu.
 - @details Exposes only configured languages as disabled rows whose value column renders the full checker command list, appends one selectable `Close` row, and emits a disabled placeholder when no language is configured so the submenu never mutates configuration. Runtime is O(l * c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered read-only inspection choices.
 - @satisfies REQ-346
 
-### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4471-4509)
+### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4486-4524)
 - @brief Builds the confirmation submenu choices for removing one configured static-check language.
 - @details Renders each configured checker as a disabled preview row, appends explicit approve and abort actions, and falls back to one disabled no-op row when the language has no checkers. Runtime is O(c * p). No external state is mutated.
 - @param[in] language {string} Canonical language name targeted for removal.
@@ -6380,7 +6388,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removal-confirmation choices.
 - @satisfies REQ-349
 
-### fn `async function confirmStaticCheckRemoval(` (L4520-4531)
+### fn `async function confirmStaticCheckRemoval(` (L4535-4546)
 - @brief Opens one explicit removal-confirmation submenu for a configured static-check language.
 - @details Renders the targeted checker entries before removal and returns `true` only when the user selects the explicit approval action. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6389,7 +6397,7 @@ registration and status updates.
 - @return {Promise<boolean>} `true` when the removal is explicitly approved.
 - @satisfies REQ-349
 
-### fn `async function configureStaticCheckMenu(` (L4541-4720)
+### fn `async function configureStaticCheckMenu(` (L4556-4735)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user add, inspect, confirm-before-remove, and reset global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6397,7 +6405,7 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253, REQ-345, REQ-346, REQ-347, REQ-348, REQ-349
 
-### fn `function formatContextFilesSummary(` (L4731-4746)
+### fn `function formatContextFilesSummary(` (L4746-4761)
 - @brief Summarizes the `Context Files` flag state with measured sizes and context occupancy for the top-level menu value column.
 - @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -6406,7 +6414,7 @@ registration and status updates.
 - @return {string} Compact `Context Files` summary string with the occupancy suffix.
 - @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405
 
-### fn `function buildContextFilesMenuChoices(` (L4757-4800)
+### fn `function buildContextFilesMenuChoices(` (L4772-4815)
 - @brief Builds the shared settings-menu choices for the `Context Files` submenu.
 - @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -6415,7 +6423,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412
 
-### fn `async function configureContextFilesMenu(` (L4812-4872)
+### fn `async function configureContextFilesMenu(` (L4827-4887)
 - @brief Runs the `Context Files` configuration submenu.
 - @details Measures the context files through the yielding async measurement helper, then loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6425,9 +6433,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-406
 
-### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L4819-4823)
+### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L4834-4838)
 
-### fn `function buildPiUsereqMenuChoices(` (L4883-4989)
+### fn `function buildPiUsereqMenuChoices(` (L4898-5004)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
 - @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] cwd {string} Current working directory.
@@ -6436,21 +6444,21 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376, REQ-405
 
-### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4998-5016)
+### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5013-5031)
 - @brief Builds the shared settings-menu choices for source-directory management.
 - @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5025-5037)
+### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5040-5052)
 - @brief Builds the shared settings-menu choices for removing one source-directory entry.
 - @details Exposes every configured `src-dir` entry as one removable row and appends a value-less subtree-local `Reset defaults` row. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L5048-5309)
+### fn `async function configurePiUsereq(` (L5063-5324)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads the effective merged config, performs one yielding async context-file measurement warm pass so menu renders resolve through stat-signed cache hits instead of first-measurement encodes, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6459,9 +6467,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-327, REQ-328, REQ-333
 
-### fn `const persistConfigChange = () =>` (L5061-5066)
+### fn `const persistConfigChange = () =>` (L5076-5081)
 
-### fn `function registerConfigCommands(` (L5319-5329)
+### fn `function registerConfigCommands(` (L5334-5344)
 - @brief Registers configuration-management commands.
 - @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6469,7 +6477,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-006, REQ-031
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5338-5357)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5353-5372)
 - @brief Registers the complete pi-usereq extension.
 - @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6570,35 +6578,35 @@ registration and status updates.
 |`resolveReqResetPromptRequest`|fn||3378-3404|function resolveReqResetPromptRequest(|
 |`isWorktreeBacked`|fn||3381-3388|const isWorktreeBacked = (request: PromptCommandExecution...|
 |`registerReqResetCommand`|fn||3414-3479|function registerReqResetCommand(|
-|`registerReqReferencesCommand`|fn||3489-3530|function registerReqReferencesCommand(|
-|`registerPromptCommands`|fn||3540-3691|function registerPromptCommands(|
-|`registerAgentTools`|fn||3701-4000|function registerAgentTools(pi: ExtensionAPI): void|
-|`buildPiUsereqToolsMenuChoices`|fn||4045-4070|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
-|`buildPiUsereqToolToggleChoices`|fn||4080-4094|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
-|`configurePiUsereqToolsMenu`|fn||4105-4222|async function configurePiUsereqToolsMenu(|
-|`getStaticCheckLanguageConfigForMenu`|fn||4231-4236|function getStaticCheckLanguageConfigForMenu(|
-|`countConfiguredStaticCheckLanguages`|fn||4244-4246|function countConfiguredStaticCheckLanguages(config: UseR...|
-|`countEnabledStaticCheckLanguages`|fn||4254-4256|function countEnabledStaticCheckLanguages(config: UseReqC...|
-|`resetStaticCheckConfig`|fn||4265-4267|function resetStaticCheckConfig(config: UseReqConfig): void|
-|`formatStaticCheckLanguagesSummary`|fn||4275-4277|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckMenuChoices`|fn||4286-4330|function buildStaticCheckMenuChoices(config: UseReqConfig...|
-|`buildSupportedStaticCheckLanguageChoices`|fn||4338-4355|function buildSupportedStaticCheckLanguageChoices(config:...|
-|`buildConfiguredStaticCheckLanguageChoices`|fn||4363-4380|function buildConfiguredStaticCheckLanguageChoices(config...|
-|`formatStaticCheckCheckerEntry`|fn||4388-4392|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
-|`formatStaticCheckLanguageCheckerSummary`|fn||4401-4407|function formatStaticCheckLanguageCheckerSummary(config: ...|
-|`buildStaticCheckViewChoices`|fn||4416-4461|function buildStaticCheckViewChoices(config: UseReqConfig...|
-|`buildStaticCheckRemovalConfirmationChoices`|fn||4471-4509|function buildStaticCheckRemovalConfirmationChoices(|
-|`confirmStaticCheckRemoval`|fn||4520-4531|async function confirmStaticCheckRemoval(|
-|`configureStaticCheckMenu`|fn||4541-4720|async function configureStaticCheckMenu(|
-|`formatContextFilesSummary`|fn||4731-4746|function formatContextFilesSummary(|
-|`buildContextFilesMenuChoices`|fn||4757-4800|function buildContextFilesMenuChoices(|
-|`configureContextFilesMenu`|fn||4812-4872|async function configureContextFilesMenu(|
-|`setFlag`|fn||4819-4823|const setFlag = (flagKey: "context-files-requirements" | ...|
-|`buildPiUsereqMenuChoices`|fn||4883-4989|function buildPiUsereqMenuChoices(|
-|`buildSrcDirMenuChoices`|fn||4998-5016|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
-|`buildSrcDirRemovalChoices`|fn||5025-5037|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||5048-5309|async function configurePiUsereq(|
-|`persistConfigChange`|fn||5061-5066|const persistConfigChange = () =>|
-|`registerConfigCommands`|fn||5319-5329|function registerConfigCommands(|
-|`piUsereqExtension`|fn||5338-5357|export default function piUsereqExtension(pi: ExtensionAP...|
+|`registerReqReferencesCommand`|fn||3489-3545|function registerReqReferencesCommand(|
+|`registerPromptCommands`|fn||3555-3706|function registerPromptCommands(|
+|`registerAgentTools`|fn||3716-4015|function registerAgentTools(pi: ExtensionAPI): void|
+|`buildPiUsereqToolsMenuChoices`|fn||4060-4085|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
+|`buildPiUsereqToolToggleChoices`|fn||4095-4109|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
+|`configurePiUsereqToolsMenu`|fn||4120-4237|async function configurePiUsereqToolsMenu(|
+|`getStaticCheckLanguageConfigForMenu`|fn||4246-4251|function getStaticCheckLanguageConfigForMenu(|
+|`countConfiguredStaticCheckLanguages`|fn||4259-4261|function countConfiguredStaticCheckLanguages(config: UseR...|
+|`countEnabledStaticCheckLanguages`|fn||4269-4271|function countEnabledStaticCheckLanguages(config: UseReqC...|
+|`resetStaticCheckConfig`|fn||4280-4282|function resetStaticCheckConfig(config: UseReqConfig): void|
+|`formatStaticCheckLanguagesSummary`|fn||4290-4292|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckMenuChoices`|fn||4301-4345|function buildStaticCheckMenuChoices(config: UseReqConfig...|
+|`buildSupportedStaticCheckLanguageChoices`|fn||4353-4370|function buildSupportedStaticCheckLanguageChoices(config:...|
+|`buildConfiguredStaticCheckLanguageChoices`|fn||4378-4395|function buildConfiguredStaticCheckLanguageChoices(config...|
+|`formatStaticCheckCheckerEntry`|fn||4403-4407|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
+|`formatStaticCheckLanguageCheckerSummary`|fn||4416-4422|function formatStaticCheckLanguageCheckerSummary(config: ...|
+|`buildStaticCheckViewChoices`|fn||4431-4476|function buildStaticCheckViewChoices(config: UseReqConfig...|
+|`buildStaticCheckRemovalConfirmationChoices`|fn||4486-4524|function buildStaticCheckRemovalConfirmationChoices(|
+|`confirmStaticCheckRemoval`|fn||4535-4546|async function confirmStaticCheckRemoval(|
+|`configureStaticCheckMenu`|fn||4556-4735|async function configureStaticCheckMenu(|
+|`formatContextFilesSummary`|fn||4746-4761|function formatContextFilesSummary(|
+|`buildContextFilesMenuChoices`|fn||4772-4815|function buildContextFilesMenuChoices(|
+|`configureContextFilesMenu`|fn||4827-4887|async function configureContextFilesMenu(|
+|`setFlag`|fn||4834-4838|const setFlag = (flagKey: "context-files-requirements" | ...|
+|`buildPiUsereqMenuChoices`|fn||4898-5004|function buildPiUsereqMenuChoices(|
+|`buildSrcDirMenuChoices`|fn||5013-5031|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
+|`buildSrcDirRemovalChoices`|fn||5040-5052|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
+|`configurePiUsereq`|fn||5063-5324|async function configurePiUsereq(|
+|`persistConfigChange`|fn||5076-5081|const persistConfigChange = () =>|
+|`registerConfigCommands`|fn||5334-5344|function registerConfigCommands(|
+|`piUsereqExtension`|fn||5353-5372|export default function piUsereqExtension(pi: ExtensionAP...|
 

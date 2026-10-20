@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.98"
-date: "2026-10-12"
+version: "0.0.99"
+date: "2026-10-20"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -511,6 +511,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-433**: MUST reference the REQ-432 log-local session snapshot inside the sidecar `replayCommands.piFork` entry, falling back to the retained execution-session path only when the session copy fails.
 - **REQ-434**: MUST document in `README.md` the exact `pi --fork <snapshot> --model <modelId> --thinking <level> "<message>"` line as the extension-free, log-files-only provider-error reproduction procedure.
 - **REQ-435**: MUST give every debug file under `DEBUG_PROMPTS_LOG_PATH` a filename extension matching its persisted content format: `.md` for markdown, `.json` for JSON, `.jsonl` for JSONL, and `.txt` for plain text.
+- **REQ-436**: MUST make `req-references` execution report whether the regenerated `REFERENCES.md` content changed relative to the pre-run file and whether the guarded commit created a commit or was skipped.
+- **REQ-437**: MUST emit one `req-references` notification per completed run stating whether `REFERENCES.md` was updated or already matched the generated content.
+- **REQ-438**: MUST emit one `req-references` notification per completed run stating whether the fixed-message commit was created or skipped without changes.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -821,6 +824,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-303 | `src/index.ts` :: `registerReqReferencesCommand` :: transitions to `error` and notifies on failure; `src/core/req-references-command.ts` :: throws deterministic `ReqError` failures for generation, staging, commit, and cleanliness errors. |
 | REQ-357 | `src/core/req-references-command.ts` :: `runGuardedGitCommit` and `hasStagedChangesForPaths` :: skip `git commit` when the cached index holds no staged difference for the target paths. |
 | REQ-358 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution` :: invokes `runGuardedGitCommit(...)` before residual-status verification. |
+| REQ-436 | `src/core/req-references-command.ts` :: `ReqReferencesCommandExecutionResult` and `executeReqReferencesCommandExecution` :: return `referencesChanged` plus `commitCreated` outcome facts. |
+| REQ-437 | `src/index.ts` :: `registerReqReferencesCommand` :: emits one update/unchanged reference notification for every completed run. |
+| REQ-438 | `src/index.ts` :: `registerReqReferencesCommand` :: emits one created/skipped commit notification for every completed run. |
 | REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
 | REQ-006 | `src/index.ts` :: `buildPiUsereqMenuChoices` and `configurePiUsereq` :: expose directories, git automation, static-check, tools, notifications, debug settings, reset, save, and `Show configuration`. |
 | REQ-236 | `src/core/config.ts` :: `getDefaultConfig`, `loadConfig`, and `buildPersistedConfig` :: persist `DEBUG_ENABLED` with default `disable`. |
