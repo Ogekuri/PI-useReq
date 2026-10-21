@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.86.0](https://github.com/Ogekuri/PI-useReq/compare/v0.85.0..v0.86.0) - 2026-10-21
+### 🐛  Bug Fixes
+- persist durable command-report session entry [useReq] *(req-references)*
+  - Add src/core/command-report-entry.ts defining the pi-usereq.command-report
+  - custom session-entry payload, per-operation report-line builders, and the
+  - guarded appendEntry/registerEntryRenderer helpers.
+  - Register the report transcript entry renderer at extension activation and
+  - append one durable report entry on every req-references run (success and
+  - failure) so the executed-commands outcome report survives the transient
+  - notify-status collapsing and session-restore chat rebuilds.
+  - Extend the fake pi runtime with entry-renderer and appended-entry recording
+  - and add a reproducer test covering report payload, renderer output, and the
+  - error path.
+  - Update WORKFLOW.md call traces and regenerate REFERENCES.md.
+
 ## [0.85.0](https://github.com/Ogekuri/PI-useReq/compare/v0.84.0..v0.85.0) - 2026-10-21
 ### 🚜  Changes
 - preserve non-agentic notification evidence across session restore [useReq] *(core)*
@@ -1130,6 +1145,7 @@
 - \[0.83.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.83.0
 - \[0.84.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.84.0
 - \[0.85.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.85.0
+- \[0.86.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.86.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1214,3 +1230,4 @@
 [0.83.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.82.0..v0.83.0
 [0.84.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.83.0..v0.84.0
 [0.85.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.84.0..v0.85.0
+[0.86.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.85.0..v0.86.0
