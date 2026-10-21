@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.104"
+version: "0.0.105"
 date: "2026-10-21"
 author: "OpenAI Codex"
 scope:
@@ -529,6 +529,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-446**: MUST document the `%%OUTPUT%%` token in the `Pushover text` menu row description.
 - **REQ-451**: MUST upgrade persisted `notify-pushover-text` payloads that exactly equal a superseded legacy default (`%%RESULT%%\n%%ARGS%%` or `%%OUTPUT%%`) to `%%RESULT%%\n%%OUTPUT%%` during global configuration loading.
 - **REQ-452**: MUST deliver user-configured `notify-pushover-text` payloads that differ from every superseded legacy default unchanged during configuration loading.
+- **REQ-453**: MUST head-truncate the substituted Pushover `title` with the fixed truncation marker whenever it exceeds the 250-character Pushover Message API limit.
+- **REQ-454**: MUST NOT send a Pushover `url` request field whose value exceeds the 512-character Pushover Message API limit.
+- **REQ-455**: MUST NOT send a Pushover `url_title` request field whose value exceeds the 100-character Pushover Message API limit.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.

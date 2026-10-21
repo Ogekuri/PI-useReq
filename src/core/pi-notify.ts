@@ -112,9 +112,16 @@ export function upgradeLegacyPiNotifyPushoverText(value: string): string {
 export const PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT = 1024;
 
 /**
- * @brief Defines the deterministic head-truncation marker for over-limit Pushover bodies.
- * @details Appended after the retained head characters whenever the substituted Pushover body exceeds `PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT`. Access complexity is O(1).
- * @satisfies REQ-445
+ * @brief Defines the Pushover Message API `title` field limit in characters.
+ * @details Caps substituted Pushover titles per REQ-453 so over-limit payloads are head-truncated instead of rejected by the provider. Access complexity is O(1).
+ * @satisfies REQ-453
+ */
+export const PI_NOTIFY_PUSHOVER_TITLE_LIMIT = 250;
+
+/**
+ * @brief Defines the deterministic head-truncation marker for over-limit Pushover field values.
+ * @details Appended after the retained head characters whenever a substituted Pushover field value exceeds its Pushover Message API limit. Access complexity is O(1).
+ * @satisfies REQ-445, REQ-453
  */
 const PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER = "...[truncated]";
 
@@ -788,33 +795,37 @@ function shouldRunPiNotifyPushover(
 
 /**
  * @brief Builds the Pushover notification title for one prompt-end request.
- * @details Resolves the configured `notify-pushover-title` template with raw runtime placeholder substitution so the pushed title remains configurable and deterministic. Runtime is O(n) in template length. No external state is mutated.
+ * @details Resolves the configured `notify-pushover-title` template with raw runtime placeholder substitution so the pushed title remains configurable and deterministic, then head-truncates over-limit titles to the Pushover Message API `title` limit. Runtime is O(n) in template length. No external state is mutated.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
  * @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
- * @return {string} Pushover title string.
- * @satisfies REQ-185, REQ-186, REQ-187, REQ-199
+ * @return {string} Pushover title string within the 250-character API limit.
+ * @satisfies REQ-185, REQ-186, REQ-187, REQ-199, REQ-453
  */
 function buildPiNotifyPushoverTitle(
   config: PiNotifyConfigFields,
   outcome: PiNotifyOutcome,
   request: PiNotifyEventRequest,
 ): string {
-  return substitutePiNotifyTextTemplate(config["notify-pushover-title"], request, outcome);
+  return truncatePiNotifyPushoverText(
+    substitutePiNotifyTextTemplate(config["notify-pushover-title"], request, outcome),
+    PI_NOTIFY_PUSHOVER_TITLE_LIMIT,
+  );
 }
 
 /**
- * @brief Head-truncates one substituted Pushover body to the Pushover Message API limit.
- * @details Returns the body unchanged when it fits `PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT` and otherwise keeps the head characters that leave room for `PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER` so over-limit bodies stay deterministic and provider-acceptable. Runtime is O(1). No external state is mutated.
- * @param[in] body {string} Fully substituted Pushover body text.
- * @return {string} Body within the Pushover `message` character limit.
- * @satisfies REQ-445
+ * @brief Head-truncates one substituted Pushover field value to one Pushover Message API limit.
+ * @details Returns the text unchanged when it fits the supplied limit and otherwise keeps the head characters that leave room for `PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER` so over-limit field values stay deterministic and provider-acceptable. Runtime is O(1). No external state is mutated.
+ * @param[in] text {string} Fully substituted Pushover field text.
+ * @param[in] limit {number} Pushover Message API character limit for the targeted field.
+ * @return {string} Text within the supplied Pushover field character limit.
+ * @satisfies REQ-445, REQ-453
  */
-function truncatePiNotifyPushoverBody(body: string): string {
-  if (body.length <= PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT) {
-    return body;
+function truncatePiNotifyPushoverText(text: string, limit: number): string {
+  if (text.length <= limit) {
+    return text;
   }
-  return body.slice(0, PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT - PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER.length)
+  return text.slice(0, limit - PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER.length)
     + PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER;
 }
 
@@ -836,17 +847,17 @@ function buildPiNotifyPushoverBody(
   const resolvedBody = substitutedBody.trim().length > 0
     ? substitutedBody
     : formatPiNotifyResult(outcome);
-  return truncatePiNotifyPushoverBody(resolvedBody);
+  return truncatePiNotifyPushoverText(resolvedBody, PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT);
 }
 
 /**
  * @brief Builds the Pushover API payload for one prompt-end request.
- * @details Encodes the configured token, user key, substituted title, priority, and substituted text as `application/x-www-form-urlencoded` fields accepted by the Pushover Message API. Runtime is O(n) in payload size. No external state is mutated.
+ * @details Encodes exactly the configured token, user key, substituted title, priority, and substituted text as `application/x-www-form-urlencoded` fields accepted by the Pushover Message API; no `url` or `url_title` request field is ever emitted, so the 512-character `url` and 100-character `url_title` API limits cannot be violated. Runtime is O(n) in payload size. No external state is mutated.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
  * @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
  * @return {URLSearchParams} Encoded Pushover request payload.
- * @satisfies REQ-167, REQ-172, REQ-185, REQ-186, REQ-199, REQ-443, REQ-444, REQ-445
+ * @satisfies REQ-167, REQ-172, REQ-185, REQ-186, REQ-199, REQ-443, REQ-444, REQ-445, REQ-453, REQ-454, REQ-455
  */
 function buildPiNotifyPushoverPayload(
   config: PiNotifyConfigFields,
@@ -914,12 +925,12 @@ export function setPiNotifySpawnForTests(spawnImpl: PiNotifySpawn | undefined): 
 
 /**
  * @brief Dispatches prompt-end notify, sound, and Pushover effects for one agent-end payload.
- * @details Classifies the terminal outcome from the `agent_end` payload and delegates to `runPiNotifyEffectsForOutcome(...)`; `%%OUTPUT%%` resolves from the caller-supplied final agent output and Pushover bodies are head-truncated to the provider message limit. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
+ * @details Classifies the terminal outcome from the `agent_end` payload and delegates to `runPiNotifyEffectsForOutcome(...)`; `%%OUTPUT%%` resolves from the caller-supplied final agent output and Pushover bodies and titles are head-truncated to the provider message and title limits. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
  * @param[in] request {PiNotifyEventRequest | undefined} Optional prompt-end request metadata used for command-notify and Pushover substitution.
  * @return {void} No return value.
- * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445
+ * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-453
  */
 export function runPiNotifyEffects(
   config: PiNotifyConfigFields,
@@ -931,12 +942,12 @@ export function runPiNotifyEffects(
 
 /**
  * @brief Dispatches prompt-end notify, sound, and Pushover effects for one explicit prompt-end outcome.
- * @details Executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied; `%%OUTPUT%%` resolves from the caller-supplied final agent output or command process output, and Pushover bodies head-truncate to the provider message limit with an outcome-token fallback for empty bodies. Agentic callers classify the outcome from the `agent_end` payload through `runPiNotifyEffects(...)`; non-agentic `req-references` and `req-reset` command callers pass the explicit completed or failed outcome per REQ-447. Runtime is O(c + b) in command length and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
+ * @details Executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied; `%%OUTPUT%%` resolves from the caller-supplied final agent output or command process output, and Pushover bodies and titles head-truncate to the provider message and title limits with an outcome-token fallback for empty bodies. Agentic callers classify the outcome from the `agent_end` payload through `runPiNotifyEffects(...)`; non-agentic `req-references` and `req-reset` command callers pass the explicit completed or failed outcome per REQ-447. Runtime is O(c + b) in command length and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] outcome {PiNotifyOutcome} Explicit prompt-end outcome.
  * @param[in] request {PiNotifyEventRequest | undefined} Optional prompt-end request metadata used for command-notify and Pushover substitution.
  * @return {void} No return value.
- * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-447, REQ-450
+ * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-447, REQ-450, REQ-453
  */
 export function runPiNotifyEffectsForOutcome(
   config: PiNotifyConfigFields,
