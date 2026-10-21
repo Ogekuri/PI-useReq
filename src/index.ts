@@ -168,6 +168,11 @@ import {
   writePersistedPromptCommandRuntimeState,
   type PersistedPromptCommandRuntimeApi,
 } from "./core/prompt-command-state.js";
+import {
+  drainDeferredNotifications,
+  enqueueDeferredNotification,
+  shouldReplayDeferredNotificationsOnSessionStart,
+} from "./core/notification-replay.js";
 import { ensureBundledResourcesAccessible, readBundledPromptDescription } from "./core/resources.js";
 import { ReqError } from "./core/errors.js";
 import {
@@ -1199,13 +1204,13 @@ function resolveDebugProjectBase(cwd: string, statusController: PiUsereqStatusCo
 }
 
 /**
- * @brief Delivers one best-effort UI notification without failing on stale replacement contexts.
- * @details Attempts to use the supplied extension context for UI notification delivery and suppresses the documented stale-extension-context runtime error raised after session replacement, because prompt-orchestration closure can outlive the context that initiated the switch. Runtime is O(n) in message length. Side effects are limited to user notification delivery when the context is still active.
+ * @brief Delivers one best-effort UI notification, deferring the payload when the context is stale.
+ * @details Attempts to use the supplied extension context for UI notification delivery; when no context is available or pi raises the documented stale-extension-context error because the context was invalidated by session replacement or reload, the exact message plus severity is enqueued into the process-scoped deferred-notification replay store so one later eligible `session_start` can redeliver it on the restored context instead of losing the evidence. The payload is enqueued only on failed delivery, so already-delivered notifications are never replayed. Runtime is O(1). Side effects are limited to user notification delivery when the context is still active and process-scoped queue mutation when delivery fails.
  * @param[in] ctx {ExtensionContext | ExtensionCommandContext | undefined} Candidate UI context.
  * @param[in] message {string} Notification message.
  * @param[in] level {"info" | "error"} Notification severity.
- * @return {boolean} `true` when the notification was delivered and `false` when the context was already stale.
- * @satisfies REQ-280
+ * @return {boolean} `true` when the notification was delivered and `false` when delivery failed and the payload was deferred for replay.
+ * @satisfies REQ-280, REQ-439, REQ-442
  */
 function notifyContextSafely(
   ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
@@ -1213,6 +1218,7 @@ function notifyContextSafely(
   level: "info" | "error",
 ): boolean {
   if (ctx === undefined) {
+    enqueueDeferredNotification(message, level);
     return false;
   }
   try {
@@ -1220,6 +1226,7 @@ function notifyContextSafely(
     return true;
   } catch (error) {
     if (isStaleExtensionContextError(error)) {
+      enqueueDeferredNotification(message, level);
       return false;
     }
     throw error;
@@ -1232,7 +1239,7 @@ function notifyContextSafely(
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @return {void} No return value.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441
  */
 function notifyContextRetentionReminder(
   statusController: PiUsereqStatusController,
@@ -1494,7 +1501,7 @@ async function finalizeMatchedPromptSuccess(
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -1528,6 +1535,12 @@ async function handleExtensionStatusEvent(
         `Missing static checkers: ${missingCheckers.join(", ")}\nInstall: run 'npm install' or install each missing checker via your system package manager.`,
         "warning",
       );
+    }
+    if (shouldReplayDeferredNotificationsOnSessionStart(event)) {
+      const deferredNotifications = drainDeferredNotifications();
+      for (const deferredNotification of deferredNotifications) {
+        notifyContextSafely(ctx, deferredNotification.message, deferredNotification.level);
+      }
     }
   }
   if (hookName === "before_agent_start") {
@@ -3409,7 +3422,7 @@ function resolveReqResetPromptRequest(
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313
+ * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313, REQ-441
  */
 function registerReqResetCommand(
   pi: ExtensionAPI,
@@ -3484,7 +3497,7 @@ function registerReqResetCommand(
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-437, REQ-438
+ * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-437, REQ-438, REQ-441
  */
 function registerReqReferencesCommand(
   pi: ExtensionAPI,
@@ -3513,19 +3526,22 @@ function registerReqReferencesCommand(
         const executionResult = executeReqReferencesCommandExecution(executionPlan, config);
         setPiUsereqWorkflowState(statusController, "idle", ctx);
         const referencesDisplayPath = formatRuntimePathForDisplay(executionResult.referencesPath);
-        ctx.ui.notify(
+        notifyContextSafely(
+          ctx,
           executionResult.referencesChanged
             ? `req-references: Updated ${referencesDisplayPath}.`
             : `req-references: ${referencesDisplayPath} already matches the generated references content; no file update was needed.`,
           "info",
         );
-        ctx.ui.notify(
+        notifyContextSafely(
+          ctx,
           executionResult.commitCreated
             ? `req-references: Created commit ${executionResult.commitMessage}`
             : "req-references: Skipped the git commit because the references content already matched HEAD.",
           "info",
         );
-        ctx.ui.notify(
+        notifyContextSafely(
+          ctx,
           executionResult.referencesChanged && executionResult.commitCreated
             ? `SUCCESS: Updated ${referencesDisplayPath} and committed changes.`
             : `SUCCESS: req-references completed with a clean repository (${executionResult.referencesChanged ? "references updated" : "references unchanged"}; ${executionResult.commitCreated ? "commit created" : "commit skipped"}).`,
@@ -3537,7 +3553,7 @@ function registerReqReferencesCommand(
         statusController.state.activePromptRequest = undefined;
         setPiUsereqWorkflowState(statusController, "error", ctx);
         const message = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(message, "error");
+        notifyContextSafely(ctx, message, "error");
         throw error;
       }
     },

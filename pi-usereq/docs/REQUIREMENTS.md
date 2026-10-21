@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.99"
-date: "2026-10-20"
+version: "0.0.100"
+date: "2026-10-21"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -102,6 +102,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-021**: MUST implement the guarded model-selection reapply helper in `src/core/prompt-command-runtime.ts` without importing extension custom-tool executors from `src/core/tool-runner.ts`.
 - **DES-022**: MUST implement the bundled-resource updater in `scripts/pi-prompts-update.sh` as a standalone bash process using `git` plus core shell utilities only.
 - **DES-023**: MUST implement the pi CLI reference updater in `scripts/pi-cli-update-src-docs.sh` as a standalone bash process using `git` plus core shell utilities only.
+- **DES-024**: MUST implement the process-scoped deferred-notification replay store plus its session-start replay gate in one dedicated `src/core/` module outside `src/index.ts` business logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -514,6 +515,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-436**: MUST make `req-references` execution report whether the regenerated `REFERENCES.md` content changed relative to the pre-run file and whether the guarded commit created a commit or was skipped.
 - **REQ-437**: MUST emit one `req-references` notification per completed run stating whether `REFERENCES.md` was updated or already matched the generated content.
 - **REQ-438**: MUST emit one `req-references` notification per completed run stating whether the fixed-message commit was created or skipped without changes.
+- **REQ-439**: MUST defer non-agentic command-output notifications whose stale-context-safe delivery fails by enqueuing message plus severity into one process-scoped replay store instead of discarding them.
+- **REQ-440**: MUST drain the process-scoped replay store during `session_start` for reasons `new`, `resume`, `reload`, and `fork`, redelivering each queued notification through the restored context UI-notification channel.
+- **REQ-441**: MUST route `req-references` and `req-reset` outcome notifications plus the final context-retention notification through the stale-context-safe deferred-delivery notification helper.
+- **REQ-442**: MUST keep replayed notifications on the UI-notification channel without session messages or session switching, and MUST NOT replay already-delivered notifications.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
