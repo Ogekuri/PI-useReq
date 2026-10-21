@@ -3605,7 +3605,7 @@ test("req-references pushes the complete execution report through %%OUTPUT%% not
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "notify-pushover-text": "%%OUTPUT%%",
+      "notify-pushover-text": "%%RESULT%%\n%%OUTPUT%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     await pi.commands.get("req-references")!.handler("", ctx);
@@ -3615,6 +3615,7 @@ test("req-references pushes the complete execution report through %%OUTPUT%% not
     assert.equal(recordedBodies.length, 1);
     const pushoverParams = new URLSearchParams(recordedBodies[0] ?? "");
     assert.equal(pushoverParams.get("message"), [
+      "successed",
       "pi-usereq req-references: execution report",
       "outcome: success",
       `references file ${referencesPath}: already matched the generated content`,
@@ -7655,7 +7656,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.equal(config["notify-pushover-on-interrupted"], false);
   assert.equal(config["notify-pushover-on-failed"], false);
   assert.equal(config.PI_NOTIFY_CMD, 'notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a "PI-useReq" "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"');
-  assert.equal(config["notify-pushover-text"], "%%OUTPUT%%");
+  assert.equal(config["notify-pushover-text"], "%%RESULT%%\n%%OUTPUT%%");
 
   const localConfig = readProjectConfigJson(cwd);
   const globalConfig = readGlobalConfigJson();
@@ -7954,7 +7955,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     assert.equal(successParams.get("token"), "ah6bf5u2sj63mcvou6qamiabeoubbe");
     assert.equal(successParams.get("user"), "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
     assert.equal(successParams.get("priority"), "1");
-    assert.equal(successParams.get("message"), "Final agent report from req-analyze.");
+    assert.equal(successParams.get("message"), `${buildExpectedNotifyResult("stop")}\nFinal agent report from req-analyze.`);
     assert.equal(successParams.get("title"), `analyze @ ${buildExpectedNotifyBasePath(cwd)} [0:05]`);
 
     recordedRequests.length = 0;

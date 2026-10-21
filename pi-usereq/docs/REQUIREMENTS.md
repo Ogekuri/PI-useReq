@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.103"
+version: "0.0.104"
 date: "2026-10-21"
 author: "OpenAI Codex"
 scope:
@@ -239,7 +239,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-288**: MUST persist menu-selected `notify-sound` changes to global configuration without changing the active runtime sound level.
 - **REQ-289**: MUST render configuration-menu sound values from persisted `notify-sound`, even when the active runtime sound level differs.
 - **REQ-184**: MUST persist Pushover event toggles in keys `notify-pushover-on-completed`, `notify-pushover-on-interrupted`, and `notify-pushover-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
-- **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%OUTPUT%%`.
+- **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%RESULT%%\n%%OUTPUT%%`.
 - **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, `%%OUTPUT%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
 - **REQ-187**: MUST render `%%BASE%%` as static `base-path` relative to user home using `~/...` form and `%%TIME%%` as final elapsed `M:SS`.
 - **REQ-188**: MUST label notification-event rows as `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
@@ -527,8 +527,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-450**: MUST fall back the Pushover `message` body to the `%%RESULT%%` outcome token whenever the fully substituted Pushover text template resolves to empty.
 - **REQ-445**: MUST head-truncate the substituted Pushover `message` body with a fixed truncation marker whenever it exceeds the 1024-character Pushover Message API limit.
 - **REQ-446**: MUST document the `%%OUTPUT%%` token in the `Pushover text` menu row description.
-- **REQ-451**: MUST upgrade persisted `notify-pushover-text` payloads that exactly equal the superseded legacy default `%%RESULT%%\n%%ARGS%%` to `%%OUTPUT%%` during global configuration loading.
-- **REQ-452**: MUST deliver user-configured `notify-pushover-text` payloads that differ from the superseded legacy default unchanged during configuration loading.
+- **REQ-451**: MUST upgrade persisted `notify-pushover-text` payloads that exactly equal a superseded legacy default (`%%RESULT%%\n%%ARGS%%` or `%%OUTPUT%%`) to `%%RESULT%%\n%%OUTPUT%%` during global configuration loading.
+- **REQ-452**: MUST deliver user-configured `notify-pushover-text` payloads that differ from every superseded legacy default unchanged during configuration loading.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -686,7 +686,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-155**: MUST verify `%%OUTPUT%%` resolves from concatenated text blocks of the last assistant message while skipping thinking plus tool-call content blocks.
 - **TST-156**: MUST verify `%%OUTPUT%%` resolves from process output for non-agentic `req-references` plus `req-reset` notifications and stays empty for agent runs without text blocks.
 - **TST-157**: MUST verify the Pushover `message` body is head-truncated with a fixed marker when the substituted template exceeds 1024 characters.
-- **TST-158**: MUST verify configuration loading upgrades the superseded legacy `notify-pushover-text` default `%%RESULT%%\n%%ARGS%%` to `%%OUTPUT%%` while delivering distinct user-configured templates unchanged.
+- **TST-158**: MUST verify configuration loading upgrades every superseded legacy `notify-pushover-text` default (`%%RESULT%%\n%%ARGS%%` and `%%OUTPUT%%`) to `%%RESULT%%\n%%OUTPUT%%` while delivering distinct user-configured templates unchanged.
 
 ## 5. Observed Component Model
 
@@ -893,7 +893,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-140 | `.github/workflows/release-npm.yml` :: `env.NODE_VERSION` is `24.15.0`; publish job uses `actions/setup-node`, `npm ci`, `npm pkg delete private`, and `npm publish --provenance --access public` with `NODE_AUTH_TOKEN`. |
 | REQ-141 | `.github/workflows/release-npm.yml` :: release job uses changelog-builder output as `softprops/action-gh-release` body with non-draft and non-prerelease flags. |
 | REQ-378 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` read-only pi CLI client reference plus source-of-truth bullets injected into pi.dev-aware rendered prompts. |
-| REQ-451 | `src/core/pi-notify.ts` :: `LEGACY_PI_NOTIFY_PUSHOVER_TEXT` plus `upgradeLegacyPiNotifyPushoverText` :: upgrade the superseded legacy `notify-pushover-text` default; `src/core/config.ts` :: `loadGlobalConfig` :: applies the upgrade to persisted global payloads. |
+| REQ-451 | `src/core/pi-notify.ts` :: `LEGACY_PI_NOTIFY_PUSHOVER_TEXTS` plus `upgradeLegacyPiNotifyPushoverText` :: upgrade every superseded legacy `notify-pushover-text` default; `src/core/config.ts` :: `loadGlobalConfig` :: applies the upgrade to persisted global payloads. |
 | REQ-452 | `src/core/pi-notify.ts` :: `upgradeLegacyPiNotifyPushoverText` :: returns every distinct user-configured `notify-pushover-text` payload unchanged. |
 
 ### 8.4 TST Evidence

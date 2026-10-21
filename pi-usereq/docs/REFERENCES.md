@@ -3001,10 +3001,10 @@ import type { UseReqConfig } from "./config.js";
 - @brief Represents one supported prompt-end outcome.
 - @details Narrows prompt-end event classification and per-feature toggle routing to the canonical completed/interrupted/failed domain. Compile-time only and introduces no runtime cost.
 ### fn `export function upgradeLegacyPiNotifyPushoverText(value: string): string` (L103-105)
-- @brief Upgrades one Pushover text template away from the superseded legacy default.
-- @details Returns the current output-carrying default when the supplied persisted template exactly equals the superseded legacy default, and returns every distinct user-configured template unchanged so REQ-186 template honoring stays intact. Runtime is O(n) in template length for the equality probe. No external state is mutated.
+- @brief Upgrades one Pushover text template away from every superseded legacy default.
+- @details Returns the current result-plus-output default when the supplied persisted template exactly equals one of the superseded legacy defaults, and returns every distinct user-configured template unchanged so REQ-186 template honoring stays intact. Runtime is O(n) in template length for the membership probe. No external state is mutated.
 - @param[in] value {string} Normalized persisted `notify-pushover-text` payload.
-- @return {string} Upgraded template when the legacy default is detected; otherwise the input unchanged.
+- @return {string} Upgraded template when a superseded legacy default is detected; otherwise the input unchanged.
 - @satisfies REQ-451, REQ-452
 
 - type `export type PiNotifyPushoverPriority = (typeof PI_NOTIFY_PUSHOVER_PRIORITIES)[number];` (L131)
