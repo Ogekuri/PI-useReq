@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.89.0](https://github.com/Ogekuri/PI-useReq/compare/v0.88.0..v0.89.0) - 2026-10-21
+### 🐛  Bug Fixes
+- push full execution report via %%OUTPUT%% [useReq] *(req-references)*
+  - Add buildCommandReportEntryText to serialize the durable report header
+  - plus per-operation outcome lines as one plain-text payload.
+  - Resolve req-references completed-run %%OUTPUT%% from the complete
+  - execution report and failed-run %%OUTPUT%% from the error report so
+  - Pushover and command-notify bodies carry all produced output.
+  - Add one reproducer test asserting the pushed Pushover message equals
+  - the full report; update WORKFLOW.md call traces and REFERENCES.md.
+  - Refs REQ-436, REQ-447, REQ-448.
+
 ## [0.88.0](https://github.com/Ogekuri/PI-useReq/compare/v0.87.0..v0.88.0) - 2026-10-21
 ### 🚜  Changes
 - make Pushover body default to final LLM output [useReq] *(pi-notify)*
@@ -1165,6 +1177,7 @@
 - \[0.86.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.86.0
 - \[0.87.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.87.0
 - \[0.88.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.88.0
+- \[0.89.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.89.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1252,3 +1265,4 @@
 [0.86.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.85.0..v0.86.0
 [0.87.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.86.0..v0.87.0
 [0.88.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.87.0..v0.88.0
+[0.89.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.88.0..v0.89.0
