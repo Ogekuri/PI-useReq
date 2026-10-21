@@ -7881,6 +7881,74 @@ test("notifications menu escapes pushover text and locks pushover enablement unt
   assert.match(renderedNotificationsMenu, /<dim>configure user\/token keys first<\/dim>/);
 });
 
+test("agent_end pushover delivery survives mid-run run-timer loss and reuses live prompt state", async () => {
+  // Reproduces the real-host defect where a long-lived pi process loses the in-memory
+  // `runStartTimeMs` timer between `agent_start` and `agent_end` (mid-run session rebind):
+  // the entry-gated `notifyRequest` becomes undefined and the prompt-end Pushover message
+  // carrying %%OUTPUT%% is silently dropped even though the live controller still tracks the
+  // active prompt request (REQ-166, REQ-184, REQ-186, REQ-443).
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, {
+    GIT_WORKTREE_ENABLED: "disable",
+    "notify-pushover-enabled": true,
+    "notify-pushover-on-completed": true,
+    "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+    "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    "notify-pushover-priority": 0,
+    "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+    "notify-pushover-text": "%%RESULT%%\n%%OUTPUT%%",
+  });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const recordedRequests: Array<{ body: string }> = [];
+  setPiNotifyHttpsRequestForTests(((url: URL, _options: Record<string, unknown>, callback?: (response: any) => void) => {
+    const record = { body: "" };
+    recordedRequests.push(record);
+    const fakeResponse = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeResponse;
+      },
+      resume() {
+        return undefined;
+      },
+    };
+    callback?.(fakeResponse);
+    const fakeRequest = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeRequest;
+      },
+      end(body?: string) {
+        record.body = body ?? "";
+      },
+    };
+    return fakeRequest as unknown as ReturnType<typeof import("node:https").request>;
+  }) as typeof import("node:https").request);
+  try {
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    // Simulate the observed real-host state loss: a non-resetting session rebind between
+    // `agent_start` and `agent_end` clears the run timer while the active prompt request survives.
+    await pi.emit("session_start", { reason: "resume" }, ctx);
+    await pi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "Final agent report after timer loss." }],
+        },
+      ],
+    }, ctx);
+
+    assert.equal(recordedRequests.length, 1);
+    const params = new URLSearchParams(recordedRequests[0]?.body ?? "");
+    assert.equal(params.get("message"), `${buildExpectedNotifyResult("stop")}\nFinal agent report after timer loss.`);
+  } finally {
+    setPiNotifyHttpsRequestForTests(undefined);
+  }
+});
+
 test("prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates", async () => {
   // The first block persists the superseded legacy default `%%RESULT%%\n%%ARGS%%` (REQ-451): loading
   // must upgrade it to `%%OUTPUT%%` so the pushed body carries the final assistant output instead of
