@@ -86,6 +86,25 @@ export const DEFAULT_PI_NOTIFY_PUSHOVER_TITLE = "%%PROMT%% @ %%BASE%% [%%TIME%%]
 export const DEFAULT_PI_NOTIFY_PUSHOVER_TEXT = "%%OUTPUT%%";
 
 /**
+ * @brief Defines the superseded legacy default Pushover text template.
+ * @details Captures the exact `%%RESULT%%\n%%ARGS%%` template persisted as the documented default before REQ-185 switched the default to `%%OUTPUT%%`; configuration loading upgrades persisted payloads that still equal this legacy default so prompt-end Pushover bodies resume carrying the final agent or command output. Access complexity is O(1).
+ * @satisfies REQ-451
+ * @see `DEFAULT_PI_NOTIFY_PUSHOVER_TEXT`
+ */
+export const LEGACY_PI_NOTIFY_PUSHOVER_TEXT = "%%RESULT%%\n%%ARGS%%";
+
+/**
+ * @brief Upgrades one Pushover text template away from the superseded legacy default.
+ * @details Returns the current output-carrying default when the supplied persisted template exactly equals the superseded legacy default, and returns every distinct user-configured template unchanged so REQ-186 template honoring stays intact. Runtime is O(n) in template length for the equality probe. No external state is mutated.
+ * @param[in] value {string} Normalized persisted `notify-pushover-text` payload.
+ * @return {string} Upgraded template when the legacy default is detected; otherwise the input unchanged.
+ * @satisfies REQ-451, REQ-452
+ */
+export function upgradeLegacyPiNotifyPushoverText(value: string): string {
+  return value === LEGACY_PI_NOTIFY_PUSHOVER_TEXT ? DEFAULT_PI_NOTIFY_PUSHOVER_TEXT : value;
+}
+
+/**
  * @brief Defines the Pushover Message API `message` field limit in characters.
  * @details Caps substituted Pushover bodies per REQ-445 so over-limit payloads are head-truncated instead of rejected by the provider. Access complexity is O(1).
  * @satisfies REQ-445

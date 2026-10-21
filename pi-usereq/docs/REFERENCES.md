@@ -680,7 +680,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ---
 
-# config.ts | TypeScript | 1206L | 44 symbols | 8 imports | 54 comments
+# config.ts | TypeScript | 1207L | 44 symbols | 8 imports | 54 comments
 > Path: `src/core/config.ts`
 - @brief Loads, normalizes, merges, and persists pi-usereq configuration.
 - @details Defines the effective configuration schema, split local/global persistence contracts, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq.json` and `~/.config/pi-usereq/config.json`.
@@ -699,95 +699,95 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 
 ## Definitions
 
-### iface `export interface StaticCheckEntry` (L62-66)
+### iface `export interface StaticCheckEntry` (L63-67)
 - @brief Describes one static-check module configuration entry.
 - @details Each record identifies the checker module and optional command or parameter list used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
 
-- type `export type StaticCheckEnabled = "enable" | "disable";` (L72)
+- type `export type StaticCheckEnabled = "enable" | "disable";` (L73)
 - @brief Represents the persisted per-language static-check enable flag.
 - @details Narrows persisted per-language enablement to the documented `enable|disable` domain reused by configuration loading, menu toggles, and static-check dispatch. The alias is compile-time only and introduces no runtime cost.
-### iface `export interface StaticCheckLanguageConfig` (L78-81)
+### iface `export interface StaticCheckLanguageConfig` (L79-82)
 - @brief Describes one persisted per-language static-check configuration object.
 - @details Couples the per-language enable flag with the ordered checker-entry list so menu toggles, config serialization, and execution dispatch can distinguish configured-but-disabled languages from enabled active checker lists. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface UseReqConfig` (L87-131)
+### iface `export interface UseReqConfig` (L88-132)
 - @brief Defines the effective pi-usereq configuration schema.
 - @details Captures the merged runtime view produced from project-local and cross-project persisted scopes, including documentation paths, source/test directory selection, per-language static-check enablement plus checker configuration, prompt-command worktree settings, enabled startup tools, and notification settings while excluding runtime-derived path metadata. The interface is compile-time only and introduces no runtime side effects.
 
-### iface `interface LocalStaticCheckLanguageConfig` (L137-139)
+### iface `interface LocalStaticCheckLanguageConfig` (L138-140)
 - @brief Defines one persisted local static-check language configuration.
 - @details Stores only the project-local enable flag so checker command definitions can live exclusively in global configuration. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface GlobalStaticCheckLanguageConfig` (L145-147)
+### iface `interface GlobalStaticCheckLanguageConfig` (L146-148)
 - @brief Defines one persisted global static-check language configuration.
 - @details Stores only the cross-project checker-entry array so project-local files do not duplicate command definitions. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface UseReqLocalConfig` (L154-171)
+### iface `interface UseReqLocalConfig` (L155-172)
 - @brief Defines the persisted local pi-usereq configuration schema.
 - @details Captures project-scoped directory, debug, and static-check enablement fields written to `<base-path>/.pi-usereq.json` while excluding the runtime-only `DEBUG_ENABLED` flag and global notification, tool, git, and checker-command settings. The interface is compile-time only and introduces no runtime side effects.
 - @satisfies REQ-426
 
-### iface `interface UseReqGlobalConfig` (L177-205)
+### iface `interface UseReqGlobalConfig` (L178-206)
 - @brief Defines the persisted global pi-usereq configuration schema.
 - @details Captures cross-project static-check checker commands, enabled tool names, git automation fields, and notification settings written to `~/.config/pi-usereq/config.json` while excluding project-local directory and debug fields. The interface is compile-time only and introduces no runtime side effects.
 
-### fn `export function normalizeContextFilesFlag(value: unknown): boolean` (L237-239)
+### fn `export function normalizeContextFilesFlag(value: unknown): boolean` (L238-240)
 - @brief Normalizes one persisted context-file injection flag.
 - @details Returns the documented default (`true`) for missing or non-boolean values and preserves only explicit boolean input, so any malformed persisted entry keeps context-file injection enabled. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted context-file flag.
 - @return {boolean} Normalized context-file injection flag.
 - @satisfies REQ-328
 
-### fn `function cloneStaticCheckEntry(entry: StaticCheckEntry): StaticCheckEntry` (L339-348)
+### fn `function cloneStaticCheckEntry(entry: StaticCheckEntry): StaticCheckEntry` (L340-349)
 - @brief Clones one static-check entry into its persisted shape.
 - @details Copies only the stable module, cmd, and params fields so runtime-only or unknown metadata never leaks into persisted configuration payloads. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Source static-check entry.
 - @return {StaticCheckEntry} Persistable static-check entry clone.
 
-### fn `export function createStaticCheckLanguageConfig(` (L357-366)
+### fn `export function createStaticCheckLanguageConfig(` (L358-367)
 - @brief Builds one per-language static-check configuration object.
 - @details Clones the supplied checker entries, derives `enabled` from the explicit argument or checker-list emptiness, and preserves checker order for menu and dispatch determinism. Runtime is O(c + p). No external state is mutated.
 - @param[in] checkers {StaticCheckEntry[]} Ordered checker entries.
 - @param[in] enabled {StaticCheckEnabled | undefined} Optional explicit enable flag.
 - @return {StaticCheckLanguageConfig} Normalized per-language config object.
 
-### fn `function createLocalStaticCheckLanguageConfig(` (L374-378)
+### fn `function createLocalStaticCheckLanguageConfig(` (L375-379)
 - @brief Builds one persisted local static-check language configuration object.
 - @details Stores only the normalized enable flag so local project files do not duplicate checker command definitions. Runtime is O(1). No external state is mutated.
 - @param[in] enabled {StaticCheckEnabled} Canonical per-language enable flag.
 - @return {LocalStaticCheckLanguageConfig} Persistable local static-check language config.
 
-### fn `function createGlobalStaticCheckLanguageConfig(` (L386-392)
+### fn `function createGlobalStaticCheckLanguageConfig(` (L387-393)
 - @brief Builds one persisted global static-check language configuration object.
 - @details Clones the supplied checker entries so global configuration retains only stable module, command, and parameter fields. Runtime is O(c + p). No external state is mutated.
 - @param[in] checkers {StaticCheckEntry[]} Ordered checker entries.
 - @return {GlobalStaticCheckLanguageConfig} Persistable global static-check language config.
 
-### fn `function getDefaultGlobalStaticCheckConfig(): Record<string, GlobalStaticCheckLanguageConfig>` (L399-404)
+### fn `function getDefaultGlobalStaticCheckConfig(): Record<string, GlobalStaticCheckLanguageConfig>` (L400-405)
 - @brief Returns the documented default global static-check checker map.
 - @details Emits one checker-array object for every supported language, preserving documented Command entries for default-enabled languages and `[]` for every other language. Runtime is O(l + c). No external state is mutated.
 - @return {Record<string, GlobalStaticCheckLanguageConfig>} Fresh default global checker map.
 
-### fn `function getDefaultLocalStaticCheckConfig(` (L412-421)
+### fn `function getDefaultLocalStaticCheckConfig(` (L413-422)
 - @brief Returns the documented default local static-check enable map.
 - @details Derives each per-language enable flag from the supplied global checker definitions using the rule `enable` when `checkers` is non-empty and `disable` otherwise. Runtime is O(l). No external state is mutated.
 - @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker map used to derive default enablement.
 - @return {Record<string, LocalStaticCheckLanguageConfig>} Fresh default local enable map.
 
-### fn `function mergeStaticCheckConfig(` (L430-449)
+### fn `function mergeStaticCheckConfig(` (L431-450)
 - @brief Merges local enable flags with global checker definitions into the effective static-check map.
 - @details Unifies all language keys present in either persisted scope, applies the default-enable rule when the local scope omits a language, and clones checker entries into the effective runtime config. Runtime is O(l + c + p). No external state is mutated.
 - @param[in] localStaticCheckConfig {Record<string, LocalStaticCheckLanguageConfig>} Persisted local enable map.
 - @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Persisted global checker map.
 - @return {Record<string, StaticCheckLanguageConfig>} Effective per-language static-check config.
 
-### fn `export function getDefaultStaticCheckConfig(): Record<string, StaticCheckLanguageConfig>` (L457-463)
+### fn `export function getDefaultStaticCheckConfig(): Record<string, StaticCheckLanguageConfig>` (L458-464)
 - @brief Returns the documented default static-check configuration.
 - @details Emits one effective per-language config object for every supported language by merging documented global checker defaults with derived local enable defaults. Runtime is O(l + c). No external state is mutated.
 - @return {Record<string, StaticCheckLanguageConfig>} Fresh default effective static-check config.
 - @satisfies REQ-249, REQ-250, REQ-251, REQ-252, REQ-316
 
-### fn `export function normalizeStaticCheckEnabled(` (L473-478)
+### fn `export function normalizeStaticCheckEnabled(` (L474-479)
 - @brief Normalizes one persisted per-language static-check enable flag.
 - @details Accepts only the documented `enable|disable` values and falls back to the supplied default when the candidate is absent or invalid. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted enable flag.
@@ -795,7 +795,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {StaticCheckEnabled} Canonical per-language enable flag.
 - @satisfies REQ-249
 
-### fn `export function getActiveStaticCheckEntries(` (L488-497)
+### fn `export function getActiveStaticCheckEntries(` (L489-498)
 - @brief Resolves the active checker list for one language.
 - @details Returns the persisted checker list only when the language is enabled; disabled or missing languages yield an empty list without mutating the source config. Runtime is O(c). No external state is mutated.
 - @param[in] staticCheckConfig {Record<string, StaticCheckLanguageConfig>} Effective static-check config.
@@ -803,21 +803,21 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {StaticCheckEntry[]} Active checker list for the language.
 - @satisfies REQ-019
 
-### fn `export function normalizeAutoGitCommit(value: unknown): "enable" | "disable"` (L512-514)
+### fn `export function normalizeAutoGitCommit(value: unknown): "enable" | "disable"` (L513-515)
 - @brief Normalizes one persisted automatic git-commit mode value.
 - @details Accepts only the documented `enable|disable` values and falls back to `DEFAULT_AUTO_GIT_COMMIT` for all other payloads. Runtime is O(1). No side effects occur.
 - @param[in] value {unknown} Candidate persisted automatic git-commit payload.
 - @return {"enable" | "disable"} Canonical automatic git-commit mode.
 - @satisfies REQ-212
 
-### fn `export function normalizeGitWorktreeEnabled(value: unknown): "enable" | "disable"` (L528-530)
+### fn `export function normalizeGitWorktreeEnabled(value: unknown): "enable" | "disable"` (L529-531)
 - @brief Normalizes one persisted worktree-enable flag value.
 - @details Accepts only the documented `enable|disable` values and falls back to `DEFAULT_GIT_WORKTREE_ENABLED` for all other payloads. Runtime is O(1). No side effects occur.
 - @param[in] value {unknown} Candidate persisted worktree-enable payload.
 - @return {"enable" | "disable"} Canonical persisted worktree-enable mode.
 - @satisfies REQ-204
 
-### fn `export function resolveEffectiveGitWorktreeEnabled(` (L539-544)
+### fn `export function resolveEffectiveGitWorktreeEnabled(` (L540-545)
 - @brief Resolves the effective worktree mode after automatic-commit policy is applied.
 - @details Forces `disable` whenever `AUTO_GIT_COMMIT` is disabled; otherwise preserves the normalized persisted worktree flag. Runtime is O(1). No side effects occur.
 - @param[in] autoGitCommit {"enable" | "disable"} Effective automatic git-commit mode.
@@ -825,37 +825,37 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {"enable" | "disable"} Effective worktree mode used by menus, persistence, and prompt execution.
 - @satisfies REQ-204, REQ-215
 
-### fn `export function normalizeGitWorktreePrefix(value: unknown): string` (L558-564)
+### fn `export function normalizeGitWorktreePrefix(value: unknown): string` (L559-565)
 - @brief Normalizes one persisted worktree-name prefix value.
 - @details Accepts only non-empty strings, trims surrounding whitespace, and falls back to `DEFAULT_GIT_WORKTREE_PREFIX` when the candidate is absent or blank. Runtime is O(n) in prefix length. No side effects occur.
 - @param[in] value {unknown} Candidate persisted prefix payload.
 - @return {string} Canonical worktree-name prefix.
 - @satisfies REQ-205
 
-### fn `export function getProjectConfigPath(projectBase: string): string` (L571-573)
+### fn `export function getProjectConfigPath(projectBase: string): string` (L572-574)
 - @brief Computes the per-project local config file path.
 - @details Joins the project base with `.pi-usereq.json`, producing the canonical local persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {string} Absolute local config file path.
 
-### fn `export function getGlobalConfigPath(): string` (L580-582)
+### fn `export function getGlobalConfigPath(): string` (L581-583)
 - @brief Computes the cross-project global config file path.
 - @details Resolves `~/.config/pi-usereq/config.json` through the shared runtime path helper so CLI and extension code use one canonical global persistence location. Time complexity is O(1). No I/O side effects occur.
 - @return {string} Absolute global config file path.
 
-### fn `function getDefaultLocalConfig(` (L591-612)
+### fn `function getDefaultLocalConfig(` (L592-613)
 - @brief Builds the default persisted local configuration.
 - @details Populates canonical docs/test/source directories, derives local static-check enable defaults from the supplied global checker definitions, and seeds documented debug defaults including tool-wrapper command registration without any cross-project fields. Runtime is O(l). No filesystem side effects occur.
 - @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker definitions used to derive local enable defaults.
 - @return {UseReqLocalConfig} Fresh default local configuration object.
 - @satisfies CTN-013, CTN-019, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `function getDefaultGlobalConfig(): UseReqGlobalConfig` (L619-649)
+### fn `function getDefaultGlobalConfig(): UseReqGlobalConfig` (L620-650)
 - @brief Builds the default persisted global configuration.
 - @details Populates documented cross-project static-check checker commands, enabled tools, git automation fields, and notification defaults without any project-local directory or debug fields. Runtime is O(l + c). No filesystem side effects occur.
 - @return {UseReqGlobalConfig} Fresh default global configuration object.
 
-### fn `function mergeConfigScopes(` (L659-731)
+### fn `function mergeConfigScopes(` (L660-732)
 - @brief Merges persisted local and global configuration scopes into the effective runtime config.
 - @details Normalizes local directories, combines local static-check enable flags with global checker arrays, resolves effective worktree disablement when automatic git commit is off, normalizes debug and notification fields including tool-wrapper command registration, sources the runtime-only `DEBUG_ENABLED` flag from the process-scoped debug store, and disables Pushover until both credentials are populated. Runtime is O(l + c + p). No external state is mutated.
 - @param[in] localConfig {UseReqLocalConfig} Persisted local configuration.
@@ -863,27 +863,27 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {UseReqConfig} Effective merged configuration.
 - @satisfies REQ-236, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `export function getDefaultConfig(_projectBase: string): UseReqConfig` (L740-746)
+### fn `export function getDefaultConfig(_projectBase: string): UseReqConfig` (L741-747)
 - @brief Builds the default effective configuration.
 - @details Composes documented local and global defaults, then merges them into the effective runtime config consumed by CLI and extension code. Time complexity is O(l + c). No filesystem side effects occur.
 - @param[in] _projectBase {string} Absolute project root path retained for stable call sites.
 - @return {UseReqConfig} Fresh default effective configuration object.
 - @satisfies CTN-001, CTN-012, CTN-013, CTN-018, CTN-019, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-250, REQ-251, REQ-252, REQ-277, REQ-315, REQ-316, REQ-413, REQ-414
 
-### fn `function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[]` (L754-774)
+### fn `function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[]` (L755-775)
 - @brief Normalizes one raw checker-entry array from persisted config.
 - @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted checker array.
 - @return {StaticCheckEntry[]} Normalized checker-entry vector.
 
-### fn `function readConfigPayload(configPath: string): Record<string, unknown> | undefined` (L783-799)
+### fn `function readConfigPayload(configPath: string): Record<string, unknown> | undefined` (L784-800)
 - @brief Reads and validates one persisted config payload.
 - @details Returns `undefined` when the target file does not exist. Otherwise parses UTF-8 JSON, rejects array or primitive payloads, and surfaces deterministic `ReqError` diagnostics keyed by the exact path. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] configPath {string} Absolute config file path.
 - @return {Record<string, unknown> | undefined} Parsed object payload or `undefined` when the file is absent.
 - @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
 
-### fn `function normalizeLocalStaticCheckConfig(` (L809-833)
+### fn `function normalizeLocalStaticCheckConfig(` (L810-834)
 - @brief Normalizes the persisted local static-check enable map.
 - @details Starts from the supplied default enable map, accepts only object-valued language entries, reads only `enabled`, and ignores misplaced checker arrays or legacy non-object payloads without migration. Runtime is O(l). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted local static-check payload.
@@ -891,14 +891,14 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {Record<string, LocalStaticCheckLanguageConfig>} Normalized local static-check enable map.
 - @satisfies REQ-249, REQ-316
 
-### fn `function normalizeGlobalStaticCheckConfig(` (L842-859)
+### fn `function normalizeGlobalStaticCheckConfig(` (L843-860)
 - @brief Normalizes the persisted global static-check checker map.
 - @details Starts from documented global checker defaults, accepts only object-valued language entries, reads only `checkers`, and ignores misplaced local enable flags or legacy non-object payloads without migration. Runtime is O(l + c + p). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted global static-check payload.
 - @return {Record<string, GlobalStaticCheckLanguageConfig>} Normalized global static-check checker map.
 - @satisfies REQ-249, REQ-250, REQ-251, REQ-252
 
-### fn `function loadLocalConfig(` (L869-925)
+### fn `function loadLocalConfig(` (L870-926)
 - @brief Loads and sanitizes the persisted local configuration.
 - @details Returns defaults when `<base-path>/.pi-usereq.json` is absent. Otherwise parses the local JSON payload, normalizes project-scoped directory, debug, tool-wrapper command registration, and static-check enable fields, ignores any persisted `DEBUG_ENABLED` payload, and ignores misplaced global keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -906,12 +906,12 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {UseReqLocalConfig} Sanitized local configuration.
 - @satisfies CTN-019, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `function loadGlobalConfig(): UseReqGlobalConfig` (L932-973)
+### fn `function loadGlobalConfig(): UseReqGlobalConfig` (L933-974)
 - @brief Loads and sanitizes the persisted global configuration.
 - @details Returns defaults when `~/.config/pi-usereq/config.json` is absent. Otherwise parses the global JSON payload, normalizes cross-project checker, tool, git, and notification fields, and ignores misplaced local keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @return {UseReqGlobalConfig} Sanitized global configuration.
 
-### fn `export function loadConfig(projectBase: string): UseReqConfig` (L983-990)
+### fn `export function loadConfig(projectBase: string): UseReqConfig` (L984-991)
 - @brief Loads and sanitizes the effective merged configuration.
 - @details Loads global configuration first so local static-check enable defaults can be derived from the active global checker map, then merges both scopes into the effective runtime config without applying legacy single-file migrations. Runtime is O(n) in combined local and global config size. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -919,28 +919,28 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @throws {ReqError} Throws with exit code `11` when either persisted config file contains invalid JSON or a non-object payload.
 - @satisfies CTN-012, CTN-013, CTN-018, CTN-019, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-215, REQ-234, REQ-235, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-277, REQ-315, REQ-316, REQ-413, REQ-414
 
-### fn `function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig` (L999-1031)
+### fn `function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig` (L1000-1032)
 - @brief Builds the persisted local configuration payload.
 - @details Copies only project-scoped keys into a fresh object so runtime-derived metadata, the runtime-only `DEBUG_ENABLED` flag, and global checker, tool, git, and notification fields never reach `.pi-usereq.json`, while preserving the debug tool-wrapper command flag beside other persisted local debug settings. Runtime is O(n) in config size. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective configuration object.
 - @return {UseReqLocalConfig} Persistable local configuration payload.
 - @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-249, REQ-316, REQ-277, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `function buildPersistedGlobalConfig(config: UseReqConfig): UseReqGlobalConfig` (L1040-1079)
+### fn `function buildPersistedGlobalConfig(config: UseReqConfig): UseReqGlobalConfig` (L1041-1080)
 - @brief Builds the persisted global configuration payload.
 - @details Copies only cross-project keys into a fresh object so local directory and debug fields never reach `~/.config/pi-usereq/config.json`, while forcing persisted worktree disablement when automatic git commit is disabled and forcing persisted Pushover disablement until both credentials are populated. Runtime is O(n) in config size. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective configuration object.
 - @return {UseReqGlobalConfig} Persistable global configuration payload.
 - @satisfies REQ-137, REQ-163, REQ-174, REQ-178, REQ-184, REQ-196, REQ-204, REQ-205, REQ-212, REQ-234, REQ-249, REQ-315
 
-### fn `function writeConfigFile(configPath: string, payload: object): void` (L1088-1091)
+### fn `function writeConfigFile(configPath: string, payload: object): void` (L1089-1092)
 - @brief Writes one normalized config payload to disk.
 - @details Creates the parent directory when required, formats JSON with two-space indentation, and terminates the file with a newline. Runtime is O(n) in serialized payload size. Side effects include directory creation and file overwrite.
 - @param[in] configPath {string} Absolute destination config path.
 - @param[in] payload {object} Persistable config payload.
 - @return {void} No return value.
 
-### fn `export function saveLocalConfig(projectBase: string, config: UseReqConfig): void` (L1101-1103)
+### fn `export function saveLocalConfig(projectBase: string, config: UseReqConfig): void` (L1102-1104)
 - @brief Persists the local configuration scope to disk.
 - @details Serializes only project-scoped fields into `<base-path>/.pi-usereq.json`, excluding runtime-derived metadata and every global-scope configuration key. Runtime is O(n) in serialized local config size. Side effects include directory creation and file overwrite.
 - @param[in] projectBase {string} Absolute project root path.
@@ -948,14 +948,14 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {void} No return value.
 - @satisfies CTN-012, REQ-104, REQ-146
 
-### fn `export function saveGlobalConfig(config: UseReqConfig): void` (L1112-1114)
+### fn `export function saveGlobalConfig(config: UseReqConfig): void` (L1113-1115)
 - @brief Persists the global configuration scope to disk.
 - @details Serializes only cross-project fields into `~/.config/pi-usereq/config.json`, excluding every project-local directory and debug setting. Runtime is O(n) in serialized global config size. Side effects include directory creation and file overwrite.
 - @param[in] config {UseReqConfig} Effective configuration object to persist.
 - @return {void} No return value.
 - @satisfies CTN-012, CTN-018, REQ-137, REQ-146, REQ-315
 
-### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L1124-1127)
+### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L1125-1128)
 - @brief Persists the effective configuration to local and global config files.
 - @details Splits the effective runtime config into project-scoped and cross-project payloads, then writes both files with normalized JSON formatting. Runtime is O(n) in combined serialized config size. Side effects include directory creation and file overwrite in both persistence locations.
 - @param[in] projectBase {string} Absolute project root path.
@@ -963,14 +963,14 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {void} No return value.
 - @satisfies CTN-012, CTN-018, REQ-137, REQ-146, REQ-315
 
-### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L1136-1154)
+### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L1137-1155)
 - @brief Normalizes persisted directory fields to project-relative forms.
 - @details Rewrites docs, tests, and source directories using project containment heuristics, strips trailing separators, and restores defaults for empty results. Runtime is O(n) in configured path count plus path-length processing. No filesystem writes occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Configuration object to normalize.
 - @return {UseReqConfig} Normalized configuration copy.
 
-### fn `export function buildPromptReplacementPaths(` (L1164-1206)
+### fn `export function buildPromptReplacementPaths(` (L1165-1207)
 - @brief Builds placeholder replacements for bundled prompt rendering.
 - @details Computes runtime path context from the execution path, derives installation-owned template and guideline paths, enumerates visible guideline files from the installed resource tree, and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -981,50 +981,50 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`StaticCheckEntry`|iface||62-66|export interface StaticCheckEntry|
-|`StaticCheckEnabled`|type||72||
-|`StaticCheckLanguageConfig`|iface||78-81|export interface StaticCheckLanguageConfig|
-|`UseReqConfig`|iface||87-131|export interface UseReqConfig|
-|`LocalStaticCheckLanguageConfig`|iface||137-139|interface LocalStaticCheckLanguageConfig|
-|`GlobalStaticCheckLanguageConfig`|iface||145-147|interface GlobalStaticCheckLanguageConfig|
-|`UseReqLocalConfig`|iface||154-171|interface UseReqLocalConfig|
-|`UseReqGlobalConfig`|iface||177-205|interface UseReqGlobalConfig|
-|`normalizeContextFilesFlag`|fn||237-239|export function normalizeContextFilesFlag(value: unknown)...|
-|`cloneStaticCheckEntry`|fn||339-348|function cloneStaticCheckEntry(entry: StaticCheckEntry): ...|
-|`createStaticCheckLanguageConfig`|fn||357-366|export function createStaticCheckLanguageConfig(|
-|`createLocalStaticCheckLanguageConfig`|fn||374-378|function createLocalStaticCheckLanguageConfig(|
-|`createGlobalStaticCheckLanguageConfig`|fn||386-392|function createGlobalStaticCheckLanguageConfig(|
-|`getDefaultGlobalStaticCheckConfig`|fn||399-404|function getDefaultGlobalStaticCheckConfig(): Record<stri...|
-|`getDefaultLocalStaticCheckConfig`|fn||412-421|function getDefaultLocalStaticCheckConfig(|
-|`mergeStaticCheckConfig`|fn||430-449|function mergeStaticCheckConfig(|
-|`getDefaultStaticCheckConfig`|fn||457-463|export function getDefaultStaticCheckConfig(): Record<str...|
-|`normalizeStaticCheckEnabled`|fn||473-478|export function normalizeStaticCheckEnabled(|
-|`getActiveStaticCheckEntries`|fn||488-497|export function getActiveStaticCheckEntries(|
-|`normalizeAutoGitCommit`|fn||512-514|export function normalizeAutoGitCommit(value: unknown): "...|
-|`normalizeGitWorktreeEnabled`|fn||528-530|export function normalizeGitWorktreeEnabled(value: unknow...|
-|`resolveEffectiveGitWorktreeEnabled`|fn||539-544|export function resolveEffectiveGitWorktreeEnabled(|
-|`normalizeGitWorktreePrefix`|fn||558-564|export function normalizeGitWorktreePrefix(value: unknown...|
-|`getProjectConfigPath`|fn||571-573|export function getProjectConfigPath(projectBase: string)...|
-|`getGlobalConfigPath`|fn||580-582|export function getGlobalConfigPath(): string|
-|`getDefaultLocalConfig`|fn||591-612|function getDefaultLocalConfig(|
-|`getDefaultGlobalConfig`|fn||619-649|function getDefaultGlobalConfig(): UseReqGlobalConfig|
-|`mergeConfigScopes`|fn||659-731|function mergeConfigScopes(|
-|`getDefaultConfig`|fn||740-746|export function getDefaultConfig(_projectBase: string): U...|
-|`normalizeStaticCheckEntries`|fn||754-774|function normalizeStaticCheckEntries(value: unknown): Sta...|
-|`readConfigPayload`|fn||783-799|function readConfigPayload(configPath: string): Record<st...|
-|`normalizeLocalStaticCheckConfig`|fn||809-833|function normalizeLocalStaticCheckConfig(|
-|`normalizeGlobalStaticCheckConfig`|fn||842-859|function normalizeGlobalStaticCheckConfig(|
-|`loadLocalConfig`|fn||869-925|function loadLocalConfig(|
-|`loadGlobalConfig`|fn||932-973|function loadGlobalConfig(): UseReqGlobalConfig|
-|`loadConfig`|fn||983-990|export function loadConfig(projectBase: string): UseReqCo...|
-|`buildPersistedLocalConfig`|fn||999-1031|function buildPersistedLocalConfig(config: UseReqConfig):...|
-|`buildPersistedGlobalConfig`|fn||1040-1079|function buildPersistedGlobalConfig(config: UseReqConfig)...|
-|`writeConfigFile`|fn||1088-1091|function writeConfigFile(configPath: string, payload: obj...|
-|`saveLocalConfig`|fn||1101-1103|export function saveLocalConfig(projectBase: string, conf...|
-|`saveGlobalConfig`|fn||1112-1114|export function saveGlobalConfig(config: UseReqConfig): void|
-|`saveConfig`|fn||1124-1127|export function saveConfig(projectBase: string, config: U...|
-|`normalizeConfigPaths`|fn||1136-1154|export function normalizeConfigPaths(projectBase: string,...|
-|`buildPromptReplacementPaths`|fn||1164-1206|export function buildPromptReplacementPaths(|
+|`StaticCheckEntry`|iface||63-67|export interface StaticCheckEntry|
+|`StaticCheckEnabled`|type||73||
+|`StaticCheckLanguageConfig`|iface||79-82|export interface StaticCheckLanguageConfig|
+|`UseReqConfig`|iface||88-132|export interface UseReqConfig|
+|`LocalStaticCheckLanguageConfig`|iface||138-140|interface LocalStaticCheckLanguageConfig|
+|`GlobalStaticCheckLanguageConfig`|iface||146-148|interface GlobalStaticCheckLanguageConfig|
+|`UseReqLocalConfig`|iface||155-172|interface UseReqLocalConfig|
+|`UseReqGlobalConfig`|iface||178-206|interface UseReqGlobalConfig|
+|`normalizeContextFilesFlag`|fn||238-240|export function normalizeContextFilesFlag(value: unknown)...|
+|`cloneStaticCheckEntry`|fn||340-349|function cloneStaticCheckEntry(entry: StaticCheckEntry): ...|
+|`createStaticCheckLanguageConfig`|fn||358-367|export function createStaticCheckLanguageConfig(|
+|`createLocalStaticCheckLanguageConfig`|fn||375-379|function createLocalStaticCheckLanguageConfig(|
+|`createGlobalStaticCheckLanguageConfig`|fn||387-393|function createGlobalStaticCheckLanguageConfig(|
+|`getDefaultGlobalStaticCheckConfig`|fn||400-405|function getDefaultGlobalStaticCheckConfig(): Record<stri...|
+|`getDefaultLocalStaticCheckConfig`|fn||413-422|function getDefaultLocalStaticCheckConfig(|
+|`mergeStaticCheckConfig`|fn||431-450|function mergeStaticCheckConfig(|
+|`getDefaultStaticCheckConfig`|fn||458-464|export function getDefaultStaticCheckConfig(): Record<str...|
+|`normalizeStaticCheckEnabled`|fn||474-479|export function normalizeStaticCheckEnabled(|
+|`getActiveStaticCheckEntries`|fn||489-498|export function getActiveStaticCheckEntries(|
+|`normalizeAutoGitCommit`|fn||513-515|export function normalizeAutoGitCommit(value: unknown): "...|
+|`normalizeGitWorktreeEnabled`|fn||529-531|export function normalizeGitWorktreeEnabled(value: unknow...|
+|`resolveEffectiveGitWorktreeEnabled`|fn||540-545|export function resolveEffectiveGitWorktreeEnabled(|
+|`normalizeGitWorktreePrefix`|fn||559-565|export function normalizeGitWorktreePrefix(value: unknown...|
+|`getProjectConfigPath`|fn||572-574|export function getProjectConfigPath(projectBase: string)...|
+|`getGlobalConfigPath`|fn||581-583|export function getGlobalConfigPath(): string|
+|`getDefaultLocalConfig`|fn||592-613|function getDefaultLocalConfig(|
+|`getDefaultGlobalConfig`|fn||620-650|function getDefaultGlobalConfig(): UseReqGlobalConfig|
+|`mergeConfigScopes`|fn||660-732|function mergeConfigScopes(|
+|`getDefaultConfig`|fn||741-747|export function getDefaultConfig(_projectBase: string): U...|
+|`normalizeStaticCheckEntries`|fn||755-775|function normalizeStaticCheckEntries(value: unknown): Sta...|
+|`readConfigPayload`|fn||784-800|function readConfigPayload(configPath: string): Record<st...|
+|`normalizeLocalStaticCheckConfig`|fn||810-834|function normalizeLocalStaticCheckConfig(|
+|`normalizeGlobalStaticCheckConfig`|fn||843-860|function normalizeGlobalStaticCheckConfig(|
+|`loadLocalConfig`|fn||870-926|function loadLocalConfig(|
+|`loadGlobalConfig`|fn||933-974|function loadGlobalConfig(): UseReqGlobalConfig|
+|`loadConfig`|fn||984-991|export function loadConfig(projectBase: string): UseReqCo...|
+|`buildPersistedLocalConfig`|fn||1000-1032|function buildPersistedLocalConfig(config: UseReqConfig):...|
+|`buildPersistedGlobalConfig`|fn||1041-1080|function buildPersistedGlobalConfig(config: UseReqConfig)...|
+|`writeConfigFile`|fn||1089-1092|function writeConfigFile(configPath: string, payload: obj...|
+|`saveLocalConfig`|fn||1102-1104|export function saveLocalConfig(projectBase: string, conf...|
+|`saveGlobalConfig`|fn||1113-1115|export function saveGlobalConfig(config: UseReqConfig): void|
+|`saveConfig`|fn||1125-1128|export function saveConfig(projectBase: string, config: U...|
+|`normalizeConfigPaths`|fn||1137-1155|export function normalizeConfigPaths(projectBase: string,...|
+|`buildPromptReplacementPaths`|fn||1165-1207|export function buildPromptReplacementPaths(|
 
 
 ---
@@ -2976,7 +2976,7 @@ import type { UseReqConfig } from "./config.js";
 
 ---
 
-# pi-notify.ts | TypeScript | 940L | 46 symbols | 7 imports | 62 comments
+# pi-notify.ts | TypeScript | 959L | 47 symbols | 7 imports | 64 comments
 > Path: `src/core/pi-notify.ts`
 - @brief Implements pi-usereq command-notify, sound, and Pushover prompt-end helpers.
 - @details Centralizes configuration defaults, status serialization, prompt-end outcome classification, placeholder substitution, detached shell-command execution, and native Pushover delivery. Runtime is O(m + c + b) in `agent_end` message count plus command length and Pushover payload size. Side effects include detached child-process spawning and outbound HTTPS requests.
@@ -3000,34 +3000,41 @@ import type { UseReqConfig } from "./config.js";
 - type `export type PiNotifyOutcome = (typeof PI_NOTIFY_OUTCOMES)[number];` (L37)
 - @brief Represents one supported prompt-end outcome.
 - @details Narrows prompt-end event classification and per-feature toggle routing to the canonical completed/interrupted/failed domain. Compile-time only and introduces no runtime cost.
-- type `export type PiNotifyPushoverPriority = (typeof PI_NOTIFY_PUSHOVER_PRIORITIES)[number];` (L112)
+### fn `export function upgradeLegacyPiNotifyPushoverText(value: string): string` (L103-105)
+- @brief Upgrades one Pushover text template away from the superseded legacy default.
+- @details Returns the current output-carrying default when the supplied persisted template exactly equals the superseded legacy default, and returns every distinct user-configured template unchanged so REQ-186 template honoring stays intact. Runtime is O(n) in template length for the equality probe. No external state is mutated.
+- @param[in] value {string} Normalized persisted `notify-pushover-text` payload.
+- @return {string} Upgraded template when the legacy default is detected; otherwise the input unchanged.
+- @satisfies REQ-451, REQ-452
+
+- type `export type PiNotifyPushoverPriority = (typeof PI_NOTIFY_PUSHOVER_PRIORITIES)[number];` (L131)
 - @brief Represents one supported Pushover priority value.
 - @details Narrows Pushover configuration parsing and request serialization to the canonical `0|1` priority domain. Compile-time only and introduces no runtime cost.
-### iface `export interface PiNotifyEventRequest` (L118-125)
+### iface `export interface PiNotifyEventRequest` (L137-144)
 - @brief Describes one prompt-end request used for command-notify and Pushover substitution.
 - @details Stores the prompt command name, raw prompt arguments, runtime base path, final prompt duration, and optional final agent output required to resolve runtime placeholders. `agentOutput` stays optional so non-agentic command callers and offline replays omit it and `%%OUTPUT%%` degrades to the empty string per REQ-444. The interface is compile-time only and introduces no runtime cost.
 
-- type `export type PiNotifyConfigFields = Pick<` (L131)
+- type `export type PiNotifyConfigFields = Pick<` (L150)
 - @brief Describes the configuration fields consumed by pi-notify helpers.
 - @details Narrows the full project config to the notify, sound, and Pushover fields used by status rendering and prompt-end routing. Callers may override `notify-sound` with the active runtime sound level before dispatch. Compile-time only and introduces no runtime cost.
-- type `type PiNotifySpawn = typeof spawn;` (L161)
+- type `type PiNotifySpawn = typeof spawn;` (L180)
 - @brief Describes the shell-spawn callback used by prompt-end command dispatch.
 - @details Narrows the injected spawn surface so deterministic tests can capture detached shell invocations without patching global module state externally. Compile-time only and introduces no runtime cost.
-### fn `export function normalizePiNotifySoundLevel(value: unknown): PiNotifySoundLevel` (L182-186)
+### fn `export function normalizePiNotifySoundLevel(value: unknown): PiNotifySoundLevel` (L201-205)
 - @brief Normalizes one persisted sound level.
 - @details Accepts only canonical `none|low|mid|high` values and falls back to `none` for missing or invalid payloads. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Raw persisted sound-level payload.
 - @return {PiNotifySoundLevel} Canonical sound level.
 - @satisfies REQ-131
 
-### fn `export function normalizePiNotifyShortcut(value: unknown): string` (L195-199)
+### fn `export function normalizePiNotifyShortcut(value: unknown): string` (L214-218)
 - @brief Normalizes one persisted sound toggle shortcut.
 - @details Accepts any non-empty string so project config can carry raw pi shortcut syntax and falls back to the canonical default when the payload is empty or invalid. Runtime is O(n) in shortcut length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted shortcut payload.
 - @return {string} Canonical non-empty shortcut string.
 - @satisfies REQ-134
 
-### fn `export function normalizePiNotifyCommand(value: unknown, fallback: string): string` (L209-211)
+### fn `export function normalizePiNotifyCommand(value: unknown, fallback: string): string` (L228-230)
 - @brief Normalizes one persisted shell-command string.
 - @details Accepts any non-empty string so project config can override bundled command templates verbatim and falls back to the supplied default when the payload is empty or invalid. Runtime is O(n) in command length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted command payload.
@@ -3035,7 +3042,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Canonical non-empty command string.
 - @satisfies REQ-133, REQ-175
 
-### fn `export function normalizePiNotifyTemplateValue(value: unknown, fallback: string): string` (L221-223)
+### fn `export function normalizePiNotifyTemplateValue(value: unknown, fallback: string): string` (L240-242)
 - @brief Normalizes one persisted template string.
 - @details Accepts any non-empty string so Pushover title and text templates can be user-configured verbatim, preserves internal and edge control characters, and falls back to the supplied default when the payload is empty or invalid. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted template payload.
@@ -3043,63 +3050,63 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Canonical non-empty template string.
 - @satisfies REQ-185, REQ-235
 
-### fn `export function formatPiNotifyControlSequenceText(value: string): string` (L232-266)
+### fn `export function formatPiNotifyControlSequenceText(value: string): string` (L251-285)
 - @brief Formats control characters for single-line menu rendering.
 - @details Rewrites supported control bytes into escaped display sequences so configuration rows can render `Pushover text` inside a one-line settings list without executing the embedded control effects. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] value {string} Raw template text.
 - @return {string} Escaped single-line display text.
 - @satisfies REQ-235
 
-### fn `export function parsePiNotifyControlSequenceText(value: string): string` (L275-320)
+### fn `export function parsePiNotifyControlSequenceText(value: string): string` (L294-339)
 - @brief Decodes supported escaped control sequences from one menu input string.
 - @details Converts the documented `\n`, `\r`, `\t`, `\\`, `\0`, `\b`, `\f`, and `\v` escape sequences into their raw byte forms while preserving unknown escapes verbatim so user-entered text is not lossy. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] value {string} Escaped menu input text.
 - @return {string} Decoded raw template text.
 - @satisfies REQ-235
 
-### fn `export function hasPiNotifyPushoverCredentials(` (L329-334)
+### fn `export function hasPiNotifyPushoverCredentials(` (L348-353)
 - @brief Tests whether both persisted Pushover credentials are non-empty.
 - @details Performs exact empty-string checks against the normalized user and token fields so UI locking, config persistence, and prompt-end delivery can share one readiness rule. Runtime is O(1). No external state is mutated.
 - @param[in] config {Pick<UseReqConfig, "notify-pushover-user-key" | "notify-pushover-api-token">} Effective Pushover credential subset.
 - @return {boolean} `true` when both Pushover credential fields are non-empty.
 - @satisfies REQ-168, REQ-234
 
-### fn `export function normalizePiNotifyPushoverCredential(value: unknown): string` (L343-345)
+### fn `export function normalizePiNotifyPushoverCredential(value: unknown): string` (L362-364)
 - @brief Normalizes one persisted Pushover credential string.
 - @details Accepts any trimmed string so the project config can store raw Pushover user and token values verbatim and falls back to the empty string for missing or invalid payloads. Runtime is O(n) in credential length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted credential payload.
 - @return {string} Canonical credential string.
 - @satisfies REQ-163
 
-### fn `export function normalizePiNotifyPushoverPriority(value: unknown): PiNotifyPushoverPriority` (L354-356)
+### fn `export function normalizePiNotifyPushoverPriority(value: unknown): PiNotifyPushoverPriority` (L373-375)
 - @brief Normalizes one persisted Pushover priority value.
 - @details Accepts only canonical `0` and `1` values, treating numeric-string `"1"` as high priority and every other payload as normal priority. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Raw persisted priority payload.
 - @return {PiNotifyPushoverPriority} Canonical priority value.
 - @satisfies REQ-172
 
-### fn `export function formatPiNotifyStatus(config: Pick<UseReqConfig, "notify-enabled">): string` (L365-367)
+### fn `export function formatPiNotifyStatus(config: Pick<UseReqConfig, "notify-enabled">): string` (L384-386)
 - @brief Formats the global command-notify flag for UI value rendering.
 - @details Serializes only the persisted global command-notify enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
 - @param[in] config {Pick<UseReqConfig, "notify-enabled">} Effective command-notify configuration subset.
 - @return {string} `on` when command-notify is globally enabled; otherwise `off`.
 - @satisfies REQ-196
 
-### fn `export function formatPiNotifyPushoverStatus(config: Pick<UseReqConfig, "notify-pushover-enabled">): string` (L376-378)
+### fn `export function formatPiNotifyPushoverStatus(config: Pick<UseReqConfig, "notify-pushover-enabled">): string` (L395-397)
 - @brief Formats the global Pushover flag for UI value rendering.
 - @details Serializes only the persisted global Pushover enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
 - @param[in] config {Pick<UseReqConfig, "notify-pushover-enabled">} Effective Pushover configuration subset.
 - @return {string} `on` when Pushover is globally enabled; otherwise `off`.
 - @satisfies REQ-163
 
-### fn `export function cyclePiNotifySoundLevel(currentLevel: PiNotifySoundLevel): PiNotifySoundLevel` (L387-393)
+### fn `export function cyclePiNotifySoundLevel(currentLevel: PiNotifySoundLevel): PiNotifySoundLevel` (L406-412)
 - @brief Cycles one sound level through the canonical shortcut order.
 - @details Advances the active runtime sound state in the exact order `none -> low -> mid -> high -> none`, enabling deterministic shortcut toggling without mutating persisted boot configuration. Runtime is O(1). No external state is mutated.
 - @param[in] currentLevel {PiNotifySoundLevel} Current active runtime sound level.
 - @return {PiNotifySoundLevel} Next runtime sound level in the cycle.
 - @satisfies REQ-286
 
-### fn `function isPiNotifyOutcomeEnabled(` (L404-418)
+### fn `function isPiNotifyOutcomeEnabled(` (L423-437)
 - @brief Tests whether one outcome-specific toggle is enabled.
 - @details Reuses the canonical completed/interrupted/failed routing order shared by notify, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
@@ -3108,41 +3115,41 @@ import type { UseReqConfig } from "./config.js";
 - @param[in] failedEnabled {boolean} Enabled state for failed prompt termination.
 - @return {boolean} `true` when the selected outcome flag is enabled.
 
-### fn `function hasAgentEndStopReason(` (L427-437)
+### fn `function hasAgentEndStopReason(` (L446-456)
 - @brief Detects whether one agent-end payload contains the requested stop reason.
 - @details Scans assistant messages only so prompt-end classification remains stable even when user or tool-result messages also appear in the payload. Runtime is O(m) in message count. No external state is mutated.
 - @param[in] messages {AgentEndEvent["messages"]} Agent-end message list.
 - @param[in] stopReason {"aborted" | "error"} Stop reason to detect.
 - @return {boolean} `true` when an assistant message carries the requested stop reason.
 
-### fn `export function classifyPiNotifyOutcome(event: Pick<AgentEndEvent, "messages">): PiNotifyOutcome` (L445-453)
+### fn `export function classifyPiNotifyOutcome(event: Pick<AgentEndEvent, "messages">): PiNotifyOutcome` (L464-472)
 - @brief Classifies one agent-end payload into the canonical pi-notify outcome.
 - @details Treats assistant `stopReason=error` as `failed`, `stopReason=aborted` as `interrupted`, and every remaining terminal state as `completed`. Runtime is O(m) in message count. No external state is mutated.
 - @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
 - @return {PiNotifyOutcome} Canonical prompt-end outcome.
 
-### fn `function formatPiNotifyDuration(durationMs: number): string` (L462-467)
+### fn `function formatPiNotifyDuration(durationMs: number): string` (L481-486)
 - @brief Formats one prompt-end duration for runtime placeholders.
 - @details Floors the supplied duration to whole seconds, keeps minutes unbounded above 59, and zero-pads seconds to two digits so `%%TIME%%` aligns with status-bar elapsed formatting. Runtime is O(1). No external state is mutated.
 - @param[in] durationMs {number} Prompt-end duration in milliseconds.
 - @return {string} Duration rendered as `M:SS`.
 - @satisfies REQ-187
 
-### fn `function formatPiNotifyBasePath(basePath: string): string` (L476-487)
+### fn `function formatPiNotifyBasePath(basePath: string): string` (L495-506)
 - @brief Formats one runtime base path for placeholder substitution.
 - @details Emits `~` or `~/...` when the supplied path equals or descends from the current user home directory; otherwise emits the slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] basePath {string} Runtime base path.
 - @return {string} Placeholder-ready base path string.
 - @satisfies REQ-187
 
-### fn `function formatPiNotifyResult(outcome: PiNotifyOutcome): string` (L496-505)
+### fn `function formatPiNotifyResult(outcome: PiNotifyOutcome): string` (L515-524)
 - @brief Formats one prompt-end outcome for `%%RESULT%%` substitution.
 - @details Maps canonical prompt-end outcomes to the persisted human-readable result tokens reused by default notify-command and Pushover templates. Runtime is O(1). No external state is mutated.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
 - @return {string} `successed`, `aborted`, or `failed`.
 - @satisfies REQ-169, REQ-186, REQ-199
 
-### fn `function buildPiNotifyRuntimeTemplateValues(` (L515-527)
+### fn `function buildPiNotifyRuntimeTemplateValues(` (L534-546)
 - @brief Builds the raw runtime placeholder map for one prompt-end request.
 - @details Resolves every placeholder value exactly once so notify-command and Pushover template substitution reuse the same prompt name, base path, elapsed time, argument string, final agent output, and terminal outcome token. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
@@ -3150,19 +3157,19 @@ import type { UseReqConfig } from "./config.js";
 - @return {{ "%%PROMT%%": string; "%%BASE%%": string; "%%TIME%%": string; "%%ARGS%%": string; "%%OUTPUT%%": string; "%%RESULT%%": string }} Raw placeholder-value map.
 - @satisfies REQ-169, REQ-186, REQ-443, REQ-444
 
-### fn `function quotePiNotifyInstallPath(installationPath: string): string` (L535-540)
+### fn `function quotePiNotifyInstallPath(installationPath: string): string` (L554-559)
 - @brief Quotes one installation path for shell substitution.
 - @details Emits POSIX single-quoted literals for `sh -lc` execution and CMD double-quoted literals for `cmd.exe /c` execution so `%%INSTALLATION_PATH%%` substitutions preserve whitespace safely. Runtime is O(n) in path length. No external state is mutated.
 - @param[in] installationPath {string} Absolute extension installation path.
 - @return {string} Shell-quoted installation path fragment.
 
-### fn `function escapePiNotifyShellTemplateValue(value: string): string` (L548-557)
+### fn `function escapePiNotifyShellTemplateValue(value: string): string` (L567-576)
 - @brief Escapes one placeholder value for double-quoted shell insertion.
 - @details Escapes the characters interpreted specially by POSIX or CMD double-quoted strings so default notify-command templates remain safe when placeholders are embedded inside double quotes. Runtime is O(n) in value length. No external state is mutated.
 - @param[in] value {string} Raw placeholder value.
 - @return {string} Shell-escaped placeholder fragment without surrounding quotes.
 
-### fn `export function substitutePiNotifyInstallPath(command: string, installationPath: string): string` (L567-572)
+### fn `export function substitutePiNotifyInstallPath(command: string, installationPath: string): string` (L586-591)
 - @brief Substitutes `%%INSTALLATION_PATH%%` inside one shell command.
 - @details Replaces every `%%INSTALLATION_PATH%%` token with a shell-quoted runtime installation path so bundled assets can be addressed safely from external commands. Runtime is O(n) in command length. No external state is mutated.
 - @param[in] command {string} Raw configured shell command.
@@ -3170,7 +3177,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Runtime-ready command string.
 - @satisfies REQ-169
 
-### fn `function substitutePiNotifyShellTemplate(` (L584-596)
+### fn `function substitutePiNotifyShellTemplate(` (L603-615)
 - @brief Substitutes runtime placeholders inside one shell-command template.
 - @details Applies shell-quoted installation-path substitution plus shell-escaped prompt, base-path, elapsed-time, raw-argument, final-output, and outcome-result substitution expected by `PI_NOTIFY_CMD`. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] template {string} Raw shell-command template.
@@ -3180,7 +3187,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Runtime-ready shell command.
 - @satisfies REQ-169, REQ-199, REQ-443, REQ-444
 
-### fn `function substitutePiNotifyTextTemplate(` (L607-617)
+### fn `function substitutePiNotifyTextTemplate(` (L626-636)
 - @brief Substitutes runtime placeholders inside one text template.
 - @details Applies raw prompt name, home-relative base path, elapsed time, raw prompt arguments, final agent output, and terminal outcome text without shell escaping so Pushover payloads preserve literal text. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] template {string} Raw text template.
@@ -3189,13 +3196,13 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Placeholder-resolved text string.
 - @satisfies REQ-186, REQ-187, REQ-199, REQ-443, REQ-444
 
-### fn `function runPiNotifyShellCommand(command: string): void` (L625-636)
+### fn `function runPiNotifyShellCommand(command: string): void` (L644-655)
 - @brief Executes one detached shell command without waiting for completion.
 - @details Uses the platform-default shell contract already employed by sound-command execution and ignores transport failures so prompt-end handling remains non-blocking. Runtime is dominated by process spawn. Side effects include detached child-process execution.
 - @param[in] command {string} Runtime-ready shell command.
 - @return {void} No return value.
 
-### fn `function shouldRunPiNotifyCommand(` (L647-660)
+### fn `function shouldRunPiNotifyCommand(` (L666-679)
 - @brief Determines whether one prompt-end outcome should trigger command-notify.
 - @details Requires a prompt-end request, the global command-notify enable flag, and the corresponding per-event notify toggle. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3204,7 +3211,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {boolean} `true` when command-notify prerequisites are satisfied.
 - @satisfies REQ-174, REQ-176
 
-### fn `function runPiNotifyCommand(` (L671-684)
+### fn `function runPiNotifyCommand(` (L690-703)
 - @brief Executes the configured command-notify shell command.
 - @details Resolves the runtime installation path, substitutes runtime placeholders into `PI_NOTIFY_CMD`, and spawns the resulting command without waiting for completion. Runtime is dominated by process spawn. Side effects include detached child-process execution.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3213,14 +3220,14 @@ import type { UseReqConfig } from "./config.js";
 - @return {void} No return value.
 - @satisfies REQ-169, REQ-175, REQ-176, REQ-199
 
-### fn `function resolvePiNotifySoundCommand(` (L693-705)
+### fn `function resolvePiNotifySoundCommand(` (L712-724)
 - @brief Resolves the configured command for one non-`none` sound level.
 - @details Selects the matching persisted command string from config without performing runtime substitution or shell execution. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
 - @param[in] soundLevel {Exclude<PiNotifySoundLevel, "none">} Non-disabled sound level.
 - @return {string} Configured command string for the requested level.
 
-### fn `function shouldRunPiNotifySound(` (L715-726)
+### fn `function shouldRunPiNotifySound(` (L734-745)
 - @brief Determines whether one prompt-end outcome should trigger sound-command execution.
 - @details Requires a non-`none` sound level and the corresponding per-event sound toggle. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3228,7 +3235,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {boolean} `true` when sound-command prerequisites are satisfied.
 - @satisfies REQ-178
 
-### fn `export function runPiNotifySoundCommand(` (L736-743)
+### fn `export function runPiNotifySoundCommand(` (L755-762)
 - @brief Executes the configured sound command on an external shell.
 - @details Resolves the runtime installation path, substitutes `%%INSTALLATION_PATH%%`, and spawns the configured command without waiting for completion. Runtime is dominated by process spawn. Side effects include detached child-process execution.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3236,7 +3243,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {void} No return value.
 - @satisfies REQ-132, REQ-133
 
-### fn `function shouldRunPiNotifyPushover(` (L754-768)
+### fn `function shouldRunPiNotifyPushover(` (L773-787)
 - @brief Determines whether one prompt-end outcome should trigger Pushover delivery.
 - @details Requires a prompt-end request, the global Pushover enable flag, the corresponding per-event Pushover toggle, and non-empty user plus token credentials. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3245,7 +3252,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {boolean} `true` when Pushover delivery prerequisites are satisfied.
 - @satisfies REQ-166, REQ-168, REQ-184
 
-### fn `function buildPiNotifyPushoverTitle(` (L779-785)
+### fn `function buildPiNotifyPushoverTitle(` (L798-804)
 - @brief Builds the Pushover notification title for one prompt-end request.
 - @details Resolves the configured `notify-pushover-title` template with raw runtime placeholder substitution so the pushed title remains configurable and deterministic. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3254,14 +3261,14 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Pushover title string.
 - @satisfies REQ-185, REQ-186, REQ-187, REQ-199
 
-### fn `function truncatePiNotifyPushoverBody(body: string): string` (L794-800)
+### fn `function truncatePiNotifyPushoverBody(body: string): string` (L813-819)
 - @brief Head-truncates one substituted Pushover body to the Pushover Message API limit.
 - @details Returns the body unchanged when it fits `PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT` and otherwise keeps the head characters that leave room for `PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER` so over-limit bodies stay deterministic and provider-acceptable. Runtime is O(1). No external state is mutated.
 - @param[in] body {string} Fully substituted Pushover body text.
 - @return {string} Body within the Pushover `message` character limit.
 - @satisfies REQ-445
 
-### fn `function buildPiNotifyPushoverBody(` (L811-821)
+### fn `function buildPiNotifyPushoverBody(` (L830-840)
 - @brief Builds the Pushover message body for one prompt-end request.
 - @details Resolves the configured `notify-pushover-text` template with raw runtime placeholder substitution, falls back to the terminal outcome token when the fully substituted body resolves empty so Pushover delivery never targets an empty `message` field, then head-truncates over-limit bodies to the Pushover Message API `message` limit. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3270,7 +3277,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Pushover message body within the 1024-character API limit.
 - @satisfies REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-450
 
-### fn `function buildPiNotifyPushoverPayload(` (L832-844)
+### fn `function buildPiNotifyPushoverPayload(` (L851-863)
 - @brief Builds the Pushover API payload for one prompt-end request.
 - @details Encodes the configured token, user key, substituted title, priority, and substituted text as `application/x-www-form-urlencoded` fields accepted by the Pushover Message API. Runtime is O(n) in payload size. No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3279,7 +3286,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {URLSearchParams} Encoded Pushover request payload.
 - @satisfies REQ-167, REQ-172, REQ-185, REQ-186, REQ-199, REQ-443, REQ-444, REQ-445
 
-### fn `function runPiNotifyPushoverRequest(` (L855-874)
+### fn `function runPiNotifyPushoverRequest(` (L874-893)
 - @brief Dispatches one native HTTPS request to the Pushover Message API.
 - @details Serializes the request body as URL-encoded form data, posts it to `https://api.pushover.net/1/messages.json`, drains the response, and ignores transport failures so prompt-end handling remains non-blocking. Runtime is dominated by outbound I/O. Side effects include one HTTPS request.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3288,19 +3295,19 @@ import type { UseReqConfig } from "./config.js";
 - @return {void} No return value.
 - @satisfies REQ-167, REQ-199
 
-### fn `export function setPiNotifyHttpsRequestForTests(requestImpl: typeof https.request | undefined): void` (L882-884)
+### fn `export function setPiNotifyHttpsRequestForTests(requestImpl: typeof https.request | undefined): void` (L901-903)
 - @brief Replaces the native HTTPS request function used for Pushover delivery in deterministic tests.
 - @details Accepts a drop-in `node:https.request` replacement and restores the native implementation when `undefined` is supplied. Runtime is O(1). Side effect: mutates the module-local Pushover transport hook.
 - @param[in] requestImpl {typeof https.request | undefined} Replacement HTTPS request function.
 - @return {void} No return value.
 
-### fn `export function setPiNotifySpawnForTests(spawnImpl: PiNotifySpawn | undefined): void` (L892-894)
+### fn `export function setPiNotifySpawnForTests(spawnImpl: PiNotifySpawn | undefined): void` (L911-913)
 - @brief Replaces the shell-spawn function used for notify and sound commands in deterministic tests.
 - @details Accepts a drop-in `node:child_process.spawn` replacement and restores the native implementation when `undefined` is supplied. Runtime is O(1). Side effect: mutates the module-local shell transport hook.
 - @param[in] spawnImpl {PiNotifySpawn | undefined} Replacement shell-spawn function.
 - @return {void} No return value.
 
-### fn `export function runPiNotifyEffects(` (L905-911)
+### fn `export function runPiNotifyEffects(` (L924-930)
 - @brief Dispatches prompt-end notify, sound, and Pushover effects for one agent-end payload.
 - @details Classifies the terminal outcome from the `agent_end` payload and delegates to `runPiNotifyEffectsForOutcome(...)`; `%%OUTPUT%%` resolves from the caller-supplied final agent output and Pushover bodies are head-truncated to the provider message limit. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3309,7 +3316,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {void} No return value.
 - @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445
 
-### fn `export function runPiNotifyEffectsForOutcome(` (L922-940)
+### fn `export function runPiNotifyEffectsForOutcome(` (L941-959)
 - @brief Dispatches prompt-end notify, sound, and Pushover effects for one explicit prompt-end outcome.
 - @details Executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied; `%%OUTPUT%%` resolves from the caller-supplied final agent output or command process output, and Pushover bodies head-truncate to the provider message limit with an outcome-token fallback for empty bodies. Agentic callers classify the outcome from the `agent_end` payload through `runPiNotifyEffects(...)`; non-agentic `req-references` and `req-reset` command callers pass the explicit completed or failed outcome per REQ-447. Runtime is O(c + b) in command length and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3323,50 +3330,51 @@ import type { UseReqConfig } from "./config.js";
 |---|---|---|---|---|
 |`PiNotifySoundLevel`|type||25||
 |`PiNotifyOutcome`|type||37||
-|`PiNotifyPushoverPriority`|type||112||
-|`PiNotifyEventRequest`|iface||118-125|export interface PiNotifyEventRequest|
-|`PiNotifyConfigFields`|type||131||
-|`PiNotifySpawn`|type||161||
-|`normalizePiNotifySoundLevel`|fn||182-186|export function normalizePiNotifySoundLevel(value: unknow...|
-|`normalizePiNotifyShortcut`|fn||195-199|export function normalizePiNotifyShortcut(value: unknown)...|
-|`normalizePiNotifyCommand`|fn||209-211|export function normalizePiNotifyCommand(value: unknown, ...|
-|`normalizePiNotifyTemplateValue`|fn||221-223|export function normalizePiNotifyTemplateValue(value: unk...|
-|`formatPiNotifyControlSequenceText`|fn||232-266|export function formatPiNotifyControlSequenceText(value: ...|
-|`parsePiNotifyControlSequenceText`|fn||275-320|export function parsePiNotifyControlSequenceText(value: s...|
-|`hasPiNotifyPushoverCredentials`|fn||329-334|export function hasPiNotifyPushoverCredentials(|
-|`normalizePiNotifyPushoverCredential`|fn||343-345|export function normalizePiNotifyPushoverCredential(value...|
-|`normalizePiNotifyPushoverPriority`|fn||354-356|export function normalizePiNotifyPushoverPriority(value: ...|
-|`formatPiNotifyStatus`|fn||365-367|export function formatPiNotifyStatus(config: Pick<UseReqC...|
-|`formatPiNotifyPushoverStatus`|fn||376-378|export function formatPiNotifyPushoverStatus(config: Pick...|
-|`cyclePiNotifySoundLevel`|fn||387-393|export function cyclePiNotifySoundLevel(currentLevel: PiN...|
-|`isPiNotifyOutcomeEnabled`|fn||404-418|function isPiNotifyOutcomeEnabled(|
-|`hasAgentEndStopReason`|fn||427-437|function hasAgentEndStopReason(|
-|`classifyPiNotifyOutcome`|fn||445-453|export function classifyPiNotifyOutcome(event: Pick<Agent...|
-|`formatPiNotifyDuration`|fn||462-467|function formatPiNotifyDuration(durationMs: number): string|
-|`formatPiNotifyBasePath`|fn||476-487|function formatPiNotifyBasePath(basePath: string): string|
-|`formatPiNotifyResult`|fn||496-505|function formatPiNotifyResult(outcome: PiNotifyOutcome): ...|
-|`buildPiNotifyRuntimeTemplateValues`|fn||515-527|function buildPiNotifyRuntimeTemplateValues(|
-|`quotePiNotifyInstallPath`|fn||535-540|function quotePiNotifyInstallPath(installationPath: strin...|
-|`escapePiNotifyShellTemplateValue`|fn||548-557|function escapePiNotifyShellTemplateValue(value: string):...|
-|`substitutePiNotifyInstallPath`|fn||567-572|export function substitutePiNotifyInstallPath(command: st...|
-|`substitutePiNotifyShellTemplate`|fn||584-596|function substitutePiNotifyShellTemplate(|
-|`substitutePiNotifyTextTemplate`|fn||607-617|function substitutePiNotifyTextTemplate(|
-|`runPiNotifyShellCommand`|fn||625-636|function runPiNotifyShellCommand(command: string): void|
-|`shouldRunPiNotifyCommand`|fn||647-660|function shouldRunPiNotifyCommand(|
-|`runPiNotifyCommand`|fn||671-684|function runPiNotifyCommand(|
-|`resolvePiNotifySoundCommand`|fn||693-705|function resolvePiNotifySoundCommand(|
-|`shouldRunPiNotifySound`|fn||715-726|function shouldRunPiNotifySound(|
-|`runPiNotifySoundCommand`|fn||736-743|export function runPiNotifySoundCommand(|
-|`shouldRunPiNotifyPushover`|fn||754-768|function shouldRunPiNotifyPushover(|
-|`buildPiNotifyPushoverTitle`|fn||779-785|function buildPiNotifyPushoverTitle(|
-|`truncatePiNotifyPushoverBody`|fn||794-800|function truncatePiNotifyPushoverBody(body: string): string|
-|`buildPiNotifyPushoverBody`|fn||811-821|function buildPiNotifyPushoverBody(|
-|`buildPiNotifyPushoverPayload`|fn||832-844|function buildPiNotifyPushoverPayload(|
-|`runPiNotifyPushoverRequest`|fn||855-874|function runPiNotifyPushoverRequest(|
-|`setPiNotifyHttpsRequestForTests`|fn||882-884|export function setPiNotifyHttpsRequestForTests(requestIm...|
-|`setPiNotifySpawnForTests`|fn||892-894|export function setPiNotifySpawnForTests(spawnImpl: PiNot...|
-|`runPiNotifyEffects`|fn||905-911|export function runPiNotifyEffects(|
-|`runPiNotifyEffectsForOutcome`|fn||922-940|export function runPiNotifyEffectsForOutcome(|
+|`upgradeLegacyPiNotifyPushoverText`|fn||103-105|export function upgradeLegacyPiNotifyPushoverText(value: ...|
+|`PiNotifyPushoverPriority`|type||131||
+|`PiNotifyEventRequest`|iface||137-144|export interface PiNotifyEventRequest|
+|`PiNotifyConfigFields`|type||150||
+|`PiNotifySpawn`|type||180||
+|`normalizePiNotifySoundLevel`|fn||201-205|export function normalizePiNotifySoundLevel(value: unknow...|
+|`normalizePiNotifyShortcut`|fn||214-218|export function normalizePiNotifyShortcut(value: unknown)...|
+|`normalizePiNotifyCommand`|fn||228-230|export function normalizePiNotifyCommand(value: unknown, ...|
+|`normalizePiNotifyTemplateValue`|fn||240-242|export function normalizePiNotifyTemplateValue(value: unk...|
+|`formatPiNotifyControlSequenceText`|fn||251-285|export function formatPiNotifyControlSequenceText(value: ...|
+|`parsePiNotifyControlSequenceText`|fn||294-339|export function parsePiNotifyControlSequenceText(value: s...|
+|`hasPiNotifyPushoverCredentials`|fn||348-353|export function hasPiNotifyPushoverCredentials(|
+|`normalizePiNotifyPushoverCredential`|fn||362-364|export function normalizePiNotifyPushoverCredential(value...|
+|`normalizePiNotifyPushoverPriority`|fn||373-375|export function normalizePiNotifyPushoverPriority(value: ...|
+|`formatPiNotifyStatus`|fn||384-386|export function formatPiNotifyStatus(config: Pick<UseReqC...|
+|`formatPiNotifyPushoverStatus`|fn||395-397|export function formatPiNotifyPushoverStatus(config: Pick...|
+|`cyclePiNotifySoundLevel`|fn||406-412|export function cyclePiNotifySoundLevel(currentLevel: PiN...|
+|`isPiNotifyOutcomeEnabled`|fn||423-437|function isPiNotifyOutcomeEnabled(|
+|`hasAgentEndStopReason`|fn||446-456|function hasAgentEndStopReason(|
+|`classifyPiNotifyOutcome`|fn||464-472|export function classifyPiNotifyOutcome(event: Pick<Agent...|
+|`formatPiNotifyDuration`|fn||481-486|function formatPiNotifyDuration(durationMs: number): string|
+|`formatPiNotifyBasePath`|fn||495-506|function formatPiNotifyBasePath(basePath: string): string|
+|`formatPiNotifyResult`|fn||515-524|function formatPiNotifyResult(outcome: PiNotifyOutcome): ...|
+|`buildPiNotifyRuntimeTemplateValues`|fn||534-546|function buildPiNotifyRuntimeTemplateValues(|
+|`quotePiNotifyInstallPath`|fn||554-559|function quotePiNotifyInstallPath(installationPath: strin...|
+|`escapePiNotifyShellTemplateValue`|fn||567-576|function escapePiNotifyShellTemplateValue(value: string):...|
+|`substitutePiNotifyInstallPath`|fn||586-591|export function substitutePiNotifyInstallPath(command: st...|
+|`substitutePiNotifyShellTemplate`|fn||603-615|function substitutePiNotifyShellTemplate(|
+|`substitutePiNotifyTextTemplate`|fn||626-636|function substitutePiNotifyTextTemplate(|
+|`runPiNotifyShellCommand`|fn||644-655|function runPiNotifyShellCommand(command: string): void|
+|`shouldRunPiNotifyCommand`|fn||666-679|function shouldRunPiNotifyCommand(|
+|`runPiNotifyCommand`|fn||690-703|function runPiNotifyCommand(|
+|`resolvePiNotifySoundCommand`|fn||712-724|function resolvePiNotifySoundCommand(|
+|`shouldRunPiNotifySound`|fn||734-745|function shouldRunPiNotifySound(|
+|`runPiNotifySoundCommand`|fn||755-762|export function runPiNotifySoundCommand(|
+|`shouldRunPiNotifyPushover`|fn||773-787|function shouldRunPiNotifyPushover(|
+|`buildPiNotifyPushoverTitle`|fn||798-804|function buildPiNotifyPushoverTitle(|
+|`truncatePiNotifyPushoverBody`|fn||813-819|function truncatePiNotifyPushoverBody(body: string): string|
+|`buildPiNotifyPushoverBody`|fn||830-840|function buildPiNotifyPushoverBody(|
+|`buildPiNotifyPushoverPayload`|fn||851-863|function buildPiNotifyPushoverPayload(|
+|`runPiNotifyPushoverRequest`|fn||874-893|function runPiNotifyPushoverRequest(|
+|`setPiNotifyHttpsRequestForTests`|fn||901-903|export function setPiNotifyHttpsRequestForTests(requestIm...|
+|`setPiNotifySpawnForTests`|fn||911-913|export function setPiNotifySpawnForTests(spawnImpl: PiNot...|
+|`runPiNotifyEffects`|fn||924-930|export function runPiNotifyEffects(|
+|`runPiNotifyEffectsForOutcome`|fn||941-959|export function runPiNotifyEffectsForOutcome(|
 
 
 ---

@@ -7881,6 +7881,10 @@ test("notifications menu escapes pushover text and locks pushover enablement unt
 });
 
 test("prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates", async () => {
+  // The first block persists the superseded legacy default `%%RESULT%%\n%%ARGS%%` (REQ-451): loading
+  // must upgrade it to `%%OUTPUT%%` so the pushed body carries the final assistant output instead of
+  // the outcome token plus arguments. The later blocks persist a distinct user-configured template
+  // (REQ-452) and verify it is delivered unchanged.
   const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
   const writeConfig = (overrides: Record<string, unknown>) => {
     writeProjectConfigOverrides(cwd, {
@@ -7939,7 +7943,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
         {
           role: "assistant",
           stopReason: "stop",
-          content: [],
+          content: [{ type: "text", text: "Final agent report from req-analyze." }],
         },
       ],
     }, ctx);
@@ -7950,7 +7954,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     assert.equal(successParams.get("token"), "ah6bf5u2sj63mcvou6qamiabeoubbe");
     assert.equal(successParams.get("user"), "gzfjjvp1xxmhibqwzh9m7i1zwvf83j");
     assert.equal(successParams.get("priority"), "1");
-    assert.equal(successParams.get("message"), `${buildExpectedNotifyResult("stop")}\nInspect src/index.ts`);
+    assert.equal(successParams.get("message"), "Final agent report from req-analyze.");
     assert.equal(successParams.get("title"), `analyze @ ${buildExpectedNotifyBasePath(cwd)} [0:05]`);
 
     recordedRequests.length = 0;
@@ -7993,7 +7997,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
       "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "notify-pushover-priority": 1,
       "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "notify-pushover-text": "%%RESULT%%\n%%ARGS%%",
+      "notify-pushover-text": "%%RESULT%% | %%ARGS%%",
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
@@ -8013,7 +8017,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     assert.equal(recordedRequests.length, 1);
     const abortedParams = new URLSearchParams(recordedRequests[0]?.body ?? "");
     assert.equal(abortedParams.get("title"), `change @ ${buildExpectedNotifyBasePath(cwd)} [0:02]`);
-    assert.equal(abortedParams.get("message"), `${buildExpectedNotifyResult("aborted")}\nAdjust docs`);
+    assert.equal(abortedParams.get("message"), `${buildExpectedNotifyResult("aborted")} | Adjust docs`);
 
     recordedRequests.length = 0;
     nowMs = 40_000;
@@ -8032,7 +8036,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     assert.equal(recordedRequests.length, 1);
     const errorParams = new URLSearchParams(recordedRequests[0]?.body ?? "");
     assert.equal(errorParams.get("title"), `write @ ${buildExpectedNotifyBasePath(cwd)} [0:02]`);
-    assert.equal(errorParams.get("message"), `${buildExpectedNotifyResult("error")}\nWrite docs`);
+    assert.equal(errorParams.get("message"), `${buildExpectedNotifyResult("error")} | Write docs`);
 
     writeConfig({
       "notify-pushover-enabled": true,

@@ -30,6 +30,7 @@ import {
   normalizePiNotifyShortcut,
   normalizePiNotifySoundLevel,
   normalizePiNotifyTemplateValue,
+  upgradeLegacyPiNotifyPushoverText,
 } from "./pi-notify.js";
 import {
   DEFAULT_DEBUG_LOG_FILE,
@@ -961,10 +962,10 @@ function loadGlobalConfig(): UseReqGlobalConfig {
       data["notify-pushover-title"],
       DEFAULT_PI_NOTIFY_PUSHOVER_TITLE,
     ),
-    "notify-pushover-text": normalizePiNotifyTemplateValue(
+    "notify-pushover-text": upgradeLegacyPiNotifyPushoverText(normalizePiNotifyTemplateValue(
       data["notify-pushover-text"],
       DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
-    ),
+    )),
     PI_NOTIFY_CMD: normalizePiNotifyCommand(data.PI_NOTIFY_CMD, DEFAULT_PI_NOTIFY_CMD),
     PI_NOTIFY_SOUND_LOW_CMD: normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_LOW_CMD, DEFAULT_PI_NOTIFY_SOUND_LOW_CMD),
     PI_NOTIFY_SOUND_MID_CMD: normalizePiNotifyCommand(data.PI_NOTIFY_SOUND_MID_CMD, DEFAULT_PI_NOTIFY_SOUND_MID_CMD),
