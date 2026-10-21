@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.85.0](https://github.com/Ogekuri/PI-useReq/compare/v0.84.0..v0.85.0) - 2026-10-21
+### 🚜  Changes
+- preserve non-agentic notification evidence across session restore [useReq] *(core)*
+  - Add process-scoped deferred-notification replay store in src/core/notification-replay.ts (DES-024).
+  - Defer stale-dropped output notifications instead of discarding them (REQ-439).
+  - Replay queued notifications on session_start reasons new/resume/reload/fork (REQ-440).
+  - Route req-references and req-reset outcome plus retention notifications through deferred delivery (REQ-441).
+  - Keep replay UI-notification-only with no duplicates (REQ-442).
+  - Update REQUIREMENTS.md, WORKFLOW.md, and regenerate REFERENCES.md.
+
 ## [0.84.0](https://github.com/Ogekuri/PI-useReq/compare/v0.83.0..v0.84.0) - 2026-10-20
 ### 🚜  Changes
 - emit outcome-conformant execution notifications [useReq] *(req-references)*
@@ -1119,6 +1129,7 @@
 - \[0.82.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.82.0
 - \[0.83.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.83.0
 - \[0.84.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.84.0
+- \[0.85.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.85.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1202,3 +1213,4 @@
 [0.82.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.81.0..v0.82.0
 [0.83.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.82.0..v0.83.0
 [0.84.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.83.0..v0.84.0
+[0.85.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.84.0..v0.85.0
