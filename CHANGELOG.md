@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.88.0](https://github.com/Ogekuri/PI-useReq/compare/v0.87.0..v0.88.0) - 2026-10-21
+### 🚜  Changes
+- make Pushover body default to final LLM output [useReq] *(pi-notify)*
+  - Default the Pushover text template to the %%OUTPUT%% token so the pushed body is the last LLM assistant message instead of the invoked user request (REQ-185).
+  - Dispatch prompt-end notify, sound, and Pushover effects for completed and failed non-agentic req-references and req-reset runs (REQ-447).
+  - Resolve %%OUTPUT%% for req-references from per-operation report lines (REQ-448) and for req-reset from recovery plus cleanup outcome lines (REQ-449).
+  - Fall back empty substituted Pushover bodies to the %%RESULT%% outcome token (REQ-450).
+  - Drop the non-agentic empty-%%OUTPUT%% clause from REQ-444, align TST-156, WORKFLOW.md call traces, REFERENCES.md, and the two default-template test assertions.
+
 ## [0.87.0](https://github.com/Ogekuri/PI-useReq/compare/v0.86.0..v0.87.0) - 2026-10-21
 ### 🚜  Changes
 - add %%OUTPUT%% prompt-end notification placeholder [useReq] *(pi-notify)*
@@ -1155,6 +1164,7 @@
 - \[0.85.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.85.0
 - \[0.86.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.86.0
 - \[0.87.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.87.0
+- \[0.88.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.88.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1241,3 +1251,4 @@
 [0.85.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.84.0..v0.85.0
 [0.86.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.85.0..v0.86.0
 [0.87.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.86.0..v0.87.0
+[0.88.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.87.0..v0.88.0
