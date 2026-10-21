@@ -60,6 +60,29 @@ export interface ReqResetCommandExecutionResult {
 }
 
 /**
+ * @brief Builds the per-operation outcome lines of one `req-reset` run for `%%OUTPUT%%` notification substitution.
+ * @details Emits one machine-readable line per recovery or cleanup fact — terminal outcome, execution-transcript preservation, `base-path` restoration, removed generated worktree count, removed generated branch count — and appends the surfaced error diagnostic for failed runs so prompt-end notification effects carry exactly the output produced during the process. Runtime is O(1). No external state is mutated.
+ * @param[in] executionResult {ReqResetCommandExecutionResult} Recovery and cleanup outcome facts of the attempted run.
+ * @return {string[]} Ordered outcome lines starting with the terminal outcome.
+ * @satisfies REQ-449
+ */
+export function buildReqResetCommandOutcomeLines(
+  executionResult: ReqResetCommandExecutionResult,
+): string[] {
+  const lines = [
+    `outcome: ${executionResult.errorMessage ? "error" : "success"}`,
+    `transcript preserved: ${executionResult.transcriptPreserved ? "yes" : "no"}`,
+    `base-path restored: ${executionResult.restoredBasePath ? "yes" : "no"}`,
+    `worktrees removed: ${executionResult.removedWorktreeDirs.length}`,
+    `branches removed: ${executionResult.removedBranchNames.length}`,
+  ];
+  if (executionResult.errorMessage) {
+    lines.push(`error: ${executionResult.errorMessage}`);
+  }
+  return lines;
+}
+
+/**
  * @brief Describes the session-bound context surface reused during `req-reset` recovery.
  * @details Reuses the session-switching contract already accepted by `restorePromptCommandExecution(...)` so the dedicated reset command can restore the original session without depending on concrete pi runtime classes. The alias is compile-time only and introduces no runtime cost.
  */

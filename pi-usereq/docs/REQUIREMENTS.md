@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.101"
+version: "0.0.102"
 date: "2026-10-21"
 author: "OpenAI Codex"
 scope:
@@ -239,7 +239,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-288**: MUST persist menu-selected `notify-sound` changes to global configuration without changing the active runtime sound level.
 - **REQ-289**: MUST render configuration-menu sound values from persisted `notify-sound`, even when the active runtime sound level differs.
 - **REQ-184**: MUST persist Pushover event toggles in keys `notify-pushover-on-completed`, `notify-pushover-on-interrupted`, and `notify-pushover-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
-- **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%RESULT%%\n%%ARGS%%`.
+- **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%OUTPUT%%`.
 - **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, `%%OUTPUT%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
 - **REQ-187**: MUST render `%%BASE%%` as static `base-path` relative to user home using `~/...` form and `%%TIME%%` as final elapsed `M:SS`.
 - **REQ-188**: MUST label notification-event rows as `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
@@ -520,7 +520,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-441**: MUST route `req-references` and `req-reset` outcome notifications plus the final context-retention notification through the stale-context-safe deferred-delivery notification helper.
 - **REQ-442**: MUST keep replayed notifications on the UI-notification channel without session messages or session switching, and MUST NOT replay already-delivered notifications.
 - **REQ-443**: MUST resolve `%%OUTPUT%%` from the concatenated `type === "text"` blocks of the last assistant message inside the `agent_end` payload, skipping `thinking` and tool-call content blocks.
-- **REQ-444**: MUST resolve `%%OUTPUT%%` to the empty string for non-agentic command notifications and for agent runs whose last assistant message exposes no `text` content blocks.
+- **REQ-444**: MUST resolve `%%OUTPUT%%` to the empty string for agent runs whose last assistant message exposes no `text` content blocks.
+- **REQ-447**: MUST dispatch prompt-end notification effects for every completed or failed non-agentic `req-references` and `req-reset` run using the existing command-notify, sound, and Pushover gates.
+- **REQ-448**: MUST resolve `%%OUTPUT%%` for `req-references` notification effects from per-operation outcome lines covering the terminal outcome, references update, commit creation, and repository cleanliness.
+- **REQ-449**: MUST resolve `%%OUTPUT%%` for `req-reset` notification effects from outcome lines covering base-path restoration plus removed generated worktrees and branches.
+- **REQ-450**: MUST fall back the Pushover `message` body to the `%%RESULT%%` outcome token whenever the fully substituted Pushover text template resolves to empty.
 - **REQ-445**: MUST head-truncate the substituted Pushover `message` body with a fixed truncation marker whenever it exceeds the 1024-character Pushover Message API limit.
 - **REQ-446**: MUST document the `%%OUTPUT%%` token in the `Pushover text` menu row description.
 
@@ -678,7 +682,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-129**: MUST verify `resolveCheckerExecutable` substitutes `%%INSTALLATION_PATH%%` with the runtime installation path inside static-check `Command` `cmd` fields.
 - **TST-130**: MUST verify `scripts/install-static-checkers.ts` best-effort approves pending npm install scripts and always returns exit code `0`.
 - **TST-155**: MUST verify `%%OUTPUT%%` resolves from concatenated text blocks of the last assistant message while skipping thinking plus tool-call content blocks.
-- **TST-156**: MUST verify `%%OUTPUT%%` resolves empty for non-agentic command notifications and runs whose last assistant message exposes no text blocks.
+- **TST-156**: MUST verify `%%OUTPUT%%` resolves from process output for non-agentic `req-references` plus `req-reset` notifications and stays empty for agent runs without text blocks.
 - **TST-157**: MUST verify the Pushover `message` body is head-truncated with a fixed marker when the substituted template exceeds 1024 characters.
 
 ## 5. Observed Component Model

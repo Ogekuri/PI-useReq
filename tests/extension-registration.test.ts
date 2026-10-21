@@ -7578,7 +7578,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.equal(config["notify-pushover-on-interrupted"], false);
   assert.equal(config["notify-pushover-on-failed"], false);
   assert.equal(config.PI_NOTIFY_CMD, 'notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a "PI-useReq" "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"');
-  assert.equal(config["notify-pushover-text"], "%%RESULT%%\n%%ARGS%%");
+  assert.equal(config["notify-pushover-text"], "%%OUTPUT%%");
 
   const localConfig = readProjectConfigJson(cwd);
   const globalConfig = readGlobalConfigJson();
@@ -7750,7 +7750,7 @@ test("configuration menu can persist pushover settings", async () => {
       "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
       "ah6bf5u2sj63mcvou6qamiabeoubbe",
       "%%PROMT%% @ %%BASE%% [%%TIME%%]",
-      "%%RESULT%%\\n%%ARGS%%",
+      "%%OUTPUT%%",
     ],
   });
 
@@ -7765,7 +7765,7 @@ test("configuration menu can persist pushover settings", async () => {
   assert.equal(config["notify-pushover-api-token"], "ah6bf5u2sj63mcvou6qamiabeoubbe");
   assert.equal(config["notify-pushover-priority"], 1);
   assert.equal(config["notify-pushover-title"], "%%PROMT%% @ %%BASE%% [%%TIME%%]");
-  assert.equal(config["notify-pushover-text"], "%%RESULT%%\n%%ARGS%%");
+  assert.equal(config["notify-pushover-text"], "%%OUTPUT%%");
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
