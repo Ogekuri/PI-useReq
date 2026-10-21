@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.100"
+version: "0.0.101"
 date: "2026-10-21"
 author: "OpenAI Codex"
 scope:
@@ -226,7 +226,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-166**: MUST deliver Pushover notifications only when global Pushover is enabled and the corresponding prompt-end Pushover event toggle is enabled.
 - **REQ-167**: MUST deliver Pushover notifications through native Node HTTP or HTTPS requests to `https://api.pushover.net/1/messages.json` and MUST NOT invoke shell commands for Pushover delivery.
 - **REQ-168**: MUST send a Pushover message only when persisted `user` plus `token` values are non-empty for the triggered prompt-end outcome.
-- **REQ-169**: MUST substitute `%%INSTALLATION_PATH%%`, `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, and `%%RESULT%%` at runtime inside `PI_NOTIFY_CMD`.
+- **REQ-169**: MUST substitute `%%INSTALLATION_PATH%%`, `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, `%%OUTPUT%%`, and `%%RESULT%%` at runtime inside `PI_NOTIFY_CMD`.
 - **REQ-172**: MUST persist Pushover priority values `Normal=0` and `High=1`, defaulting to `Normal`.
 - **REQ-174**: MUST persist command-notify event toggles in keys `notify-on-completed`, `notify-on-interrupted`, and `notify-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
 - **REQ-175**: MUST persist `PI_NOTIFY_CMD` defaulting to `notify-send -i %%INSTALLATION_PATH%%/resources/images/pi.dev.png -a "PI-useReq" "%%PROMT%% @ %%BASE%% [%%TIME%%]" "%%RESULT%%"`.
@@ -240,7 +240,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-289**: MUST render configuration-menu sound values from persisted `notify-sound`, even when the active runtime sound level differs.
 - **REQ-184**: MUST persist Pushover event toggles in keys `notify-pushover-on-completed`, `notify-pushover-on-interrupted`, and `notify-pushover-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
 - **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%RESULT%%\n%%ARGS%%`.
-- **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
+- **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, `%%OUTPUT%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
 - **REQ-187**: MUST render `%%BASE%%` as static `base-path` relative to user home using `~/...` form and `%%TIME%%` as final elapsed `M:SS`.
 - **REQ-188**: MUST label notification-event rows as `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
 - **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Context Files`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, `Debug`, `Show local configuration`, and `Show global configuration`.
@@ -519,6 +519,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-440**: MUST drain the process-scoped replay store during `session_start` for reasons `new`, `resume`, `reload`, and `fork`, redelivering each queued notification through the restored context UI-notification channel.
 - **REQ-441**: MUST route `req-references` and `req-reset` outcome notifications plus the final context-retention notification through the stale-context-safe deferred-delivery notification helper.
 - **REQ-442**: MUST keep replayed notifications on the UI-notification channel without session messages or session switching, and MUST NOT replay already-delivered notifications.
+- **REQ-443**: MUST resolve `%%OUTPUT%%` from the concatenated `type === "text"` blocks of the last assistant message inside the `agent_end` payload, skipping `thinking` and tool-call content blocks.
+- **REQ-444**: MUST resolve `%%OUTPUT%%` to the empty string for non-agentic command notifications and for agent runs whose last assistant message exposes no `text` content blocks.
+- **REQ-445**: MUST head-truncate the substituted Pushover `message` body with a fixed truncation marker whenever it exceeds the 1024-character Pushover Message API limit.
+- **REQ-446**: MUST document the `%%OUTPUT%%` token in the `Pushover text` menu row description.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -544,9 +548,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-098**: MUST verify menu-selected boot sound changes persist to global configuration without changing the active runtime sound level.
 - **TST-047**: MUST verify the `Notifications` menu exposes `Pushover events` before direct Pushover settings, keeps `Enable pushover` dimmed and locked until both credential fields are non-empty, and persists Pushover event and credential values only in global configuration.
 - **TST-072**: MUST verify `Pushover text` displays escaped control sequences in menus and decodes the documented escape sequences from input before persistence.
-- **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` for enabled prompt-end outcomes.
+- **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` plus `%%OUTPUT%%` for enabled prompt-end outcomes.
 - **TST-049**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
-- **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
+- **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` plus `%%OUTPUT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
 - **TST-062**: MUST verify `Show local configuration` saves pending local and global config, closes the active configuration menu tree, and writes persisted `<base-path>/.pi-usereq.json` text into the editor.
 - **TST-109**: MUST verify `Show global configuration` saves pending local and global config, closes the active configuration menu tree, and writes persisted `~/.config/pi-usereq/config.json` text into the editor.
@@ -673,6 +677,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-128**: MUST verify `Remove static code checker` previews targeted checker entries and requires explicit confirmation before removing configured global checker entries.
 - **TST-129**: MUST verify `resolveCheckerExecutable` substitutes `%%INSTALLATION_PATH%%` with the runtime installation path inside static-check `Command` `cmd` fields.
 - **TST-130**: MUST verify `scripts/install-static-checkers.ts` best-effort approves pending npm install scripts and always returns exit code `0`.
+- **TST-155**: MUST verify `%%OUTPUT%%` resolves from concatenated text blocks of the last assistant message while skipping thinking plus tool-call content blocks.
+- **TST-156**: MUST verify `%%OUTPUT%%` resolves empty for non-agentic command notifications and runs whose last assistant message exposes no text blocks.
+- **TST-157**: MUST verify the Pushover `message` body is head-truncated with a fixed marker when the substituted template exceeds 1024 characters.
 
 ## 5. Observed Component Model
 

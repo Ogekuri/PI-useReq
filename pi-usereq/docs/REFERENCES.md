@@ -2968,7 +2968,7 @@ import type { UseReqConfig } from "./config.js";
 
 ---
 
-# pi-notify.ts | TypeScript | 887L | 44 symbols | 7 imports | 57 comments
+# pi-notify.ts | TypeScript | 922L | 45 symbols | 7 imports | 61 comments
 > Path: `src/core/pi-notify.ts`
 - @brief Implements pi-usereq command-notify, sound, and Pushover prompt-end helpers.
 - @details Centralizes configuration defaults, status serialization, prompt-end outcome classification, placeholder substitution, detached shell-command execution, and native Pushover delivery. Runtime is O(m + c + b) in `agent_end` message count plus command length and Pushover payload size. Side effects include detached child-process spawning and outbound HTTPS requests.
@@ -2992,34 +2992,34 @@ import type { UseReqConfig } from "./config.js";
 - type `export type PiNotifyOutcome = (typeof PI_NOTIFY_OUTCOMES)[number];` (L37)
 - @brief Represents one supported prompt-end outcome.
 - @details Narrows prompt-end event classification and per-feature toggle routing to the canonical completed/interrupted/failed domain. Compile-time only and introduces no runtime cost.
-- type `export type PiNotifyPushoverPriority = (typeof PI_NOTIFY_PUSHOVER_PRIORITIES)[number];` (L98)
+- type `export type PiNotifyPushoverPriority = (typeof PI_NOTIFY_PUSHOVER_PRIORITIES)[number];` (L112)
 - @brief Represents one supported Pushover priority value.
 - @details Narrows Pushover configuration parsing and request serialization to the canonical `0|1` priority domain. Compile-time only and introduces no runtime cost.
-### iface `export interface PiNotifyEventRequest` (L104-109)
+### iface `export interface PiNotifyEventRequest` (L118-125)
 - @brief Describes one prompt-end request used for command-notify and Pushover substitution.
-- @details Stores the prompt command name, raw prompt arguments, runtime base path, and final prompt duration required to resolve runtime placeholders. The interface is compile-time only and introduces no runtime cost.
+- @details Stores the prompt command name, raw prompt arguments, runtime base path, final prompt duration, and optional final agent output required to resolve runtime placeholders. `agentOutput` stays optional so non-agentic command callers and offline replays omit it and `%%OUTPUT%%` degrades to the empty string per REQ-444. The interface is compile-time only and introduces no runtime cost.
 
-- type `export type PiNotifyConfigFields = Pick<` (L115)
+- type `export type PiNotifyConfigFields = Pick<` (L131)
 - @brief Describes the configuration fields consumed by pi-notify helpers.
 - @details Narrows the full project config to the notify, sound, and Pushover fields used by status rendering and prompt-end routing. Callers may override `notify-sound` with the active runtime sound level before dispatch. Compile-time only and introduces no runtime cost.
-- type `type PiNotifySpawn = typeof spawn;` (L145)
+- type `type PiNotifySpawn = typeof spawn;` (L161)
 - @brief Describes the shell-spawn callback used by prompt-end command dispatch.
 - @details Narrows the injected spawn surface so deterministic tests can capture detached shell invocations without patching global module state externally. Compile-time only and introduces no runtime cost.
-### fn `export function normalizePiNotifySoundLevel(value: unknown): PiNotifySoundLevel` (L166-170)
+### fn `export function normalizePiNotifySoundLevel(value: unknown): PiNotifySoundLevel` (L182-186)
 - @brief Normalizes one persisted sound level.
 - @details Accepts only canonical `none|low|mid|high` values and falls back to `none` for missing or invalid payloads. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Raw persisted sound-level payload.
 - @return {PiNotifySoundLevel} Canonical sound level.
 - @satisfies REQ-131
 
-### fn `export function normalizePiNotifyShortcut(value: unknown): string` (L179-183)
+### fn `export function normalizePiNotifyShortcut(value: unknown): string` (L195-199)
 - @brief Normalizes one persisted sound toggle shortcut.
 - @details Accepts any non-empty string so project config can carry raw pi shortcut syntax and falls back to the canonical default when the payload is empty or invalid. Runtime is O(n) in shortcut length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted shortcut payload.
 - @return {string} Canonical non-empty shortcut string.
 - @satisfies REQ-134
 
-### fn `export function normalizePiNotifyCommand(value: unknown, fallback: string): string` (L193-195)
+### fn `export function normalizePiNotifyCommand(value: unknown, fallback: string): string` (L209-211)
 - @brief Normalizes one persisted shell-command string.
 - @details Accepts any non-empty string so project config can override bundled command templates verbatim and falls back to the supplied default when the payload is empty or invalid. Runtime is O(n) in command length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted command payload.
@@ -3027,7 +3027,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Canonical non-empty command string.
 - @satisfies REQ-133, REQ-175
 
-### fn `export function normalizePiNotifyTemplateValue(value: unknown, fallback: string): string` (L205-207)
+### fn `export function normalizePiNotifyTemplateValue(value: unknown, fallback: string): string` (L221-223)
 - @brief Normalizes one persisted template string.
 - @details Accepts any non-empty string so Pushover title and text templates can be user-configured verbatim, preserves internal and edge control characters, and falls back to the supplied default when the payload is empty or invalid. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted template payload.
@@ -3035,63 +3035,63 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Canonical non-empty template string.
 - @satisfies REQ-185, REQ-235
 
-### fn `export function formatPiNotifyControlSequenceText(value: string): string` (L216-250)
+### fn `export function formatPiNotifyControlSequenceText(value: string): string` (L232-266)
 - @brief Formats control characters for single-line menu rendering.
 - @details Rewrites supported control bytes into escaped display sequences so configuration rows can render `Pushover text` inside a one-line settings list without executing the embedded control effects. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] value {string} Raw template text.
 - @return {string} Escaped single-line display text.
 - @satisfies REQ-235
 
-### fn `export function parsePiNotifyControlSequenceText(value: string): string` (L259-304)
+### fn `export function parsePiNotifyControlSequenceText(value: string): string` (L275-320)
 - @brief Decodes supported escaped control sequences from one menu input string.
 - @details Converts the documented `\n`, `\r`, `\t`, `\\`, `\0`, `\b`, `\f`, and `\v` escape sequences into their raw byte forms while preserving unknown escapes verbatim so user-entered text is not lossy. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] value {string} Escaped menu input text.
 - @return {string} Decoded raw template text.
 - @satisfies REQ-235
 
-### fn `export function hasPiNotifyPushoverCredentials(` (L313-318)
+### fn `export function hasPiNotifyPushoverCredentials(` (L329-334)
 - @brief Tests whether both persisted Pushover credentials are non-empty.
 - @details Performs exact empty-string checks against the normalized user and token fields so UI locking, config persistence, and prompt-end delivery can share one readiness rule. Runtime is O(1). No external state is mutated.
 - @param[in] config {Pick<UseReqConfig, "notify-pushover-user-key" | "notify-pushover-api-token">} Effective Pushover credential subset.
 - @return {boolean} `true` when both Pushover credential fields are non-empty.
 - @satisfies REQ-168, REQ-234
 
-### fn `export function normalizePiNotifyPushoverCredential(value: unknown): string` (L327-329)
+### fn `export function normalizePiNotifyPushoverCredential(value: unknown): string` (L343-345)
 - @brief Normalizes one persisted Pushover credential string.
 - @details Accepts any trimmed string so the project config can store raw Pushover user and token values verbatim and falls back to the empty string for missing or invalid payloads. Runtime is O(n) in credential length. No external state is mutated.
 - @param[in] value {unknown} Raw persisted credential payload.
 - @return {string} Canonical credential string.
 - @satisfies REQ-163
 
-### fn `export function normalizePiNotifyPushoverPriority(value: unknown): PiNotifyPushoverPriority` (L338-340)
+### fn `export function normalizePiNotifyPushoverPriority(value: unknown): PiNotifyPushoverPriority` (L354-356)
 - @brief Normalizes one persisted Pushover priority value.
 - @details Accepts only canonical `0` and `1` values, treating numeric-string `"1"` as high priority and every other payload as normal priority. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Raw persisted priority payload.
 - @return {PiNotifyPushoverPriority} Canonical priority value.
 - @satisfies REQ-172
 
-### fn `export function formatPiNotifyStatus(config: Pick<UseReqConfig, "notify-enabled">): string` (L349-351)
+### fn `export function formatPiNotifyStatus(config: Pick<UseReqConfig, "notify-enabled">): string` (L365-367)
 - @brief Formats the global command-notify flag for UI value rendering.
 - @details Serializes only the persisted global command-notify enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
 - @param[in] config {Pick<UseReqConfig, "notify-enabled">} Effective command-notify configuration subset.
 - @return {string} `on` when command-notify is globally enabled; otherwise `off`.
 - @satisfies REQ-196
 
-### fn `export function formatPiNotifyPushoverStatus(config: Pick<UseReqConfig, "notify-pushover-enabled">): string` (L360-362)
+### fn `export function formatPiNotifyPushoverStatus(config: Pick<UseReqConfig, "notify-pushover-enabled">): string` (L376-378)
 - @brief Formats the global Pushover flag for UI value rendering.
 - @details Serializes only the persisted global Pushover enable state so configuration menus and summaries can report `on|off` independently from per-event toggles. Runtime is O(1). No external state is mutated.
 - @param[in] config {Pick<UseReqConfig, "notify-pushover-enabled">} Effective Pushover configuration subset.
 - @return {string} `on` when Pushover is globally enabled; otherwise `off`.
 - @satisfies REQ-163
 
-### fn `export function cyclePiNotifySoundLevel(currentLevel: PiNotifySoundLevel): PiNotifySoundLevel` (L371-377)
+### fn `export function cyclePiNotifySoundLevel(currentLevel: PiNotifySoundLevel): PiNotifySoundLevel` (L387-393)
 - @brief Cycles one sound level through the canonical shortcut order.
 - @details Advances the active runtime sound state in the exact order `none -> low -> mid -> high -> none`, enabling deterministic shortcut toggling without mutating persisted boot configuration. Runtime is O(1). No external state is mutated.
 - @param[in] currentLevel {PiNotifySoundLevel} Current active runtime sound level.
 - @return {PiNotifySoundLevel} Next runtime sound level in the cycle.
 - @satisfies REQ-286
 
-### fn `function isPiNotifyOutcomeEnabled(` (L388-402)
+### fn `function isPiNotifyOutcomeEnabled(` (L404-418)
 - @brief Tests whether one outcome-specific toggle is enabled.
 - @details Reuses the canonical completed/interrupted/failed routing order shared by notify, sound, and Pushover event toggles. Runtime is O(1). No external state is mutated.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
@@ -3100,60 +3100,61 @@ import type { UseReqConfig } from "./config.js";
 - @param[in] failedEnabled {boolean} Enabled state for failed prompt termination.
 - @return {boolean} `true` when the selected outcome flag is enabled.
 
-### fn `function hasAgentEndStopReason(` (L411-421)
+### fn `function hasAgentEndStopReason(` (L427-437)
 - @brief Detects whether one agent-end payload contains the requested stop reason.
 - @details Scans assistant messages only so prompt-end classification remains stable even when user or tool-result messages also appear in the payload. Runtime is O(m) in message count. No external state is mutated.
 - @param[in] messages {AgentEndEvent["messages"]} Agent-end message list.
 - @param[in] stopReason {"aborted" | "error"} Stop reason to detect.
 - @return {boolean} `true` when an assistant message carries the requested stop reason.
 
-### fn `export function classifyPiNotifyOutcome(event: Pick<AgentEndEvent, "messages">): PiNotifyOutcome` (L429-437)
+### fn `export function classifyPiNotifyOutcome(event: Pick<AgentEndEvent, "messages">): PiNotifyOutcome` (L445-453)
 - @brief Classifies one agent-end payload into the canonical pi-notify outcome.
 - @details Treats assistant `stopReason=error` as `failed`, `stopReason=aborted` as `interrupted`, and every remaining terminal state as `completed`. Runtime is O(m) in message count. No external state is mutated.
 - @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
 - @return {PiNotifyOutcome} Canonical prompt-end outcome.
 
-### fn `function formatPiNotifyDuration(durationMs: number): string` (L446-451)
+### fn `function formatPiNotifyDuration(durationMs: number): string` (L462-467)
 - @brief Formats one prompt-end duration for runtime placeholders.
 - @details Floors the supplied duration to whole seconds, keeps minutes unbounded above 59, and zero-pads seconds to two digits so `%%TIME%%` aligns with status-bar elapsed formatting. Runtime is O(1). No external state is mutated.
 - @param[in] durationMs {number} Prompt-end duration in milliseconds.
 - @return {string} Duration rendered as `M:SS`.
 - @satisfies REQ-187
 
-### fn `function formatPiNotifyBasePath(basePath: string): string` (L460-471)
+### fn `function formatPiNotifyBasePath(basePath: string): string` (L476-487)
 - @brief Formats one runtime base path for placeholder substitution.
 - @details Emits `~` or `~/...` when the supplied path equals or descends from the current user home directory; otherwise emits the slash-normalized absolute path. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] basePath {string} Runtime base path.
 - @return {string} Placeholder-ready base path string.
 - @satisfies REQ-187
 
-### fn `function formatPiNotifyResult(outcome: PiNotifyOutcome): string` (L480-489)
+### fn `function formatPiNotifyResult(outcome: PiNotifyOutcome): string` (L496-505)
 - @brief Formats one prompt-end outcome for `%%RESULT%%` substitution.
 - @details Maps canonical prompt-end outcomes to the persisted human-readable result tokens reused by default notify-command and Pushover templates. Runtime is O(1). No external state is mutated.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
 - @return {string} `successed`, `aborted`, or `failed`.
 - @satisfies REQ-169, REQ-186, REQ-199
 
-### fn `function buildPiNotifyRuntimeTemplateValues(` (L498-509)
+### fn `function buildPiNotifyRuntimeTemplateValues(` (L515-527)
 - @brief Builds the raw runtime placeholder map for one prompt-end request.
-- @details Resolves every placeholder value exactly once so notify-command and Pushover template substitution reuse the same prompt name, base path, elapsed time, argument string, and terminal outcome token. Runtime is O(p) in path length. No external state is mutated.
+- @details Resolves every placeholder value exactly once so notify-command and Pushover template substitution reuse the same prompt name, base path, elapsed time, argument string, final agent output, and terminal outcome token. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
-- @return {{ "%%PROMT%%": string; "%%BASE%%": string; "%%TIME%%": string; "%%ARGS%%": string; "%%RESULT%%": string }} Raw placeholder-value map.
+- @return {{ "%%PROMT%%": string; "%%BASE%%": string; "%%TIME%%": string; "%%ARGS%%": string; "%%OUTPUT%%": string; "%%RESULT%%": string }} Raw placeholder-value map.
+- @satisfies REQ-169, REQ-186, REQ-443, REQ-444
 
-### fn `function quotePiNotifyInstallPath(installationPath: string): string` (L517-522)
+### fn `function quotePiNotifyInstallPath(installationPath: string): string` (L535-540)
 - @brief Quotes one installation path for shell substitution.
 - @details Emits POSIX single-quoted literals for `sh -lc` execution and CMD double-quoted literals for `cmd.exe /c` execution so `%%INSTALLATION_PATH%%` substitutions preserve whitespace safely. Runtime is O(n) in path length. No external state is mutated.
 - @param[in] installationPath {string} Absolute extension installation path.
 - @return {string} Shell-quoted installation path fragment.
 
-### fn `function escapePiNotifyShellTemplateValue(value: string): string` (L530-539)
+### fn `function escapePiNotifyShellTemplateValue(value: string): string` (L548-557)
 - @brief Escapes one placeholder value for double-quoted shell insertion.
 - @details Escapes the characters interpreted specially by POSIX or CMD double-quoted strings so default notify-command templates remain safe when placeholders are embedded inside double quotes. Runtime is O(n) in value length. No external state is mutated.
 - @param[in] value {string} Raw placeholder value.
 - @return {string} Shell-escaped placeholder fragment without surrounding quotes.
 
-### fn `export function substitutePiNotifyInstallPath(command: string, installationPath: string): string` (L549-554)
+### fn `export function substitutePiNotifyInstallPath(command: string, installationPath: string): string` (L567-572)
 - @brief Substitutes `%%INSTALLATION_PATH%%` inside one shell command.
 - @details Replaces every `%%INSTALLATION_PATH%%` token with a shell-quoted runtime installation path so bundled assets can be addressed safely from external commands. Runtime is O(n) in command length. No external state is mutated.
 - @param[in] command {string} Raw configured shell command.
@@ -3161,32 +3162,32 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Runtime-ready command string.
 - @satisfies REQ-169
 
-### fn `function substitutePiNotifyShellTemplate(` (L566-578)
+### fn `function substitutePiNotifyShellTemplate(` (L584-596)
 - @brief Substitutes runtime placeholders inside one shell-command template.
-- @details Applies shell-quoted installation-path substitution plus shell-escaped prompt, base-path, elapsed-time, raw-argument, and outcome-result substitution expected by `PI_NOTIFY_CMD`. Runtime is O(n) in template length. No external state is mutated.
+- @details Applies shell-quoted installation-path substitution plus shell-escaped prompt, base-path, elapsed-time, raw-argument, final-output, and outcome-result substitution expected by `PI_NOTIFY_CMD`. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] template {string} Raw shell-command template.
 - @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
 - @param[in] installationPath {string} Absolute extension installation path.
 - @return {string} Runtime-ready shell command.
-- @satisfies REQ-169, REQ-199
+- @satisfies REQ-169, REQ-199, REQ-443, REQ-444
 
-### fn `function substitutePiNotifyTextTemplate(` (L589-599)
+### fn `function substitutePiNotifyTextTemplate(` (L607-617)
 - @brief Substitutes runtime placeholders inside one text template.
-- @details Applies raw prompt name, home-relative base path, elapsed time, raw prompt arguments, and terminal outcome text without shell escaping so Pushover payloads preserve literal text. Runtime is O(n) in template length. No external state is mutated.
+- @details Applies raw prompt name, home-relative base path, elapsed time, raw prompt arguments, final agent output, and terminal outcome text without shell escaping so Pushover payloads preserve literal text. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] template {string} Raw text template.
 - @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
 - @return {string} Placeholder-resolved text string.
-- @satisfies REQ-186, REQ-187, REQ-199
+- @satisfies REQ-186, REQ-187, REQ-199, REQ-443, REQ-444
 
-### fn `function runPiNotifyShellCommand(command: string): void` (L607-618)
+### fn `function runPiNotifyShellCommand(command: string): void` (L625-636)
 - @brief Executes one detached shell command without waiting for completion.
 - @details Uses the platform-default shell contract already employed by sound-command execution and ignores transport failures so prompt-end handling remains non-blocking. Runtime is dominated by process spawn. Side effects include detached child-process execution.
 - @param[in] command {string} Runtime-ready shell command.
 - @return {void} No return value.
 
-### fn `function shouldRunPiNotifyCommand(` (L629-642)
+### fn `function shouldRunPiNotifyCommand(` (L647-660)
 - @brief Determines whether one prompt-end outcome should trigger command-notify.
 - @details Requires a prompt-end request, the global command-notify enable flag, and the corresponding per-event notify toggle. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3195,7 +3196,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {boolean} `true` when command-notify prerequisites are satisfied.
 - @satisfies REQ-174, REQ-176
 
-### fn `function runPiNotifyCommand(` (L653-666)
+### fn `function runPiNotifyCommand(` (L671-684)
 - @brief Executes the configured command-notify shell command.
 - @details Resolves the runtime installation path, substitutes runtime placeholders into `PI_NOTIFY_CMD`, and spawns the resulting command without waiting for completion. Runtime is dominated by process spawn. Side effects include detached child-process execution.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3204,14 +3205,14 @@ import type { UseReqConfig } from "./config.js";
 - @return {void} No return value.
 - @satisfies REQ-169, REQ-175, REQ-176, REQ-199
 
-### fn `function resolvePiNotifySoundCommand(` (L675-687)
+### fn `function resolvePiNotifySoundCommand(` (L693-705)
 - @brief Resolves the configured command for one non-`none` sound level.
 - @details Selects the matching persisted command string from config without performing runtime substitution or shell execution. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
 - @param[in] soundLevel {Exclude<PiNotifySoundLevel, "none">} Non-disabled sound level.
 - @return {string} Configured command string for the requested level.
 
-### fn `function shouldRunPiNotifySound(` (L697-708)
+### fn `function shouldRunPiNotifySound(` (L715-726)
 - @brief Determines whether one prompt-end outcome should trigger sound-command execution.
 - @details Requires a non-`none` sound level and the corresponding per-event sound toggle. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3219,7 +3220,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {boolean} `true` when sound-command prerequisites are satisfied.
 - @satisfies REQ-178
 
-### fn `export function runPiNotifySoundCommand(` (L718-725)
+### fn `export function runPiNotifySoundCommand(` (L736-743)
 - @brief Executes the configured sound command on an external shell.
 - @details Resolves the runtime installation path, substitutes `%%INSTALLATION_PATH%%`, and spawns the configured command without waiting for completion. Runtime is dominated by process spawn. Side effects include detached child-process execution.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3227,7 +3228,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {void} No return value.
 - @satisfies REQ-132, REQ-133
 
-### fn `function shouldRunPiNotifyPushover(` (L736-750)
+### fn `function shouldRunPiNotifyPushover(` (L754-768)
 - @brief Determines whether one prompt-end outcome should trigger Pushover delivery.
 - @details Requires a prompt-end request, the global Pushover enable flag, the corresponding per-event Pushover toggle, and non-empty user plus token credentials. Runtime is O(1). No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3236,7 +3237,7 @@ import type { UseReqConfig } from "./config.js";
 - @return {boolean} `true` when Pushover delivery prerequisites are satisfied.
 - @satisfies REQ-166, REQ-168, REQ-184
 
-### fn `function buildPiNotifyPushoverTitle(` (L761-767)
+### fn `function buildPiNotifyPushoverTitle(` (L779-785)
 - @brief Builds the Pushover notification title for one prompt-end request.
 - @details Resolves the configured `notify-pushover-title` template with raw runtime placeholder substitution so the pushed title remains configurable and deterministic. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3245,25 +3246,32 @@ import type { UseReqConfig } from "./config.js";
 - @return {string} Pushover title string.
 - @satisfies REQ-185, REQ-186, REQ-187, REQ-199
 
-### fn `function buildPiNotifyPushoverBody(` (L778-784)
+### fn `function truncatePiNotifyPushoverBody(body: string): string` (L794-800)
+- @brief Head-truncates one substituted Pushover body to the Pushover Message API limit.
+- @details Returns the body unchanged when it fits `PI_NOTIFY_PUSHOVER_MESSAGE_LIMIT` and otherwise keeps the head characters that leave room for `PI_NOTIFY_PUSHOVER_TRUNCATION_MARKER` so over-limit bodies stay deterministic and provider-acceptable. Runtime is O(1). No external state is mutated.
+- @param[in] body {string} Fully substituted Pushover body text.
+- @return {string} Body within the Pushover `message` character limit.
+- @satisfies REQ-445
+
+### fn `function buildPiNotifyPushoverBody(` (L811-819)
 - @brief Builds the Pushover message body for one prompt-end request.
-- @details Resolves the configured `notify-pushover-text` template with raw runtime placeholder substitution so the pushed text remains configurable and deterministic. Runtime is O(n) in template length. No external state is mutated.
+- @details Resolves the configured `notify-pushover-text` template with raw runtime placeholder substitution so the pushed text remains configurable and deterministic, then head-truncates over-limit bodies to the Pushover Message API `message` limit. Runtime is O(n) in template length. No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
 - @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
-- @return {string} Pushover message body.
-- @satisfies REQ-185, REQ-186, REQ-187, REQ-199
+- @return {string} Pushover message body within the 1024-character API limit.
+- @satisfies REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445
 
-### fn `function buildPiNotifyPushoverPayload(` (L795-807)
+### fn `function buildPiNotifyPushoverPayload(` (L830-842)
 - @brief Builds the Pushover API payload for one prompt-end request.
 - @details Encodes the configured token, user key, substituted title, priority, and substituted text as `application/x-www-form-urlencoded` fields accepted by the Pushover Message API. Runtime is O(n) in payload size. No external state is mutated.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
 - @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
 - @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
 - @return {URLSearchParams} Encoded Pushover request payload.
-- @satisfies REQ-167, REQ-172, REQ-185, REQ-186, REQ-199
+- @satisfies REQ-167, REQ-172, REQ-185, REQ-186, REQ-199, REQ-443, REQ-444, REQ-445
 
-### fn `function runPiNotifyPushoverRequest(` (L818-837)
+### fn `function runPiNotifyPushoverRequest(` (L853-872)
 - @brief Dispatches one native HTTPS request to the Pushover Message API.
 - @details Serializes the request body as URL-encoded form data, posts it to `https://api.pushover.net/1/messages.json`, drains the response, and ignores transport failures so prompt-end handling remains non-blocking. Runtime is dominated by outbound I/O. Side effects include one HTTPS request.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
@@ -3272,74 +3280,75 @@ import type { UseReqConfig } from "./config.js";
 - @return {void} No return value.
 - @satisfies REQ-167, REQ-199
 
-### fn `export function setPiNotifyHttpsRequestForTests(requestImpl: typeof https.request | undefined): void` (L845-847)
+### fn `export function setPiNotifyHttpsRequestForTests(requestImpl: typeof https.request | undefined): void` (L880-882)
 - @brief Replaces the native HTTPS request function used for Pushover delivery in deterministic tests.
 - @details Accepts a drop-in `node:https.request` replacement and restores the native implementation when `undefined` is supplied. Runtime is O(1). Side effect: mutates the module-local Pushover transport hook.
 - @param[in] requestImpl {typeof https.request | undefined} Replacement HTTPS request function.
 - @return {void} No return value.
 
-### fn `export function setPiNotifySpawnForTests(spawnImpl: PiNotifySpawn | undefined): void` (L855-857)
+### fn `export function setPiNotifySpawnForTests(spawnImpl: PiNotifySpawn | undefined): void` (L890-892)
 - @brief Replaces the shell-spawn function used for notify and sound commands in deterministic tests.
 - @details Accepts a drop-in `node:child_process.spawn` replacement and restores the native implementation when `undefined` is supplied. Runtime is O(1). Side effect: mutates the module-local shell transport hook.
 - @param[in] spawnImpl {PiNotifySpawn | undefined} Replacement shell-spawn function.
 - @return {void} No return value.
 
-### fn `export function runPiNotifyEffects(` (L868-887)
+### fn `export function runPiNotifyEffects(` (L903-922)
 - @brief Dispatches prompt-end notify, sound, and Pushover effects for one agent-end payload.
-- @details Classifies the terminal outcome, executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
+- @details Classifies the terminal outcome, executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied; `%%OUTPUT%%` resolves from the caller-supplied final agent output and Pushover bodies are head-truncated to the provider message limit. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
 - @param[in] config {PiNotifyConfigFields} Effective notification configuration.
 - @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
 - @param[in] request {PiNotifyEventRequest | undefined} Optional prompt-end request metadata used for command-notify and Pushover substitution.
 - @return {void} No return value.
-- @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199
+- @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
 |`PiNotifySoundLevel`|type||25||
 |`PiNotifyOutcome`|type||37||
-|`PiNotifyPushoverPriority`|type||98||
-|`PiNotifyEventRequest`|iface||104-109|export interface PiNotifyEventRequest|
-|`PiNotifyConfigFields`|type||115||
-|`PiNotifySpawn`|type||145||
-|`normalizePiNotifySoundLevel`|fn||166-170|export function normalizePiNotifySoundLevel(value: unknow...|
-|`normalizePiNotifyShortcut`|fn||179-183|export function normalizePiNotifyShortcut(value: unknown)...|
-|`normalizePiNotifyCommand`|fn||193-195|export function normalizePiNotifyCommand(value: unknown, ...|
-|`normalizePiNotifyTemplateValue`|fn||205-207|export function normalizePiNotifyTemplateValue(value: unk...|
-|`formatPiNotifyControlSequenceText`|fn||216-250|export function formatPiNotifyControlSequenceText(value: ...|
-|`parsePiNotifyControlSequenceText`|fn||259-304|export function parsePiNotifyControlSequenceText(value: s...|
-|`hasPiNotifyPushoverCredentials`|fn||313-318|export function hasPiNotifyPushoverCredentials(|
-|`normalizePiNotifyPushoverCredential`|fn||327-329|export function normalizePiNotifyPushoverCredential(value...|
-|`normalizePiNotifyPushoverPriority`|fn||338-340|export function normalizePiNotifyPushoverPriority(value: ...|
-|`formatPiNotifyStatus`|fn||349-351|export function formatPiNotifyStatus(config: Pick<UseReqC...|
-|`formatPiNotifyPushoverStatus`|fn||360-362|export function formatPiNotifyPushoverStatus(config: Pick...|
-|`cyclePiNotifySoundLevel`|fn||371-377|export function cyclePiNotifySoundLevel(currentLevel: PiN...|
-|`isPiNotifyOutcomeEnabled`|fn||388-402|function isPiNotifyOutcomeEnabled(|
-|`hasAgentEndStopReason`|fn||411-421|function hasAgentEndStopReason(|
-|`classifyPiNotifyOutcome`|fn||429-437|export function classifyPiNotifyOutcome(event: Pick<Agent...|
-|`formatPiNotifyDuration`|fn||446-451|function formatPiNotifyDuration(durationMs: number): string|
-|`formatPiNotifyBasePath`|fn||460-471|function formatPiNotifyBasePath(basePath: string): string|
-|`formatPiNotifyResult`|fn||480-489|function formatPiNotifyResult(outcome: PiNotifyOutcome): ...|
-|`buildPiNotifyRuntimeTemplateValues`|fn||498-509|function buildPiNotifyRuntimeTemplateValues(|
-|`quotePiNotifyInstallPath`|fn||517-522|function quotePiNotifyInstallPath(installationPath: strin...|
-|`escapePiNotifyShellTemplateValue`|fn||530-539|function escapePiNotifyShellTemplateValue(value: string):...|
-|`substitutePiNotifyInstallPath`|fn||549-554|export function substitutePiNotifyInstallPath(command: st...|
-|`substitutePiNotifyShellTemplate`|fn||566-578|function substitutePiNotifyShellTemplate(|
-|`substitutePiNotifyTextTemplate`|fn||589-599|function substitutePiNotifyTextTemplate(|
-|`runPiNotifyShellCommand`|fn||607-618|function runPiNotifyShellCommand(command: string): void|
-|`shouldRunPiNotifyCommand`|fn||629-642|function shouldRunPiNotifyCommand(|
-|`runPiNotifyCommand`|fn||653-666|function runPiNotifyCommand(|
-|`resolvePiNotifySoundCommand`|fn||675-687|function resolvePiNotifySoundCommand(|
-|`shouldRunPiNotifySound`|fn||697-708|function shouldRunPiNotifySound(|
-|`runPiNotifySoundCommand`|fn||718-725|export function runPiNotifySoundCommand(|
-|`shouldRunPiNotifyPushover`|fn||736-750|function shouldRunPiNotifyPushover(|
-|`buildPiNotifyPushoverTitle`|fn||761-767|function buildPiNotifyPushoverTitle(|
-|`buildPiNotifyPushoverBody`|fn||778-784|function buildPiNotifyPushoverBody(|
-|`buildPiNotifyPushoverPayload`|fn||795-807|function buildPiNotifyPushoverPayload(|
-|`runPiNotifyPushoverRequest`|fn||818-837|function runPiNotifyPushoverRequest(|
-|`setPiNotifyHttpsRequestForTests`|fn||845-847|export function setPiNotifyHttpsRequestForTests(requestIm...|
-|`setPiNotifySpawnForTests`|fn||855-857|export function setPiNotifySpawnForTests(spawnImpl: PiNot...|
-|`runPiNotifyEffects`|fn||868-887|export function runPiNotifyEffects(|
+|`PiNotifyPushoverPriority`|type||112||
+|`PiNotifyEventRequest`|iface||118-125|export interface PiNotifyEventRequest|
+|`PiNotifyConfigFields`|type||131||
+|`PiNotifySpawn`|type||161||
+|`normalizePiNotifySoundLevel`|fn||182-186|export function normalizePiNotifySoundLevel(value: unknow...|
+|`normalizePiNotifyShortcut`|fn||195-199|export function normalizePiNotifyShortcut(value: unknown)...|
+|`normalizePiNotifyCommand`|fn||209-211|export function normalizePiNotifyCommand(value: unknown, ...|
+|`normalizePiNotifyTemplateValue`|fn||221-223|export function normalizePiNotifyTemplateValue(value: unk...|
+|`formatPiNotifyControlSequenceText`|fn||232-266|export function formatPiNotifyControlSequenceText(value: ...|
+|`parsePiNotifyControlSequenceText`|fn||275-320|export function parsePiNotifyControlSequenceText(value: s...|
+|`hasPiNotifyPushoverCredentials`|fn||329-334|export function hasPiNotifyPushoverCredentials(|
+|`normalizePiNotifyPushoverCredential`|fn||343-345|export function normalizePiNotifyPushoverCredential(value...|
+|`normalizePiNotifyPushoverPriority`|fn||354-356|export function normalizePiNotifyPushoverPriority(value: ...|
+|`formatPiNotifyStatus`|fn||365-367|export function formatPiNotifyStatus(config: Pick<UseReqC...|
+|`formatPiNotifyPushoverStatus`|fn||376-378|export function formatPiNotifyPushoverStatus(config: Pick...|
+|`cyclePiNotifySoundLevel`|fn||387-393|export function cyclePiNotifySoundLevel(currentLevel: PiN...|
+|`isPiNotifyOutcomeEnabled`|fn||404-418|function isPiNotifyOutcomeEnabled(|
+|`hasAgentEndStopReason`|fn||427-437|function hasAgentEndStopReason(|
+|`classifyPiNotifyOutcome`|fn||445-453|export function classifyPiNotifyOutcome(event: Pick<Agent...|
+|`formatPiNotifyDuration`|fn||462-467|function formatPiNotifyDuration(durationMs: number): string|
+|`formatPiNotifyBasePath`|fn||476-487|function formatPiNotifyBasePath(basePath: string): string|
+|`formatPiNotifyResult`|fn||496-505|function formatPiNotifyResult(outcome: PiNotifyOutcome): ...|
+|`buildPiNotifyRuntimeTemplateValues`|fn||515-527|function buildPiNotifyRuntimeTemplateValues(|
+|`quotePiNotifyInstallPath`|fn||535-540|function quotePiNotifyInstallPath(installationPath: strin...|
+|`escapePiNotifyShellTemplateValue`|fn||548-557|function escapePiNotifyShellTemplateValue(value: string):...|
+|`substitutePiNotifyInstallPath`|fn||567-572|export function substitutePiNotifyInstallPath(command: st...|
+|`substitutePiNotifyShellTemplate`|fn||584-596|function substitutePiNotifyShellTemplate(|
+|`substitutePiNotifyTextTemplate`|fn||607-617|function substitutePiNotifyTextTemplate(|
+|`runPiNotifyShellCommand`|fn||625-636|function runPiNotifyShellCommand(command: string): void|
+|`shouldRunPiNotifyCommand`|fn||647-660|function shouldRunPiNotifyCommand(|
+|`runPiNotifyCommand`|fn||671-684|function runPiNotifyCommand(|
+|`resolvePiNotifySoundCommand`|fn||693-705|function resolvePiNotifySoundCommand(|
+|`shouldRunPiNotifySound`|fn||715-726|function shouldRunPiNotifySound(|
+|`runPiNotifySoundCommand`|fn||736-743|export function runPiNotifySoundCommand(|
+|`shouldRunPiNotifyPushover`|fn||754-768|function shouldRunPiNotifyPushover(|
+|`buildPiNotifyPushoverTitle`|fn||779-785|function buildPiNotifyPushoverTitle(|
+|`truncatePiNotifyPushoverBody`|fn||794-800|function truncatePiNotifyPushoverBody(body: string): string|
+|`buildPiNotifyPushoverBody`|fn||811-819|function buildPiNotifyPushoverBody(|
+|`buildPiNotifyPushoverPayload`|fn||830-842|function buildPiNotifyPushoverPayload(|
+|`runPiNotifyPushoverRequest`|fn||853-872|function runPiNotifyPushoverRequest(|
+|`setPiNotifyHttpsRequestForTests`|fn||880-882|export function setPiNotifyHttpsRequestForTests(requestIm...|
+|`setPiNotifySpawnForTests`|fn||890-892|export function setPiNotifySpawnForTests(spawnImpl: PiNot...|
+|`runPiNotifyEffects`|fn||903-922|export function runPiNotifyEffects(|
 
 
 ---
@@ -5730,7 +5739,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 5397L | 122 symbols | 30 imports | 171 comments
+# index.ts | TypeScript | 5432L | 123 symbols | 30 imports | 172 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -6145,18 +6154,25 @@ cost.
 - @return {Promise<void>} Promise resolved when finalization and state transitions complete.
 - @satisfies REQ-208, REQ-228, REQ-229, REQ-230, REQ-282, REQ-291, REQ-292, REQ-354, REQ-355, REQ-368, REQ-370, REQ-371, REQ-372
 
-### fn `async function handleExtensionStatusEvent(` (L1512-1811)
+### fn `function buildAgentEndOutputText(event: unknown): string` (L1508-1533)
+- @brief Extracts the final agent output text for prompt-end `%%OUTPUT%%` substitution.
+- @details Scans the `agent_end` payload messages backwards for the last assistant message and concatenates its `type === "text"` content blocks while skipping `thinking` and tool-call blocks, returning the empty string for non-agent payloads and for last assistant messages without text blocks so non-agentic command notifications never substitute stale output. Runtime is O(m + n) in message and text-block count. No external state is mutated.
+- @param[in] event {unknown} Raw `agent_end` lifecycle event payload.
+- @return {string} Concatenated final assistant text blocks, or the empty string when unavailable.
+- @satisfies REQ-443, REQ-444
+
+### fn `async function handleExtensionStatusEvent(` (L1546-1845)
 - @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
-- @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. After the status update, captures the exact `before_provider_request` provider payload for the live active or pending prompt run by reloading the prompt debug gating configuration from the prompt run's original `base-path` (worktree-backed checkouts do not contain the untracked `.pi-usereq.json`, so the cwd-derived cached config would silently disable capture), flushes the process-scoped captured payload as one `<timestamp>-<req-command>-error-<status>` file whenever `after_provider_response` reports a status >= 400 or whenever one finalized `message_end` assistant error message carries a leading HTTP status >= 400 (the provider-independent fallback for provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses) without requiring live workflow state, and discards the capture at prompt-run end so stale payloads never reach later runs. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
+- @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. After the status update, captures the exact `before_provider_request` provider payload for the live active or pending prompt run by reloading the prompt debug gating configuration from the prompt run's original `base-path` (worktree-backed checkouts do not contain the untracked `.pi-usereq.json`, so the cwd-derived cached config would silently disable capture), flushes the process-scoped captured payload as one `<timestamp>-<req-command>-error-<status>` file whenever `after_provider_response` reports a status >= 400 or whenever one finalized `message_end` assistant error message carries a leading HTTP status >= 400 (the provider-independent fallback for provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses) without requiring live workflow state, and discards the capture at prompt-run end so stale payloads never reach later runs. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects with the final assistant output text feeding `%%OUTPUT%%` placeholder substitution, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
 - @param[in] event {unknown} Hook payload forwarded by pi.
 - @param[in] ctx {ExtensionContext} Active extension context.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {Promise<void>} Promise resolved when hook processing completes.
-- @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440
+- @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440, REQ-443, REQ-444
 
-### fn `function registerExtensionStatusHooks(` (L1857-1876)
+### fn `function registerExtensionStatusHooks(` (L1892-1911)
 - @brief Registers shared wrappers for every supported pi lifecycle hook.
 - @details Installs one generic wrapper per intercepted hook so every resource,
 session, agent, model, tool, bash, and input event is routed through the
@@ -6170,7 +6186,7 @@ registered hook count. Side effects include hook registration.
 - @return {void} No return value.
 - @satisfies DES-002, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117
 
-### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L1886-1889)
+### fn `function setConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig, enabledTools: string[]): void` (L1921-1924)
 - @brief Replaces the configured active-tool selection and applies it immediately.
 - @details Normalizes the requested tool names, stores them in config, and synchronizes the active tool set with runtime registration state. Runtime is O(n + t). Side effect: mutates config and active tools.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6178,26 +6194,26 @@ registered hook count. Side effects include hook registration.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 
-### fn `function getDebugToolToggleNames(): PiUsereqStartupToolName[]` (L1897-1899)
+### fn `function getDebugToolToggleNames(): PiUsereqStartupToolName[]` (L1932-1934)
 - @brief Returns the canonical debug-tool toggle order.
 - @details Reuses the documented configurable-tool ordering so debug toggles list extension-owned tools before embedded tools and remain deterministic across sessions. Runtime is O(t log t). No external state is mutated.
 - @return {PiUsereqStartupToolName[]} Ordered debug-tool toggle names.
 - @satisfies REQ-242
 
-### fn `function resetDebugConfigToDefaults(config: UseReqConfig): void` (L1908-1920)
+### fn `function resetDebugConfigToDefaults(config: UseReqConfig): void` (L1943-1955)
 - @brief Restores the debug configuration subtree to its documented defaults.
 - @details Resets runtime debug enablement in both the effective config object and the process-scoped runtime debug store, then resets log path, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config` and process-scoped runtime debug state.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 - @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322, REQ-413, REQ-414, REQ-420, REQ-426
 
-### fn `function formatDebugMenuSummary(config: UseReqConfig): string` (L1928-1934)
+### fn `function formatDebugMenuSummary(config: UseReqConfig): string` (L1963-1969)
 - @brief Formats the top-level Debug summary value.
 - @details Emits the current global debug mode plus compact selected-tool and selected-prompt counts for right-aligned menu display. Runtime is O(n) in configured selector count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact debug summary string.
 
-### fn `function buildDebugMenuChoice(` (L1944-1957)
+### fn `function buildDebugMenuChoice(` (L1979-1992)
 - @brief Builds one debug-menu row with optional disabled styling.
 - @details Applies dim styling and disables selection whenever global debug is off for all rows except the global `Debug` toggle row. Runtime is O(1). No external state is mutated.
 - @param[in] choice {PiUsereqSettingsMenuChoice} Base debug-menu row.
@@ -6205,21 +6221,21 @@ registered hook count. Side effects include hook registration.
 - @return {PiUsereqSettingsMenuChoice} Styled debug-menu row.
 - @satisfies REQ-241
 
-### fn `async function selectDebugLogOnStatus(` (L1966-1994)
+### fn `async function selectDebugLogOnStatus(` (L2001-2029)
 - @brief Opens the workflow-state filter selector used by the Debug submenu.
 - @details Exposes `any` plus each canonical workflow state through the shared settings-menu renderer and returns the selected normalized filter or `undefined` when the user cancels the submenu. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
 - @param[in] currentValue {DebugLogOnStatus} Current persisted workflow-state filter.
 - @return {Promise<DebugLogOnStatus | undefined>} Selected workflow-state filter or `undefined` when cancelled.
 
-### fn `function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2003-2108)
+### fn `function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2038-2143)
 - @brief Builds the shared settings-menu choices for debug logging configuration.
 - @details Serializes global debug controls plus prompt-content debug controls, tool-wrapper command registration, workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists and dimming locked rows while debug is disabled. Runtime is O(t + p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered debug-menu choices.
 - @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277, REQ-321, REQ-322, REQ-415
 
-### fn `async function configureDebugMenu(` (L2119-2336)
+### fn `async function configureDebugMenu(` (L2154-2371)
 - @brief Runs the interactive Debug submenu.
 - @details Lets the user toggle runtime global debug enablement (stored only in the process-scoped runtime debug store and never persisted), prompt-content debug enablement plus prompt log path, tool-wrapper command registration, debug file and workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates, config mutation, process-scoped runtime debug state mutation, and optional debug command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6228,47 +6244,47 @@ registered hook count. Side effects include hook registration.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323, REQ-413, REQ-414, REQ-415, REQ-420, REQ-426
 
-### fn `const updateDebugToolCommandsEnabled = (nextValue: unknown): void =>` (L2125-2132)
+### fn `const updateDebugToolCommandsEnabled = (nextValue: unknown): void =>` (L2160-2167)
 
-- type `type PiNotifyBooleanConfigKey =` (L2342)
+- type `type PiNotifyBooleanConfigKey =` (L2377)
 - @brief Represents one persisted boolean notification-setting key.
 - @details Restricts menu toggles to the global enable flags and completed/interrupted/failed event toggles used by command-notify, sound, and Pushover configuration. Compile-time only and introduces no runtime cost.
-- type `type PiNotifyEventBooleanConfigKey = Exclude<` (L2359)
+- type `type PiNotifyEventBooleanConfigKey = Exclude<` (L2394)
 - @brief Represents one persisted boolean notification event-toggle key.
 - @details Restricts shared event-submenu mutation helpers to completed/interrupted/failed toggles and excludes global enable flags. Compile-time only and introduces no runtime cost.
-- type `type PiNotifyEventId = "completed" | "interrupted" | "failed";` (L2368)
+- type `type PiNotifyEventId = "completed" | "interrupted" | "failed";` (L2403)
 - @brief Represents one shared prompt-end event identifier used by notification menus.
 - @details Restricts event-submenu rendering to the canonical completed/interrupted/failed domain shared by command-notify, sound, and Pushover routing. Compile-time only and introduces no runtime cost.
-### iface `interface PiNotifyEventRowDefinition` (L2374-2378)
+### iface `interface PiNotifyEventRowDefinition` (L2409-2413)
 - @brief Describes one shared prompt-end event row rendered inside notification event submenus.
 - @details Binds one canonical event identifier to the human-readable label and terminal-outcome description reused across command-notify, sound, and Pushover event menus. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface PiNotifyEventMenuDefinition` (L2384-2390)
+### iface `interface PiNotifyEventMenuDefinition` (L2419-2425)
 - @brief Describes one notification-system event submenu contract.
 - @details Binds the top-level launcher row, submenu title, toast prefix, and completed/interrupted/failed config keys for one notification transport. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function togglePiNotifyFlag(config: UseReqConfig, key: PiNotifyBooleanConfigKey): boolean` (L2399-2402)
+### fn `function togglePiNotifyFlag(config: UseReqConfig, key: PiNotifyBooleanConfigKey): boolean` (L2434-2437)
 - @brief Flips one persisted boolean notification setting.
 - @details Negates the selected configuration flag in place and returns the resulting boolean value so callers can emit deterministic UI feedback. Runtime is O(1). Side effect: mutates `config`.
 - @param[in] key {PiNotifyBooleanConfigKey} Boolean configuration key to toggle.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {boolean} Next enabled state.
 
-### fn `function resetPiNotifyConfigToDefaults(config: UseReqConfig): void` (L2411-2435)
+### fn `function resetPiNotifyConfigToDefaults(config: UseReqConfig): void` (L2446-2470)
 - @brief Restores notification-related settings to their documented defaults.
 - @details Copies the command-notify, sound, and Pushover configuration subtree from a fresh default config into the supplied mutable project config. Runtime is O(1). Side effect: mutates `config`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 - @satisfies REQ-174, REQ-178, REQ-184, REQ-195, REQ-196
 
-### fn `function formatPiNotifyPushoverPriority(priority: PiNotifyPushoverPriority): string` (L2444-2446)
+### fn `function formatPiNotifyPushoverPriority(priority: PiNotifyPushoverPriority): string` (L2479-2481)
 - @brief Formats one persisted Pushover priority for menu display.
 - @details Maps the canonical `0|1` priority domain to deterministic `Normal|High` labels reused by the Pushover configuration UI. Runtime is O(1). No external state is mutated.
 - @param[in] priority {PiNotifyPushoverPriority} Persisted Pushover priority.
 - @return {string} Menu-display label.
 - @satisfies REQ-172
 
-### fn `function formatPiNotifyEventMenuSummary(` (L2530-2538)
+### fn `function formatPiNotifyEventMenuSummary(` (L2565-2573)
 - @brief Formats the top-level summary value for one notification event submenu.
 - @details Counts enabled completed/interrupted/failed toggles for the selected transport and renders the result as `n/3 on` for right-aligned menu display. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -6276,7 +6292,7 @@ registered hook count. Side effects include hook registration.
 - @return {string} Compact enabled-toggle summary.
 - @satisfies REQ-198
 
-### fn `function buildPiNotifyEventLauncherChoice(` (L2548-2558)
+### fn `function buildPiNotifyEventLauncherChoice(` (L2583-2593)
 - @brief Builds the top-level launcher row for one notification event submenu.
 - @details Reuses the shared completed/interrupted/failed summary renderer so the `Notifications` menu can expose dedicated event editors for command-notify, sound, and Pushover in a uniform shape. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -6284,7 +6300,7 @@ registered hook count. Side effects include hook registration.
 - @return {PiUsereqSettingsMenuChoice} Launcher row for the selected event submenu.
 - @satisfies REQ-181, REQ-183, REQ-165, REQ-198
 
-### fn `function buildPiNotifyEventMenuChoices(` (L2568-2584)
+### fn `function buildPiNotifyEventMenuChoices(` (L2603-2619)
 - @brief Builds the shared settings-menu choices for one notification event submenu.
 - @details Serializes completed/interrupted/failed rows with right-aligned `on|off` values, then appends a value-less `Reset defaults` row for submenu-scoped mutation control. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -6292,7 +6308,7 @@ registered hook count. Side effects include hook registration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered event-submenu choice vector.
 - @satisfies REQ-188, REQ-193, REQ-198
 
-### fn `function resetPiNotifyEventMenuToDefaults(` (L2594-2602)
+### fn `function resetPiNotifyEventMenuToDefaults(` (L2629-2637)
 - @brief Restores one notification event submenu to its documented defaults.
 - @details Copies only the completed/interrupted/failed toggles referenced by the supplied submenu contract from a fresh default config into the mutable project config. Runtime is O(1). Side effect: mutates `config`.
 - @param[in] eventMenu {PiNotifyEventMenuDefinition} Notification-system event submenu contract.
@@ -6300,7 +6316,7 @@ registered hook count. Side effects include hook registration.
 - @return {void} No return value.
 - @satisfies REQ-174, REQ-178, REQ-184, REQ-195
 
-### fn `function resolvePiNotifyEventLabel(` (L2612-2619)
+### fn `function resolvePiNotifyEventLabel(` (L2647-2654)
 - @brief Resolves the human-readable event label for one event-toggle config key.
 - @details Matches the supplied config key against the submenu contract and returns the corresponding completed/interrupted/failed menu label for deterministic notification toasts. Runtime is O(1). No external state is mutated.
 - @param[in] key {PiNotifyEventBooleanConfigKey} Event-toggle configuration key.
@@ -6308,7 +6324,7 @@ registered hook count. Side effects include hook registration.
 - @return {string} Human-readable event label.
 - @satisfies REQ-188, REQ-198
 
-### fn `async function configurePiNotifyEventMenu(` (L2630-2706)
+### fn `async function configurePiNotifyEventMenu(` (L2665-2741)
 - @brief Runs one dedicated notification event submenu.
 - @details Reuses the shared settings-menu renderer to toggle completed/interrupted/failed delivery flags, preserve row focus, and apply submenu-scoped reset semantics for command-notify, sound, or Pushover events. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6317,14 +6333,14 @@ registered hook count. Side effects include hook registration.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-188, REQ-192, REQ-193, REQ-195, REQ-198
 
-### fn `function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2715-2765)
+### fn `function buildPiNotifyPushoverRows(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2750-2800)
 - @brief Builds the direct Pushover rows rendered inside `Notifications`.
 - @details Serializes the global enable flag, shared-event submenu launcher, priority, title, text, and credential rows into right-valued menu items appended after the sound-command rows, dims and disables the enable row until both credentials are populated, renders the locked value as `configure user/token keys first`, and escapes control characters for the single-line `Pushover text` value. Runtime is O(n) in the rendered text-template length. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered direct Pushover rows.
-- @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-198, REQ-234, REQ-235
+- @satisfies REQ-163, REQ-165, REQ-172, REQ-184, REQ-185, REQ-198, REQ-234, REQ-235, REQ-443, REQ-444, REQ-446
 
-### fn `async function selectPiNotifyPushoverPriority(` (L2775-2803)
+### fn `async function selectPiNotifyPushoverPriority(` (L2810-2838)
 - @brief Opens the shared settings-menu selector for Pushover priority.
 - @details Reuses the pi-usereq settings-menu renderer so Pushover priority selection remains stylistically aligned with the notification menus and appends a value-less subtree-local `Reset defaults` row. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6332,14 +6348,14 @@ registered hook count. Side effects include hook registration.
 - @return {Promise<PiNotifyPushoverPriority | "reset-defaults" | undefined>} Selected priority, reset action, or `undefined` when cancelled.
 - @satisfies REQ-172, REQ-192
 
-### fn `function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2812-2870)
+### fn `function buildPiNotifyMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L2847-2905)
 - @brief Builds the shared settings-menu choices for notification configuration.
 - @details Serializes command-notify, sound, and Pushover blocks with dedicated shared-event submenu launchers so the settings-menu renderer can expose one unified but modular configuration surface, including locked Pushover enablement, persisted boot-sound rows that stay decoupled from the active runtime sound level, and escaped single-line rendering for `Pushover text`. Runtime is O(n) in the longest rendered command or text field. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered notification-menu choice vector.
 - @satisfies REQ-137, REQ-149, REQ-150, REQ-151, REQ-152, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-188, REQ-193, REQ-198, REQ-234, REQ-235, REQ-289
 
-### fn `async function selectPiNotifySoundLevel(` (L2880-2920)
+### fn `async function selectPiNotifySoundLevel(` (L2915-2955)
 - @brief Opens the shared settings-menu selector for the persisted boot sound level.
 - @details Reuses the pi-usereq settings-menu renderer so boot-sound selection remains stylistically aligned with the notification menu, keeps the active runtime sound level unchanged, and appends a value-less subtree-local `Reset defaults` row. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6347,7 +6363,7 @@ registered hook count. Side effects include hook registration.
 - @return {Promise<PiNotifySoundLevel | "reset-defaults" | undefined>} Selected boot sound level, reset action, or `undefined` when cancelled.
 - @satisfies REQ-131, REQ-179, REQ-192, REQ-289
 
-### fn `async function configurePiNotifyMenu(` (L2930-3216)
+### fn `async function configurePiNotifyMenu(` (L2965-3251)
 - @brief Runs the interactive notification-configuration menu.
 - @details Exposes command-notify, sound, and Pushover controls through the shared settings-menu renderer, persists every notification subtree mutation into global configuration, delegates completed/interrupted/failed toggles to dedicated event submenus, preserves boot-sound edits without altering the active runtime sound level, keeps `Enable pushover` locked until both credentials are populated, decodes escaped control-sequence input for `Pushover text`, and preserves row focus across menu re-renders. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6355,7 +6371,7 @@ registered hook count. Side effects include hook registration.
 - @return {Promise<boolean>} `true` when the sound-toggle shortcut changed.
 - @satisfies REQ-131, REQ-133, REQ-134, REQ-137, REQ-163, REQ-164, REQ-165, REQ-172, REQ-179, REQ-181, REQ-183, REQ-184, REQ-188, REQ-192, REQ-193, REQ-195, REQ-196, REQ-198, REQ-234, REQ-235, REQ-288, REQ-289
 
-### fn `function registerPiNotifyShortcut(` (L3231-3254)
+### fn `function registerPiNotifyShortcut(` (L3266-3289)
 - @brief Registers the configurable notification-sound shortcut when supported.
 - @details Loads the current effective config, registers one raw pi shortcut when
 the runtime exposes `registerShortcut(...)`, cycles only the active runtime
@@ -6368,20 +6384,20 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-134, REQ-180, REQ-286, REQ-287
 
-- type `type PromptModelSelectionApiSurface = {` (L3260)
+- type `type PromptModelSelectionApiSurface = {` (L3295)
 - @brief Describes the loosely-typed pi extension API surface required by model re-application.
 - @details Narrows the runtime API to the model appliers and thinking-level probe accessed defensively so legacy hosts and offline harnesses without `setModel`, `setThinkingLevel`, or `getThinkingLevel` degrade to a documented warning instead of a runtime exception. The alias is compile-time only and introduces no runtime cost.
-- type `type PromptModelSelectionContextSurface = {` (L3270)
+- type `type PromptModelSelectionContextSurface = {` (L3305)
 - @brief Describes the loosely-typed context surface required by model re-application.
 - @details Narrows extension contexts to the active model, thinking level, and model registry probe used to capture the pre-switch selection and to evaluate the duplicate-skip guard after session replacement. The alias is compile-time only and introduces no runtime cost.
-### fn `function resolveCurrentModelSelection(` (L3283-3299)
+### fn `function resolveCurrentModelSelection(` (L3318-3334)
 - @brief Captures the active model provider and identifier from one loosely-typed context model.
 - @details Validates that the runtime model object exposes non-empty string provider and identifier fields and emits the serializable selection fact stored inside the prompt execution plan, returning undefined when the runtime exposes no usable model so preflight capture never throws. Runtime is O(1). No external state is mutated.
 - @param[in] model {unknown} Active runtime model object from `ctx.model`.
 - @return {PromptCommandModelSelection | undefined} Serializable provider plus identifier fact, or undefined when unavailable.
 - @satisfies REQ-366
 
-### fn `function resolveCurrentThinkingLevel(pi: ExtensionAPI, ctx: unknown): string | undefined` (L3309-3327)
+### fn `function resolveCurrentThinkingLevel(pi: ExtensionAPI, ctx: unknown): string | undefined` (L3344-3362)
 - @brief Captures the active thinking level from the runtime API or fallback context.
 - @details Prefers `pi.getThinkingLevel()` when the host exposes it and falls back to the context `thinkingLevel` probe, returning undefined for legacy hosts or offline harnesses that provide neither so capture stays advisory. Runtime is O(1). No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6389,7 +6405,7 @@ registration and status updates.
 - @return {string | undefined} Active thinking level, or undefined when unavailable.
 - @satisfies REQ-366, REQ-371
 
-### fn `function resolvePromptCommandModelSurface(` (L3337-3361)
+### fn `function resolvePromptCommandModelSurface(` (L3372-3396)
 - @brief Builds the loosely-typed model-selection surface from the runtime API plus context.
 - @details Wraps `setModel` and `setThinkingLevel` with defensive function probes so the surface only exposes appliers the running host actually implements, and copies the context model, thinking level, and model registry used by the guarded re-apply comparison. The supplied api MUST be the latest live extension api bound to the active session runner because pi invalidates captured extension apis after session replacement. Returns undefined when no context is available so re-application degrades to a not-attempted skip. Runtime is O(1). No external state is mutated.
 - @param[in] pi {ExtensionAPI} Latest live extension api instance supplying the session-scoped model appliers; after session replacement callers pass the rebound api rather than a captured pre-switch api.
@@ -6397,7 +6413,7 @@ registration and status updates.
 - @return {PromptCommandModelSelectionSurface | undefined} Re-apply surface, or undefined when no context exists.
 - @satisfies REQ-367, REQ-370, REQ-371
 
-### fn `async function reapplyCapturedPromptModelSelection(` (L3373-3389)
+### fn `async function reapplyCapturedPromptModelSelection(` (L3408-3424)
 - @brief Re-applies one captured model selection onto the active post-switch session.
 - @details Builds the guarded re-apply surface from the latest process-scoped extension api plus context, preferring the api written by the most recent extension bind because pi invalidates the api captured before session replacement, and falls back to the caller-supplied api for hosts that do not rebind. Forwards the captured selection plus thinking level into `reapplyPromptCommandSessionSelection(...)` and routes every warning through `notifyContextSafely(...)` so stale replacement contexts after session replacement never abort orchestration. Runtime is O(1) plus one awaited model mutation. Side effects include session-scoped model and thinking-level mutation plus stale-safe warning notifications.
 - @param[in] selection {PromptCommandModelSelection | undefined} Captured model provider plus identifier.
@@ -6407,15 +6423,15 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved once the guarded re-application completed.
 - @satisfies REQ-367, REQ-368, REQ-369, REQ-370, REQ-371, REQ-372
 
-### fn `function resolveReqResetPromptRequest(` (L3397-3423)
+### fn `function resolveReqResetPromptRequest(` (L3432-3458)
 - @brief Resolves the prompt execution plan targeted by `req-reset` recovery.
 - @details Prefers the current in-memory active request, then the current in-memory pending request, then the process-scoped persisted prompt runtime state so the dedicated reset command can recover from same-host unclean prompt termination after session replacement. Runtime is O(1). No external state is mutated.
 - @param[in] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {PromptCommandExecutionPlan | undefined} Recoverable prompt execution plan when one remains available.
 
-### fn `const isWorktreeBacked = (request: PromptCommandExecutionPlan | undefined): request is PromptCommandExecutionPlan =>` (L3400-3407)
+### fn `const isWorktreeBacked = (request: PromptCommandExecutionPlan | undefined): request is PromptCommandExecutionPlan =>` (L3435-3442)
 
-### fn `function registerReqResetCommand(` (L3433-3498)
+### fn `function registerReqResetCommand(` (L3468-3533)
 - @brief Registers the specialized `req-reset` slash command.
 - @details Registers the non-agentic prompt-recovery command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, force-removes matching generated worktrees plus branches, clears recoverable prompt state when restoration succeeds, and notifies pi without starting an LLM session or creating a worktree. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and user notifications.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6423,7 +6439,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313, REQ-441
 
-### fn `function registerReqReferencesCommand(` (L3508-3569)
+### fn `function registerReqReferencesCommand(` (L3543-3604)
 - @brief Registers the specialized `req-references` slash command.
 - @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, appends one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes so the report renders in the transcript and survives session restore, and emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, session-entry persistence, and user notifications.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6431,7 +6447,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-436, REQ-437, REQ-438, REQ-441
 
-### fn `function registerPromptCommands(` (L3579-3730)
+### fn `function registerPromptCommands(` (L3614-3765)
 - @brief Registers bundled prompt-backed commands with the extension.
 - @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact command invocation summary plus the delivered prompt content into the debug prompt log path as separate `-request` and `-prompt` files when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-debug file creation, user-message delivery during execution, and optional debug-log writes.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6439,14 +6455,14 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428
 
-### fn `function registerAgentTools(pi: ExtensionAPI): void` (L3740-4039)
+### fn `function registerAgentTools(pi: ExtensionAPI): void` (L3775-4074)
 - @brief Registers pi-usereq agent tools exposed to the model.
 - @details Defines the tool schemas, prompt metadata, and execution handlers that bridge extension tool calls into tool-runner operations without registering duplicate custom slash commands for the same capabilities. Runtime is O(t) for registration; execution cost depends on the selected tool. Side effects include tool registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102, REQ-293, REQ-294, REQ-295, REQ-296, REQ-297
 
-### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4084-4109)
+### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4119-4144)
 - @brief Builds the shared settings-menu choices for startup-tool management.
 - @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting the removed status-reference action. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6454,7 +6470,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
 - @satisfies REQ-007, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4119-4133)
+### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4154-4168)
 - @brief Builds the shared settings-menu choices for per-tool startup toggles.
 - @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends a value-less subtree-local `Reset defaults` row. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6462,7 +6478,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
 - @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-231, REQ-232
 
-### fn `async function configurePiUsereqToolsMenu(` (L4144-4261)
+### fn `async function configurePiUsereqToolsMenu(` (L4179-4296)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with the effective config, renders startup-tool actions through the shared settings-menu UI, persists enablement changes into global configuration, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6471,78 +6487,78 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-231, REQ-232
 
-### fn `function getStaticCheckLanguageConfigForMenu(` (L4270-4275)
+### fn `function getStaticCheckLanguageConfigForMenu(` (L4305-4310)
 - @brief Resolves one static-check language config for menu rendering.
 - @details Returns the configured per-language static-check object when present and otherwise synthesizes a disabled empty-language object so menu code can render all supported languages deterministically. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {StaticCheckLanguageConfig} Resolved per-language config object.
 
-### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4283-4285)
+### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4318-4320)
 - @brief Counts languages that currently expose at least one configured checker.
 - @details Treats configured-but-disabled languages as configured when their checker list is non-empty so removal actions remain deterministic. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of languages with at least one configured checker.
 
-### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4293-4295)
+### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4328-4330)
 - @brief Counts languages whose static-check enable flag is on.
 - @details Counts only languages whose persisted per-language config explicitly sets `enabled=enable`, regardless of checker count. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of enabled languages.
 
-### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4304-4306)
+### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4339-4341)
 - @brief Restores the documented static-check default configuration.
 - @details Replaces the mutable config subtree with a fresh clone of the documented per-language defaults so menu reset actions restore both enable flags and checker lists in one step. Runtime is O(l + c). Side effect: mutates `config`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 - @satisfies REQ-250, REQ-251, REQ-252
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4314-4316)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4349-4351)
 - @brief Summarizes enabled and configured static-check languages.
 - @details Counts enabled languages and languages with at least one checker, then emits one compact summary string suitable for the top-level configuration menu. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string.
 
-### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4325-4369)
+### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4360-4404)
 - @brief Builds the shared settings-menu choices for static-check management.
 - @details Serializes guided Command-oriented add and remove actions, renders one direct on/off toggle row for every supported language, and appends canonical terminal rows while omitting raw-spec and reference-only actions. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
 - @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248, REQ-345, REQ-347
 
-### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4377-4394)
+### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4412-4429)
 - @brief Builds the shared settings-menu choices for supported static-check languages.
 - @details Exposes every supported language as one row whose right-side value reports extensions, enablement, and configured checker count for guided Command configuration flows, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
 
-### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4402-4419)
+### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4437-4454)
 - @brief Builds the shared settings-menu choices for configured static-check languages.
 - @details Exposes only languages whose checker lists are non-empty so removal remains deterministic, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
 
-### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4427-4431)
+### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4462-4466)
 - @brief Formats one static-check checker entry as a compact command summary.
 - @details Joins the module command plus its parameter list into a single shell-like token sequence so inspection and confirmation menus can render checker identity deterministically. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Compact command summary string.
 
-### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4440-4446)
+### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4475-4481)
 - @brief Summarizes every configured checker for one language as a delimited command list.
 - @details Joins each checker entry summary with `; ` so the value column exposes the full language configuration in one row. Runtime is O(c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {string} Delimited checker summary string, or `(none)` when no checkers are configured.
 
-### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4455-4500)
+### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4490-4535)
 - @brief Builds the shared settings-menu choices for the read-only static-check inspection submenu.
 - @details Exposes only configured languages as disabled rows whose value column renders the full checker command list, appends one selectable `Close` row, and emits a disabled placeholder when no language is configured so the submenu never mutates configuration. Runtime is O(l * c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered read-only inspection choices.
 - @satisfies REQ-346
 
-### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4510-4548)
+### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4545-4583)
 - @brief Builds the confirmation submenu choices for removing one configured static-check language.
 - @details Renders each configured checker as a disabled preview row, appends explicit approve and abort actions, and falls back to one disabled no-op row when the language has no checkers. Runtime is O(c * p). No external state is mutated.
 - @param[in] language {string} Canonical language name targeted for removal.
@@ -6550,7 +6566,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removal-confirmation choices.
 - @satisfies REQ-349
 
-### fn `async function confirmStaticCheckRemoval(` (L4559-4570)
+### fn `async function confirmStaticCheckRemoval(` (L4594-4605)
 - @brief Opens one explicit removal-confirmation submenu for a configured static-check language.
 - @details Renders the targeted checker entries before removal and returns `true` only when the user selects the explicit approval action. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6559,7 +6575,7 @@ registration and status updates.
 - @return {Promise<boolean>} `true` when the removal is explicitly approved.
 - @satisfies REQ-349
 
-### fn `async function configureStaticCheckMenu(` (L4580-4759)
+### fn `async function configureStaticCheckMenu(` (L4615-4794)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user add, inspect, confirm-before-remove, and reset global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6567,7 +6583,7 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253, REQ-345, REQ-346, REQ-347, REQ-348, REQ-349
 
-### fn `function formatContextFilesSummary(` (L4770-4785)
+### fn `function formatContextFilesSummary(` (L4805-4820)
 - @brief Summarizes the `Context Files` flag state with measured sizes and context occupancy for the top-level menu value column.
 - @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -6576,7 +6592,7 @@ registration and status updates.
 - @return {string} Compact `Context Files` summary string with the occupancy suffix.
 - @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405
 
-### fn `function buildContextFilesMenuChoices(` (L4796-4839)
+### fn `function buildContextFilesMenuChoices(` (L4831-4874)
 - @brief Builds the shared settings-menu choices for the `Context Files` submenu.
 - @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -6585,7 +6601,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412
 
-### fn `async function configureContextFilesMenu(` (L4851-4911)
+### fn `async function configureContextFilesMenu(` (L4886-4946)
 - @brief Runs the `Context Files` configuration submenu.
 - @details Measures the context files through the yielding async measurement helper, then loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -6595,9 +6611,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-406
 
-### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L4858-4862)
+### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L4893-4897)
 
-### fn `function buildPiUsereqMenuChoices(` (L4922-5028)
+### fn `function buildPiUsereqMenuChoices(` (L4957-5063)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
 - @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] cwd {string} Current working directory.
@@ -6606,21 +6622,21 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376, REQ-405
 
-### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5037-5055)
+### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5072-5090)
 - @brief Builds the shared settings-menu choices for source-directory management.
 - @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5064-5076)
+### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5099-5111)
 - @brief Builds the shared settings-menu choices for removing one source-directory entry.
 - @details Exposes every configured `src-dir` entry as one removable row and appends a value-less subtree-local `Reset defaults` row. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L5087-5348)
+### fn `async function configurePiUsereq(` (L5122-5383)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads the effective merged config, performs one yielding async context-file measurement warm pass so menu renders resolve through stat-signed cache hits instead of first-measurement encodes, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6629,9 +6645,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-327, REQ-328, REQ-333
 
-### fn `const persistConfigChange = () =>` (L5100-5105)
+### fn `const persistConfigChange = () =>` (L5135-5140)
 
-### fn `function registerConfigCommands(` (L5358-5368)
+### fn `function registerConfigCommands(` (L5393-5403)
 - @brief Registers configuration-management commands.
 - @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6639,7 +6655,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-006, REQ-031
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5377-5397)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5412-5432)
 - @brief Registers the complete pi-usereq extension.
 - @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6700,75 +6716,76 @@ registration and status updates.
 |`applyConfiguredPiUsereqTools`|fn||1334-1351|function applyConfiguredPiUsereqTools(pi: ExtensionAPI, c...|
 |`isPiAgentSettledEventSupported`|fn||1361-1378|function isPiAgentSettledEventSupported(|
 |`finalizeMatchedPromptSuccess`|fn||1390-1499|async function finalizeMatchedPromptSuccess(|
-|`handleExtensionStatusEvent`|fn||1512-1811|async function handleExtensionStatusEvent(|
-|`registerExtensionStatusHooks`|fn||1857-1876|function registerExtensionStatusHooks(|
-|`setConfiguredPiUsereqTools`|fn||1886-1889|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
-|`getDebugToolToggleNames`|fn||1897-1899|function getDebugToolToggleNames(): PiUsereqStartupToolNa...|
-|`resetDebugConfigToDefaults`|fn||1908-1920|function resetDebugConfigToDefaults(config: UseReqConfig)...|
-|`formatDebugMenuSummary`|fn||1928-1934|function formatDebugMenuSummary(config: UseReqConfig): st...|
-|`buildDebugMenuChoice`|fn||1944-1957|function buildDebugMenuChoice(|
-|`selectDebugLogOnStatus`|fn||1966-1994|async function selectDebugLogOnStatus(|
-|`buildDebugMenuChoices`|fn||2003-2108|function buildDebugMenuChoices(config: UseReqConfig): PiU...|
-|`configureDebugMenu`|fn||2119-2336|async function configureDebugMenu(|
-|`updateDebugToolCommandsEnabled`|fn||2125-2132|const updateDebugToolCommandsEnabled = (nextValue: unknow...|
-|`PiNotifyBooleanConfigKey`|type||2342||
-|`PiNotifyEventBooleanConfigKey`|type||2359||
-|`PiNotifyEventId`|type||2368||
-|`PiNotifyEventRowDefinition`|iface||2374-2378|interface PiNotifyEventRowDefinition|
-|`PiNotifyEventMenuDefinition`|iface||2384-2390|interface PiNotifyEventMenuDefinition|
-|`togglePiNotifyFlag`|fn||2399-2402|function togglePiNotifyFlag(config: UseReqConfig, key: Pi...|
-|`resetPiNotifyConfigToDefaults`|fn||2411-2435|function resetPiNotifyConfigToDefaults(config: UseReqConf...|
-|`formatPiNotifyPushoverPriority`|fn||2444-2446|function formatPiNotifyPushoverPriority(priority: PiNotif...|
-|`formatPiNotifyEventMenuSummary`|fn||2530-2538|function formatPiNotifyEventMenuSummary(|
-|`buildPiNotifyEventLauncherChoice`|fn||2548-2558|function buildPiNotifyEventLauncherChoice(|
-|`buildPiNotifyEventMenuChoices`|fn||2568-2584|function buildPiNotifyEventMenuChoices(|
-|`resetPiNotifyEventMenuToDefaults`|fn||2594-2602|function resetPiNotifyEventMenuToDefaults(|
-|`resolvePiNotifyEventLabel`|fn||2612-2619|function resolvePiNotifyEventLabel(|
-|`configurePiNotifyEventMenu`|fn||2630-2706|async function configurePiNotifyEventMenu(|
-|`buildPiNotifyPushoverRows`|fn||2715-2765|function buildPiNotifyPushoverRows(config: UseReqConfig):...|
-|`selectPiNotifyPushoverPriority`|fn||2775-2803|async function selectPiNotifyPushoverPriority(|
-|`buildPiNotifyMenuChoices`|fn||2812-2870|function buildPiNotifyMenuChoices(config: UseReqConfig): ...|
-|`selectPiNotifySoundLevel`|fn||2880-2920|async function selectPiNotifySoundLevel(|
-|`configurePiNotifyMenu`|fn||2930-3216|async function configurePiNotifyMenu(|
-|`registerPiNotifyShortcut`|fn||3231-3254|function registerPiNotifyShortcut(|
-|`PromptModelSelectionApiSurface`|type||3260||
-|`PromptModelSelectionContextSurface`|type||3270||
-|`resolveCurrentModelSelection`|fn||3283-3299|function resolveCurrentModelSelection(|
-|`resolveCurrentThinkingLevel`|fn||3309-3327|function resolveCurrentThinkingLevel(pi: ExtensionAPI, ct...|
-|`resolvePromptCommandModelSurface`|fn||3337-3361|function resolvePromptCommandModelSurface(|
-|`reapplyCapturedPromptModelSelection`|fn||3373-3389|async function reapplyCapturedPromptModelSelection(|
-|`resolveReqResetPromptRequest`|fn||3397-3423|function resolveReqResetPromptRequest(|
-|`isWorktreeBacked`|fn||3400-3407|const isWorktreeBacked = (request: PromptCommandExecution...|
-|`registerReqResetCommand`|fn||3433-3498|function registerReqResetCommand(|
-|`registerReqReferencesCommand`|fn||3508-3569|function registerReqReferencesCommand(|
-|`registerPromptCommands`|fn||3579-3730|function registerPromptCommands(|
-|`registerAgentTools`|fn||3740-4039|function registerAgentTools(pi: ExtensionAPI): void|
-|`buildPiUsereqToolsMenuChoices`|fn||4084-4109|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
-|`buildPiUsereqToolToggleChoices`|fn||4119-4133|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
-|`configurePiUsereqToolsMenu`|fn||4144-4261|async function configurePiUsereqToolsMenu(|
-|`getStaticCheckLanguageConfigForMenu`|fn||4270-4275|function getStaticCheckLanguageConfigForMenu(|
-|`countConfiguredStaticCheckLanguages`|fn||4283-4285|function countConfiguredStaticCheckLanguages(config: UseR...|
-|`countEnabledStaticCheckLanguages`|fn||4293-4295|function countEnabledStaticCheckLanguages(config: UseReqC...|
-|`resetStaticCheckConfig`|fn||4304-4306|function resetStaticCheckConfig(config: UseReqConfig): void|
-|`formatStaticCheckLanguagesSummary`|fn||4314-4316|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckMenuChoices`|fn||4325-4369|function buildStaticCheckMenuChoices(config: UseReqConfig...|
-|`buildSupportedStaticCheckLanguageChoices`|fn||4377-4394|function buildSupportedStaticCheckLanguageChoices(config:...|
-|`buildConfiguredStaticCheckLanguageChoices`|fn||4402-4419|function buildConfiguredStaticCheckLanguageChoices(config...|
-|`formatStaticCheckCheckerEntry`|fn||4427-4431|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
-|`formatStaticCheckLanguageCheckerSummary`|fn||4440-4446|function formatStaticCheckLanguageCheckerSummary(config: ...|
-|`buildStaticCheckViewChoices`|fn||4455-4500|function buildStaticCheckViewChoices(config: UseReqConfig...|
-|`buildStaticCheckRemovalConfirmationChoices`|fn||4510-4548|function buildStaticCheckRemovalConfirmationChoices(|
-|`confirmStaticCheckRemoval`|fn||4559-4570|async function confirmStaticCheckRemoval(|
-|`configureStaticCheckMenu`|fn||4580-4759|async function configureStaticCheckMenu(|
-|`formatContextFilesSummary`|fn||4770-4785|function formatContextFilesSummary(|
-|`buildContextFilesMenuChoices`|fn||4796-4839|function buildContextFilesMenuChoices(|
-|`configureContextFilesMenu`|fn||4851-4911|async function configureContextFilesMenu(|
-|`setFlag`|fn||4858-4862|const setFlag = (flagKey: "context-files-requirements" | ...|
-|`buildPiUsereqMenuChoices`|fn||4922-5028|function buildPiUsereqMenuChoices(|
-|`buildSrcDirMenuChoices`|fn||5037-5055|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
-|`buildSrcDirRemovalChoices`|fn||5064-5076|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||5087-5348|async function configurePiUsereq(|
-|`persistConfigChange`|fn||5100-5105|const persistConfigChange = () =>|
-|`registerConfigCommands`|fn||5358-5368|function registerConfigCommands(|
-|`piUsereqExtension`|fn||5377-5397|export default function piUsereqExtension(pi: ExtensionAP...|
+|`buildAgentEndOutputText`|fn||1508-1533|function buildAgentEndOutputText(event: unknown): string|
+|`handleExtensionStatusEvent`|fn||1546-1845|async function handleExtensionStatusEvent(|
+|`registerExtensionStatusHooks`|fn||1892-1911|function registerExtensionStatusHooks(|
+|`setConfiguredPiUsereqTools`|fn||1921-1924|function setConfiguredPiUsereqTools(pi: ExtensionAPI, con...|
+|`getDebugToolToggleNames`|fn||1932-1934|function getDebugToolToggleNames(): PiUsereqStartupToolNa...|
+|`resetDebugConfigToDefaults`|fn||1943-1955|function resetDebugConfigToDefaults(config: UseReqConfig)...|
+|`formatDebugMenuSummary`|fn||1963-1969|function formatDebugMenuSummary(config: UseReqConfig): st...|
+|`buildDebugMenuChoice`|fn||1979-1992|function buildDebugMenuChoice(|
+|`selectDebugLogOnStatus`|fn||2001-2029|async function selectDebugLogOnStatus(|
+|`buildDebugMenuChoices`|fn||2038-2143|function buildDebugMenuChoices(config: UseReqConfig): PiU...|
+|`configureDebugMenu`|fn||2154-2371|async function configureDebugMenu(|
+|`updateDebugToolCommandsEnabled`|fn||2160-2167|const updateDebugToolCommandsEnabled = (nextValue: unknow...|
+|`PiNotifyBooleanConfigKey`|type||2377||
+|`PiNotifyEventBooleanConfigKey`|type||2394||
+|`PiNotifyEventId`|type||2403||
+|`PiNotifyEventRowDefinition`|iface||2409-2413|interface PiNotifyEventRowDefinition|
+|`PiNotifyEventMenuDefinition`|iface||2419-2425|interface PiNotifyEventMenuDefinition|
+|`togglePiNotifyFlag`|fn||2434-2437|function togglePiNotifyFlag(config: UseReqConfig, key: Pi...|
+|`resetPiNotifyConfigToDefaults`|fn||2446-2470|function resetPiNotifyConfigToDefaults(config: UseReqConf...|
+|`formatPiNotifyPushoverPriority`|fn||2479-2481|function formatPiNotifyPushoverPriority(priority: PiNotif...|
+|`formatPiNotifyEventMenuSummary`|fn||2565-2573|function formatPiNotifyEventMenuSummary(|
+|`buildPiNotifyEventLauncherChoice`|fn||2583-2593|function buildPiNotifyEventLauncherChoice(|
+|`buildPiNotifyEventMenuChoices`|fn||2603-2619|function buildPiNotifyEventMenuChoices(|
+|`resetPiNotifyEventMenuToDefaults`|fn||2629-2637|function resetPiNotifyEventMenuToDefaults(|
+|`resolvePiNotifyEventLabel`|fn||2647-2654|function resolvePiNotifyEventLabel(|
+|`configurePiNotifyEventMenu`|fn||2665-2741|async function configurePiNotifyEventMenu(|
+|`buildPiNotifyPushoverRows`|fn||2750-2800|function buildPiNotifyPushoverRows(config: UseReqConfig):...|
+|`selectPiNotifyPushoverPriority`|fn||2810-2838|async function selectPiNotifyPushoverPriority(|
+|`buildPiNotifyMenuChoices`|fn||2847-2905|function buildPiNotifyMenuChoices(config: UseReqConfig): ...|
+|`selectPiNotifySoundLevel`|fn||2915-2955|async function selectPiNotifySoundLevel(|
+|`configurePiNotifyMenu`|fn||2965-3251|async function configurePiNotifyMenu(|
+|`registerPiNotifyShortcut`|fn||3266-3289|function registerPiNotifyShortcut(|
+|`PromptModelSelectionApiSurface`|type||3295||
+|`PromptModelSelectionContextSurface`|type||3305||
+|`resolveCurrentModelSelection`|fn||3318-3334|function resolveCurrentModelSelection(|
+|`resolveCurrentThinkingLevel`|fn||3344-3362|function resolveCurrentThinkingLevel(pi: ExtensionAPI, ct...|
+|`resolvePromptCommandModelSurface`|fn||3372-3396|function resolvePromptCommandModelSurface(|
+|`reapplyCapturedPromptModelSelection`|fn||3408-3424|async function reapplyCapturedPromptModelSelection(|
+|`resolveReqResetPromptRequest`|fn||3432-3458|function resolveReqResetPromptRequest(|
+|`isWorktreeBacked`|fn||3435-3442|const isWorktreeBacked = (request: PromptCommandExecution...|
+|`registerReqResetCommand`|fn||3468-3533|function registerReqResetCommand(|
+|`registerReqReferencesCommand`|fn||3543-3604|function registerReqReferencesCommand(|
+|`registerPromptCommands`|fn||3614-3765|function registerPromptCommands(|
+|`registerAgentTools`|fn||3775-4074|function registerAgentTools(pi: ExtensionAPI): void|
+|`buildPiUsereqToolsMenuChoices`|fn||4119-4144|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
+|`buildPiUsereqToolToggleChoices`|fn||4154-4168|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
+|`configurePiUsereqToolsMenu`|fn||4179-4296|async function configurePiUsereqToolsMenu(|
+|`getStaticCheckLanguageConfigForMenu`|fn||4305-4310|function getStaticCheckLanguageConfigForMenu(|
+|`countConfiguredStaticCheckLanguages`|fn||4318-4320|function countConfiguredStaticCheckLanguages(config: UseR...|
+|`countEnabledStaticCheckLanguages`|fn||4328-4330|function countEnabledStaticCheckLanguages(config: UseReqC...|
+|`resetStaticCheckConfig`|fn||4339-4341|function resetStaticCheckConfig(config: UseReqConfig): void|
+|`formatStaticCheckLanguagesSummary`|fn||4349-4351|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckMenuChoices`|fn||4360-4404|function buildStaticCheckMenuChoices(config: UseReqConfig...|
+|`buildSupportedStaticCheckLanguageChoices`|fn||4412-4429|function buildSupportedStaticCheckLanguageChoices(config:...|
+|`buildConfiguredStaticCheckLanguageChoices`|fn||4437-4454|function buildConfiguredStaticCheckLanguageChoices(config...|
+|`formatStaticCheckCheckerEntry`|fn||4462-4466|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
+|`formatStaticCheckLanguageCheckerSummary`|fn||4475-4481|function formatStaticCheckLanguageCheckerSummary(config: ...|
+|`buildStaticCheckViewChoices`|fn||4490-4535|function buildStaticCheckViewChoices(config: UseReqConfig...|
+|`buildStaticCheckRemovalConfirmationChoices`|fn||4545-4583|function buildStaticCheckRemovalConfirmationChoices(|
+|`confirmStaticCheckRemoval`|fn||4594-4605|async function confirmStaticCheckRemoval(|
+|`configureStaticCheckMenu`|fn||4615-4794|async function configureStaticCheckMenu(|
+|`formatContextFilesSummary`|fn||4805-4820|function formatContextFilesSummary(|
+|`buildContextFilesMenuChoices`|fn||4831-4874|function buildContextFilesMenuChoices(|
+|`configureContextFilesMenu`|fn||4886-4946|async function configureContextFilesMenu(|
+|`setFlag`|fn||4893-4897|const setFlag = (flagKey: "context-files-requirements" | ...|
+|`buildPiUsereqMenuChoices`|fn||4957-5063|function buildPiUsereqMenuChoices(|
+|`buildSrcDirMenuChoices`|fn||5072-5090|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
+|`buildSrcDirRemovalChoices`|fn||5099-5111|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
+|`configurePiUsereq`|fn||5122-5383|async function configurePiUsereq(|
+|`persistConfigChange`|fn||5135-5140|const persistConfigChange = () =>|
+|`registerConfigCommands`|fn||5393-5403|function registerConfigCommands(|
+|`piUsereqExtension`|fn||5412-5432|export default function piUsereqExtension(pi: ExtensionAP...|
 
