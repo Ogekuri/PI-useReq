@@ -3551,6 +3551,83 @@ test("req-references appends a durable command-report entry that survives sessio
 });
 
 /**
+ * @brief Verifies `req-references` notification effects resolve `%%OUTPUT%%` to the complete execution report.
+ * @details Enables Pushover delivery with the documented `%%OUTPUT%%` text template, runs `req-references` twice against a temporary fixture repository, captures the second completed run's Pushover request, and asserts the substituted `message` body equals the full durable execution report — the `pi-usereq req-references: execution report` header followed by the terminal-outcome, references-update, guarded-commit, and repository-cleanliness lines. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation and intercepted HTTPS dispatch.
+ * @return {Promise<void>} Promise resolved after Pushover body assertions complete.
+ * @throws {AssertionError} Throws when the pushed `message` omits the report header or any per-operation outcome line.
+ * @satisfies TST-156, REQ-448
+ */
+test("req-references pushes the complete execution report through %%OUTPUT%% notification effects", async () => {
+  const fixture = initFixtureRepo({ fixtures: [] });
+  const projectBase = fixture.projectBase;
+  const referencesPath = path.join(projectBase, fixture.config["docs-dir"], "REFERENCES.md");
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(projectBase);
+  const recordedBodies: string[] = [];
+  setPiNotifyHttpsRequestForTests(((url: URL, options: Record<string, unknown>, callback?: (response: any) => void) => {
+    void url;
+    void options;
+    const fakeResponse = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeResponse;
+      },
+      resume() {
+        return undefined;
+      },
+    };
+    callback?.(fakeResponse);
+    const fakeRequest = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeRequest;
+      },
+      end(body?: string) {
+        recordedBodies.push(body ?? "");
+      },
+    };
+    return fakeRequest as unknown as ReturnType<typeof import("node:https").request>;
+  }) as typeof import("node:https").request);
+
+  try {
+    fs.writeFileSync(path.join(projectBase, "src", "report-source.ts"), "export const REPORT_SOURCE = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/report-source.ts"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).status, 0);
+    const fixtureCommit = spawnSync("git", ["commit", "-m", "report source"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    });
+    assert.equal(fixtureCommit.status, 0, fixtureCommit.stderr);
+    writeProjectConfigOverrides(projectBase, {
+      "notify-pushover-enabled": true,
+      "notify-pushover-on-completed": true,
+      "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+      "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "notify-pushover-text": "%%OUTPUT%%",
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-references")!.handler("", ctx);
+    recordedBodies.length = 0;
+    await pi.commands.get("req-references")!.handler("", ctx);
+
+    assert.equal(recordedBodies.length, 1);
+    const pushoverParams = new URLSearchParams(recordedBodies[0] ?? "");
+    assert.equal(pushoverParams.get("message"), [
+      "pi-usereq req-references: execution report",
+      "outcome: success",
+      `references file ${referencesPath}: already matched the generated content`,
+      "git commit: skipped (references content matched HEAD)",
+      "repository: clean after run",
+    ].join("\n"));
+  } finally {
+    setPiNotifyHttpsRequestForTests(undefined);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies failing `req-references` runs report errors without session handoff.
  * @details Covers both git-preflight failure and reference-generation failure, proving the command creates no worktree, sends no LLM message, transitions workflow state to `error`, and preserves the previous git commit when execution aborts. Runtime is dominated by temporary repository setup plus failing command invocations. Side effects are limited to temporary filesystem and git mutation inside fixture repositories.
  * @return {Promise<void>} Promise resolved after failure-path assertions complete.

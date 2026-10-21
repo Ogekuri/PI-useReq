@@ -127,6 +127,20 @@ export function buildCommandReportErrorEntryData(
 }
 
 /**
+ * @brief Serializes one durable command report entry into its complete plain-text form.
+ * @details Joins the `pi-usereq <command>: execution report` header with every per-operation outcome line using newline separators so notification `%%OUTPUT%%` substitution carries exactly the report content rendered in the transcript. Runtime is O(n) in aggregate report-line length. No external state is mutated.
+ * @param[in] data {CommandReportEntryData} Report entry payload to serialize.
+ * @return {string} Complete execution-report text starting with the report header.
+ * @satisfies REQ-436, REQ-448
+ */
+export function buildCommandReportEntryText(data: CommandReportEntryData): string {
+  return [
+    `pi-usereq ${data.command}: execution report`,
+    ...data.lines,
+  ].join("\n");
+}
+
+/**
  * @brief Appends one durable command report entry to the active session when the host supports custom entries.
  * @details Probes the optional `pi.appendEntry(...)` surface before use so legacy hosts and offline harnesses without custom-entry support skip persistence silently; supported hosts persist the payload as a `custom` session entry that survives session restore while remaining excluded from LLM context. Runtime is O(1) plus delegated session-entry persistence. Side effects include session-file entry persistence on supported hosts.
  * @param[in] pi {ExtensionAPI} Active extension API instance.

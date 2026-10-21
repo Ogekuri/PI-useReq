@@ -248,7 +248,7 @@ import type { ToolResult } from "./tool-runner.js";
 
 ---
 
-# command-report-entry.ts | TypeScript | 182L | 9 symbols | 5 imports | 11 comments
+# command-report-entry.ts | TypeScript | 196L | 10 symbols | 5 imports | 12 comments
 > Path: `src/core/command-report-entry.ts`
 - @brief Persists durable non-agentic command execution reports as custom session entries.
 - @details Defines the stable custom-entry type, machine-readable report payload, builders for `req-references` outcome lines, and the pi guarded helpers that append the report entry and register its transcript renderer. Custom entries are stored in the session file, excluded from LLM context, rendered live through `entry_appended`, and re-rendered after any session restore, so transient UI-notification collapsing or chat rebuilds never lose the executed-commands outcome report. Runtime is O(n) in report-line count. Side effects are limited to session-entry persistence and renderer registration through the pi extension API.
@@ -299,14 +299,21 @@ import type { ReqReferencesCommandExecutionResult } from "./req-references-comma
 - @param[in] errorMessage {string} Surfaced failure diagnostic.
 - @return {CommandReportEntryData} Report entry payload for session persistence.
 
-### fn `export function appendCommandReportEntry(pi: ExtensionAPI, data: CommandReportEntryData): boolean` (L136-143)
+### fn `export function buildCommandReportEntryText(data: CommandReportEntryData): string` (L136-141)
+- @brief Serializes one durable command report entry into its complete plain-text form.
+- @details Joins the `pi-usereq <command>: execution report` header with every per-operation outcome line using newline separators so notification `%%OUTPUT%%` substitution carries exactly the report content rendered in the transcript. Runtime is O(n) in aggregate report-line length. No external state is mutated.
+- @param[in] data {CommandReportEntryData} Report entry payload to serialize.
+- @return {string} Complete execution-report text starting with the report header.
+- @satisfies REQ-436, REQ-448
+
+### fn `export function appendCommandReportEntry(pi: ExtensionAPI, data: CommandReportEntryData): boolean` (L150-157)
 - @brief Appends one durable command report entry to the active session when the host supports custom entries.
 - @details Probes the optional `pi.appendEntry(...)` surface before use so legacy hosts and offline harnesses without custom-entry support skip persistence silently; supported hosts persist the payload as a `custom` session entry that survives session restore while remaining excluded from LLM context. Runtime is O(1) plus delegated session-entry persistence. Side effects include session-file entry persistence on supported hosts.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in] data {CommandReportEntryData} Report entry payload to persist.
 - @return {boolean} `true` when the entry was appended; `false` when the host lacks the custom-entry surface.
 
-### fn `function renderCommandReportEntry(` (L153-168)
+### fn `function renderCommandReportEntry(` (L167-182)
 - @brief Renders one durable command report entry as a transcript component.
 - @details Maps the report payload into a themed multi-line `Text` — header colored `error` for failed runs and `accent` otherwise, body lines colored `error` for failed runs and `muted` otherwise — and returns `undefined` for malformed payloads so the host transcript skips undisplayable entries. Runtime is O(n) in aggregate report-line length. No external state is mutated.
 - @param[in] entry {CustomEntry<CommandReportEntryData>} Persisted custom report entry.
@@ -314,7 +321,7 @@ import type { ReqReferencesCommandExecutionResult } from "./req-references-comma
 - @param[in] theme {Theme} Active pi theme used for color tokens.
 - @return {Component | undefined} Transcript component, or `undefined` when the payload is malformed.
 
-### fn `export function registerCommandReportEntryRenderer(pi: ExtensionAPI): void` (L176-182)
+### fn `export function registerCommandReportEntryRenderer(pi: ExtensionAPI): void` (L190-196)
 - @brief Registers the durable command report transcript renderer when the host supports entry rendering.
 - @details Probes the optional `pi.registerEntryRenderer(...)` surface before use so legacy hosts and offline harnesses without custom-entry rendering skip registration silently; supported hosts bind the renderer for `pi-usereq.command-report` entries so appended reports render in the live transcript and re-render after every session restore. Runtime is O(1). Side effects include entry-renderer registration on supported hosts.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -329,9 +336,10 @@ import type { ReqReferencesCommandExecutionResult } from "./req-references-comma
 |`buildReqReferencesCommandReportLines`|fn||74-90|export function buildReqReferencesCommandReportLines(|
 |`buildReqReferencesCommandReportEntryData`|fn||99-108|export function buildReqReferencesCommandReportEntryData(|
 |`buildCommandReportErrorEntryData`|fn||117-127|export function buildCommandReportErrorEntryData(|
-|`appendCommandReportEntry`|fn||136-143|export function appendCommandReportEntry(pi: ExtensionAPI...|
-|`renderCommandReportEntry`|fn||153-168|function renderCommandReportEntry(|
-|`registerCommandReportEntryRenderer`|fn||176-182|export function registerCommandReportEntryRenderer(pi: Ex...|
+|`buildCommandReportEntryText`|fn||136-141|export function buildCommandReportEntryText(data: Command...|
+|`appendCommandReportEntry`|fn||150-157|export function appendCommandReportEntry(pi: ExtensionAPI...|
+|`renderCommandReportEntry`|fn||167-182|function renderCommandReportEntry(|
+|`registerCommandReportEntryRenderer`|fn||190-196|export function registerCommandReportEntryRenderer(pi: Ex...|
 
 
 ---
@@ -6469,7 +6477,7 @@ registration and status updates.
 
 ### fn `function registerReqReferencesCommand(` (L3595-3671)
 - @brief Registers the specialized `req-references` slash command.
-- @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, appends one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes so the report renders in the transcript and survives session restore, emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, dispatches prompt-end notification effects carrying the per-operation process output as `%%OUTPUT%%`, all without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, session-entry persistence, user notifications, and optional prompt-end notify, sound, and Pushover dispatch.
+- @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, appends one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes so the report renders in the transcript and survives session restore, emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, dispatches prompt-end notification effects carrying the complete execution-report text (header plus per-operation outcome lines) as `%%OUTPUT%%` for completed and failed runs, all without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, session-entry persistence, user notifications, and optional prompt-end notify, sound, and Pushover dispatch.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.

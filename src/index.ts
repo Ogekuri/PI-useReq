@@ -179,9 +179,9 @@ import {
 import { ensureBundledResourcesAccessible, readBundledPromptDescription } from "./core/resources.js";
 import {
   appendCommandReportEntry,
+  buildCommandReportEntryText,
   buildCommandReportErrorEntryData,
   buildReqReferencesCommandReportEntryData,
-  buildReqReferencesCommandReportLines,
   registerCommandReportEntryRenderer,
 } from "./core/command-report-entry.js";
 import { ReqError } from "./core/errors.js";
@@ -3586,7 +3586,7 @@ function registerReqResetCommand(
 
 /**
  * @brief Registers the specialized `req-references` slash command.
- * @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, appends one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes so the report renders in the transcript and survives session restore, emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, dispatches prompt-end notification effects carrying the per-operation process output as `%%OUTPUT%%`, all without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, session-entry persistence, user notifications, and optional prompt-end notify, sound, and Pushover dispatch.
+ * @details Registers the non-agentic references-maintenance command that rejects non-`idle` invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, transitions workflow state through `checking|running|idle`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, appends one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes so the report renders in the transcript and survives session restore, emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, dispatches prompt-end notification effects carrying the complete execution-report text (header plus per-operation outcome lines) as `%%OUTPUT%%` for completed and failed runs, all without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, session-entry persistence, user notifications, and optional prompt-end notify, sound, and Pushover dispatch.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -3647,7 +3647,7 @@ function registerReqReferencesCommand(
           promptArgs: args,
           basePath: projectBase,
           completionTimeMs: Math.max(0, Date.now() - commandStartMs),
-          agentOutput: buildReqReferencesCommandReportLines(executionResult).join("\n"),
+          agentOutput: buildCommandReportEntryText(buildReqReferencesCommandReportEntryData(executionResult)),
         });
         notifyContextRetentionReminder(statusController, ctx);
       } catch (error) {
@@ -3662,7 +3662,7 @@ function registerReqReferencesCommand(
           promptArgs: args,
           basePath: projectBase,
           completionTimeMs: Math.max(0, Date.now() - commandStartMs),
-          agentOutput: message,
+          agentOutput: buildCommandReportEntryText(buildCommandReportErrorEntryData("req-references", message)),
         });
         throw error;
       }
