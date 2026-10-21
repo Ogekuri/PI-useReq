@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.87.0](https://github.com/Ogekuri/PI-useReq/compare/v0.86.0..v0.87.0) - 2026-10-21
+### 🚜  Changes
+- add %%OUTPUT%% prompt-end notification placeholder [useReq] *(pi-notify)*
+  - Extend PiNotifyEventRequest with optional agentOutput and add the %%OUTPUT%% runtime token to PI_NOTIFY_CMD plus Pushover title and text substitution (REQ-169, REQ-186).
+  - Extract the final agent output from the last agent_end assistant message text blocks, skipping thinking and tool-call blocks; empty for non-agentic commands and text-less runs (REQ-443, REQ-444).
+  - Head-truncate over-limit Pushover message bodies at the 1024-character API limit with a fixed marker (REQ-445) and document the token in the Pushover text menu row (REQ-446).
+  - Update REQUIREMENTS.md (REQ-169, REQ-186, REQ-443..446, TST-048, TST-050, TST-155..157), WORKFLOW.md call traces, and regenerate REFERENCES.md.
+
 ## [0.86.0](https://github.com/Ogekuri/PI-useReq/compare/v0.85.0..v0.86.0) - 2026-10-21
 ### 🐛  Bug Fixes
 - persist durable command-report session entry [useReq] *(req-references)*
@@ -1146,6 +1154,7 @@
 - \[0.84.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.84.0
 - \[0.85.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.85.0
 - \[0.86.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.86.0
+- \[0.87.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.87.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1231,3 +1240,4 @@
 [0.84.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.83.0..v0.84.0
 [0.85.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.84.0..v0.85.0
 [0.86.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.85.0..v0.86.0
+[0.87.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.86.0..v0.87.0
