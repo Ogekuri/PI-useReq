@@ -60,7 +60,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 - **11 built-in agent tools** - token counting, summarization, compression, construct search, and static-check tools for explicit files or for the configured project surface.
 - **Interactive configuration menu** - `/pi-usereq` manages local (`<base-path>/.pi-usereq.json`) and global (`~/.config/pi-usereq/config.json`) configuration with no manual JSON editing required.
 - **Worktree-isolated runs** - prompt-command executions run in an isolated git worktree (created with `<prefix><project>-<branch>-<YYYYMMDDHHMMSS>` names) and are merged back with a stash-assisted fast-forward on success.
-- **Automatic commit guidance** - `AUTO_GIT_COMMIT=enable` (default) injects structured commit instructions (`<TYPE>(<COMPONENT>): <DESCRIPTION> [useReq]`) into every prompt; disabling it forces read-only git behavior and turns worktree orchestration off.
+- **Automatic commit guidance** - `AUTO_GIT_COMMIT=enable` (default) injects structured commit instructions (`<TYPE>(<COMPONENT>)<BREAKING>: <DESCRIPTION> [useReq]`) into every prompt; disabling it forces read-only git behavior and turns worktree orchestration off.
 - **Notifications** - desktop notify command, sound effects (levels `none`/`low`/`mid`/`high`, default `alt+s` toggle) and Pushover push messages on prompt completion, interruption, or failure.
 - **Runtime status bar** - the extension renders its workflow state, current branch, context usage, elapsed time, and sound level in the pi status line.
 - **Context-occupancy guardrails** - the `Context Files` settings row and every command invocation summary show the measured `[<percent>% context]` occupancy of the enabled context files against the selected model's max input context (or the documented 1,000,000-token fallback); prompt dispatch is aborted before worktree creation when the enabled context files exceed that limit.
@@ -72,7 +72,9 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 Each `req-*` command is invoked as `/req-<name> <User Request>` inside pi. Prompt commands first run git validation and the
 prompt-specific required-document checks, then (when `Auto git commit` and `Git worktree` are enabled) switch the session into an
 isolated worktree, render the bundled prompt with the project context, and on success merge the changes back and leave the
-repository clean. `/req-references` and `/req-reset` are non-agentic: they execute directly without starting an LLM session or
+repository clean. Every command prints an on-screen invocation summary (command name, passed arguments, and active
+configuration); the full rendered prompt content is delivered only to the LLM agent and is never displayed on screen.
+`/req-references` and `/req-reset` are non-agentic: they execute directly without starting an LLM session or
 creating a worktree.
 
 > **Clean context between commands** — every `/req-*` orchestration keeps the session context content in place when it
@@ -320,19 +322,19 @@ The extension renders a status field in the pi status line showing: extension id
 - Config-gated slash commands that run the project tools and write the output into the editor: `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, `debug-tokens`.
 - Standalone debug harness: `scripts/pi-usereq-debug.sh` (bash wrapper) and `scripts/debug-extension.ts` with subcommands `inspect`, `session-start`, `command`, `tool`, and `sdk-smoke`.
 - Debug logging writes to the configured `DEBUG_LOG_FILE`, filtered by prompt/tool name and workflow status.
-- **Prompt content logging** — when both `Debug` and `Enable debug prompts` are enabled (the `Debug > Enable debug prompts` menu entry), the exact rendered prompt delivered to the LLM agent through `sendMessage`/`sendUserMessage` is saved under `Log path for prompts` (`DEBUG_PROMPTS_LOG_PATH`, default `/tmp/PI-useReq`). Each run writes one file named `<timestamp>-<command>` (a `YYYYMMDDHHMMSSmmm` timestamp plus the `/req-*` command used, e.g. `20261009072235123-req-implement`) whose content is byte-identical to what reached the model. Prompt logging is subordinate to the global `Debug` flag and to the `Log on status` workflow filter; nothing is written while `Debug` is disabled. Relative log paths resolve against the project root, and trailing slashes are stripped from the configured path.
+- **Prompt content logging** — when both `Debug` and `Enable debug prompts` are enabled (the `Debug > Enable debug prompts` menu entry), the exact rendered prompt delivered to the LLM agent through `sendMessage`/`sendUserMessage` is saved under `Log path for prompts` (`DEBUG_PROMPTS_LOG_PATH`, default `/tmp/PI-useReq`). Each run writes two files named `<timestamp>-<command>-request.md` and `<timestamp>-<command>-prompt.md` (a `YYYYMMDDHHMMSSmmm` write-time timestamp plus the `/req-*` command used, e.g. `20261009072235123-req-implement-request.md` and `20261009072235123-req-implement-prompt.md`). The `-prompt.md` file is byte-identical to the rendered prompt delivered to the model; the `-request.md` file contains the exact on-screen command invocation summary. Prompt logging depends only on the global `Debug` flag plus `Enable debug prompts` (it is exempt from the `Log on status` workflow filter); nothing is written while `Debug` is disabled. Relative log paths resolve against the project root, and trailing slashes are stripped from the configured path.
 
   Because the saved file contains exactly what pi-usereq sent, you can replicate the same send from the `pi` CLI, outside pi-usereq and without the extension installed:
 
   ```bash
   # Replay the exact saved prompt as a one-shot task argument
-  pi -p "$(cat /tmp/PI-useReq/20261009072235123-req-implement)"
+  pi -p "$(cat /tmp/PI-useReq/20261009072235123-req-implement-prompt.md)"
 
   # Feed extra material on stdin while replaying an analysis request
   cat errors.log | pi -p "Analyze these errors and suggest how to fix them"
 
   # Reuse a saved prompt as coding-style guidance through an appended system prompt
-  pi -p "Rewrite this function" --append-system-prompt /tmp/PI-useReq/20261009072235123-req-implement
+  pi -p "Rewrite this function" --append-system-prompt /tmp/PI-useReq/20261009072235123-req-implement-prompt.md
   ```
 
 - **Provider error logging** — when a dispatched `req-*` run receives a provider response with status >= 400, pi-usereq writes the exact failing request payload into `<timestamp>-<command>-error-<status>.json` (raw provider-request JSON), the provider error message text into `<timestamp>-<command>-error-<status>-response.txt`, a byte-for-byte snapshot of the retained execution session into `<timestamp>-<command>-error-<status>-session.jsonl`, and replay metadata into `<timestamp>-<command>-error-<status>-replay.json`, all beside the run's `-request.md` and `-prompt.md` files. The `-replay.json` sidecar carries the provider, base URL, model id, thinking level, context window, max output tokens, the retained execution-session file, and ready-to-use replay commands; `replayCommands.piFork` targets the log-local `-session.jsonl` snapshot, which freezes the transcript exactly at the failing provider request (before any context edit or compaction). You can re-generate the failure for immediate pi CLI debugging:
@@ -373,7 +375,7 @@ This section describes the Git behavior of the `req-*` commands. The commands ow
   - On success the extension restores the original `base-path` session, applies a stash-assisted fast-forward merge of the worktree branch, and deletes the worktree and branch.
   - On failure or interruption the worktree and branch are **kept** and the workflow is parked in the `error` state so the produced artifacts can be inspected or recovered: run `/req-reset` to restore the original base path and force-remove the generated worktrees and branches.
   - With `Auto git commit = enable` (default), every prompt receives structured commit instructions and commits follow the message template `<TYPE>(<COMPONENT>)<BREAKING>: <DESCRIPTION> [useReq]`. With `Auto git commit = disable`, prompts receive a read-only git restriction and worktree orchestration is forced off.
-  - The extension never rewrites history and never runs destructive cleanup on your behalf.
+  - The extension never rewrites git history; destructive cleanup is limited to the generated worktrees and branches, which only `/req-reset` force-removes (see above).
 
 - Recommended practice:
   - Review the changes produced by each command before pushing them.
