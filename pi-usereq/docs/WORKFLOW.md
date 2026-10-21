@@ -371,8 +371,9 @@
   - Looping model: event-driven callbacks; menu handlers loop until the user selects exit or back.
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
-  - `piUsereqExtension(...)`: persist the live extension api into process-scoped storage for the current session runner, then initialize resources, schedule a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm, and register commands, tools, shortcuts, and lifecycle-hook telemetry wrappers [`src/index.ts`]
+  - `piUsereqExtension(...)`: persist the live extension api into process-scoped storage for the current session runner, register the durable `pi-usereq.command-report` transcript entry renderer, then initialize resources, schedule a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm, and register commands, tools, shortcuts, and lifecycle-hook telemetry wrappers [`src/index.ts`]
     - `writePersistedPromptCommandRuntimeApi(...)`: store the latest live extension api so post-switch model re-application binds to the currently active session runner instead of an api invalidated by session replacement [`src/core/prompt-command-state.ts`]
+    - `registerCommandReportEntryRenderer(...)`: register the durable `pi-usereq.command-report` transcript entry renderer when the host supports custom-entry rendering so appended command reports render live and survive session restore [`src/core/command-report-entry.ts`]
     - `ensureBundledResourcesAccessible(...)`: validate installation-owned bundled resources [`src/core/resources.ts`]
       - `getBundledResourceRoot(...)`: resolve installation-owned resource root [`src/core/resources.ts`]
         - `getInstallationPath(...)`: resolve the installed extension root from the executing module [`src/core/path-context.ts`]
@@ -499,6 +500,11 @@
           - `runCapture(...)`: run git add, diff inspection, guarded commit, and status subprocesses [`src/core/req-references-command.ts`]
         - `listResidualGitStatusLines(...)`: confirm no residual git-status rows remain after commit [`src/core/req-references-command.ts`]
           - `buildIgnoredGitStatusPaths(...)`: ignore extension-owned debug-log artifacts during cleanliness verification [`src/core/req-references-command.ts`]
+      - `appendCommandReportEntry(...)`: append one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes for both successful and failed `req-references` runs so the report renders in the transcript and survives session restore [`src/core/command-report-entry.ts`]
+        - `buildReqReferencesCommandReportEntryData(...)`: build the success report payload with per-operation outcome lines [`src/core/command-report-entry.ts`]
+          - `buildReqReferencesCommandReportLines(...)`: emit terminal outcome, references-update, guarded-commit, and post-run cleanliness lines [`src/core/command-report-entry.ts`]
+            - `formatRuntimePathForDisplay(...)`: render the references-file path home-relative for the report lines [`src/core/path-context.ts`]
+        - `buildCommandReportErrorEntryData(...)`: build the error report payload for failed runs [`src/core/command-report-entry.ts`]
       - `notifyContextSafely(...)`: deliver `req-references` outcome notifications with stale-context deferral into the process-scoped replay store [`src/index.ts`]
         - `enqueueDeferredNotification(...)`: queue one undeliverable notification into the process-scoped replay store [`src/core/notification-replay.ts`]
       - `notifyContextRetentionReminder(...)`: emit the final retained-context info notification with the current context-usage percentage after direct references success [`src/index.ts`]
@@ -984,7 +990,7 @@
         - `normalizeEnabledPiUsereqTools(...)`: canonicalize configurable active tools [`src/core/pi-usereq-tools.ts`]
       - `getPiUsereqStartupTools(...)`: enumerate configurable tools from runtime inventory in documented menu order [`src/index.ts`]
 - External Boundaries:
-  - pi ExtensionAPI plus command-context APIs for command registration, tool registration, shortcut registration, user-message delivery, session events, active-tool mutation, editor updates, notifications, selections, and text input.
+  - pi ExtensionAPI plus command-context APIs for command registration, tool registration, shortcut registration, user-message delivery, session events, active-tool mutation, editor updates, notifications, selections, text input, durable custom session-entry persistence, and transcript entry rendering.
   - Filesystem access for home resource cache, bundled prompt reads, and project config persistence.
   - Git and static-check subprocesses reused through the same tool-runner and static-check functions documented under `PROC:main`.
   - Detached shell command execution and native outbound HTTPS requests for prompt-end command-notify, sound, and Pushover delivery via `src/core/pi-notify.ts`.

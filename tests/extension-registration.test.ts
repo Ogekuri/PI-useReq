@@ -13,6 +13,10 @@ import {
   REQ_RESET_COMMAND_DESCRIPTION,
 } from "../src/core/req-reset-command.js";
 import {
+  COMMAND_REPORT_ENTRY_TYPE,
+  type CommandReportEntryData,
+} from "../src/core/command-report-entry.js";
+import {
   createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
   getDefaultConfig,
@@ -321,7 +325,7 @@ function createFakeSessionManager(cwd: string): FakeSessionManager {
 
 /**
  * @brief Creates a fake pi runtime that records command, tool, and shortcut registrations.
- * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, shortcut registration, event dispatch, active-tool mutation, prompt delivery, and optional session-entry persistence. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
+ * @details Provides deterministic in-memory implementations for the subset of `ExtensionAPI` methods exercised by this suite, including command registration, tool registration, builtin-tool discovery, shortcut registration, event dispatch, active-tool mutation, prompt delivery, entry-renderer registration, appended custom-entry recording, and optional session-entry persistence. Runtime is O(1) per registration plus delegated handler cost. Side effects are limited to in-memory state mutation.
  * @param[in] options {FakePiOptions} Optional fake runtime integrations.
  * @return {FakePi} Fake extension runtime.
  */
@@ -331,6 +335,8 @@ function createFakePi(options: FakePiOptions = {}) {
   const shortcuts = new Map<string, RegisteredShortcut>();
   const sentUserMessages: Array<{ content: unknown; options?: unknown }> = [];
   const eventHandlers = new Map<string, Array<(event: any, ctx: any) => Promise<void> | void>>();
+  const entryRenderers = new Map<string, unknown>();
+  const appendedEntries: Array<{ customType: string; data?: unknown }> = [];
   const embeddedToolNames = new Set<string>(PI_USEREQ_EMBEDDED_TOOL_NAMES);
   const builtinTools: RegisteredTool[] = PI_USEREQ_EMBEDDED_TOOL_NAMES.map((name) => ({
     name,
@@ -365,6 +371,8 @@ function createFakePi(options: FakePiOptions = {}) {
     shortcuts,
     sentUserMessages,
     eventHandlers,
+    entryRenderers,
+    appendedEntries,
     getActiveTools() {
       return [...activeTools];
     },
@@ -394,6 +402,9 @@ function createFakePi(options: FakePiOptions = {}) {
     registerCommand(name: string, options: RegisteredCommand) {
       commands.set(name, options);
     },
+    registerEntryRenderer(customType: string, renderer: unknown) {
+      entryRenderers.set(customType, renderer);
+    },
     registerTool(definition: RegisteredTool) {
       const existingIndex = tools.findIndex((tool) => tool.name === definition.name);
       if (existingIndex >= 0) {
@@ -412,6 +423,7 @@ function createFakePi(options: FakePiOptions = {}) {
       sentUserMessages.push({ content, options });
     },
     appendEntry(customType: string, data?: unknown) {
+      appendedEntries.push({ customType, data });
       return options.sessionManager?.appendCustomEntry(customType, data);
     },
   } as any;
@@ -3449,6 +3461,89 @@ test("req-references updates REFERENCES.md with a direct commit workflow and no 
         et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
       }),
     );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-references` persists a durable command-report session entry with per-operation outcomes.
+ * @details Runs one successful `req-references` invocation against a temporary fixture repository and confirms the handler appends exactly one `pi-usereq.command-report` custom session entry whose payload records the `success` outcome plus the references-update and guarded-commit operation outcomes, that activation registered the matching entry renderer and the renderer produces a transcript component, and that a failing invocation appends an `error`-level report entry before rethrowing while the transient notify notifications still fire. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation and command-handler notifications.
+ * @return {Promise<void>} Promise resolved after durable-report assertions complete.
+ * @throws {AssertionError} Throws when the report entry is missing, malformed, unrendered, or records wrong operation outcomes.
+ * @satisfies TST-103, TST-104
+ */
+test("req-references appends a durable command-report entry that survives session restore", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    fs.writeFileSync(path.join(projectBase, "src", "report-source.ts"), "export const REPORT_SOURCE = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src/report-source.ts"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    }).status, 0);
+    const fixtureCommit = spawnSync("git", ["commit", "-m", "report source"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    });
+    assert.equal(fixtureCommit.status, 0, fixtureCommit.stderr);
+
+    const sessionManager = createFakeSessionManager(projectBase);
+    const pi = createFakePi({ sessionManager });
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase, { selects: [] }, { sessionManager });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-references")!.handler("", ctx);
+
+    const reportEntries = sessionManager.getEntries()
+      .filter((entry: FakeSessionEntry) => entry.type === "custom" && entry.customType === COMMAND_REPORT_ENTRY_TYPE);
+    assert.equal(reportEntries.length, 1);
+    const reportData = (reportEntries[0] as { type: "custom"; customType: string; data?: unknown })
+      .data as CommandReportEntryData;
+    assert.equal(reportData.command, "req-references");
+    assert.equal(reportData.level, "info");
+    assert.equal(reportData.outcome, "success");
+    assert.ok(reportData.lines.some((line) => /references file .*: updated/.test(line)));
+    assert.ok(reportData.lines.some((line) => /git commit: created "/.test(line)));
+    assert.ok(reportData.lines.some((line) => line === "repository: clean after run"));
+    assert.equal(
+      pi.appendedEntries.filter((entry: { customType: string }) => entry.customType === COMMAND_REPORT_ENTRY_TYPE).length,
+      1,
+    );
+
+    assert.ok(pi.entryRenderers.has(COMMAND_REPORT_ENTRY_TYPE));
+    const renderer = pi.entryRenderers.get(COMMAND_REPORT_ENTRY_TYPE) as (
+      entry: { type: "custom"; customType: string; data?: unknown },
+      options: { expanded: boolean },
+      theme: { fg: (color: string, text: string) => string },
+    ) => unknown;
+    const renderedComponent = renderer(
+      { type: "custom", customType: COMMAND_REPORT_ENTRY_TYPE, data: reportData },
+      { expanded: false },
+      { fg: (color, text) => formatFakeThemeForeground(color, text) },
+    );
+    assert.ok(renderedComponent !== undefined);
+    assert.equal(
+      renderer(
+        { type: "custom", customType: COMMAND_REPORT_ENTRY_TYPE, data: { malformed: true } },
+        { expanded: false },
+        { fg: (color, text) => formatFakeThemeForeground(color, text) },
+      ),
+      undefined,
+    );
+
+    assert.ok(ctx.__state.notifications.some((entry: { message: string }) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
+
+    fs.writeFileSync(path.join(projectBase, "src", "report-source.ts"), "export const REPORT_SOURCE = 2;\n", "utf8");
+    await assert.rejects(pi.commands.get("req-references")!.handler("", ctx));
+    const errorReportEntries = pi.appendedEntries
+      .filter((entry: { customType: string }) => entry.customType === COMMAND_REPORT_ENTRY_TYPE) as Array<{ data?: CommandReportEntryData }>;
+    assert.equal(errorReportEntries.length, 2);
+    assert.equal(errorReportEntries[1].data?.outcome, "error");
+    assert.equal(errorReportEntries[1].data?.level, "error");
+    assert.ok(errorReportEntries[1].data?.lines.some((line) => line.startsWith("error: ")));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error" && /Git status unclear/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
