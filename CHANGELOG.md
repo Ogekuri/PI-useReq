@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.92.0](https://github.com/Ogekuri/PI-useReq/compare/v0.91.0..v0.92.0) - 2026-10-22
+### ⛰️  Features
+- Update PI-Cli docs/sources from v1.1.0 to v1.4.0.
+
+### 🚜  Changes
+- BREAKING CHANGE: target pi CLI v1.4.0 extension interfaces [useReq] *(pi-host)*
+  - Probe pi CLI host version at extension bootstrap via the SDK VERSION
+  - export (REQ-456) and emit one session_start WARNING notification when
+  - the detected version is below v1.4.0, staying functional on older hosts
+  - (REQ-457, REQ-458).
+  - Pass deliverAs:"followUp" on every sendUserMessage prompt-delivery
+  - fallback so busy pi v1.4.0 sessions queue the dispatched prompt
+  - (REQ-459).
+  - Bump @earendil-works/pi-coding-agent, pi-ai, and pi-tui peer
+  - dependencies to ^1.4.0 with no backward compatibility (REQ-460).
+  - Extend the sdk-smoke event-surface probe with the pi v1.4.0 events
+  - (agent_before_settle, provider_stream_event, context_with_system,
+  - cache_warming_decision, mcp_servers_change) per amended REQ-356.
+  - Update SRS (REQ-456..460), WORKFLOW.md call traces, and REFERENCES.md.
+
 ## [0.91.0](https://github.com/Ogekuri/PI-useReq/compare/v0.90.0..v0.91.0) - 2026-10-22
 ### 🐛  Bug Fixes
 - use ended run's own duration for prompt-end effects [useReq] *(pi-notify)*
@@ -1235,6 +1255,7 @@
 - \[0.89.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.89.0
 - \[0.90.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.90.0
 - \[0.91.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.91.0
+- \[0.92.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.92.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1325,3 +1346,4 @@
 [0.89.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.88.0..v0.89.0
 [0.90.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.89.0..v0.90.0
 [0.91.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.90.0..v0.91.0
+[0.92.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.91.0..v0.92.0
