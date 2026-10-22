@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.91.0](https://github.com/Ogekuri/PI-useReq/compare/v0.90.0..v0.91.0) - 2026-10-22
+### 🐛  Bug Fixes
+- use ended run's own duration for prompt-end effects [useReq] *(pi-notify)*
+  - Prompt-end command-notify and Pushover effects now resolve %%TIME%% from the
+  - ended run's own duration. updateExtensionStatus persists the in-flight run
+  - record (start timestamp plus prompt-ownership flag) at agent_start, recovers
+  - it at agent_end/agent_settled when the in-memory timer was cleared mid-run,
+  - and records the ended run's duration even for aborted runs, separate from the
+  - REQ-125/159 completed counters. The agent_end dispatch gates the prompt
+  - request on post-update run association, so pending-only, duplicate, and
+  - error-retained terminal events no longer notify with a previous run's
+  - duration; notification and closure share one post-update completion snapshot.
+  - Tests: strengthened timer-loss regression plus six defect-focused scenarios.
+
 ## [0.90.0](https://github.com/Ogekuri/PI-useReq/compare/v0.89.0..v0.90.0) - 2026-10-22
 ### 🐛  Bug Fixes
 - re-read live prompt state for agent_end pushover delivery [useReq] *(pi-notify)*
@@ -1220,6 +1234,7 @@
 - \[0.88.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.88.0
 - \[0.89.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.89.0
 - \[0.90.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.90.0
+- \[0.91.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.91.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1309,3 +1324,4 @@
 [0.88.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.87.0..v0.88.0
 [0.89.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.88.0..v0.89.0
 [0.90.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.89.0..v0.90.0
+[0.91.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.90.0..v0.91.0
