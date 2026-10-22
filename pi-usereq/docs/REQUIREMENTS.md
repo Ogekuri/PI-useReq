@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.105"
-date: "2026-10-21"
+version: "0.0.106"
+date: "2026-10-22"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -434,7 +434,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-352**: MUST best-effort approve pending npm install scripts for bundled checker dependencies during extension install or run so embedded checkers execute without manual approval.
 - **REQ-354**: MUST defer matched-success worktree closure finalization to the `agent_settled` event when the running pi host supports it, and MUST execute that finalization at `agent_end` when the host does not emit `agent_settled`.
 - **REQ-355**: MUST detect `agent_settled` availability on the running pi host from whether pi lifecycle event registration returns an unsubscribe function.
-- **REQ-356**: MUST make the `sdk-smoke` probe detect support for the new event surface (`agent_settled`, `project_trust`, `session_info_changed`, `session_compact_failed`, `before_provider_headers`, `after_provider_response`, `ui_prompt_start`, `ui_prompt_end`, `thinking_level_select`).
+- **REQ-356**: MUST make the `sdk-smoke` probe detect support for the post-0.80.4 pi event surface (`agent_settled`, `agent_before_settle`, `project_trust`, `session_info_changed`, `session_compact_failed`, `before_provider_headers`, `after_provider_response`, `provider_stream_event`, `context_with_system`, `cache_warming_decision`, `mcp_servers_change`, `ui_prompt_start`, `ui_prompt_end`, `thinking_level_select`).
 - **REQ-357**: MUST guard every runtime `git commit` invocation with a staged-changes precheck that skips commit creation when the git index holds no staged difference for the intended target paths.
 - **REQ-358**: MUST make `req-references` skip the fixed-message commit when regenerated `REFERENCES.md` content matches `HEAD` and still verify repository cleanliness plus report success.
 - **REQ-359**: MUST state in `README.md` that initializing a new session with a clean context before each new `/req-*` command is recommended, unless the previous context MUST be retained.
@@ -532,6 +532,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-453**: MUST head-truncate the substituted Pushover `title` with the fixed truncation marker whenever it exceeds the 250-character Pushover Message API limit.
 - **REQ-454**: MUST NOT send a Pushover `url` request field whose value exceeds the 512-character Pushover Message API limit.
 - **REQ-455**: MUST NOT send a Pushover `url_title` request field whose value exceeds the 100-character Pushover Message API limit.
+- **REQ-456**: MUST probe the installed pi CLI host version at extension bootstrap by dynamically importing `@earendil-works/pi-coding-agent` and reading its `VERSION` export into process-scoped runtime state.
+- **REQ-457**: MUST emit one warning notification during `session_start` when the probed pi CLI host version is resolvable and lower than `1.4.0`, without aborting activation or transitioning workflow state.
+- **REQ-458**: MUST remain fully functional when the pi CLI host version is unresolvable or below `1.4.0`, emitting the version warning only for a resolvable version below `1.4.0` and never repeating it in the same process.
+- **REQ-459**: MUST pass `deliverAs: "followUp"` on every `sendUserMessage(...)` prompt-delivery fallback so pi sessions busy during run start queue the dispatched prompt.
+- **REQ-460**: MUST declare `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, and `@earendil-works/pi-tui` peer dependencies with `^1.4.0` ranges.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -707,9 +712,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
 
 ### 5.2 Libraries and Runtime Dependencies
-- `@earendil-works/pi-coding-agent` (>=1.0.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
-- `@earendil-works/pi-ai` (>=1.0.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
-- `@earendil-works/pi-tui` (>=1.0.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-coding-agent` (>=1.4.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
+- `@earendil-works/pi-ai` (>=1.4.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-tui` (>=1.4.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
 - `@sinclair/typebox` provides runtime tool parameter schemas and is declared as a peer dependency evidenced by `src/index.ts`, `package.json`, and `package-lock.json`.
 - `js-tiktoken` provides token counting evidence in `src/core/token-counter.ts`, `package.json`, and `package-lock.json`.
 - `fast-glob` provides wildcard expansion for static-check inputs evidence in `src/core/static-check.ts`, `package.json`, and `package-lock.json`.

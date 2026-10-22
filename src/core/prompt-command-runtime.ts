@@ -214,7 +214,7 @@ interface PromptCommandDebugOptions {
 
 /**
  * @brief Describes prompt-delivery options supported by replacement-session callbacks.
- * @details Mirrors the documented `sendUserMessage(...)` delivery modes needed when prompt orchestration targets a replacement session after a slash-command-owned session switch. The interface is compile-time only and introduces no runtime cost.
+ * @details Mirrors the documented pi 1.4.0 `sendUserMessage(...)` delivery modes needed when prompt orchestration targets a replacement session after a slash-command-owned session switch; pi 1.4.0 sessions count as busy while a run starts and reject `sendUserMessage(...)` without `deliverAs` while streaming. The interface is compile-time only and introduces no runtime cost.
  */
 interface PromptCommandSessionMessageOptions {
   deliverAs?: "steer" | "followUp";
@@ -230,7 +230,7 @@ interface PromptCommandSessionSwitchOptions {
 
 /**
  * @brief Describes the minimal session-bound surface available after session replacement.
- * @details Extends the shared prompt-command context with a string-only `sendUserMessage(...)` probe so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The string content parameter mirrors the prompt-delivery contract consumed by `deliverPromptCommand(...)` while remaining structurally compatible with the pi 1.0.0 replacement-session delivery signatures. The interface is compile-time only and introduces no runtime cost.
+ * @details Extends the shared prompt-command context with a string-only `sendUserMessage(...)` probe so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The string content parameter mirrors the prompt-delivery contract consumed by `deliverPromptCommand(...)` while remaining structurally compatible with the pi 1.4.0 replacement-session delivery signatures. The interface is compile-time only and introduces no runtime cost.
  */
 interface PromptCommandActiveContext extends PromptCommandSessionContext {
   sendUserMessage?: (

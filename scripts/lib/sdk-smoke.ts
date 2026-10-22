@@ -98,17 +98,22 @@ interface SdkApiLike {
 }
 
 /**
- * @brief Lists the 0.80.4+ pi event names probed for host support by the SDK parity probe.
- * @details The probe registers a no-op handler for each new-event name on the extension runtime and treats a returned unsubscribe function as proof that the host emits the event, mirroring the capability contract used by prompt-end finalization. Lookup complexity is O(1).
+ * @brief Lists the post-0.80.4 pi event names probed for host support by the SDK parity probe.
+ * @details The probe registers a no-op handler for each new-event name on the extension runtime and treats a returned unsubscribe function as proof that the host emits the event, mirroring the capability contract used by prompt-end finalization. The list covers the extension-facing event additions through pi v1.4.0. Lookup complexity is O(1).
  * @satisfies REQ-356
  */
 const PI_EVENT_SURFACE_PROBE_NAMES = [
   "agent_settled",
+  "agent_before_settle",
   "project_trust",
   "session_info_changed",
   "session_compact_failed",
   "before_provider_headers",
   "after_provider_response",
+  "provider_stream_event",
+  "context_with_system",
+  "cache_warming_decision",
+  "mcp_servers_change",
   "ui_prompt_start",
   "ui_prompt_end",
   "thinking_level_select",

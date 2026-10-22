@@ -176,6 +176,10 @@ import {
   enqueueDeferredNotification,
   shouldReplayDeferredNotificationsOnSessionStart,
 } from "./core/notification-replay.js";
+import {
+  consumePiHostVersionWarningForSessionStart,
+  schedulePiHostVersionProbe,
+} from "./core/pi-host-version.js";
 import { ensureBundledResourcesAccessible, readBundledPromptDescription } from "./core/resources.js";
 import {
   appendCommandReportEntry,
@@ -993,13 +997,13 @@ function executeStatusTool(operation: () => ToolResult): ReturnType<typeof build
 
 /**
  * @brief Starts delivery of one rendered prompt into the current active session.
- * @details Prefers the replacement-session `sendMessage(...)` helper exposed by `withSession(...)` callbacks after session replacement so post-switch prompt delivery never reuses stale pre-switch session-bound extension objects. Delivers the rendered prompt as a `display:false` custom message with `triggerTurn:true` so the full content reaches the LLM agent without appearing on screen, and emits a `display:true` command invocation summary so the TUI shows only the compact summary. Awaits the non-critical summary delivery and suppresses its failures before dispatching the authoritative hidden prompt turn so a rejecting summary never surfaces as an unhandled rejection that could terminate the process before prompt-end closure runs the worktree merge. Returns the underlying hidden-delivery promise without awaiting the full agent turn so callers can record the `running` workflow transition as soon as prompt handoff is accepted; the returned promise resolves after the hidden prompt message is accepted, which on runtimes whose async replacement-session helpers resolve only after `agent_end` lets prompt-end closure finalize the worktree merge during the awaited delivery. When pi later invalidates that replacement-session context during successful prompt-end restoration, the helper suppresses the documented stale-extension-context rejection because the prompt was already accepted and late rethrow would surface a false orchestration failure. Falls back to `sendUserMessage(...)` only for non-replacement flows or runtimes that do not expose `sendMessage`. Runtime is O(n) in prompt length. Side effects are limited to hidden prompt delivery plus on-screen summary display.
+ * @details Prefers the replacement-session `sendMessage(...)` helper exposed by `withSession(...)` callbacks after session replacement so post-switch prompt delivery never reuses stale pre-switch session-bound extension objects. Delivers the rendered prompt as a `display:false` custom message with `triggerTurn:true` so the full content reaches the LLM agent without appearing on screen, and emits a `display:true` command invocation summary so the TUI shows only the compact summary. Awaits the non-critical summary delivery and suppresses its failures before dispatching the authoritative hidden prompt turn so a rejecting summary never surfaces as an unhandled rejection that could terminate the process before prompt-end closure runs the worktree merge. Returns the underlying hidden-delivery promise without awaiting the full agent turn so callers can record the `running` workflow transition as soon as prompt handoff is accepted; the returned promise resolves after the hidden prompt message is accepted, which on runtimes whose async replacement-session helpers resolve only after `agent_end` lets prompt-end closure finalize the worktree merge during the awaited delivery. When pi later invalidates that replacement-session context during successful prompt-end restoration, the helper suppresses the documented stale-extension-context rejection because the prompt was already accepted and late rethrow would surface a false orchestration failure. Falls back to `sendUserMessage(...)` only for non-replacement flows or runtimes that do not expose `sendMessage`, always passing `deliverAs: "followUp"` so pi sessions busy during run start queue the dispatched prompt for the next turn instead of failing the delivery. Runtime is O(n) in prompt length. Side effects are limited to hidden prompt delivery plus on-screen summary display.
  * @param[in] pi {ExtensionAPI} Handler-scoped extension API instance retained as the fallback dispatcher.
  * @param[in] content {string} Rendered prompt markdown.
  * @param[in] summary {string} Command invocation summary text displayed on screen.
  * @param[in] context {unknown} Optional replacement-session helper context.
  * @return {Promise<void>} Promise representing eventual prompt-delivery completion.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-227, REQ-281, REQ-334, REQ-335, DES-016
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-227, REQ-281, REQ-334, REQ-335, REQ-459, DES-016
  */
 function deliverPromptCommand(
   pi: ExtensionAPI,
@@ -1012,7 +1016,10 @@ function deliverPromptCommand(
       message: { customType: string; content: string; display: boolean },
       options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
     ) => Promise<void> | void;
-    sendUserMessage?: (message: string) => Promise<void> | void;
+    sendUserMessage?: (
+      message: string,
+      options?: { deliverAs?: "steer" | "followUp" },
+    ) => Promise<void> | void;
   } | undefined;
   const summaryMessage = {
     customType: PROMPT_COMMAND_SUMMARY_CUSTOM_TYPE,
@@ -1056,14 +1063,19 @@ function deliverPromptCommand(
     });
   }
   if (typeof replacementContext?.sendUserMessage === "function") {
-    return Promise.resolve(replacementContext.sendUserMessage(content)).catch((error) => {
+    // v1.4.0 sessions count as busy while a run starts, and `sendUserMessage(...)` rejects with
+    // "Agent is already processing" when it is streaming without `deliverAs`; `followUp` queues
+    // the dispatched prompt for the next turn instead of failing the fallback delivery.
+    return Promise.resolve(
+      replacementContext.sendUserMessage(content, { deliverAs: "followUp" }),
+    ).catch((error) => {
       if (isStaleExtensionContextError(error)) {
         return;
       }
       throw error;
     });
   }
-  pi.sendUserMessage(content);
+  pi.sendUserMessage(content, { deliverAs: "followUp" });
   return Promise.resolve();
 }
 
@@ -1605,6 +1617,10 @@ async function handleExtensionStatusEvent(
         `Missing static checkers: ${missingCheckers.join(", ")}\nInstall: run 'npm install' or install each missing checker via your system package manager.`,
         "warning",
       );
+    }
+    const piHostVersionWarning = await consumePiHostVersionWarningForSessionStart();
+    if (piHostVersionWarning !== undefined) {
+      ctx.ui.notify(piHostVersionWarning, "warning");
     }
     if (shouldReplayDeferredNotificationsOnSessionStart(event)) {
       const deferredNotifications = drainDeferredNotifications();
@@ -5488,14 +5504,15 @@ function registerConfigCommands(
 
 /**
  * @brief Registers the complete pi-usereq extension.
- * @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
+ * @details Persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, DES-015, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327
+ * @satisfies DES-002, DES-015, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456
  */
 export default function piUsereqExtension(pi: ExtensionAPI): void {
   writePersistedPromptCommandRuntimeApi(pi as unknown as PersistedPromptCommandRuntimeApi);
   registerCommandReportEntryRenderer(pi);
+  schedulePiHostVersionProbe();
   const statusController = createPiUsereqStatusController();
   ensureBundledResourcesAccessible();
   try {
