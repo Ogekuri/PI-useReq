@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.90.0](https://github.com/Ogekuri/PI-useReq/compare/v0.89.0..v0.90.0) - 2026-10-22
+### 🐛  Bug Fixes
+- re-read live prompt state for agent_end pushover delivery [useReq] *(pi-notify)*
+  - agent_end notify dispatch now falls back to the live post-update
+  - active-or-pending prompt request with the last captured run duration
+  - when the entry-gated notify request is undefined (stale entry snapshot
+  - or run-timer loss between agent_start and agent_end on long-lived hosts)
+  - restores REQ-166/REQ-184/REQ-186 prompt-end Pushover delivery carrying
+  - the real %%OUTPUT%% text extracted from the last assistant message
+  - add failing-then-passing reproducer test for mid-run run-timer loss
+  - update WORKFLOW.md node role and regenerate REFERENCES.md
+
+### 🚜  Changes
+- enforce Pushover API title and field length limits [useReq] *(pi-notify)*
+  - Add REQ-453, REQ-454, and REQ-455 encoding the Pushover Message API
+  - interface limits, and head-truncate the substituted Pushover title at
+  - 250 characters with the shared fixed truncation marker by generalizing
+  - the message truncation helper into truncatePiNotifyPushoverText.
+  - Document that the request payload never emits url or url_title fields,
+  - enforcing the 512-character and 100-character limits by construction.
+  - Bump REQUIREMENTS.md to 0.0.105 and refresh WORKFLOW.md/REFERENCES.md.
+- default Pushover text to result plus output [useReq] *(pi-notify)*
+  - Default notify-pushover-text is now RESULT token followed by OUTPUT
+  - token per REQ-185.
+  - Global config loading upgrades both superseded legacy defaults
+  - (ARGS-based and output-only) to the new default per REQ-451 while
+  - distinct user-configured templates stay unchanged per REQ-452.
+  - Updated REQUIREMENTS.md, WORKFLOW.md, REFERENCES.md and the
+  - extension-registration test expectations covering TST-158.
+- upgrade legacy persisted pushover text to %%OUTPUT%% [useReq] *(pi-notify)*
+  - Add LEGACY_PI_NOTIFY_PUSHOVER_TEXT plus upgradeLegacyPiNotifyPushoverText
+  - and apply it during global config loading so persisted legacy-default
+  - %%RESULT%%\n%%ARGS%% templates resolve to %%OUTPUT%% again.
+  - Fix stale-config bug where req-references pushed only 'successed' and
+  - agentic req-* pushed 'successed' + user request: agentOutput plumbing was
+  - already correct; the superseded persisted template never referenced
+  - %%OUTPUT%%.
+  - Update mapped Pushover routing test: legacy default now pushes the final
+  - assistant output; distinct user templates stay unchanged.
+  - Add REQ-451, REQ-452, TST-158; update WORKFLOW.md and REFERENCES.md.
+
 ## [0.89.0](https://github.com/Ogekuri/PI-useReq/compare/v0.88.0..v0.89.0) - 2026-10-21
 ### 🐛  Bug Fixes
 - push full execution report via %%OUTPUT%% [useReq] *(req-references)*
@@ -1178,6 +1219,7 @@
 - \[0.87.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.87.0
 - \[0.88.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.88.0
 - \[0.89.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.89.0
+- \[0.90.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.90.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1266,3 +1308,4 @@
 [0.87.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.86.0..v0.87.0
 [0.88.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.87.0..v0.88.0
 [0.89.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.88.0..v0.89.0
+[0.90.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.89.0..v0.90.0
