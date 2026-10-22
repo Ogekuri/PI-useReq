@@ -652,6 +652,44 @@ function buildExpectedNotifyResult(stopReason: "stop" | "aborted" | "error"): st
 }
 
 /**
+ * @brief Installs a deterministic Pushover HTTPS transport recorder for notification tests.
+ * @details Replaces the native Pushover HTTPS request function with an in-memory fake that records every dispatched request URL and URL-encoded body without network access and returns the recorder collection plus the restore callback that reinstates the native transport. Runtime is O(1) per dispatched request. Side effects are limited to module-local transport-hook mutation.
+ * @return {{ requests: Array<{ url: string; body: string }>; restore: () => void }} Recorder handle exposing captured requests and the restore callback.
+ */
+function recordPiNotifyPushoverRequests(): {
+  requests: Array<{ url: string; body: string }>;
+  restore: () => void;
+} {
+  const requests: Array<{ url: string; body: string }> = [];
+  setPiNotifyHttpsRequestForTests(((url: URL, _options: Record<string, unknown>, callback?: (response: any) => void) => {
+    const record = { url: url.toString(), body: "" };
+    requests.push(record);
+    const fakeResponse = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeResponse;
+      },
+      resume() {
+        return undefined;
+      },
+    };
+    callback?.(fakeResponse);
+    const fakeRequest = {
+      on(_eventName: string, _handler: (...args: any[]) => void) {
+        return fakeRequest;
+      },
+      end(body?: string) {
+        record.body = body ?? "";
+      },
+    };
+    return fakeRequest as unknown as ReturnType<typeof import("node:https").request>;
+  }) as typeof import("node:https").request);
+  return {
+    requests,
+    restore: () => setPiNotifyHttpsRequestForTests(undefined),
+  };
+}
+
+/**
  * @brief Creates a fake extension command context with scripted UI interactions.
  * @details Materializes deterministic `select`, shared settings-menu `custom`, `input`, `notify`, `setStatus`, `setEditorText`, `waitForIdle`, `newSession`, `sessionManager`, `getContextUsage`, theme-color behaviors, and captured custom-menu render output backed by in-memory state so menu-oriented and prompt-command tests can assert side effects without a real UI. Optional `onNewSession` and theme overrides let tests emulate runtime replacement and strict token validation. Runtime is O(1) plus queued interaction count and delegated new-session setup cost. Side effects are limited to in-memory state mutation.
  * @param[in] cwd {string} Working directory exposed to command handlers.
@@ -7882,11 +7920,13 @@ test("notifications menu escapes pushover text and locks pushover enablement unt
 });
 
 test("agent_end pushover delivery survives mid-run run-timer loss and reuses live prompt state", async () => {
-  // Reproduces the real-host defect where a long-lived pi process loses the in-memory
-  // `runStartTimeMs` timer between `agent_start` and `agent_end` (mid-run session rebind):
-  // the entry-gated `notifyRequest` becomes undefined and the prompt-end Pushover message
-  // carrying %%OUTPUT%% is silently dropped even though the live controller still tracks the
-  // active prompt request (REQ-166, REQ-184, REQ-186, REQ-443).
+  // Fault injection, not a lifecycle reproduction: a non-resetting rebind between `agent_start`
+  // and `agent_end` clears the in-memory run timer while the active prompt request survives,
+  // exercising the state-loss class observed on one long-lived host. The historical incident's
+  // exact trigger was never identified, and a real pi session switch aborts the active run
+  // before rebinding, so this test injects the fault directly. The pushed `%%TIME%%` must report
+  // the ended run's own six-hour duration recovered from the process-scoped run record instead
+  // of a zero or a previous run's duration (REQ-166, REQ-184, REQ-186, REQ-187, REQ-443).
   const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
   writeProjectConfigOverrides(cwd, {
     GIT_WORKTREE_ENABLED: "disable",
@@ -7901,36 +7941,19 @@ test("agent_end pushover delivery survives mid-run run-timer loss and reuses liv
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(cwd);
-  const recordedRequests: Array<{ body: string }> = [];
-  setPiNotifyHttpsRequestForTests(((url: URL, _options: Record<string, unknown>, callback?: (response: any) => void) => {
-    const record = { body: "" };
-    recordedRequests.push(record);
-    const fakeResponse = {
-      on(_eventName: string, _handler: (...args: any[]) => void) {
-        return fakeResponse;
-      },
-      resume() {
-        return undefined;
-      },
-    };
-    callback?.(fakeResponse);
-    const fakeRequest = {
-      on(_eventName: string, _handler: (...args: any[]) => void) {
-        return fakeRequest;
-      },
-      end(body?: string) {
-        record.body = body ?? "";
-      },
-    };
-    return fakeRequest as unknown as ReturnType<typeof import("node:https").request>;
-  }) as typeof import("node:https").request);
+  const recorder = recordPiNotifyPushoverRequests();
+  const originalDateNow = Date.now;
+  let nowMs = 0;
+  Date.now = () => nowMs;
   try {
     await pi.emit("session_start", { reason: "startup" }, ctx);
     await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
     await pi.emit("agent_start", {}, ctx);
-    // Simulate the observed real-host state loss: a non-resetting session rebind between
-    // `agent_start` and `agent_end` clears the run timer while the active prompt request survives.
+    nowMs = 10_800_000;
+    // Inject the observed fault class: a non-resetting session rebind between `agent_start` and
+    // `agent_end` clears the run timer while the active prompt request survives.
     await pi.emit("session_start", { reason: "resume" }, ctx);
+    nowMs = 21_600_000;
     await pi.emit("agent_end", {
       messages: [
         {
@@ -7941,11 +7964,456 @@ test("agent_end pushover delivery survives mid-run run-timer loss and reuses liv
       ],
     }, ctx);
 
-    assert.equal(recordedRequests.length, 1);
-    const params = new URLSearchParams(recordedRequests[0]?.body ?? "");
+    assert.equal(recorder.requests.length, 1);
+    const params = new URLSearchParams(recorder.requests[0]?.body ?? "");
     assert.equal(params.get("message"), `${buildExpectedNotifyResult("stop")}\nFinal agent report after timer loss.`);
+    assert.equal(params.get("title"), `analyze @ ${buildExpectedNotifyBasePath(cwd)} [360:00]`);
   } finally {
-    setPiNotifyHttpsRequestForTests(undefined);
+    recorder.restore();
+    Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("agent_end pushover reports the ended run's own duration after mid-run run-timer loss", async () => {
+  // Reproduces the cross-run duration defect: run A completes normally in two minutes, then
+  // run B loses the in-memory run timer mid-run. The timer-loss fallback read `lastRunDurationMs`,
+  // so run B was notified with run A's two-minute duration. The pushed `%%TIME%%` must report
+  // run B's own five-minute duration recovered from the process-scoped run record (REQ-187).
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, {
+    GIT_WORKTREE_ENABLED: "disable",
+    "notify-pushover-enabled": true,
+    "notify-pushover-on-completed": true,
+    "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+    "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    "notify-pushover-priority": 0,
+    "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+    "notify-pushover-text": "%%RESULT%%\n%%OUTPUT%%",
+  });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const recorder = recordPiNotifyPushoverRequests();
+  const originalDateNow = Date.now;
+  let nowMs = 0;
+  Date.now = () => nowMs;
+  try {
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    // Run A: two minutes, completed normally.
+    await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 120_000;
+    await pi.emit("agent_end", {
+      messages: [
+        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Run A report." }] },
+      ],
+    }, ctx);
+    // Run B: five minutes with the in-memory run timer cleared mid-run.
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 150_000;
+    await pi.emit("session_start", { reason: "resume" }, ctx);
+    nowMs = 420_000;
+    await pi.emit("agent_end", {
+      messages: [
+        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Run B report." }] },
+      ],
+    }, ctx);
+
+    assert.equal(recorder.requests.length, 2);
+    const runAParams = new URLSearchParams(recorder.requests[0]?.body ?? "");
+    assert.equal(runAParams.get("title"), `analyze @ ${buildExpectedNotifyBasePath(cwd)} [2:00]`);
+    assert.equal(runAParams.get("message"), `${buildExpectedNotifyResult("stop")}\nRun A report.`);
+    const runBParams = new URLSearchParams(recorder.requests[1]?.body ?? "");
+    assert.equal(runBParams.get("title"), `change @ ${buildExpectedNotifyBasePath(cwd)} [5:00]`);
+    assert.equal(runBParams.get("message"), `${buildExpectedNotifyResult("stop")}\nRun B report.`);
+  } finally {
+    recorder.restore();
+    Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("prompt-end pushover renders unbounded minute durations for long uninterrupted runs", async () => {
+  // Minutes stay unbounded above 59: a six-hour run must render `360:00` and a 24-hour run
+  // `1440:00` in the pushed title, with both durations accumulated into the completed counters
+  // (REQ-125, REQ-159, REQ-187).
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, {
+    GIT_WORKTREE_ENABLED: "disable",
+    "notify-pushover-enabled": true,
+    "notify-pushover-on-completed": true,
+    "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+    "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    "notify-pushover-priority": 0,
+    "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+    "notify-pushover-text": "%%RESULT%%",
+  });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const recorder = recordPiNotifyPushoverRequests();
+  const originalDateNow = Date.now;
+  let nowMs = 0;
+  Date.now = () => nowMs;
+  try {
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 21_600_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(recorder.requests.length, 1);
+    assert.equal(
+      new URLSearchParams(recorder.requests[0]?.body ?? "").get("title"),
+      `analyze @ ${buildExpectedNotifyBasePath(cwd)} [360:00]`,
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 360:00 ⌛︎360:00",
+      }),
+    );
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 108_000_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(recorder.requests.length, 2);
+    assert.equal(
+      new URLSearchParams(recorder.requests[1]?.body ?? "").get("title"),
+      `change @ ${buildExpectedNotifyBasePath(cwd)} [1440:00]`,
+    );
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 1440:00 ⌛︎1800:00",
+      }),
+    );
+  } finally {
+    recorder.restore();
+    Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("agent_end pushover recovers the run duration and prompt state on a fresh controller after mid-run rebinding", async () => {
+  // Supported-rebind recovery: a second extension instance receives `session_start` with reason
+  // `resume` for the same execution session while the run is still in flight, then handles
+  // `agent_end`. The prompt request is restored from process-scoped persistence and the ended
+  // run's duration is recovered from the process-scoped run record, so the notification reports
+  // the run's own seven-minute elapsed time instead of a previous run's counter (REQ-187,
+  // REQ-279).
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, {
+    GIT_WORKTREE_ENABLED: "disable",
+    "notify-pushover-enabled": true,
+    "notify-pushover-on-completed": true,
+    "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+    "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    "notify-pushover-priority": 0,
+    "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+    "notify-pushover-text": "%%RESULT%%\n%%OUTPUT%%",
+  });
+  const firstPi = createFakePi();
+  piUsereqExtension(firstPi);
+  const firstCtx = createFakeCtx(cwd);
+  const executionSessionFile = firstCtx.sessionManager.getSessionFile() ?? "";
+  const recorder = recordPiNotifyPushoverRequests();
+  const originalDateNow = Date.now;
+  let nowMs = 0;
+  Date.now = () => nowMs;
+  try {
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+    await firstPi.commands.get("req-analyze")!.handler("Inspect src", firstCtx);
+    await firstPi.emit("agent_start", {}, firstCtx);
+    // Rebind: the old runtime is torn down (disposing its controller and live ticker) and a
+    // fresh extension instance takes over the same execution session mid-run.
+    nowMs = 60_000;
+    await firstPi.emit("session_shutdown", {
+      reason: "resume",
+      targetSessionFile: executionSessionFile,
+    }, firstCtx);
+    const reboundPi = createFakePi();
+    piUsereqExtension(reboundPi);
+    const reboundCtx = createFakeCtx(cwd);
+    reboundCtx.sessionManager.getSessionFile = () => executionSessionFile;
+    await reboundPi.emit("session_start", {
+      reason: "resume",
+      previousSessionFile: executionSessionFile,
+    }, reboundCtx);
+    nowMs = 420_000;
+    await reboundPi.emit("agent_end", {
+      messages: [
+        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Rebound run report." }] },
+      ],
+    }, reboundCtx);
+
+    assert.equal(recorder.requests.length, 1);
+    const params = new URLSearchParams(recorder.requests[0]?.body ?? "");
+    assert.equal(params.get("title"), `analyze @ ${buildExpectedNotifyBasePath(cwd)} [7:00]`);
+    assert.equal(params.get("message"), `${buildExpectedNotifyResult("stop")}\nRebound run report.`);
+  } finally {
+    recorder.restore();
+    Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("agent_end pushover reports the aborted run's own duration and preserves completed counters", async () => {
+  // Run A completes in two minutes and populates the completed counters. Run B is aborted one
+  // minute after the in-memory run timer is lost mid-run: the pushed notification must report
+  // run B's own `1:00` with the `aborted` result token, while the `⚑` and `⌛︎` counters keep
+  // run A's `2:00` because escape-triggered cancellation must not overwrite them (REQ-125,
+  // REQ-159, REQ-187, REQ-199).
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, {
+    GIT_WORKTREE_ENABLED: "disable",
+    "notify-pushover-enabled": true,
+    "notify-pushover-on-completed": true,
+    "notify-pushover-on-interrupted": true,
+    "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+    "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    "notify-pushover-priority": 0,
+    "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+    "notify-pushover-text": "%%RESULT%%\n%%OUTPUT%%",
+  });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const recorder = recordPiNotifyPushoverRequests();
+  const originalDateNow = Date.now;
+  let nowMs = 0;
+  Date.now = () => nowMs;
+  try {
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 120_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(recorder.requests.length, 1);
+    // Run B: aborted with the in-memory run timer lost mid-run.
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 150_000;
+    await pi.emit("session_start", { reason: "resume" }, ctx);
+    nowMs = 180_000;
+    await pi.emit("agent_end", {
+      messages: [
+        { role: "assistant", stopReason: "aborted", content: [{ type: "text", text: "Interrupted mid-run." }] },
+      ],
+    }, ctx);
+
+    assert.equal(recorder.requests.length, 2);
+    const abortedParams = new URLSearchParams(recorder.requests[1]?.body ?? "");
+    assert.equal(abortedParams.get("title"), `change @ ${buildExpectedNotifyBasePath(cwd)} [1:00]`);
+    assert.equal(abortedParams.get("message"), `${buildExpectedNotifyResult("aborted")}\nInterrupted mid-run.`);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 2:00 ⌛︎2:00",
+      }),
+    );
+  } finally {
+    recorder.restore();
+    Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("agent_end pushover suppresses unassociated prompt ends from pending, duplicate, and retained requests", async () => {
+  // Notification gating must not treat prompt state as proof that an `agent_end` belongs to it:
+  // a pending request whose agent run never started, a duplicate terminal delivery after a
+  // completed run, and an error-retained worktree request followed by an unrelated agent run
+  // must all stay silent for command-notify and Pushover (REQ-166, REQ-168, REQ-184).
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, {
+    GIT_WORKTREE_ENABLED: "disable",
+    "notify-pushover-enabled": true,
+    "notify-pushover-on-completed": true,
+    "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+    "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+    "notify-pushover-priority": 0,
+    "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+    "notify-pushover-text": "%%RESULT%%",
+  });
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const ctx = createFakeCtx(cwd);
+  const recorder = recordPiNotifyPushoverRequests();
+  const originalDateNow = Date.now;
+  const previousCwd = process.cwd();
+  let nowMs = 0;
+  let retainedWorktreePath = "";
+  Date.now = () => nowMs;
+  try {
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    // Pending prompt whose agent run never started: the terminal event belongs to no prompt run.
+    await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(recorder.requests.length, 0);
+    // The abandoned pending plan stays in the process-scoped prompt store (closure never ran);
+    // clear it so the next startup reset is not undone by session-matched restoration.
+    clearPersistedPromptCommandRuntimeState();
+
+    // Reset and complete one full run: exactly one notification.
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 5_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(recorder.requests.length, 1);
+    // A duplicate terminal delivery of the already completed run must not push twice.
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(recorder.requests.length, 1);
+
+    // Error-retained worktree request: the failed run's own notification fires once, and a later
+    // unrelated agent run in the retained worktree session must not notify for it again.
+    writeProjectConfigOverrides(cwd, {
+      GIT_WORKTREE_ENABLED: "enable",
+      "notify-pushover-enabled": true,
+      "notify-pushover-on-completed": true,
+      "notify-pushover-on-failed": true,
+      "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+      "notify-pushover-priority": 0,
+      "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "notify-pushover-text": "%%RESULT%%",
+    });
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-fix")!.handler("Fix defect", ctx);
+    const promptText = String(pi.sentUserMessages.at(-1)?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    retainedWorktreePath = worktreeMatch?.[2] ?? "";
+    const eventCtx = createFakeCtx(retainedWorktreePath);
+    eventCtx.sessionManager.getSessionFile = () => ctx.sessionManager.getSessionFile() ?? "";
+    eventCtx.sessionManager.getSessionDir = () => path.dirname(ctx.sessionManager.getSessionFile() ?? "");
+    eventCtx.sessionManager.getCwd = () => retainedWorktreePath;
+    eventCtx.cwd = retainedWorktreePath;
+    delete eventCtx.switchSession;
+    await pi.emit("before_agent_start", {}, eventCtx);
+    await pi.emit("agent_start", {}, eventCtx);
+    nowMs = 10_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, eventCtx);
+    assert.equal(recorder.requests.length, 2);
+    // Unrelated follow-up agent run in the retained worktree session.
+    await pi.emit("agent_start", {}, eventCtx);
+    nowMs = 15_000;
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, eventCtx);
+    assert.equal(recorder.requests.length, 2);
+  } finally {
+    recorder.restore();
+    Date.now = originalDateNow;
+    process.chdir(previousCwd);
+    if (retainedWorktreePath !== "") {
+      fs.rmSync(retainedWorktreePath, { recursive: true, force: true });
+    }
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("agent_end pushover reports each retried agent segment's own duration", async () => {
+  // Overflow compact-and-retry restarts the agent run after `agent_end`: each start/end segment
+  // is an independent `M:SS` measurement boundary for `%%TIME%%`, both non-aborted segments
+  // accumulate into the completed counters, and matched-success closure stays deferred until
+  // `agent_settled` (REQ-159, REQ-187, REQ-354).
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, {
+      GIT_WORKTREE_ENABLED: "enable",
+      "notify-pushover-enabled": true,
+      "notify-pushover-on-completed": true,
+      "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
+      "notify-pushover-api-token": "ah6bf5u2sj63mcvou6qamiabeoubbe",
+      "notify-pushover-priority": 0,
+      "notify-pushover-title": "%%PROMT%% @ %%BASE%% [%%TIME%%]",
+      "notify-pushover-text": "%%RESULT%%",
+    });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    const recorder = recordPiNotifyPushoverRequests();
+    const originalDateNow = Date.now;
+    let nowMs = 0;
+    Date.now = () => nowMs;
+    try {
+      await pi.emit("session_start", { reason: "startup" }, ctx);
+      await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+      const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+      const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+      assert.ok(worktreeMatch, promptText);
+      const executionBasePath = worktreeMatch?.[2] ?? "";
+      const eventCtx = createFakeCtx(executionBasePath);
+      eventCtx.sessionManager.getSessionFile = () => ctx.sessionManager.getSessionFile() ?? "";
+      eventCtx.sessionManager.getSessionDir = () => path.dirname(ctx.sessionManager.getSessionFile() ?? "");
+      eventCtx.sessionManager.getCwd = () => executionBasePath;
+      eventCtx.cwd = executionBasePath;
+      delete eventCtx.switchSession;
+
+      // Segment 1: one minute, ends with a length-style stop that schedules compact-and-retry.
+      await pi.emit("before_agent_start", {}, eventCtx);
+      await pi.emit("agent_start", {}, eventCtx);
+      nowMs = 60_000;
+      await pi.emit("agent_end", {
+        messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+      }, eventCtx);
+      assert.equal(recorder.requests.length, 1);
+      assert.equal(
+        new URLSearchParams(recorder.requests[0]?.body ?? "").get("title"),
+        `change @ ${buildExpectedNotifyBasePath(projectBase)} [1:00]`,
+      );
+
+      // Segment 2: the retried agent run restarts without a new pending request.
+      await pi.emit("agent_start", {}, eventCtx);
+      nowMs = 150_000;
+      await pi.emit("agent_end", {
+        messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+      }, eventCtx);
+      assert.equal(recorder.requests.length, 2);
+      assert.equal(
+        new URLSearchParams(recorder.requests[1]?.body ?? "").get("title"),
+        `change @ ${buildExpectedNotifyBasePath(projectBase)} [1:30]`,
+      );
+
+      // Settlement finalizes the deferred matched-success closure.
+      await pi.emit("agent_settled", {}, eventCtx);
+      assert.equal(process.cwd(), projectBase);
+      assert.equal(fs.existsSync(executionBasePath), false);
+      assert.equal(
+        new URLSearchParams(recorder.requests[1]?.body ?? "").get("message"),
+        buildExpectedNotifyResult("stop"),
+      );
+    } finally {
+      recorder.restore();
+      Date.now = originalDateNow;
+    }
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 

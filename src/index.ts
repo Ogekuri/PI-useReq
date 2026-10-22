@@ -1564,7 +1564,7 @@ function buildAgentEndOutputText(event: unknown): string {
 
 /**
  * @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
- * @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. After the status update, captures the exact `before_provider_request` provider payload for the live active or pending prompt run by reloading the prompt debug gating configuration from the prompt run's original `base-path` (worktree-backed checkouts do not contain the untracked `.pi-usereq.json`, so the cwd-derived cached config would silently disable capture), flushes the process-scoped captured payload as one `<timestamp>-<req-command>-error-<status>` file whenever `after_provider_response` reports a status >= 400 or whenever one finalized `message_end` assistant error message carries a leading HTTP status >= 400 (the provider-independent fallback for provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses) without requiring live workflow state, and discards the capture at prompt-run end so stale payloads never reach later runs. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects with the final assistant output text feeding `%%OUTPUT%%` placeholder substitution; when the entry-gated notify request is undefined because the entry-read prompt snapshot is stale or the in-memory run timer was lost between `agent_start` and `agent_end` on a long-lived host, the dispatch re-reads the live post-update active-or-pending prompt request and falls back to the last captured run duration so prompt-end delivery survives timer loss, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. After the status update, captures the exact `before_provider_request` provider payload for the live active or pending prompt run by reloading the prompt debug gating configuration from the prompt run's original `base-path` (worktree-backed checkouts do not contain the untracked `.pi-usereq.json`, so the cwd-derived cached config would silently disable capture), flushes the process-scoped captured payload as one `<timestamp>-<req-command>-error-<status>` file whenever `after_provider_response` reports a status >= 400 or whenever one finalized `message_end` assistant error message carries a leading HTTP status >= 400 (the provider-independent fallback for provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses) without requiring live workflow state, and discards the capture at prompt-run end so stale payloads never reach later runs. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects with the final assistant output text feeding `%%OUTPUT%%` placeholder substitution; the prompt request is gated on post-update run association so only an `agent_end` that provably belongs to the live active prompt request notifies, the completion time comes from the ended run's own resolved duration (recovered from the process-scoped run record when the in-memory run timer was cleared mid-run between `agent_start` and `agent_end` on a long-lived host) instead of a previous run's completed counter or a fabricated zero, and unassociated terminal events (never-started pending requests, duplicate deliveries, error-retained worktree requests) stay silent for command-notify and Pushover while their outcome-gated sound effects still run, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, and for every matched successful worktree-backed completion defers the restore switch, stash-assisted merge, and worktree deletion to `agent_settled` when the running pi host supports that 0.80.4+ event (because its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), or executes the finalization directly at `agent_end` when the host does not emit `agent_settled`; notification and closure consume one coherent post-update completion snapshot of the live active prompt request taken before any destructive reset, so a resynchronized completion can never split into two identities. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, executes the deferred stash-assisted merge-and-delete finalization path, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `idle` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
@@ -1625,17 +1625,6 @@ async function handleExtensionStatusEvent(
       );
     }
   }
-  const notifyRequest: PiNotifyEventRequest | undefined = hookName === "agent_end"
-    && activePromptRequest !== undefined
-    && statusController.state.runStartTimeMs !== undefined
-    ? {
-        promptName: activePromptRequest.promptName,
-        promptArgs: activePromptRequest.promptArgs,
-        basePath: activePromptRequest.basePath,
-        completionTimeMs: Math.max(0, Date.now() - statusController.state.runStartTimeMs),
-        agentOutput: buildAgentEndOutputText(event),
-      }
-    : undefined;
   updateExtensionStatus(statusController, hookName, event, ctx);
   // Provider payload capture and error flush read the LIVE post-update controller state and fall
   // back to a fresh config load: after switchSession rebinds the extension, the entry-read
@@ -1716,23 +1705,26 @@ async function handleExtensionStatusEvent(
   }
   if (hookName === "agent_end") {
     if (statusController.config) {
-      // The entry-gated `notifyRequest` reads the controller snapshot captured before
-      // `updateExtensionStatus(...)` mutated it. Long-lived hosts can lose the in-memory
-      // run timer between `agent_start` and `agent_end` (mid-run session rebind), which would
-      // silently drop the prompt-end notification even though the live controller still tracks
-      // the active prompt request. Re-read the live post-update prompt state first and fall back
-      // to the last captured run duration so REQ-166/REQ-184/REQ-186 delivery survives timer loss.
-      const liveNotifyRequest = notifyRequest ?? (() => {
-        const livePromptEndRequest = statusController.state.activePromptRequest
-          ?? statusController.state.pendingPromptRequest;
-        return livePromptEndRequest === undefined ? undefined : {
-          promptName: livePromptEndRequest.promptName,
-          promptArgs: livePromptEndRequest.promptArgs,
-          basePath: livePromptEndRequest.basePath,
-          completionTimeMs: statusController.state.lastRunDurationMs ?? 0,
-          agentOutput: buildAgentEndOutputText(event),
-        };
-      })();
+      // Prompt-end effects are gated on post-update run association, not on UI-timer presence:
+      // `updateExtensionStatus(...)` resolves the ended run's own duration (recovering the
+      // process-scoped run record when the in-memory timer was lost mid-run) and records
+      // whether the ended run belongs to the live active prompt request. Association implies a
+      // recoverable start, so a notification never substitutes a previous run's completed
+      // counter or a fabricated zero; unassociated terminal events (never-started pending
+      // requests, duplicate deliveries, error-retained worktree requests) stay silent for
+      // command-notify and Pushover while their outcome-gated sound effects still run.
+      const livePromptEndRequest = statusController.state.activePromptRequest;
+      const liveNotifyRequest = livePromptEndRequest !== undefined
+        && statusController.state.activeRunBelongsToPrompt
+        && statusController.state.endedRunDurationMs !== undefined
+        ? {
+            promptName: livePromptEndRequest.promptName,
+            promptArgs: livePromptEndRequest.promptArgs,
+            basePath: livePromptEndRequest.basePath,
+            completionTimeMs: statusController.state.endedRunDurationMs,
+            agentOutput: buildAgentEndOutputText(event),
+          }
+        : undefined;
       runPiNotifyEffects(
         {
           ...statusController.config,
@@ -1742,24 +1734,28 @@ async function handleExtensionStatusEvent(
         liveNotifyRequest,
       );
     }
-    if (activePromptRequest !== undefined) {
+    // One coherent post-update completion snapshot: the same live prompt request that fed the
+    // notification gates also owns closure, so a resynchronized completion can never split
+    // into two identities, and the snapshot is taken before any destructive reset below.
+    const completionPromptRequest = statusController.state.activePromptRequest;
+    if (completionPromptRequest !== undefined) {
       const debugConfig = statusController.config;
       let promptContext = ctx;
       const outcome = classifyPromptCommandOutcome(
         event as { messages: AgentEndEvent["messages"] },
       );
       const closureFailureMessage = outcome !== "completed"
-        && activePromptRequest.worktreeDir !== undefined
-        ? `ERROR: Prompt closure retained worktree ${activePromptRequest.worktreeDir} after ${outcome} outcome.`
+        && completionPromptRequest.worktreeDir !== undefined
+        ? `ERROR: Prompt closure retained worktree ${completionPromptRequest.worktreeDir} after ${outcome} outcome.`
         : undefined;
       const shouldFinalizeMatchedSuccess = outcome === "completed"
-        && activePromptRequest.worktreeDir !== undefined;
+        && completionPromptRequest.worktreeDir !== undefined;
       if (debugConfig) {
         logPromptWorkflowEvent(
-          activePromptRequest.basePath,
+          completionPromptRequest.basePath,
           debugConfig,
           statusController.state.workflowState,
-          activePromptRequest.promptName,
+          completionPromptRequest.promptName,
           "workflow_closure",
           {
             hook: "agent_end",
@@ -1767,7 +1763,7 @@ async function handleExtensionStatusEvent(
           },
           {
             should_finalize_matched_success: shouldFinalizeMatchedSuccess,
-            worktree_dir: activePromptRequest.worktreeDir,
+            worktree_dir: completionPromptRequest.worktreeDir,
             event_context_has_switch_session: typeof (ctx as ExtensionCommandContext).switchSession === "function",
           },
         );
@@ -1785,9 +1781,9 @@ async function handleExtensionStatusEvent(
             transitionPromptWorkflowState(
               statusController,
               promptContext,
-              activePromptRequest.basePath,
+              completionPromptRequest.basePath,
               debugConfig,
-              activePromptRequest.promptName,
+              completionPromptRequest.promptName,
               "merging",
             );
           } else {
@@ -1801,7 +1797,7 @@ async function handleExtensionStatusEvent(
           await finalizeMatchedPromptSuccess(
             pi,
             statusController,
-            activePromptRequest,
+            completionPromptRequest,
             promptContext,
           );
         }
@@ -1813,13 +1809,16 @@ async function handleExtensionStatusEvent(
         // remove the retained worktree plus branch. The original base-path
         // session MUST NOT be resumed here so the failure stays visible.
         notifyContextSafely(promptContext, closureFailureMessage, "error");
+        // The retained request closed with this run: later unrelated agent runs
+        // must not claim its prompt-end notification effects.
+        statusController.state.activeRunBelongsToPrompt = false;
         if (debugConfig) {
           transitionPromptWorkflowState(
             statusController,
             promptContext,
-            activePromptRequest.basePath,
+            completionPromptRequest.basePath,
             debugConfig,
-            activePromptRequest.promptName,
+            completionPromptRequest.promptName,
             "error",
           );
         } else {
@@ -1828,7 +1827,7 @@ async function handleExtensionStatusEvent(
       } else {
         try {
           promptContext = (await restorePromptCommandExecution(
-            activePromptRequest,
+            completionPromptRequest,
             promptContext,
             debugConfig
               ? { config: debugConfig, workflowState: statusController.state.workflowState }
@@ -1840,9 +1839,9 @@ async function handleExtensionStatusEvent(
             transitionPromptWorkflowState(
               statusController,
               promptContext,
-              activePromptRequest.basePath,
+              completionPromptRequest.basePath,
               debugConfig,
-              activePromptRequest.promptName,
+              completionPromptRequest.promptName,
               "error",
             );
           } else {
@@ -1854,13 +1853,14 @@ async function handleExtensionStatusEvent(
       if (closureFailureMessage === undefined && !shouldFinalizeMatchedSuccess) {
         statusController.state.pendingPromptRequest = undefined;
         statusController.state.activePromptRequest = undefined;
+        statusController.state.activeRunBelongsToPrompt = false;
         if (debugConfig) {
           transitionPromptWorkflowState(
             statusController,
             promptContext,
-            activePromptRequest.basePath,
+            completionPromptRequest.basePath,
             debugConfig,
-            activePromptRequest.promptName,
+            completionPromptRequest.promptName,
             "idle",
           );
         } else {

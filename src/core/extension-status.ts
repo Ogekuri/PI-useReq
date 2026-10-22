@@ -115,12 +115,14 @@ export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" 
 
 /**
  * @brief Stores the mutable runtime facts displayed by the status bar.
- * @details Persists the prompt-orchestration workflow state, the latest context-usage snapshot, the active run start timestamp, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, and prompt-request metadata carried from command dispatch into the next runtime execution. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
+ * @details Persists the prompt-orchestration workflow state, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, and prompt-request metadata carried from command dispatch into the next runtime execution. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqStatusState {
   workflowState: PiUsereqWorkflowState;
   contextUsage: ContextUsage | undefined;
   runStartTimeMs: number | undefined;
+  activeRunBelongsToPrompt: boolean;
+  endedRunDurationMs: number | undefined;
   lastRunDurationMs: number | undefined;
   totalRunDurationMs: number | undefined;
   runtimeSoundLevel: PiNotifySoundLevel | undefined;
@@ -146,11 +148,13 @@ export interface PiUsereqStatusController {
 
 /**
  * @brief Stores the process-scoped elapsed-timer snapshot reused across session replacement.
- * @details Preserves only the latest completed duration and accumulated completed runtime so `/new`, `/resume`, and `/fork` can restore elapsed counters after the extension runtime is rebound. Compile-time only and introduces no runtime cost.
+ * @details Preserves the latest completed duration, accumulated completed runtime, and the in-flight run record (start timestamp plus prompt-ownership flag) so `/new`, `/resume`, and `/fork` can restore elapsed counters after the extension runtime is rebound, and so a terminal hook on a replacement runtime can recover the ended run's own duration and prompt association when the in-memory run timer was cleared mid-run. Compile-time only and introduces no runtime cost.
  */
 interface PiUsereqStatusPersistenceStore {
   lastRunDurationMs: number | undefined;
   totalRunDurationMs: number | undefined;
+  activeRunStartMs: number | undefined;
+  activeRunBelongsToPrompt: boolean;
 }
 
 /**
@@ -172,6 +176,8 @@ function getPiUsereqStatusPersistenceStore(): PiUsereqStatusPersistenceStore {
   globalState[PI_USEREQ_STATUS_PERSISTENCE_KEY] ??= {
     lastRunDurationMs: undefined,
     totalRunDurationMs: undefined,
+    activeRunStartMs: undefined,
+    activeRunBelongsToPrompt: false,
   };
   return globalState[PI_USEREQ_STATUS_PERSISTENCE_KEY]!;
 }
@@ -198,6 +204,44 @@ function persistElapsedState(state: PiUsereqStatusState): void {
   const store = getPiUsereqStatusPersistenceStore();
   store.lastRunDurationMs = state.lastRunDurationMs;
   store.totalRunDurationMs = state.totalRunDurationMs;
+}
+
+/**
+ * @brief Persists the in-flight run record into the process-scoped elapsed store.
+ * @details Mirrors the active run start timestamp plus its prompt-ownership flag onto `globalThis` so a terminal hook on a replacement extension instance can recover the exact run identity and time reference after the in-memory timer was cleared mid-run by session replacement or fault-injected state loss. The record is written only at `agent_start` and cleared at the run's terminal hook or an elapsed-state reset, so it is never inherited by a different run. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @param[in] state {PiUsereqStatusState} Controller state carrying the in-flight run facts.
+ * @return {void} No return value.
+ * @satisfies REQ-123, REQ-187
+ */
+function persistActiveRunState(state: PiUsereqStatusState): void {
+  const store = getPiUsereqStatusPersistenceStore();
+  store.activeRunStartMs = state.runStartTimeMs;
+  store.activeRunBelongsToPrompt = state.activeRunBelongsToPrompt;
+}
+
+/**
+ * @brief Reads the process-scoped in-flight run record.
+ * @details Returns the persisted run start timestamp plus prompt-ownership flag only while a run is genuinely in flight, and `undefined` once the run's terminal hook cleared the record, so a late or duplicate terminal event can never borrow another run's timing or association. Runtime is O(1). No external state is mutated.
+ * @return {{ startMs: number; belongsToPrompt: boolean } | undefined} Persisted in-flight run record when available.
+ * @satisfies REQ-187
+ */
+function readPersistedActiveRunState(): { startMs: number; belongsToPrompt: boolean } | undefined {
+  const store = getPiUsereqStatusPersistenceStore();
+  return typeof store.activeRunStartMs === "number"
+    ? { startMs: store.activeRunStartMs, belongsToPrompt: store.activeRunBelongsToPrompt === true }
+    : undefined;
+}
+
+/**
+ * @brief Clears the process-scoped in-flight run record.
+ * @details Removes the persisted run start timestamp and prompt-ownership flag after a terminal hook or an elapsed-state reset so later terminal events without their own `agent_start` can never recover stale timing. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @return {void} No return value.
+ * @satisfies REQ-187
+ */
+function clearPersistedActiveRunState(): void {
+  const store = getPiUsereqStatusPersistenceStore();
+  store.activeRunStartMs = undefined;
+  store.activeRunBelongsToPrompt = false;
 }
 
 /**
@@ -272,7 +316,7 @@ export function isStaleExtensionContextError(error: unknown): boolean {
 
 /**
  * @brief Resets the in-memory and persisted elapsed counters.
- * @details Clears both completed-duration fields in the supplied state and mirrors that cleared snapshot into the process-scoped store. Runtime is O(1). Side effects include mutable state reset and process-scoped persistence update.
+ * @details Clears both completed-duration fields plus the in-flight run timer, run-ownership flag, and ended-run duration in the supplied state, mirrors the cleared counters into the process-scoped store, and clears the persisted in-flight run record. Runtime is O(1). Side effects include mutable state reset and process-scoped persistence update.
  * @param[in,out] state {PiUsereqStatusState} Mutable status state.
  * @return {void} No return value.
  * @satisfies REQ-217
@@ -280,7 +324,11 @@ export function isStaleExtensionContextError(error: unknown): boolean {
 function resetElapsedState(state: PiUsereqStatusState): void {
   state.lastRunDurationMs = undefined;
   state.totalRunDurationMs = undefined;
+  state.runStartTimeMs = undefined;
+  state.activeRunBelongsToPrompt = false;
+  state.endedRunDurationMs = undefined;
   persistElapsedState(state);
+  clearPersistedActiveRunState();
 }
 
 /**
@@ -695,6 +743,8 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       workflowState: "idle",
       contextUsage: undefined,
       runStartTimeMs: undefined,
+      activeRunBelongsToPrompt: false,
+      endedRunDurationMs: undefined,
       lastRunDurationMs: undefined,
       totalRunDurationMs: undefined,
       runtimeSoundLevel: undefined,
@@ -824,13 +874,13 @@ export function setPiUsereqWorkflowState(
 
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, captures non-aborted run duration on `agent_end` or `agent_settled`, accumulates successful runtime into `Σ`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, starts run timing, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight run record into the process-scoped store, captures each ended run's own duration on `agent_end` or `agent_settled` (recovering the run start and prompt association from the process-scoped record when the in-memory timer was cleared mid-run), accumulates successful runtime into `Σ` while keeping the ended-run duration separate from the completed counters, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421
+ * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-187, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421
  */
 export function updateExtensionStatus(
   controller: PiUsereqStatusController,
@@ -857,6 +907,7 @@ export function updateExtensionStatus(
       controller.state.workflowState = "idle";
     }
     controller.state.runStartTimeMs = undefined;
+    controller.state.activeRunBelongsToPrompt = false;
     if (shouldResetWorkflowState || controller.state.workflowState === "idle") {
       controller.state.pendingPromptRequest = undefined;
       controller.state.activePromptRequest = undefined;
@@ -881,27 +932,60 @@ export function updateExtensionStatus(
       controller.state.activePromptRequest = pendingPromptRequest;
       controller.state.pendingPromptRequest = undefined;
     }
+    // The in-flight run belongs to the active prompt request when this start promoted a
+    // pending request, or when an already-promoted request still owns an open prompt
+    // workflow (`running`, or `merging` while matched-success finalization waits for
+    // `agent_settled`). Error-retained requests park the workflow in `error` and must
+    // never reclaim ownership of later unrelated agent runs.
+    controller.state.activeRunBelongsToPrompt = pendingPromptRequest !== undefined
+      || (controller.state.activePromptRequest !== undefined
+        && (controller.state.activeRunBelongsToPrompt
+          || controller.state.workflowState === "running"
+          || controller.state.workflowState === "merging"));
+    persistActiveRunState(controller.state);
   }
 
-  if (
-    (hookName === "agent_end" || hookName === "agent_settled")
-    && controller.state.runStartTimeMs !== undefined
-  ) {
-    const durationMs = nowMs - controller.state.runStartTimeMs;
-    const agentEndMessages = hookName === "agent_end"
-      ? (event as AgentEndEvent).messages ?? []
-      : [];
-    if (!didAgentEndAbort(agentEndMessages)) {
-      controller.state.lastRunDurationMs = durationMs;
-      controller.state.totalRunDurationMs = controller.state.totalRunDurationMs === undefined
-        ? durationMs
-        : controller.state.totalRunDurationMs + durationMs;
+  if (hookName === "agent_end" || hookName === "agent_settled") {
+    // Recover the run start and prompt association from the process-scoped run record when
+    // the in-memory timer was cleared between `agent_start` and this terminal hook (mid-run
+    // rebind or fault-injected state loss), so the ended run keeps its own duration instead
+    // of inheriting a previous run's completed counters. The ownership flag travels with the
+    // same record, so a recovered run can never borrow another run's prompt association.
+    const persistedActiveRun = readPersistedActiveRunState();
+    const runStartMs = controller.state.runStartTimeMs ?? persistedActiveRun?.startMs;
+    const runBelongsToPrompt = controller.state.runStartTimeMs !== undefined
+      ? controller.state.activeRunBelongsToPrompt
+      : persistedActiveRun?.belongsToPrompt === true;
+    if (runStartMs !== undefined) {
+      const durationMs = Math.max(0, nowMs - runStartMs);
+      const agentEndMessages = hookName === "agent_end"
+        ? (event as AgentEndEvent).messages ?? []
+        : [];
+      if (!didAgentEndAbort(agentEndMessages)) {
+        controller.state.lastRunDurationMs = durationMs;
+        controller.state.totalRunDurationMs = controller.state.totalRunDurationMs === undefined
+          ? durationMs
+          : controller.state.totalRunDurationMs + durationMs;
+      }
+      // The ended run's own duration, recorded even for aborted runs and kept strictly
+      // separate from the completed-run counters above.
+      controller.state.endedRunDurationMs = durationMs;
+    } else {
+      // No recoverable start exists for this terminal event: mark the duration unknown so
+      // downstream notification gates never substitute a previous run's duration or a
+      // fabricated zero.
+      controller.state.endedRunDurationMs = undefined;
     }
     controller.state.runStartTimeMs = undefined;
+    // Retain the ended run's ownership flag for the post-update notification gate; the next
+    // `agent_start` recomputes it for the next run.
+    controller.state.activeRunBelongsToPrompt = runBelongsToPrompt;
+    clearPersistedActiveRunState();
   }
 
   if (hookName === "session_shutdown") {
     controller.state.runStartTimeMs = undefined;
+    controller.state.activeRunBelongsToPrompt = false;
     if (!preservePromptCommandStateOnShutdown) {
       controller.state.pendingPromptRequest = undefined;
       controller.state.activePromptRequest = undefined;
