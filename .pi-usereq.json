@@ -1,0 +1,81 @@
+{
+  "docs-dir": "pi-usereq/docs",
+  "tests-dir": "tests",
+  "src-dir": [
+    "src"
+  ],
+  "context-files-requirements": true,
+  "context-files-references": true,
+  "context-files-workflow": true,
+  "static-check": {
+    "C": {
+      "enabled": "enable"
+    },
+    "C#": {
+      "enabled": "disable"
+    },
+    "C++": {
+      "enabled": "enable"
+    },
+    "Elixir": {
+      "enabled": "disable"
+    },
+    "Go": {
+      "enabled": "disable"
+    },
+    "Haskell": {
+      "enabled": "disable"
+    },
+    "Java": {
+      "enabled": "disable"
+    },
+    "JavaScript": {
+      "enabled": "enable"
+    },
+    "Kotlin": {
+      "enabled": "disable"
+    },
+    "Lua": {
+      "enabled": "disable"
+    },
+    "Perl": {
+      "enabled": "disable"
+    },
+    "PHP": {
+      "enabled": "disable"
+    },
+    "Python": {
+      "enabled": "enable"
+    },
+    "Ruby": {
+      "enabled": "disable"
+    },
+    "Rust": {
+      "enabled": "disable"
+    },
+    "Scala": {
+      "enabled": "disable"
+    },
+    "Shell": {
+      "enabled": "disable"
+    },
+    "Swift": {
+      "enabled": "disable"
+    },
+    "TypeScript": {
+      "enabled": "enable"
+    },
+    "Zig": {
+      "enabled": "disable"
+    }
+  },
+  "DEBUG_LOG_FILE": "/tmp/PI-useReq.json",
+  "DEBUG_PROMPTS_ENABLED": "enable",
+  "DEBUG_PROMPTS_LOG_PATH": "/tmp/PI-useReq",
+  "DEBUG_STATUS_CHANGES": "disable",
+  "DEBUG_WORKFLOW_EVENTS": "disable",
+  "DEBUG_TOOL_COMMANDS_ENABLED": "disable",
+  "DEBUG_LOG_ON_STATUS": "running",
+  "DEBUG_ENABLED_TOOLS": [],
+  "DEBUG_ENABLED_PROMPTS": []
+}
