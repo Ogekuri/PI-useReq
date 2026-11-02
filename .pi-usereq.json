@@ -1,5 +1,5 @@
 {
-  "docs-dir": "pi-usereq/docs",
+  "docs-dir": "usereq/docs",
   "tests-dir": "tests",
   "src-dir": [
     "src"

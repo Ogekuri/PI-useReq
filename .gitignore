@@ -39,9 +39,9 @@
 !scripts/**/*.sh
 !scripts/**/*.ts
 !.pi-usereq.json
-!pi-usereq/
-!pi-usereq/docs/
-!pi-usereq/docs/**/*.md
+!usereq/
+!usereq/docs/
+!usereq/docs/**/*.md
 !pi.dev-src/
 !pi.dev-src/**/*
 !images/
