@@ -467,7 +467,7 @@ export function buildRuntimePathContext(
     normalizedBasePath,
     options.gitPath,
   );
-  const docsDir = normalizeRelativeDirContract(config["docs-dir"]) || "req/docs";
+  const docsDir = normalizeRelativeDirContract(config["docs-dir"]) || "pi-usereq/docs";
   const testsDir = normalizeRelativeDirContract(config["tests-dir"]) || "tests";
   const srcDir = config["src-dir"]
     .map((entry) => normalizeRelativeDirContract(entry))
