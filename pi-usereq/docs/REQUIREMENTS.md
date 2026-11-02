@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.106"
-date: "2026-10-22"
+version: "0.0.107"
+date: "2026-11-02"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -51,7 +51,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery, base-path session restoration, and force cleanup of generated worktrees plus branches.
 
 ### 2.2 Project Constraints
-- **CTN-001**: MUST persist local project configuration only at `<base-path>/.pi-usereq.json` with default `docs-dir=pi-usereq/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
+- **CTN-001**: MUST persist local project configuration only at `<base-path>/.pi-usereq.json` with default `docs-dir=req/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
 - **CTN-018**: MUST persist global configuration only at `~/.config/pi-usereq/config.json` with default `AUTO_GIT_COMMIT=enable`, `GIT_WORKTREE_ENABLED=enable`, and `GIT_WORKTREE_PREFIX=PI-useReq-`.
 - **CTN-002**: MUST collect project-wide source files through `git ls-files --cached --others --exclude-standard`; non-git project scans therefore fail instead of falling back to directory walking.
 - **CTN-003**: MUST limit project-wide source discovery to extensions listed in `STATIC_CHECK_EXT_TO_LANG`; analyzer-only aliases such as `.cc`, `.cxx`, `.hpp`, and `.exs` remain undiscoverable.
@@ -810,7 +810,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | PRJ-003 | `src/index.ts` :: `buildPiUsereqMenuChoices`, `configurePiUsereq`, and `configureDebugMenu` :: expose project paths, git automation, static-check, startup tools, notifications, and debug logging controls. |
 | PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` and `executeReqReferencesCommandExecution` :: keep git orchestration internal to slash-command execution. |
 | PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,templates,guidelines}`. |
-| CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `pi-usereq/docs`, `tests`, and `["src"]`. |
+| CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `req/docs`, `tests`, and `["src"]`. |
 | CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
 | CTN-003 | `src/core/tool-runner.ts` :: `SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG))`; `src/core/source-analyzer.ts` :: alias assignments `specs.cc = specs.cpp`, `specs.cxx = specs.cpp`, `specs.hpp = specs.cpp`, `specs.exs = specs.elixir`. |
 | CTN-004 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` :: defines `fixtureRoots` with `tests/fixtures` and `${testsDirRel}/fixtures`, then filters matching files out before execution. |

@@ -3377,7 +3377,7 @@ test("configuration menus reuse CLI settings theme semantics", async () => {
   const renderedMenu = (ctx.__state.customRenderLines[0] ?? []).join("\n");
   assert.match(renderedMenu, /<accent><bold>pi-usereq<\/bold><\/accent>/);
   assert.match(renderedMenu, /<accent>→ <\/accent>/);
-  assert.match(renderedMenu, /<accent>pi-usereq\/docs<\/accent>/);
+  assert.match(renderedMenu, /<accent>req\/docs<\/accent>/);
   assert.match(renderedMenu, /<muted>tests<\/muted>/);
   assert.match(renderedMenu, /<dim>/);
   assert.deepEqual([...usedColors].sort(), ["accent", "dim", "muted"]);
