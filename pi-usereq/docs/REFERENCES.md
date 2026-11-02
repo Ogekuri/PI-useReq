@@ -2807,7 +2807,7 @@ import { SourceAnalyzer, formatMarkdown } from "./source-analyzer.js";
 
 ---
 
-# path-context.ts | TypeScript | 535L | 25 symbols | 5 imports | 33 comments
+# path-context.ts | TypeScript | 536L | 25 symbols | 5 imports | 33 comments
 > Path: `src/core/path-context.ts`
 - @brief Derives shared runtime path contracts for prompts, tools, and configuration flows.
 - @details Centralizes the static bootstrap paths and dynamic cwd-aligned paths used across the extension runtime. The module also exposes home-relative display formatting, trailing-slash-free normalization, and prompt-facing path facts. Runtime is O(s + p) where s is the configured source-directory count and p is aggregate path length. Side effects are limited to module-local runtime-path state mutation.
@@ -2952,7 +2952,7 @@ import type { UseReqConfig } from "./config.js";
 - @param[in] absolutePath {string} Absolute or relative path candidate.
 - @return {string} Home-relative or trailing-slash-free absolute path.
 
-### fn `export function buildRuntimePathContext(` (L450-459)
+### fn `export function buildRuntimePathContext(` (L451-460)
 - @brief Builds the absolute runtime path context for one base path, context path, and configuration.
 - @details Derives static `install-path`, `git-path`, `parent-path`, and `base-dir`, resolves the static `config-path`, preserves the dynamic `context-path`, and resolves docs/tests/source absolute paths against `context-path` so worktree-backed execution uses the active checkout. Runtime is O(s + p) where s is configured source-directory count and p is aggregate path length. No external state is mutated.
 - @param[in] basePath {string} Static base path.
@@ -2960,8 +2960,9 @@ import type { UseReqConfig } from "./config.js";
 - @param[in] config {Pick<UseReqConfig, "docs-dir" | "tests-dir" | "src-dir">} Effective relative directory configuration.
 - @param[in] options {{ installationPath?: string; gitPath?: string | undefined; worktreeDir?: string | undefined; worktreePath?: string | undefined } | undefined} Optional installation, repository, and worktree overrides.
 - @return {RuntimePathContext} Absolute runtime path context.
+- @satisfies CTN-001
 
-### fn `export function buildRuntimePathFacts(` (L510-535)
+### fn `export function buildRuntimePathFacts(` (L511-536)
 - @brief Converts the absolute runtime path context into prompt/tool-facing path facts.
 - @details Re-encodes every absolute path with the home-relative formatter while preserving trailing-slash-free relative directories for `base-dir` and `worktree-dir`. Runtime is O(s + p) where s is source-directory count and p is aggregate path length. No external state is mutated.
 - @param[in] context {RuntimePathContext} Absolute runtime path context.
@@ -2993,8 +2994,8 @@ import type { UseReqConfig } from "./config.js";
 |`setRuntimeWorktreePathState`|fn||390-400|export function setRuntimeWorktreePathState(options:|
 |`getRuntimePathState`|fn||407-418|export function getRuntimePathState(): RuntimePathState|
 |`formatRuntimePathForDisplay`|fn||426-439|export function formatRuntimePathForDisplay(absolutePath:...|
-|`buildRuntimePathContext`|fn||450-459|export function buildRuntimePathContext(|
-|`buildRuntimePathFacts`|fn||510-535|export function buildRuntimePathFacts(|
+|`buildRuntimePathContext`|fn||451-460|export function buildRuntimePathContext(|
+|`buildRuntimePathFacts`|fn||511-536|export function buildRuntimePathFacts(|
 
 
 ---

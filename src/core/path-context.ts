@@ -446,6 +446,7 @@ export function formatRuntimePathForDisplay(absolutePath: string): string {
  * @param[in] config {Pick<UseReqConfig, "docs-dir" | "tests-dir" | "src-dir">} Effective relative directory configuration.
  * @param[in] options {{ installationPath?: string; gitPath?: string | undefined; worktreeDir?: string | undefined; worktreePath?: string | undefined } | undefined} Optional installation, repository, and worktree overrides.
  * @return {RuntimePathContext} Absolute runtime path context.
+ * @satisfies CTN-001
  */
 export function buildRuntimePathContext(
   basePath: string,
@@ -467,7 +468,7 @@ export function buildRuntimePathContext(
     normalizedBasePath,
     options.gitPath,
   );
-  const docsDir = normalizeRelativeDirContract(config["docs-dir"]) || "pi-usereq/docs";
+  const docsDir = normalizeRelativeDirContract(config["docs-dir"]) || "usereq/docs";
   const testsDir = normalizeRelativeDirContract(config["tests-dir"]) || "tests";
   const srcDir = config["src-dir"]
     .map((entry) => normalizeRelativeDirContract(entry))

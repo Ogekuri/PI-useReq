@@ -210,7 +210,7 @@ interface UseReqGlobalConfig {
  * @details Used when no persisted `docs-dir` value exists or normalization yields an empty string. Lookup complexity is O(1).
  * @satisfies CTN-001
  */
-export const DEFAULT_DOCS_DIR = "pi-usereq/docs";
+export const DEFAULT_DOCS_DIR = "usereq/docs";
 /**
  * @brief Defines the default tests directory relative to the project root.
  * @details Used when no persisted `tests-dir` value exists or normalization yields an empty string. Lookup complexity is O(1).
