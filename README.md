@@ -49,7 +49,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 
 - **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 1.0.0 or newer (Node.js 22.19+, per the pi CLI requirement).
 - **Git repository** - every `req-*` command runs slash-command-owned git validation: the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
-- **Requirements documentation** - the configured `docs-dir` (default `pi-usereq/docs`) must contain the canonical documents required by each command (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); commands such as `/req-write`, `/req-create`, and `/req-workflow` are the entry points that generate them.
+- **Requirements documentation** - the configured `docs-dir` (default `usereq/docs`) must contain the canonical documents required by each command (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); commands such as `/req-write`, `/req-create`, and `/req-workflow` are the entry points that generate them.
 - **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install automatically through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
 - **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker). The tool is tested with the OpenRouter model `~deepseek/deepseek-v4-flash-latest`; the extension is model-agnostic and also works with other models exposed by the pi client.
 
@@ -127,7 +127,7 @@ Click to zoom flowchart image.
 ```text
 .
 ├── .pi-usereq.json              # local project configuration (auto-generated)
-├── pi-usereq/                   # configured docs-dir (default)
+├── usereq/                      # configured docs-dir (default)
 │   └── docs/
 │       ├── REQUIREMENTS.md      # Software Requirements Specification (SRS)
 │       ├── WORKFLOW.md          # runtime/execution units and call traces
@@ -142,7 +142,7 @@ Click to zoom flowchart image.
 ```
 
 The documentation directory, unit-tests directory, and source directories are configurable via the
-[settings menu](#extension-usage) (defaults: `pi-usereq/docs`, `tests`, `src`).
+[settings menu](#extension-usage) (defaults: `usereq/docs`, `tests`, `src`).
 
 
 ## Install/Uninstall
@@ -283,7 +283,7 @@ Project-scoped commands (`--summarize`, `--compress`, `--tokens`, `--find`, `--s
 
 The interactive configuration menu exposes every user-facing setting; changes are persisted automatically:
 
-- **Documentation directory** — `docs-dir` (default `pi-usereq/docs`) used for the canonical documents.
+- **Documentation directory** — `docs-dir` (default `usereq/docs`) used for the canonical documents.
 - **Source directories** — `src-dir` (default `["src"]`) used by the analysis tools.
 - **Unit tests directory** — `tests-dir` (default `tests`).
 - **Context Files** — toggles to inject `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` into the prompt context through `%%CONTEXT_FILES%%`. Each toggle shows the measured file size (`<chars>c/<tokens>t`) plus its occupancy share, and the summary row appends the overall `[<percent>% context]` suffix. It is recommended to keep all three toggles enabled (`requirements:on • references:on • workflow:on`) so the analysis commands receive the canonical documents in their context.
