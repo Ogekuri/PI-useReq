@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.93.0](https://github.com/Ogekuri/PI-useReq/compare/v0.92.0..v0.93.0) - 2026-11-02
+### ⛰️  Features
+- Add .pi-usereq.json config file.
+
+### 🚜  Changes
+- BREAKING CHANGE: default docs-dir to usereq/docs instead of pi-usereq/docs [useReq] *(config)*
+  - Update CTN-001 default docs-dir from pi-usereq/docs to usereq/docs in REQUIREMENTS.md (bump to 0.0.107) and its evidence row.
+  - Change DEFAULT_DOCS_DIR in src/core/config.ts and the duplicated fallback literal in src/core/path-context.ts buildRuntimePathContext to usereq/docs.
+  - Regenerate pi-usereq/docs/REFERENCES.md from the updated source surface.
+  - No backward-compatibility or migration logic implemented per request.
+- BREAKING CHANGE: default docs-dir to req/docs [useReq] *(config)*
+  - Update CTN-001 default documentation directory from pi-usereq/docs to req/docs without backward-compatibility logic. Align DEFAULT_DOCS_DIR in src/core/config.ts and the runtime path fallback in src/core/path-context.ts, refresh the SRS default and its evidence row plus front matter, and update the menu-theme test expectation to the new default.
+
+### ◀️  Revert
+- Roll back branch to 36ca1f34 (36ca1f3489a85f1c911865ed11e373a4a42c6465).
+
 ## [0.92.0](https://github.com/Ogekuri/PI-useReq/compare/v0.91.0..v0.92.0) - 2026-10-22
 ### ⛰️  Features
 - Update PI-Cli docs/sources from v1.1.0 to v1.4.0.
@@ -1256,6 +1272,7 @@
 - \[0.90.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.90.0
 - \[0.91.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.91.0
 - \[0.92.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.92.0
+- \[0.93.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.93.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1347,3 +1364,4 @@
 [0.90.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.89.0..v0.90.0
 [0.91.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.90.0..v0.91.0
 [0.92.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.91.0..v0.92.0
+[0.93.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.92.0..v0.93.0
