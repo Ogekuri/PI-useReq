@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.94.0](https://github.com/Ogekuri/PI-useReq/compare/v0.93.0..v0.94.0) - 2026-11-04
+### 🐛  Bug Fixes
+- Fix .gitignore file.
+
+### 🚜  Changes
+- Determine terminal prompt workflow outcome at agent_settled only [useReq] *(prompt-workflow-state)*
+  - Add REQ-461..REQ-465: keep workflow state running during agentic
+  - execution, never flip status:error for host-recovered intermediate agent
+  - errors, and determine the terminal outcome (interrupted/completed/failed)
+  - only at orchestration end. On hosts emitting agent_settled, agent_end now
+  - only records the terminal-outcome candidate for worktree-backed runs; the
+  - error park, retention notification, ownership clear, and merging transition
+  - moved to agent_settled. Legacy hosts keep the agent_end fallback. Update
+  - WORKFLOW.md and regenerate REFERENCES.md. Two existing tests encode the
+  - superseded error-park-at-agent_end timing and now mismatch by design.
+
 ## [0.93.0](https://github.com/Ogekuri/PI-useReq/compare/v0.92.0..v0.93.0) - 2026-11-02
 ### ⛰️  Features
 - Add .pi-usereq.json config file.
@@ -1273,6 +1289,7 @@
 - \[0.91.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.91.0
 - \[0.92.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.92.0
 - \[0.93.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.93.0
+- \[0.94.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.94.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1365,3 +1382,4 @@
 [0.91.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.90.0..v0.91.0
 [0.92.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.91.0..v0.92.0
 [0.93.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.92.0..v0.93.0
+[0.94.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.93.0..v0.94.0
