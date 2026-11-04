@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.107"
-date: "2026-11-02"
+version: "0.0.108"
+date: "2026-11-04"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -537,6 +537,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-458**: MUST remain fully functional when the pi CLI host version is unresolvable or below `1.4.0`, emitting the version warning only for a resolvable version below `1.4.0` and never repeating it in the same process.
 - **REQ-459**: MUST pass `deliverAs: "followUp"` on every `sendUserMessage(...)` prompt-delivery fallback so pi sessions busy during run start queue the dispatched prompt.
 - **REQ-460**: MUST declare `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, and `@earendil-works/pi-tui` peer dependencies with `^1.4.0` ranges.
+- **REQ-461**: MUST keep workflow state `running` throughout the agentic-execution window of one prompt orchestration, from the post-handoff `running` transition until orchestration termination, without intermediate workflow-state updates from agent-run events.
+- **REQ-462**: MUST NOT transition workflow state to `error` from an intermediate agent-run error that the pi host retries or recovers; a recovered orchestration MUST never render `status:error`.
+- **REQ-463**: On hosts emitting `agent_settled`, MUST determine the terminal prompt-orchestration outcome only at `agent_settled`, classifying interrupted, completed, or failed from the final agent run.
+- **REQ-464**: On hosts emitting `agent_settled`, MUST NOT park workflow state `error`, emit the worktree-retention error notification, or clear prompt-run ownership at intermediate `agent_end` events.
+- **REQ-465**: On hosts without `agent_settled`, MUST determine the terminal prompt-orchestration outcome at the final `agent_end` event.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
