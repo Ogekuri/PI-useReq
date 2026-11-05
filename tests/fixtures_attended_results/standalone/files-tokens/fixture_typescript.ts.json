@@ -1,5 +1,5 @@
 {
   "code": 0,
-  "stdout": "  📄 fixture_typescript.ts: 2,882 tokens, 12,463 chars\n\n📊 Pack Summary:\n────────────────\n  Total Files: 1 files\n Total Tokens: 2,882 tokens\n  Total Chars: 12,463 chars\n",
+  "stdout": "  📄 fixture_typescript.ts: 2,950 tokens, 12,895 chars\n\n📊 Pack Summary:\n────────────────\n  Total Files: 1 files\n Total Tokens: 2,950 tokens\n  Total Chars: 12,895 chars\n",
   "stderr": ""
 }

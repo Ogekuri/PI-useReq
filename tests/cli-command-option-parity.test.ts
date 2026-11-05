@@ -451,6 +451,7 @@ const TARGET_CASES: TargetParityCase[] = [
       saveFixtureConfigs(projectBase, {
         ...updatedConfig,
         "static-check": {
+          C: createStaticCheckLanguageConfig([], "disable"),
           JavaScript: createStaticCheckLanguageConfig([
             { module: "Command", cmd: firstScript },
             { module: "Command", cmd: secondScript, params: ["--check"] },

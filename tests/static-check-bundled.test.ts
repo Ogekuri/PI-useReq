@@ -23,11 +23,11 @@ import {
   getConsumerInstallRoot,
   selectInstallScriptPackageNames,
   mergeAllowScriptsEntries,
-} from "../scripts/install-static-checkers.ts";
+} from "../scripts/install-static-checkers.js";
 import type {
   NodeModulesPackage,
   InstallScriptApprovalDeps,
-} from "../scripts/install-static-checkers.ts";
+} from "../scripts/install-static-checkers.js";
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");

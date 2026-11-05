@@ -7,8 +7,6 @@
  */
 // Single line comment
 /* Multi-line comment */
-import { Component } from 'react';
-import type { ReactNode } from 'react';
 
 /* ── Interfaces ───────────────────────────────────────────────────────── */
 
@@ -325,6 +323,17 @@ declare module MyMod {
 /* ── Decorator ────────────────────────────────────────────────────────── */
 
 /**
+ * @brief Local standard class decorator replacing the unresolvable external react binding.
+ * @details Identity decorator typed as the legacy `ClassDecorator` signature so the `@Component`
+ *          annotation stays resolvable without the `react` package while preserving decorator
+ *          coverage in the parser fixture. Returns the decorated class unchanged; performs no
+ *          mutation and holds no state. Complexity O(1).
+ * @param[in] value {Function} Decorated class constructor passed by the compiler.
+ * @return {Function} The unchanged decorated class constructor.
+ */
+const Component: ClassDecorator = (value) => value;
+
+/**
  * @class Decorated
  * @brief Class using a decorator annotation.
  */
@@ -375,13 +384,6 @@ function makeOptional<T extends object>(obj: T): Partial<T> {
 }
 
 /* coverage extension block */
-import { Injectable } from 'inversify';
-import { Observable } from 'rxjs';
-import { FC } from 'react';
-@injectable
-@sealed
-@track
-@memoized
 interface CacheEntry { key: string; value: string }
 export interface Runner { run(): Promise<void> }
 enum ModeTs { Fast, Safe }

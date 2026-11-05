@@ -365,6 +365,26 @@ function getFailingStaticCheckConfig(): UseReqConfig["static-check"] {
 }
 
 /**
+ * @brief Builds the environment-isolated failing static-check configuration for the project scan archive.
+ * @details Enables only the deterministic `Command` checker `false` for Python and explicitly
+ *          disables C, C++, JavaScript, and TypeScript so the archived `project/static-check`
+ *          scenario never depends on default-seeded checkers (`cppcheck`, `clang-format`,
+ *          `node --check`, `eslint`) being resolvable in the verification toolchain. Runtime
+ *          is O(1). No side effects occur.
+ * @return {UseReqConfig["static-check"]} Static-check configuration payload isolating the failing checker.
+ * @satisfies REQ-019, REQ-043, REQ-250, REQ-251, REQ-316, TST-016
+ */
+function getIsolatedFailingStaticCheckConfig(): UseReqConfig["static-check"] {
+  return {
+    Python: createStaticCheckLanguageConfig([{ module: "Command", cmd: "false" }], "enable"),
+    C: createStaticCheckLanguageConfig([], "disable"),
+    "C++": createStaticCheckLanguageConfig([], "disable"),
+    JavaScript: createStaticCheckLanguageConfig([], "disable"),
+    TypeScript: createStaticCheckLanguageConfig([], "disable"),
+  };
+}
+
+/**
  * @brief Builds all archive-backed repository scenarios.
  * @details Declares deterministic temporary-repository cases covering project-scoped commands, config-mutation commands, and git/worktree commands required by `REQ-043`. Runtime is O(1) until execution. No side effects occur until scenarios execute.
  * @return {AttendedScenario[]} Deterministically ordered repository scenarios.
@@ -530,7 +550,7 @@ function buildProjectScenarios(): AttendedScenario[] {
       };
     }),
     createProjectScenario("project/static-check", path.posix.join("project", "static-check.json"), () => {
-      const { projectBase } = initFixtureRepo({ staticCheck: getFailingStaticCheckConfig() });
+      const { projectBase } = initFixtureRepo({ staticCheck: getIsolatedFailingStaticCheckConfig() });
       return {
         args: ["--static-check"],
         cwd: projectBase,
@@ -582,9 +602,9 @@ export function parseArchivedCliResult(text: string): ArchivedCliResult {
   assert.equal(typeof payload.stdout, "string", "Archived result is missing stdout");
   assert.equal(typeof payload.stderr, "string", "Archived result is missing stderr");
   return {
-    code: payload.code,
-    stdout: payload.stdout,
-    stderr: payload.stderr,
+    code: payload.code!,
+    stdout: payload.stdout!,
+    stderr: payload.stderr!,
   };
 }
 

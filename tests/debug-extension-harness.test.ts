@@ -114,6 +114,7 @@ function buildSdkFixture(overrides?: Partial<SdkContractSnapshot>): SdkContractS
     ],
     activeTools: ["tokens"],
     runtimeShape: "extensionsResult.runtime.pi",
+    supportedEvents: [],
     ...overrides,
   };
 }

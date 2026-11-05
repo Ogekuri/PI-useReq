@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import piUsereqExtension from "../src/index.ts";
+import piUsereqExtension from "../src/index.js";
 import {
   REQ_REFERENCES_COMMAND_DESCRIPTION,
   REQ_REFERENCES_COMMIT_MESSAGE,
@@ -349,7 +349,7 @@ function createFakePi(options: FakePiOptions = {}) {
       origin: "top-level",
     },
   }));
-  let activeTools = PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.filter((name) => embeddedToolNames.has(name));
+  let activeTools: string[] = PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.filter((name) => embeddedToolNames.has(name));
   const getVisibleTools = () => {
     const overridden = new Set(tools.map((tool) => tool.name));
     return [
@@ -885,7 +885,7 @@ async function executeRegisteredTool(
   cwd: string,
   params: Record<string, unknown> = {},
 ): Promise<any> {
-  const tool = pi.tools.find((candidate) => candidate.name === toolName);
+  const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === toolName);
   assert.ok(tool, `missing tool ${toolName}`);
   assert.ok(tool.execute, `missing execute handler for tool ${toolName}`);
   const previousCwd = process.cwd();
@@ -1066,11 +1066,11 @@ test("token tools register agent-oriented descriptions and schema details", () =
   assert.ok(tokens, "missing tokens tool");
 
   assert.match(filesTokens.description ?? "", /monolithic token pack summary/);
-  assert.ok(filesTokens.promptGuidelines?.some((line) => line.includes("monolithic pack-summary text")));
+  assert.ok(filesTokens.promptGuidelines?.some((line: string) => line.includes("monolithic pack-summary text")));
   assert.match(String((filesTokens.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic pack-summary text/);
 
   assert.match(tokens.description ?? "", /canonical docs/);
-  assert.ok(tokens.promptGuidelines?.some((line) => line.includes("monolithic pack-summary text")));
+  assert.ok(tokens.promptGuidelines?.some((line: string) => line.includes("monolithic pack-summary text")));
   assert.match(String((tokens.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic pack-summary text/);
 });
 
@@ -1084,13 +1084,13 @@ test("summary tools register agent-oriented descriptions and schema details", ()
   assert.ok(summarize, "missing summarize tool");
 
   assert.match(filesSummarize.description ?? "", /monolithic summary markdown report/);
-  assert.ok(filesSummarize.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
-  assert.ok(filesSummarize.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+  assert.ok(filesSummarize.promptGuidelines?.some((line: string) => line.includes("monolithic markdown")));
+  assert.ok(filesSummarize.promptGuidelines?.some((line: string) => line.includes("Formatting contract:")));
   assert.match(String((filesSummarize.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 
   assert.match(summarize.description ?? "", /configured project source directories/);
-  assert.ok(summarize.promptGuidelines?.some((line) => line.includes("file-structure markdown block")));
-  assert.ok(summarize.promptGuidelines?.some((line) => line.includes("Configuration contract:")));
+  assert.ok(summarize.promptGuidelines?.some((line: string) => line.includes("file-structure markdown block")));
+  assert.ok(summarize.promptGuidelines?.some((line: string) => line.includes("Configuration contract:")));
   assert.match(String((summarize.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
@@ -1102,8 +1102,8 @@ test("references tool registers agent-oriented descriptions and schema details",
   assert.ok(references, "missing references tool");
 
   assert.match(references.description ?? "", /configured project source directories and configured docs-dir/);
-  assert.ok(references.promptGuidelines?.some((line) => line.includes("overwrite `<docs-dir>/REFERENCES.md`")));
-  assert.ok(references.promptGuidelines?.some((line) => line.includes("generated markdown is never returned")));
+  assert.ok(references.promptGuidelines?.some((line: string) => line.includes("overwrite `<docs-dir>/REFERENCES.md`")));
+  assert.ok(references.promptGuidelines?.some((line: string) => line.includes("generated markdown is never returned")));
   assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /content\[0\]\.text returns only `success` or `error: <diagnostic>`/);
 });
 
@@ -1117,14 +1117,14 @@ test("search tools register agent-oriented descriptions and schema details", () 
   assert.ok(search, "missing search tool");
 
   assert.match(filesSearch.description ?? "", /monolithic construct-search markdown report/);
-  assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Regex rule:")));
-  assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
-  assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Supported tags [Python]:")));
+  assert.ok(filesSearch.promptGuidelines?.some((line: string) => line.includes("Regex rule:")));
+  assert.ok(filesSearch.promptGuidelines?.some((line: string) => line.includes("Supported tags [Typescript]:")));
+  assert.ok(filesSearch.promptGuidelines?.some((line: string) => line.includes("Supported tags [Python]:")));
   assert.match(String((filesSearch.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 
   assert.match(search.description ?? "", /configured project source directories/);
-  assert.ok(search.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
-  assert.ok(search.promptGuidelines?.some((line) => line.includes("Tag rule:")));
+  assert.ok(search.promptGuidelines?.some((line: string) => line.includes("monolithic markdown")));
+  assert.ok(search.promptGuidelines?.some((line: string) => line.includes("Tag rule:")));
   assert.match(String((search.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
@@ -1138,13 +1138,13 @@ test("compression tools register agent-oriented descriptions and schema details"
   assert.ok(compress, "missing compress tool");
 
   assert.match(filesCompress.description ?? "", /monolithic compression markdown report/);
-  assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
-  assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+  assert.ok(filesCompress.promptGuidelines?.some((line: string) => line.includes("Line-number behavior:")));
+  assert.ok(filesCompress.promptGuidelines?.some((line: string) => line.includes("Formatting contract:")));
   assert.match(String((filesCompress.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 
   assert.match(compress.description ?? "", /configured project source directories/);
-  assert.ok(compress.promptGuidelines?.some((line) => line.includes("monolithic markdown")));
-  assert.ok(compress.promptGuidelines?.some((line) => line.includes("Formatting contract:")));
+  assert.ok(compress.promptGuidelines?.some((line: string) => line.includes("monolithic markdown")));
+  assert.ok(compress.promptGuidelines?.some((line: string) => line.includes("Formatting contract:")));
   assert.match(String((compress.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
@@ -1872,7 +1872,7 @@ test("configuration menu omits prompt-delivery controls and persisted config omi
   await command!.handler("", ctx);
 
   const menuItems = ctx.__state.selectCalls[0]?.items ?? [];
-  assert.equal(menuItems.some((item) => item.includes("reset-context")), false);
+  assert.equal(menuItems.some((item: string) => item.includes("reset-context")), false);
   assert.equal(fs.existsSync(getProjectConfigPath(cwd)), false);
 });
 
@@ -1962,7 +1962,7 @@ test("show local configuration saves pending config, closes the menu, and writes
   assert.equal(ctx.__state.editorText, persistedText);
   assert.match(ctx.__state.editorText, /"docs-dir": "docs\/custom"/);
   assert.equal(
-    ctx.__state.selectCalls.filter((call) => call.title === "pi-usereq").length,
+    ctx.__state.selectCalls.filter((call: { title: string; items: string[]; selectedChoiceId?: string }) => call.title === "pi-usereq").length,
     2,
   );
 });
@@ -1984,7 +1984,7 @@ test("show global configuration saves pending config, closes the menu, and write
   assert.equal(ctx.__state.editorText, persistedText);
   assert.match(ctx.__state.editorText, /"AUTO_GIT_COMMIT": "disable"/);
   assert.equal(
-    ctx.__state.selectCalls.filter((call) => call.title === "pi-usereq").length,
+    ctx.__state.selectCalls.filter((call: { title: string; items: string[]; selectedChoiceId?: string }) => call.title === "pi-usereq").length,
     2,
   );
 });
@@ -2028,7 +2028,7 @@ test("descendant configuration menus end with Reset defaults only", async () => 
 
   const getMenuIndex = (title: string, marker?: string): number => {
     const index = ctx.__state.selectCalls.findIndex(
-      (entry) => entry.title === title && (marker === undefined || entry.items.includes(marker)),
+      (entry: { title: string; items: string[]; selectedChoiceId?: string }) => entry.title === title && (marker === undefined || entry.items.includes(marker)),
     );
     assert.notEqual(index, -1, `missing menu ${title}`);
     return index;
@@ -2085,7 +2085,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
 
   const renderedInitialDebugMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
   const persistedConfig = readProjectConfigJson(cwd);
-  const debugCalls = ctx.__state.selectCalls.filter((call) => call.title === "Debug");
+  const debugCalls = ctx.__state.selectCalls.filter((call: { title: string; items: string[]; selectedChoiceId?: string }) => call.title === "Debug");
   assert.match(renderedInitialDebugMenu, /<dim>Log file/);
   assert.match(renderedInitialDebugMenu, /<dim>Enable debug commands for tools/);
   assert.ok(
@@ -3175,12 +3175,12 @@ test("notifications menu preserves focus on toggled and edited rows", async () =
 
   await command!.handler("", ctx);
 
-  const notificationCalls = ctx.__state.selectCalls.filter((call) => call.title === "Notifications");
+  const notificationCalls = ctx.__state.selectCalls.filter((call: { title: string; items: string[]; selectedChoiceId?: string }) => call.title === "Notifications");
   assert.equal(notificationCalls[0]?.selectedChoiceId, "notify-enabled");
   assert.equal(notificationCalls[1]?.selectedChoiceId, "notification-events");
   assert.equal(notificationCalls[2]?.selectedChoiceId, "notify-command");
 
-  const notificationEventCalls = ctx.__state.selectCalls.filter((call) => call.title === "Notification events");
+  const notificationEventCalls = ctx.__state.selectCalls.filter((call: { title: string; items: string[]; selectedChoiceId?: string }) => call.title === "Notification events");
   assert.deepEqual(notificationEventCalls[0]?.items ?? [], [
     "Prompt completed",
     "Prompt interrupted",
@@ -3377,7 +3377,7 @@ test("configuration menus reuse CLI settings theme semantics", async () => {
   const renderedMenu = (ctx.__state.customRenderLines[0] ?? []).join("\n");
   assert.match(renderedMenu, /<accent><bold>pi-usereq<\/bold><\/accent>/);
   assert.match(renderedMenu, /<accent>→ <\/accent>/);
-  assert.match(renderedMenu, /<accent>pi-usereq\/docs<\/accent>/);
+  assert.match(renderedMenu, /<accent>usereq\/docs<\/accent>/);
   assert.match(renderedMenu, /<muted>tests<\/muted>/);
   assert.match(renderedMenu, /<dim>/);
   assert.deepEqual([...usedColors].sort(), ["accent", "dim", "muted"]);
@@ -3484,7 +3484,7 @@ test("req-references updates REFERENCES.md with a direct commit workflow and no 
       spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
       "",
     );
-    assert.ok(ctx.__state.notifications.some((entry) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
     assert.ok(recordedStatuses.every((status) => !/<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
     assert.equal(
@@ -3695,7 +3695,7 @@ test("req-references surfaces git-validation and reference-generation failures w
       .filter((entry) => /^PI-useReq-/.test(entry));
     assert.equal(pi.sentUserMessages.length, 0);
     assert.deepEqual(createdWorktreeEntries, []);
-    assert.ok(ctx.__state.notifications.some((entry) => /ERROR: Git status unclear!/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /ERROR: Git status unclear!/.test(entry.message)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
@@ -3747,7 +3747,7 @@ test("req-references surfaces git-validation and reference-generation failures w
       .filter((entry) => /^PI-useReq-/.test(entry));
     assert.equal(pi.sentUserMessages.length, 0);
     assert.deepEqual(createdWorktreeEntries, []);
-    assert.ok(ctx.__state.notifications.some((entry) => /no source files found in configured directories/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /no source files found in configured directories/.test(entry.message)));
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
@@ -3843,7 +3843,7 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
     );
     assert.match(fs.readFileSync(originalSessionFile, "utf8"), new RegExp(appendedEntryId));
     assert.ok(
-      ctx.__state.notifications.some((entry) => /SUCCESS: req-reset/.test(entry.message)),
+      ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)),
     );
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
@@ -3915,7 +3915,7 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
       0,
     );
     assert.ok(
-      ctx.__state.notifications.some((entry) => /Session switch cancelled/.test(entry.message)),
+      ctx.__state.notifications.some((entry: { message: string; level: string }) => /Session switch cancelled/.test(entry.message)),
     );
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
@@ -4268,8 +4268,8 @@ test("req-reset re-anchors the live session when the reserved base session was n
       1,
     );
     assert.equal(path.resolve(process.cwd()), path.resolve(projectBase));
-    assert.ok(uiState.notifications.some((entry) => /SUCCESS: req-reset/.test(entry.message)));
-    assert.ok(!uiState.notifications.some((entry) => entry.level === "error"));
+    assert.ok(uiState.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)));
+    assert.ok(!uiState.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
     const finalStatusText = uiState.statuses.get("pi-usereq") ?? "";
     assert.doesNotMatch(finalStatusText, /branch:unknown/);
     assert.match(
@@ -4422,7 +4422,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
     );
     assert.equal(pi.sentUserMessages.length, 1);
     assert.equal(
-      ctx.__state.notifications.filter((entry) => /expected idle/.test(entry.message)).length,
+      ctx.__state.notifications.filter((entry: { message: string; level: string }) => /expected idle/.test(entry.message)).length,
       1,
     );
     assert.equal(
@@ -4444,7 +4444,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
     );
     assert.equal(pi.sentUserMessages.length, 1);
     assert.equal(
-      ctx.__state.notifications.filter((entry) => /expected idle/.test(entry.message)).length,
+      ctx.__state.notifications.filter((entry: { message: string; level: string }) => /expected idle/.test(entry.message)).length,
       2,
     );
     assert.equal(
@@ -4532,7 +4532,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
     );
     assert.equal(pi.sentUserMessages.length, sentMessageCount);
     assert.equal(
-      ctx.__state.notifications.filter((entry) => /expected idle/.test(entry.message)).length,
+      ctx.__state.notifications.filter((entry: { message: string; level: string }) => /expected idle/.test(entry.message)).length,
       1,
     );
     assert.equal(
@@ -4606,7 +4606,7 @@ test("prompt commands abort when git validation fails", async () => {
       /ERROR: Git status unclear!/,
     );
     assert.equal(pi.sentUserMessages.length, 0);
-    assert.ok(ctx.__state.notifications.some((entry) => /ERROR: Git status unclear!/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /ERROR: Git status unclear!/.test(entry.message)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
@@ -4649,7 +4649,7 @@ test("prompt commands enforce the documented required-doc matrix", async () => {
       .filter((entry) => /^PI-useReq-/.test(entry));
     assert.equal(pi.sentUserMessages.length, 0);
     assert.deepEqual(createdWorktreeEntries, []);
-    assert.ok(ctx.__state.notifications.some((entry) => /WORKFLOW\.md/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /WORKFLOW\.md/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -4726,7 +4726,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
       }).status,
       0,
     );
-    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
     assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", originalBranchName)}`)));
     const finalStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
@@ -4830,10 +4830,10 @@ test("worktree-backed successful closure stashes tracked base-path changes, merg
       }).status,
       0,
     );
-    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
     assert.ok(
       ctx.__state.notifications.some(
-        (entry) => entry.level === "info"
+        (entry: { message: string; level: string }) => entry.level === "info"
           && /WARNING: Restored base-path changes after merge; base-path is not clean\./.test(entry.message),
       ),
     );
@@ -4952,7 +4952,7 @@ test("prompt-command bootstrap ignores stale deleted-worktree session metadata o
       }).status,
       0,
     );
-    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -5015,7 +5015,7 @@ test("worktree-backed finalization transitions through merging, error, and idle 
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><error>\u001b\[5merror\u001b\[25m<\/error>/.test(status)));
     assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><warning>idle<\/warning>/);
-    assert.ok(ctx.__state.notifications.some((entry) => /Fast-forward merge failed/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /Fast-forward merge failed/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -5066,6 +5066,10 @@ test("worktree-backed prompt failures keep the worktree session, retain worktree
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "error", content: [] }],
     }, ctx);
+    // REQ-463/REQ-464: the fake host advertises `agent_settled` (its `on(...)` returns an
+    // unsubscribe function), so terminal failure classification, the worktree-retention
+    // error notification, and prompt-run ownership reset happen only at settlement.
+    await pi.emit("agent_settled", {}, ctx);
 
     // The original base-path session MUST NOT be resumed on failure; the
     // client stays on the worktree execution session so the failure stays
@@ -5081,7 +5085,7 @@ test("worktree-backed prompt failures keep the worktree session, retain worktree
       }).status,
       0,
     );
-    assert.ok(ctx.__state.notifications.some((entry) => entry.level === "error"
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error"
       && /Prompt closure retained worktree .* after failed outcome\./.test(entry.message)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
@@ -5783,7 +5787,7 @@ test("worktree-backed prompt commands close successfully with realistic single-a
       }).status,
       0,
     );
-    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -5831,9 +5835,9 @@ test("worktree-backed prompt commands close successfully with realistic single-a
     });
     activeContext!.switchSession = async (sessionPath: string) => {
       activeContextCwd = projectBase;
-      activeContext!.sessionManager.getSessionFile = () => sessionPath;
-      activeContext!.sessionManager.getSessionDir = () => path.dirname(sessionPath);
-      activeContext!.sessionManager.getCwd = () => projectBase;
+      activeContext!.sessionManager!.getSessionFile = () => sessionPath;
+      activeContext!.sessionManager!.getSessionDir = () => path.dirname(sessionPath);
+      activeContext!.sessionManager!.getCwd = () => projectBase;
       process.chdir(projectBase);
       staleAfterSwitch = true;
       return { cancelled: false };
@@ -5890,9 +5894,9 @@ test("worktree-backed prompt commands close successfully with realistic single-a
     });
     activeContext!.switchSession = async (sessionPath: string) => {
       activeContextCwd = projectBase;
-      activeContext!.sessionManager.getSessionFile = () => sessionPath;
-      activeContext!.sessionManager.getSessionDir = () => path.dirname(sessionPath);
-      activeContext!.sessionManager.getCwd = () => projectBase;
+      activeContext!.sessionManager!.getSessionFile = () => sessionPath;
+      activeContext!.sessionManager!.getSessionDir = () => path.dirname(sessionPath);
+      activeContext!.sessionManager!.getCwd = () => projectBase;
       process.chdir(projectBase);
       return { cancelled: false };
     };
@@ -5973,7 +5977,7 @@ test("worktree-backed closure succeeds when agent_end lifecycle contexts omit sw
       }).status,
       0,
     );
-    assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(commandCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -6055,7 +6059,7 @@ test("worktree-backed closure defers the restore switch until agent_settled", as
     assert.equal(commandCtx.cwd, projectBase);
     assert.ok(fs.existsSync(path.join(projectBase, "src", "settled-closure.ts")));
     assert.equal(fs.existsSync(executionBasePath), false);
-    assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(commandCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -6115,7 +6119,7 @@ test("worktree-backed closure finalizes at agent_end when the host lacks agent_s
     assert.equal(commandCtx.cwd, projectBase);
     assert.ok(fs.existsSync(path.join(projectBase, "src", "legacy-closure.ts")));
     assert.equal(fs.existsSync(executionBasePath), false);
-    assert.equal(commandCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(commandCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -6196,7 +6200,7 @@ test("switch-triggered session_shutdown preserves prompt state for same-runtime 
     assert.equal(ctx.cwd, projectBase);
     assert.ok(fs.existsSync(path.join(projectBase, "src", "shutdown-preserve.ts")));
     assert.equal(fs.existsSync(executionBasePath), false);
-    assert.equal(ctx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
@@ -6286,7 +6290,7 @@ test("replacement-session runtime resynchronizes persisted running state before 
     assert.equal(reboundCtx.cwd, projectBase);
     assert.equal(fs.existsSync(executionBasePath), false);
     assert.equal(fs.existsSync(path.join(projectBase, "src", "rebound-running.ts")), true);
-    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(reboundCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
@@ -6434,7 +6438,7 @@ test("replacement-session prompt delivery persists running before async sendUser
     assert.equal(reboundCtx.cwd, projectBase);
     assert.equal(fs.existsSync(executionBasePath), false);
     assert.equal(fs.existsSync(path.join(projectBase, "src", "delayed-running.ts")), true);
-    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(reboundCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
@@ -6524,7 +6528,7 @@ test("replacement-session prompt delivery persists running before async sendUser
     const handlerPromise = firstPi.commands.get("req-change")!.handler("Adjust docs", firstCtx);
     const handlerOutcomePromise = handlerPromise.then(
       () => ({ error: undefined as unknown }),
-      (error) => ({ error }),
+      (error: unknown) => ({ error }),
     );
     for (let attempt = 0; attempt < 20 && rejectPromptDelivery === undefined; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -6593,7 +6597,7 @@ test("replacement-session prompt delivery persists running before async sendUser
       }).status,
       0,
     );
-    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(reboundCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
@@ -6647,7 +6651,7 @@ test("worktree-backed prompt execution survives switch-triggered extension rebin
     assert.equal(reboundCtx.cwd, projectBase);
     assert.equal(fs.existsSync(executionBasePath), false);
     assert.equal(fs.existsSync(path.join(projectBase, "src", "rebound.ts")), true);
-    assert.equal(reboundCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(reboundCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -6691,7 +6695,7 @@ test("worktree-backed prompt commands activate when ctx.switchSession only accep
     assert.equal(ctx.sessionManager.getSessionFile(), frozenSessionFile);
     assert.equal(ctx.sessionManager.getCwd(), frozenSessionCwd);
     assert.equal(
-      ctx.__state.notifications.some((entry) => /Prompt execution activation expected/.test(entry.message)),
+      ctx.__state.notifications.some((entry: { message: string; level: string }) => /Prompt execution activation expected/.test(entry.message)),
       false,
     );
   } finally {
@@ -6731,7 +6735,7 @@ test("worktree-backed prompt commands tolerate stale ctx.sessionManager probes a
     assert.equal(ctx.sessionManager.getSessionFile(), originalSessionFile);
     assert.equal(ctx.sessionManager.getCwd(), originalSessionCwd);
     assert.equal(
-      ctx.__state.notifications.some((entry) => /Prompt execution activation expected/.test(entry.message)),
+      ctx.__state.notifications.some((entry: { message: string; level: string }) => /Prompt execution activation expected/.test(entry.message)),
       false,
     );
   } finally {
@@ -6768,7 +6772,7 @@ test("worktree-backed prompt commands tolerate a pending-persistence execution-s
     const executionBasePath = worktreeMatch?.[2] ?? "";
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(
-      ctx.__state.notifications.some((entry) => /Prompt execution activation expected session/.test(entry.message)),
+      ctx.__state.notifications.some((entry: { message: string; level: string }) => /Prompt execution activation expected session/.test(entry.message)),
       false,
     );
   } finally {
@@ -6801,7 +6805,7 @@ test("worktree-backed prompt commands abort before prompt dispatch when the pers
     );
 
     assert.equal(pi.sentUserMessages.length, 0);
-    assert.ok(ctx.__state.notifications.some((entry) => /Prompt execution activation expected session/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /Prompt execution activation expected session/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -6851,7 +6855,7 @@ test("worktree-backed successful merge stops before merge when fork-session veri
     assert.equal(ctx.cwd, projectBase);
     assert.equal(fs.existsSync(executionBasePath), true);
     assert.equal(fs.existsSync(path.join(projectBase, "src", "restore-failed.ts")), false);
-    assert.ok(ctx.__state.notifications.some((entry) => /Prompt execution finalization expected session/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /Prompt execution finalization expected session/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -6941,7 +6945,7 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
       }).status,
       0,
     );
-    assert.equal(eventCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(eventCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
@@ -7031,7 +7035,7 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
       }).status,
       0,
     );
-    assert.equal(eventCtx.__state.notifications.filter((entry) => entry.level === "error").length, 0);
+    assert.equal(eventCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
     setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
@@ -7077,7 +7081,7 @@ test("worktree-backed prompt commands abort before prompt dispatch when post-cre
       }).status,
       0,
     );
-    assert.ok(ctx.__state.notifications.some((entry) => /Worktree verification failed/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /Worktree verification failed/.test(entry.message)));
   } finally {
     fs.existsSync = originalExistsSync;
     setPromptCommandPostCreateHookForTests(undefined);
@@ -7449,11 +7453,11 @@ test("agent timing status updates et while preserving accumulated completed runt
   Date.now = () => nowMs;
   globalThis.setInterval = ((callback: TimerHandler) => {
     intervalCallbacks.push(callback as () => void);
-    return intervalCallbacks.length as ReturnType<typeof setInterval>;
-  }) as typeof setInterval;
+    return intervalCallbacks.length;
+  }) as unknown as typeof setInterval;
   globalThis.clearInterval = ((handle: ReturnType<typeof setInterval>) => {
     clearedHandles.push(Number(handle));
-  }) as typeof clearInterval;
+  }) as unknown as typeof clearInterval;
 
   try {
     const pi = createFakePi();
@@ -7748,7 +7752,7 @@ test("configuration menu orders tool toggles and can enable embedded builtin too
     "ls",
     "Reset defaults",
   ]);
-  assert.ok(config["enabled-tools"].includes("grep"));
+  assert.ok((config as { "enabled-tools": string[] })["enabled-tools"].includes("grep"));
   assert.ok(pi.getActiveTools().includes("grep"));
 });
 
@@ -8316,6 +8320,10 @@ test("agent_end pushover suppresses unassociated prompt ends from pending, dupli
     await pi.emit("agent_end", {
       messages: [{ role: "assistant", stopReason: "error", content: [] }],
     }, eventCtx);
+    // REQ-463/REQ-464: settle the failed worktree-backed run so prompt-run ownership
+    // clears before the unrelated follow-up agent run, keeping command-notify and
+    // Pushover silent for unassociated terminal events.
+    await pi.emit("agent_settled", {}, eventCtx);
     assert.equal(recorder.requests.length, 2);
     // Unrelated follow-up agent run in the retained worktree session.
     await pi.emit("agent_start", {}, eventCtx);
