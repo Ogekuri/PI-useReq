@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.99.0](https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0) - 2026-11-05
+### 🐛  Bug Fixes
+- restore strict tsc, hermetic archives, agent_settled scenarios [useReq] *(tests)*
+  - Fix 84 strict tsc errors under tests/: .js import specifiers, explicit
+  - callback parameter types, non-null guards, typed fake-tool state casts
+  - (CTN-006, TST-010); src/ stays clean.
+  - Align theme-menu assertion to the CTN-001 default docs-dir usereq/docs.
+  - Emit agent_settled in the worktree-failure and pushover-suppression
+  - scenarios so terminal failure handling follows REQ-463/REQ-464.
+  - Isolate project/static-check archive config from default-seeded checkers
+  - (REQ-250/REQ-251/REQ-316) and disable C explicitly in the
+  - unconfigured-language parity case for hermetic expectations.
+  - Make tests/fixtures/fixture_typescript.ts compile without external
+  - packages; regenerate the 11 fixture-dependent attended archives.
+
 ## [0.98.0](https://github.com/Ogekuri/PI-useReq/compare/v0.97.0..v0.98.0) - 2026-11-05
 ### 🚜  Changes
 - gate npm publish on master, keep GitHub Release for develop tags [useReq] *(release-workflow)*
@@ -1337,6 +1352,7 @@
 - \[0.96.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.96.0
 - \[0.97.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.97.0
 - \[0.98.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.98.0
+- \[0.99.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1434,3 +1450,4 @@
 [0.96.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.95.0..v0.96.0
 [0.97.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.96.0..v0.97.0
 [0.98.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.97.0..v0.98.0
+[0.99.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0
