@@ -167,7 +167,9 @@ test(
     assert.ok(
       workflow.includes("run: npm publish --provenance --access public"),
     );
-    assert.ok(workflow.includes("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}"));
+    assert.ok(workflow.includes("id-token: write"));
+    assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN/u);
+    assert.doesNotMatch(workflow, /secrets\.NPM_TOKEN/u);
     assert.ok(
       workflow.includes(
         "uses: mikepenz/release-changelog-builder-action@v6",

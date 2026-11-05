@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.108"
-date: "2026-11-04"
+version: "0.0.109"
+date: "2026-11-05"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -388,7 +388,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-043**: MUST archive repository scenarios for `summarize`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, and `static-check`.
 - **REQ-138**: MUST make `.github/workflows/release-npm.yml` trigger release automation from pushed tags matched by the existing workflow filter `v[0-9]+.[0-9]+.[0-9]+`.
 - **REQ-139**: MUST skip downstream release work unless `check-branch` confirms the tagged commit is contained in `origin/master`.
-- **REQ-140**: MUST configure `.github/workflows/release-npm.yml` to use Node.js `24.15.0`, npm registry authentication, run `npm ci`, remove manifest `private`, and publish with provenance and public access using `secrets.NPM_TOKEN`.
+- **REQ-140**: MUST configure `.github/workflows/release-npm.yml` to use Node.js `24.15.0`, run `npm ci`, remove manifest `private`, and publish with provenance and public access.
+- **REQ-466**: MUST authenticate `.github/workflows/release-npm.yml` npm publication through OIDC trusted publishing with the `id-token: write` permission and configured registry URL, without npm token secrets.
 - **REQ-141**: MUST preserve the existing changelog-builder step and use its output as the non-draft non-prerelease GitHub Release body.
 - **REQ-155**: MUST keep `package.json` `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **REQ-157**: MUST declare `package.json` `repository.type` as `git` and `repository.url` as `git+https://github.com/Ogekuri/PI-useReq.git`.
@@ -615,7 +616,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-027**: MUST verify harness inspection surfaces `files-compress` and `compress` descriptions covering parameters, line-number behavior, monolithic markdown output, and failure details.
 - **TST-028**: MUST verify `files-static-check` and `static-check` agent-tool outputs place the monolithic static-check report in `content[0].text` and restrict `details` to execution metadata.
 - **TST-029**: MUST verify harness inspection surfaces `files-static-check` and `static-check` descriptions covering parameters, monolithic output, selection rules, and failure details.
-- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML when `PyYAML` is available, keeps the existing tag filter, gates downstream release work on `origin/master`, uses Node.js `24.15.0`, runs npm publication, and creates the GitHub Release.
+- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML when `PyYAML` is available, keeps the existing tag filter, gates downstream release work on `origin/master`, uses Node.js `24.15.0`, publishes through OIDC trusted publishing without `NODE_AUTH_TOKEN`, and creates the GitHub Release.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify local and global configuration files omit derived static and dynamic path fields while runtime path context and status rendering still derive them correctly.
@@ -903,7 +904,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-031 | `src/index.ts` :: `registerConfigCommands` :: `pi-usereq-show-config` writes `JSON.stringify(config, null, 2)` into the editor. |
 | REQ-138 | `.github/workflows/release-npm.yml` :: `on.push.tags` plus release-tag validation restrict automation to canonical `v<major>.<minor>.<patch>` tags. |
 | REQ-139 | `.github/workflows/release-npm.yml` :: branch-check job fetches `origin/master` and gates downstream jobs on containment of `github.sha`. |
-| REQ-140 | `.github/workflows/release-npm.yml` :: `env.NODE_VERSION` is `24.15.0`; publish job uses `actions/setup-node`, `npm ci`, `npm pkg delete private`, and `npm publish --provenance --access public` with `NODE_AUTH_TOKEN`. |
+| REQ-140 | `.github/workflows/release-npm.yml` :: `env.NODE_VERSION` is `24.15.0`; publish job uses `actions/setup-node`, `npm ci`, `npm pkg delete private`, and `npm publish --provenance --access public`. |
+| REQ-466 | `.github/workflows/release-npm.yml` :: top-level `id-token: write` permission plus `actions/setup-node` `registry-url` with a publish step that provides no `NODE_AUTH_TOKEN` :: npm OIDC trusted publishing. |
 | REQ-141 | `.github/workflows/release-npm.yml` :: release job uses changelog-builder output as `softprops/action-gh-release` body with non-draft and non-prerelease flags. |
 | REQ-378 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` read-only pi CLI client reference plus source-of-truth bullets injected into pi.dev-aware rendered prompts. |
 | REQ-451 | `src/core/pi-notify.ts` :: `LEGACY_PI_NOTIFY_PUSHOVER_TEXTS` plus `upgradeLegacyPiNotifyPushoverText` :: upgrade every superseded legacy `notify-pushover-text` default; `src/core/config.ts` :: `loadGlobalConfig` :: applies the upgrade to persisted global payloads. |

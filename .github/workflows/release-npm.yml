@@ -66,10 +66,10 @@ jobs:
       - name: Remove private package flag
         run: npm pkg delete private
 
+      # OIDC trusted publishing: the workflow-level `id-token: write` permission plus
+      # the configured registry-url let npm authenticate without any NPM_TOKEN secret.
       - name: Publish package to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build Changelog
         id: build_changelog
