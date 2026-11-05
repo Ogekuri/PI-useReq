@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.96.0](https://github.com/Ogekuri/PI-useReq/compare/v0.95.0..v0.96.0) - 2026-11-05
+### 🚜  Changes
+- add npm publication compliance metadata and prepublish test gate [useReq] *(package)*
+  - Add package.json description, keywords, GPL-3.0-only license, author,
+  - engines.node >=22.19.0, and prepublishOnly=npm test for npm best practices
+  - Requirements CTN-025..CTN-029, DES-025, TST-159..TST-161 (REQUIREMENTS 0.0.110)
+  - Tests: manifest/lockfile version identity, license+discoverability+engines,
+  - publish test gate without --ignore-scripts (release-workflow suite 9/9)
+  - Verification: static-check clean; all remaining failures reproduce on base
+
 ## [0.95.0](https://github.com/Ogekuri/PI-useReq/compare/v0.94.0..v0.95.0) - 2026-11-05
 ### 🚜  Changes
 - Publish via npm OIDC trusted publishing without NPM_TOKEN [useReq] *(release-npm)*
@@ -1304,6 +1314,7 @@
 - \[0.93.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.93.0
 - \[0.94.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.94.0
 - \[0.95.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.95.0
+- \[0.96.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.96.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1398,3 +1409,4 @@
 [0.93.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.92.0..v0.93.0
 [0.94.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.93.0..v0.94.0
 [0.95.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.94.0..v0.95.0
+[0.96.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.95.0..v0.96.0
