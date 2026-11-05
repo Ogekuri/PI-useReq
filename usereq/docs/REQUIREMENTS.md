@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.109"
+version: "0.0.110"
 date: "2026-11-05"
 author: "OpenAI Codex"
 scope:
@@ -75,6 +75,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-022**: MUST NOT persist the selected model provider, model identifier, or thinking level in local or global pi-usereq configuration files.
 - **CTN-023**: MUST use the read-only pi CLI client sources under `pi.dev-src/` as reference material during analysis, implementation, verification, and bug fixing.
 - **CTN-024**: MUST treat the read-only pi CLI client sources under `pi.dev-src/` as the source-of-truth for new implementations, source-code modifications, and bug fixes.
+- **CTN-025**: MUST declare `package.json` `license` as SPDX identifier `GPL-3.0-only`, matching the committed GPL-3.0 `LICENSE` file.
+- **CTN-026**: MUST declare non-empty `package.json` `description`, `author`, and `keywords` entries for npm registry discoverability metadata.
+- **CTN-027**: MUST declare `package.json` `engines.node` as `>=22.19.0`, matching the minimum Node.js engine of the declared pi peer dependencies.
+- **CTN-028**: MUST keep `package.json` `version` semver-valid and identical to both root-package `version` fields inside `package-lock.json`.
+- **CTN-029**: MUST declare a `prepublishOnly` package script executing the full `npm test` suite so `npm publish` packs only after tests pass.
 
 ## 3. Requirements
 
@@ -103,6 +108,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-022**: MUST implement the bundled-resource updater in `scripts/pi-prompts-update.sh` as a standalone bash process using `git` plus core shell utilities only.
 - **DES-023**: MUST implement the pi CLI reference updater in `scripts/pi-cli-update-src-docs.sh` as a standalone bash process using `git` plus core shell utilities only.
 - **DES-024**: MUST implement the process-scoped deferred-notification replay store plus its session-start replay gate in one dedicated `src/core/` module outside `src/index.ts` business logic.
+- **DES-025**: MUST implement npm publication metadata compliance declaratively in `package.json` plus `package-lock.json` root version identity, without modifying `.github/workflows/release-npm.yml` publication steps.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -701,6 +707,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-156**: MUST verify `%%OUTPUT%%` resolves from process output for non-agentic `req-references` plus `req-reset` notifications and stays empty for agent runs without text blocks.
 - **TST-157**: MUST verify the Pushover `message` body is head-truncated with a fixed marker when the substituted template exceeds 1024 characters.
 - **TST-158**: MUST verify configuration loading upgrades every superseded legacy `notify-pushover-text` default (`%%RESULT%%\n%%ARGS%%` and `%%OUTPUT%%`) to `%%RESULT%%\n%%OUTPUT%%` while delivering distinct user-configured templates unchanged.
+- **TST-159**: MUST verify `package.json` `version` is semver-valid and identical to both root-package `version` fields of `package-lock.json`.
+- **TST-160**: MUST verify `package.json` declares SPDX `GPL-3.0-only` matching the committed `LICENSE` text plus non-empty `description`, `author`, `keywords`, and `engines.node` metadata.
+- **TST-161**: MUST verify `package.json` declares `prepublishOnly` executing `npm test` and the release workflow keeps `npm publish` without `--ignore-scripts`.
 
 ## 5. Observed Component Model
 
@@ -729,11 +738,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `git` CLI is a runtime dependency for repository discovery, source-file collection, bundled prompt-command worktree orchestration, and direct `req-references` commit orchestration evidenced in `src/core/tool-runner.ts`, `src/core/prompt-command-runtime.ts`, and `src/core/req-references-command.ts`.
 
 ### 5.3 Packaging and Tooling Surface
-- `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
+- `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `prepublishOnly`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
 - `package.json` declares a `files` allowlist of `src` and `scripts` so npm consumer installs ship only runtime-required code and omit the `tests/` directory.
 - `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
 - `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, publishes the package to npm, and creates the matching GitHub Release.
-- `package.json` declares version `0.0.0` while `package-lock.json` resolves the top-level package as version `0.1.0`; this manifest metadata is inconsistent in the current revision.
+- `package.json` and `package-lock.json` resolve the top-level package as the identical semver version `0.95.0`, and the manifest declares `description`, `author`, `keywords`, `license`, `engines.node`, and a `prepublishOnly` test gate for npm publication.
 
 ## 6. Repository Structure
 
@@ -803,7 +812,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `tests/prompt-rendering.test.ts` covers home-resource synchronization and placeholder replacement in rendered prompts.
 - `tests/oracle-standalone.test.ts` compares non-tab-sensitive standalone `files-*` outputs against the Python `usereq.cli` oracle, asserts Go-fixture tab preservation, and compares `--test-static-check` dummy/command outputs against archived fixtures.
 - `tests/oracle-project.test.ts` compares non-tab-sensitive project commands against the Python oracle, asserts Go-source tab preservation for project extraction commands, and verifies archived `files-static-check` plus `static-check` outputs.
-- `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, npm publication steps, and GitHub release creation directives in `.github/workflows/release-npm.yml`.
+- `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, npm publication steps, GitHub release creation directives in `.github/workflows/release-npm.yml`, plus npm manifest compliance for license, discoverability, engines, lockfile version identity, and the `prepublishOnly` test gate.
 - Test business logic focuses on parity with the Python oracle, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
 
 ## 8. Evidence Matrix
@@ -829,6 +838,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | CTN-021 | `package.json` :: `"files": ["src", "scripts"]` :: npm-published file set ships runtime-required `src/` and `scripts/` only and omits the `tests/` directory. |
 | CTN-023 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` mandatory reference mandate for analysis, implementation, verification, and bug fixing. |
 | CTN-024 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` source-of-truth mandate for new implementations, source-code modifications, and bug fixes. |
+| CTN-025 | `package.json` :: `"license": "GPL-3.0-only"`; `LICENSE` :: committed GPL-3.0 full text. |
+| CTN-026 | `package.json` :: non-empty `"description"`, `"author"`, and `"keywords"` metadata fields. |
+| CTN-027 | `package.json` :: `"engines": { "node": ">=22.19.0" }` mirroring the pi CLI host engines floor. |
+| CTN-028 | `package.json` :: `"version": "0.95.0"`; `package-lock.json` :: root `version` plus `packages[""].version` both `0.95.0`. |
+| CTN-029 | `package.json` :: `"scripts"` :: `"prepublishOnly": "npm test"` executed automatically by `npm publish`. |
 
 ### 8.2 DES Evidence
 | ID | Evidence |
@@ -941,6 +955,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-039 | `tests/release-workflow.test.ts` :: workflow-content assertions cover semver gating, `origin/master` containment, Node.js `24.15.0`, npm publication, and GitHub release generation. |
 | TST-133 | `tests/extension-registration.test.ts` :: `req-references` direct-commit workflow coverage verifies the guarded commit path against staged-change presence. |
 | TST-158 | `tests/extension-registration.test.ts` :: `prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates` verifies the superseded legacy default pushes the final assistant output while a distinct user-configured template is delivered unchanged. |
+| TST-159 | `tests/release-workflow.test.ts` :: `package manifest and lockfile keep one identical semver version for npm publication` verifies manifest/lock root version identity. |
+| TST-160 | `tests/release-workflow.test.ts` :: `package manifest declares npm compliance metadata for license, discoverability, and engines` verifies license, LICENSE text, description, author, keywords, and engines. |
+| TST-161 | `tests/release-workflow.test.ts` :: `package manifest gates npm publish on the full test suite` verifies `prepublishOnly` plus the workflow publish step. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

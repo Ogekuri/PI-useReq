@@ -2,6 +2,21 @@
   "name": "pi-usereq",
   "private": true,
   "version": "0.95.0",
+  "description": "Requirements-oriented pi extension plus Node CLI for prompt delivery, source summarization, static-check orchestration, git worktree automation, and npm release automation.",
+  "keywords": [
+    "pi",
+    "pi-extension",
+    "requirements",
+    "srs",
+    "prompt-engineering",
+    "static-analysis",
+    "summarization",
+    "llm",
+    "coding-agent",
+    "developer-tools"
+  ],
+  "license": "GPL-3.0-only",
+  "author": "Ogekuri",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Ogekuri/PI-useReq.git"
@@ -15,9 +30,13 @@
     "src",
     "scripts"
   ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
     "test": "node --import tsx --test tests/**/*.test.ts",
     "test:watch": "node --import tsx --test --watch tests/**/*.test.ts",
+    "prepublishOnly": "npm test",
     "cli": "node --import tsx ./src/cli.ts",
     "debug:ext": "node --import tsx ./scripts/debug-extension.ts",
     "debug:ext:inspect": "node --import tsx ./scripts/debug-extension.ts inspect",

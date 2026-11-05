@@ -222,3 +222,134 @@ test(
   "package manifest keeps canonical repository, bugs, and homepage metadata for npm provenance",
   assertCanonicalPackageProvenanceMetadata,
 );
+
+/**
+ * @brief Describes the npm publication metadata asserted by manifest compliance tests.
+ * @details Constrains the parsed `package.json` shape to the license, discoverability, engine, and prepublish-gate metadata required for npm registry compliance. The interface is compile-time only and introduces no runtime side effects.
+ */
+interface NpmComplianceManifest {
+  version?: unknown;
+  description?: unknown;
+  author?: unknown;
+  keywords?: unknown;
+  license?: unknown;
+  engines?: {
+    node?: unknown;
+  };
+  scripts?: {
+    prepublishOnly?: unknown;
+  };
+}
+
+/**
+ * @brief Describes the root lockfile facts asserted by manifest compliance tests.
+ * @details Constrains the parsed `package-lock.json` shape to the top-level version plus the root-package entry version that npm publication metadata must keep identical. The interface is compile-time only and introduces no runtime side effects.
+ */
+interface NpmComplianceLock {
+  version?: unknown;
+  packages?: Record<string, { version?: unknown } | undefined>;
+}
+
+/**
+ * @brief Loads the package manifest for npm compliance assertions.
+ * @details Reads and parses `package.json` from the current process working directory so registry-metadata tests share one deterministic loader with the existing release-workflow tests. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @return {NpmComplianceManifest} Parsed package manifest.
+ * @satisfies TST-159, TST-160, TST-161
+ */
+function readNpmComplianceManifest(): NpmComplianceManifest {
+  return JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+  ) as NpmComplianceManifest;
+}
+
+/**
+ * @brief Loads the root lockfile facts for npm compliance assertions.
+ * @details Reads and parses `package-lock.json` from the current process working directory, preserving the top-level version and the root-package entry version used for manifest and lockfile identity checks. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @return {NpmComplianceLock} Parsed root lockfile facts.
+ * @satisfies TST-159
+ */
+function readNpmComplianceLock(): NpmComplianceLock {
+  return JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), "package-lock.json"), "utf8"),
+  ) as NpmComplianceLock;
+}
+
+/**
+ * @brief Asserts the published version is semver-valid and identical across manifest and lockfile.
+ * @details Loads `package.json` plus `package-lock.json`, validates the manifest version against the official semver grammar, and asserts both root-package lockfile version fields equal the manifest version so npm publication always resolves one coherent package version. Runtime is O(n) in combined file size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies TST-159, CTN-028
+ */
+test(
+  "package manifest and lockfile keep one identical semver version for npm publication",
+  () => {
+    const manifest = readNpmComplianceManifest();
+    const lock = readNpmComplianceLock();
+
+    const version = manifest.version;
+    assert.equal(typeof version, "string");
+    assert.match(
+      version as string,
+      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/u,
+    );
+    assert.equal(lock.version, manifest.version);
+    assert.equal(lock.packages?.[""]?.version, manifest.version);
+  },
+);
+
+/**
+ * @brief Asserts the manifest carries license, discoverability, and engine metadata.
+ * @details Loads `package.json` plus the committed `LICENSE` text, asserts the SPDX `GPL-3.0-only` identifier matches the GPL-3.0 license document, and asserts non-empty description, author, keywords, and the `>=22.19.0` Node.js engine floor required for npm registry discoverability and runtime policy compliance. Runtime is O(n) in combined file size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies TST-160, CTN-025, CTN-026, CTN-027
+ */
+test(
+  "package manifest declares npm compliance metadata for license, discoverability, and engines",
+  () => {
+    const manifest = readNpmComplianceManifest();
+    const licenseText = fs.readFileSync(
+      path.join(process.cwd(), "LICENSE"),
+      "utf8",
+    );
+
+    assert.equal(manifest.license, "GPL-3.0-only");
+    assert.match(licenseText, /GNU GENERAL PUBLIC LICENSE/u);
+    assert.match(licenseText, /Version 3, 29 June 2007/u);
+
+    const description = manifest.description;
+    assert.equal(typeof description, "string");
+    assert.ok((description as string).length > 0);
+
+    const author = manifest.author;
+    assert.equal(typeof author, "string");
+    assert.ok((author as string).length > 0);
+
+    const keywords = manifest.keywords;
+    assert.ok(Array.isArray(keywords));
+    assert.ok((keywords as unknown[]).length > 0);
+    for (const keyword of keywords as unknown[]) {
+      assert.equal(typeof keyword, "string");
+      assert.ok((keyword as string).length > 0);
+    }
+
+    assert.equal(manifest.engines?.node, ">=22.19.0");
+  },
+);
+
+/**
+ * @brief Asserts npm publish is gated on the full test suite.
+ * @details Loads `package.json` plus the release workflow, asserts the `prepublishOnly` script executes `npm test` so `npm publish` runs the suite before packing, and asserts the workflow keeps publishing with provenance without any `--ignore-scripts` escape that would bypass the gate. Runtime is O(n) in combined file size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies TST-161, CTN-029
+ */
+test(
+  "package manifest gates npm publish on the full test suite",
+  () => {
+    const manifest = readNpmComplianceManifest();
+    const workflow = readReleaseWorkflow();
+
+    assert.equal(manifest.scripts?.prepublishOnly, "npm test");
+    assert.ok(workflow.includes("npm publish --provenance --access public"));
+    assert.doesNotMatch(workflow, /--ignore-scripts/u);
+  },
+);
