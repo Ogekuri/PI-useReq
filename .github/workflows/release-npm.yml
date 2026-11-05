@@ -30,18 +30,18 @@ jobs:
         run: |
           git fetch origin master
           if git branch -r --contains ${GITHUB_SHA} | grep -q "origin/master"; then
-            echo "✅ Tag ${{ github.ref }} is on master branch. Proceeding with release."
+            echo "✅ Tag ${{ github.ref }} is on master branch. Proceeding with release and npm publication."
             echo "is_master=true" >> "$GITHUB_OUTPUT"
           else
-            echo "❌ Tag ${{ github.ref }} is not on master branch. Skipping release."
+            echo "📦 Tag ${{ github.ref }} is not on master branch (e.g. develop). Creating the GitHub Release without npm publication."
             echo "is_master=false" >> "$GITHUB_OUTPUT"
           fi
 
   # 2. Effetua la build
   build-release:
     needs: check-branch
-    # Esegue questo job SOLO se l'output del job precedente è 'true'
-    if: needs.check-branch.outputs.is_master == 'true'
+    # Runs for every pushed canonical tag (master and develop); only the npm
+    # publication step below is gated on the origin/master containment check.
     runs-on: ubuntu-24.04
 
     steps:
@@ -68,7 +68,10 @@ jobs:
 
       # OIDC trusted publishing: the workflow-level `id-token: write` permission plus
       # the configured registry-url let npm authenticate without any NPM_TOKEN secret.
+      # Publication runs only when the tagged commit is contained in origin/master;
+      # develop-only tags skip this step and still produce the GitHub Release below.
       - name: Publish package to npm
+        if: needs.check-branch.outputs.is_master == 'true'
         run: npm publish --provenance --access public
 
       - name: Build Changelog

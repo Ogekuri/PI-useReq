@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.111"
+version: "0.0.112"
 date: "2026-11-05"
 author: "OpenAI Codex"
 scope:
@@ -98,7 +98,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-008**: MUST wrap affected agent-tool executions as one monolithic content text block plus minimal execution-only details instead of mirrored structured JSON payloads.
 - **DES-009**: MUST treat `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json` as the authoritative read-only contract for new or modified software that interfaces with the pi.dev CLI.
 - **DES-010**: MUST centralize event-driven context snapshots, run-timing state, prompt-orchestration workflow state, and status-bar rendering through shared extension-status helpers.
-- **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates `build-release`, preserving changelog-driven GitHub Release creation while adding npm publication.
+- **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates npm publication inside `build-release`, preserving changelog-driven GitHub Release creation for every canonical tag.
 - **DES-015**: MUST implement config-gated `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` slash-command wrappers in `src/index.ts` that reuse existing tool-runner execution paths.
 - **DES-016**: MUST deliver rendered bundled-prompt content to the LLM through `sendMessage` as a `display:false` custom message with `triggerTurn:true` and MUST NOT use `sendUserMessage` when `sendMessage` is available.
 - **DES-017**: MUST declare `pyright`, `ruff`, and `eslint` as pinned caret-range npm dependencies and register a `postinstall` script that installs bundled static checkers.
@@ -394,7 +394,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-042**: MUST archive explicit-file scenarios for `files-tokens`, `files-summarize`, `files-compress`, `files-find`, and `test-static-check` across every file under `tests/fixtures/`.
 - **REQ-043**: MUST archive repository scenarios for `summarize`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, and `static-check`.
 - **REQ-138**: MUST make `.github/workflows/release-npm.yml` trigger release automation from pushed tags matched by the existing workflow filter `v[0-9]+.[0-9]+.[0-9]+`.
-- **REQ-139**: MUST skip downstream release work unless `check-branch` confirms the tagged commit is contained in `origin/master`.
+- **REQ-139**: MUST gate the npm publication step on the `check-branch` output confirming the tagged commit is contained in `origin/master`.
+- **REQ-467**: MUST run `build-release` for every pushed canonical tag, including tags committed and tagged on `develop` but not `master`.
+- **REQ-468**: MUST create the changelog-driven non-draft non-prerelease GitHub Release even when npm publication is skipped for a tag outside `origin/master`.
 - **REQ-140**: MUST configure `.github/workflows/release-npm.yml` to use Node.js `24.15.0`, run `npm ci`, remove manifest `private`, and publish with provenance and public access.
 - **REQ-466**: MUST authenticate `.github/workflows/release-npm.yml` npm publication through OIDC trusted publishing with the `id-token: write` permission and configured registry URL, without npm token secrets.
 - **REQ-141**: MUST preserve the existing changelog-builder step and use its output as the non-draft non-prerelease GitHub Release body.
@@ -623,7 +625,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-027**: MUST verify harness inspection surfaces `files-compress` and `compress` descriptions covering parameters, line-number behavior, monolithic markdown output, and failure details.
 - **TST-028**: MUST verify `files-static-check` and `static-check` agent-tool outputs place the monolithic static-check report in `content[0].text` and restrict `details` to execution metadata.
 - **TST-029**: MUST verify harness inspection surfaces `files-static-check` and `static-check` descriptions covering parameters, monolithic output, selection rules, and failure details.
-- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML when `PyYAML` is available, keeps the existing tag filter, gates downstream release work on `origin/master`, uses Node.js `24.15.0`, publishes through OIDC trusted publishing without `NODE_AUTH_TOKEN`, and creates the GitHub Release.
+- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML when `PyYAML` is available, keeps the existing tag filter, gates npm publication on `origin/master` containment, uses Node.js `24.15.0`, publishes through OIDC trusted publishing without `NODE_AUTH_TOKEN`, and creates the GitHub Release.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify local and global configuration files omit derived static and dynamic path fields while runtime path context and status rendering still derive them correctly.
@@ -743,7 +745,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `prepublishOnly`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
 - `package.json` declares a `files` allowlist of `src` and `scripts` so npm consumer installs ship only runtime-required code and omit the `tests/` directory.
 - `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
-- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, pins every composite action to a Node24-native release, publishes the package to npm, and creates the matching GitHub Release.
+- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, pins every composite action to a Node24-native release, publishes the package to npm only for tags contained in `origin/master`, and creates the matching GitHub Release for every canonical tag.
 - `package.json` and `package-lock.json` resolve the top-level package as the identical semver version `0.95.0`, and the manifest declares `description`, `author`, `keywords`, `license`, `engines.node`, and a `prepublishOnly` test gate for npm publication.
 
 ## 6. Repository Structure
@@ -857,7 +859,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-004 | `src/core/static-check.ts` :: `StaticCheckBase` and `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the modular implementation by module name. |
 | DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runFilesSummarize`, `runSummarize`, `runCompress`, `runSearch`, `runFilesStaticCheck`, and `runProjectStaticCheck`. |
 | DES-006 | `src/core/compress.ts` :: `normalizeRetainedLineIndentation`; `src/core/source-analyzer.ts` :: `normalizeSourceLineForExtraction`; `src/core/compress-files.ts` and `src/core/find-constructs.ts` reuse shared markdown emitters with preserved source tabs. |
-| DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags and `origin/master`, publish with npm authentication, and create the GitHub Release. |
+| DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags, gate npm publication on `origin/master` containment, and create the GitHub Release for every canonical tag. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -920,7 +922,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-030 | `src/index.ts` :: `loadProjectConfig` :: resolves the project base from cwd and normalizes the loaded config without persisting runtime-derived path metadata. |
 | REQ-031 | `src/index.ts` :: `registerConfigCommands` :: `pi-usereq-show-config` writes `JSON.stringify(config, null, 2)` into the editor. |
 | REQ-138 | `.github/workflows/release-npm.yml` :: `on.push.tags` plus release-tag validation restrict automation to canonical `v<major>.<minor>.<patch>` tags. |
-| REQ-139 | `.github/workflows/release-npm.yml` :: branch-check job fetches `origin/master` and gates downstream jobs on containment of `github.sha`. |
+| REQ-139 | `.github/workflows/release-npm.yml` :: `build-release` publish step declares `if: needs.check-branch.outputs.is_master == 'true'`, gating npm publication on containment of `github.sha`. |
+| REQ-467 | `.github/workflows/release-npm.yml` :: `build-release` declares `needs: check-branch` with no job-level master gate, so it runs for every pushed canonical tag. |
+| REQ-468 | `.github/workflows/release-npm.yml` :: changelog-builder plus `softprops/action-gh-release@v3` steps run unconditionally inside `build-release`. |
 | REQ-140 | `.github/workflows/release-npm.yml` :: `env.NODE_VERSION` is `24.15.0`; publish job uses `actions/setup-node`, `npm ci`, `npm pkg delete private`, and `npm publish --provenance --access public`. |
 | REQ-466 | `.github/workflows/release-npm.yml` :: top-level `id-token: write` permission plus `actions/setup-node` `registry-url` with a publish step that provides no `NODE_AUTH_TOKEN` :: npm OIDC trusted publishing. |
 | REQ-141 | `.github/workflows/release-npm.yml` :: release job uses changelog-builder output as `softprops/action-gh-release` body with non-draft and non-prerelease flags. |
@@ -955,7 +959,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-023 | `tests/extension-registration.test.ts` :: `summary tools register agent-oriented descriptions and schema details`. |
 | TST-024 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-search` and `search` monolithic-output tests. |
 | TST-026 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-compress` and `compress` monolithic-output tests. |
-| TST-039 | `tests/release-workflow.test.ts` :: workflow-content assertions cover semver gating, `origin/master` containment, Node.js `24.15.0`, npm publication, and GitHub release generation. |
+| TST-039 | `tests/release-workflow.test.ts` :: workflow-content assertions cover semver gating, `origin/master`-gated npm publication, Node.js `24.15.0`, and GitHub release generation. |
 | TST-133 | `tests/extension-registration.test.ts` :: `req-references` direct-commit workflow coverage verifies the guarded commit path against staged-change presence. |
 | TST-158 | `tests/extension-registration.test.ts` :: `prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates` verifies the superseded legacy default pushes the final assistant output while a distinct user-configured template is delivered unchanged. |
 | TST-159 | `tests/release-workflow.test.ts` :: `package manifest and lockfile keep one identical semver version for npm publication` verifies manifest/lock root version identity. |
