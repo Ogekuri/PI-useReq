@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.97.0](https://github.com/Ogekuri/PI-useReq/compare/v0.96.0..v0.97.0) - 2026-11-05
+### 🚜  Changes
+- BREAKING CHANGE: migrate runtime and workflow actions to Node.js 24 [useReq] *(package)*
+  - Raise package.json engines.node floor from >=22.19.0 to >=24.0.0 (CTN-027)
+  - Bump softprops/action-gh-release v2 (node20) to v3 (node24); inputs unchanged
+  - Keep checkout@v5, setup-node@v5, changelog-builder@v6 (verified node24 upstream)
+  - Add CTN-030 plus TST-162; update TST-039/TST-160; README Node 24 requirement
+  - Requirements 0.0.111; no Node20 transitional opt-outs present (test-enforced)
+
 ## [0.96.0](https://github.com/Ogekuri/PI-useReq/compare/v0.95.0..v0.96.0) - 2026-11-05
 ### 🚜  Changes
 - add npm publication compliance metadata and prepublish test gate [useReq] *(package)*
@@ -1315,6 +1324,7 @@
 - \[0.94.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.94.0
 - \[0.95.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.95.0
 - \[0.96.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.96.0
+- \[0.97.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.97.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1410,3 +1420,4 @@
 [0.94.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.93.0..v0.94.0
 [0.95.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.94.0..v0.95.0
 [0.96.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.95.0..v0.96.0
+[0.97.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.96.0..v0.97.0
