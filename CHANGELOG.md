@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.95.0](https://github.com/Ogekuri/PI-useReq/compare/v0.94.0..v0.95.0) - 2026-11-05
+### 🚜  Changes
+- Publish via npm OIDC trusted publishing without NPM_TOKEN [useReq] *(release-npm)*
+  - REQ-466 added: npm publication authenticates through OIDC trusted
+  - publishing with the id-token: write permission and configured
+  - registry-url, without npm token secrets.
+  - REQ-140 and TST-039 updated: provenance/public publishing keeps npm ci,
+  - private-flag removal, tag gating on origin/master, and changelog-driven
+  - GitHub Release creation unchanged.
+  - release-npm.yml drops NODE_AUTH_TOKEN from the publish step.
+  - release-workflow tests assert id-token: write and absence of
+  - NODE_AUTH_TOKEN/secrets.NPM_TOKEN.
+
 ## [0.94.0](https://github.com/Ogekuri/PI-useReq/compare/v0.93.0..v0.94.0) - 2026-11-04
 ### 🐛  Bug Fixes
 - Fix .gitignore file.
@@ -1290,6 +1303,7 @@
 - \[0.92.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.92.0
 - \[0.93.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.93.0
 - \[0.94.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.94.0
+- \[0.95.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.95.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1383,3 +1397,4 @@
 [0.92.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.91.0..v0.92.0
 [0.93.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.92.0..v0.93.0
 [0.94.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.93.0..v0.94.0
+[0.95.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.94.0..v0.95.0
