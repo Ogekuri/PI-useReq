@@ -2,10 +2,10 @@
 
 ## Version 1.0.0
 
-### Proof-of-Concept (PoC) Stage
+### Pre-Alpha Stage
 #### Todo List ✓
-- [x] Initial PoC release
-- [x] PoC developments
+- [x] Initial Pre-Alpha release
+- [x] Pre-Alpha developments
 - [ ] Alpha stage release
 
 ### Alpha Stage
