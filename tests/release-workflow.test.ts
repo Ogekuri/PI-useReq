@@ -175,7 +175,7 @@ test(
         "uses: mikepenz/release-changelog-builder-action@v6",
       ),
     );
-    assert.ok(workflow.includes("uses: softprops/action-gh-release@v2"));
+    assert.ok(workflow.includes("uses: softprops/action-gh-release@v3"));
     assert.ok(workflow.includes("draft: false"));
     assert.ok(workflow.includes("prerelease: false"));
     assert.ok(
@@ -299,7 +299,7 @@ test(
 
 /**
  * @brief Asserts the manifest carries license, discoverability, and engine metadata.
- * @details Loads `package.json` plus the committed `LICENSE` text, asserts the SPDX `GPL-3.0-only` identifier matches the GPL-3.0 license document, and asserts non-empty description, author, keywords, and the `>=22.19.0` Node.js engine floor required for npm registry discoverability and runtime policy compliance. Runtime is O(n) in combined file size. Side effects are limited to filesystem reads.
+ * @details Loads `package.json` plus the committed `LICENSE` text, asserts the SPDX `GPL-3.0-only` identifier matches the GPL-3.0 license document, and asserts non-empty description, author, keywords, and the `>=24.0.0` Node.js engine floor required for npm registry discoverability and runtime policy compliance. Runtime is O(n) in combined file size. Side effects are limited to filesystem reads.
  * @return {void} No return value.
  * @satisfies TST-160, CTN-025, CTN-026, CTN-027
  */
@@ -332,7 +332,7 @@ test(
       assert.ok((keyword as string).length > 0);
     }
 
-    assert.equal(manifest.engines?.node, ">=22.19.0");
+    assert.equal(manifest.engines?.node, ">=24.0.0");
   },
 );
 
@@ -351,5 +351,27 @@ test(
     assert.equal(manifest.scripts?.prepublishOnly, "npm test");
     assert.ok(workflow.includes("npm publish --provenance --access public"));
     assert.doesNotMatch(workflow, /--ignore-scripts/u);
+  },
+);
+
+/**
+ * @brief Asserts the release workflow runs every composite action on Node.js 24.
+ * @details Loads `.github/workflows/release-npm.yml` and verifies each `uses:` pin targets a Node24-native action release (`actions/checkout@v5`, `actions/setup-node@v5`, `mikepenz/release-changelog-builder-action@v6`, `softprops/action-gh-release@v3`) while no Node20 transitional opt-out environment variable (`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`, `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`) appears, so the automation depends only on the Node24 runtime GitHub runners provide by default. Runtime is O(n) in workflow size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies TST-162, CTN-030
+ */
+test(
+  "release workflow pins Node24-native composite actions without Node20 transitional opt-outs",
+  () => {
+    const workflow = readReleaseWorkflow();
+
+    assert.ok(workflow.includes("uses: actions/checkout@v5"));
+    assert.ok(workflow.includes("uses: actions/setup-node@v5"));
+    assert.ok(
+      workflow.includes("uses: mikepenz/release-changelog-builder-action@v6"),
+    );
+    assert.ok(workflow.includes("uses: softprops/action-gh-release@v3"));
+    assert.doesNotMatch(workflow, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24/u);
+    assert.doesNotMatch(workflow, /ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION/u);
   },
 );

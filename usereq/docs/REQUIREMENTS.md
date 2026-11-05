@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.110"
+version: "0.0.111"
 date: "2026-11-05"
 author: "OpenAI Codex"
 scope:
@@ -77,9 +77,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-024**: MUST treat the read-only pi CLI client sources under `pi.dev-src/` as the source-of-truth for new implementations, source-code modifications, and bug fixes.
 - **CTN-025**: MUST declare `package.json` `license` as SPDX identifier `GPL-3.0-only`, matching the committed GPL-3.0 `LICENSE` file.
 - **CTN-026**: MUST declare non-empty `package.json` `description`, `author`, and `keywords` entries for npm registry discoverability metadata.
-- **CTN-027**: MUST declare `package.json` `engines.node` as `>=22.19.0`, matching the minimum Node.js engine of the declared pi peer dependencies.
+- **CTN-027**: MUST declare `package.json` `engines.node` as `>=24.0.0`, establishing Node.js 24 as the minimum supported runtime for the package.
 - **CTN-028**: MUST keep `package.json` `version` semver-valid and identical to both root-package `version` fields inside `package-lock.json`.
 - **CTN-029**: MUST declare a `prepublishOnly` package script executing the full `npm test` suite so `npm publish` packs only after tests pass.
+- **CTN-030**: MUST pin `.github/workflows/release-npm.yml` composite actions to Node24-native releases: `actions/checkout@v5`, `actions/setup-node@v5`, `mikepenz/release-changelog-builder-action@v6`, and `softprops/action-gh-release@v3`.
 
 ## 3. Requirements
 
@@ -710,6 +711,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-159**: MUST verify `package.json` `version` is semver-valid and identical to both root-package `version` fields of `package-lock.json`.
 - **TST-160**: MUST verify `package.json` declares SPDX `GPL-3.0-only` matching the committed `LICENSE` text plus non-empty `description`, `author`, `keywords`, and `engines.node` metadata.
 - **TST-161**: MUST verify `package.json` declares `prepublishOnly` executing `npm test` and the release workflow keeps `npm publish` without `--ignore-scripts`.
+- **TST-162**: MUST verify `.github/workflows/release-npm.yml` pins the four Node24-native composite action versions and declares no Node20 transitional environment opt-outs.
 
 ## 5. Observed Component Model
 
@@ -741,7 +743,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `prepublishOnly`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
 - `package.json` declares a `files` allowlist of `src` and `scripts` so npm consumer installs ship only runtime-required code and omit the `tests/` directory.
 - `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
-- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, publishes the package to npm, and creates the matching GitHub Release.
+- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, pins every composite action to a Node24-native release, publishes the package to npm, and creates the matching GitHub Release.
 - `package.json` and `package-lock.json` resolve the top-level package as the identical semver version `0.95.0`, and the manifest declares `description`, `author`, `keywords`, `license`, `engines.node`, and a `prepublishOnly` test gate for npm publication.
 
 ## 6. Repository Structure
@@ -840,9 +842,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | CTN-024 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` source-of-truth mandate for new implementations, source-code modifications, and bug fixes. |
 | CTN-025 | `package.json` :: `"license": "GPL-3.0-only"`; `LICENSE` :: committed GPL-3.0 full text. |
 | CTN-026 | `package.json` :: non-empty `"description"`, `"author"`, and `"keywords"` metadata fields. |
-| CTN-027 | `package.json` :: `"engines": { "node": ">=22.19.0" }` mirroring the pi CLI host engines floor. |
+| CTN-027 | `package.json` :: `"engines": { "node": ">=24.0.0" }` establishing the Node.js 24 minimum runtime. |
 | CTN-028 | `package.json` :: `"version": "0.95.0"`; `package-lock.json` :: root `version` plus `packages[""].version` both `0.95.0`. |
 | CTN-029 | `package.json` :: `"scripts"` :: `"prepublishOnly": "npm test"` executed automatically by `npm publish`. |
+| CTN-030 | `.github/workflows/release-npm.yml` :: `uses:` pins `actions/checkout@v5`, `actions/setup-node@v5`, `mikepenz/release-changelog-builder-action@v6`, and `softprops/action-gh-release@v3`, each running Node24. |
 
 ### 8.2 DES Evidence
 | ID | Evidence |
@@ -958,6 +961,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-159 | `tests/release-workflow.test.ts` :: `package manifest and lockfile keep one identical semver version for npm publication` verifies manifest/lock root version identity. |
 | TST-160 | `tests/release-workflow.test.ts` :: `package manifest declares npm compliance metadata for license, discoverability, and engines` verifies license, LICENSE text, description, author, keywords, and engines. |
 | TST-161 | `tests/release-workflow.test.ts` :: `package manifest gates npm publish on the full test suite` verifies `prepublishOnly` plus the workflow publish step. |
+| TST-162 | `tests/release-workflow.test.ts` :: `release workflow pins Node24-native composite actions without Node20 transitional opt-outs` verifies the four action pins plus absence of Node20 escape variables. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

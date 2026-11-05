@@ -47,7 +47,8 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 
 ## Requirements
 
-- **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 1.0.0 or newer (Node.js 22.19+, per the pi CLI requirement).
+- **Node.js** - 24.0.0 or newer, per the `engines` constraint in `package.json`.
+- **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 1.0.0 or newer (Node.js 24+ satisfies the pi CLI 22.19+ minimum).
 - **Git repository** - every `req-*` command runs slash-command-owned git validation: the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
 - **Requirements documentation** - the configured `docs-dir` (default `usereq/docs`) must contain the canonical documents required by each command (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); commands such as `/req-write`, `/req-create`, and `/req-workflow` are the entry points that generate them.
 - **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install automatically through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
