@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.98.0](https://github.com/Ogekuri/PI-useReq/compare/v0.97.0..v0.98.0) - 2026-11-05
+### 🚜  Changes
+- gate npm publish on master, keep GitHub Release for develop tags [useReq] *(release-workflow)*
+  - Remove job-level master gate from build-release so every canonical tag runs the release job
+  - Gate only the 'Publish package to npm' step on is_master output from check-branch
+  - Update check-branch messaging: develop-only tags create the GitHub Release without npm publication
+  - Requirements: rework REQ-139, add REQ-467/REQ-468, update DES-011, TST-039, evidence matrix
+
+### 📚  Documentation
+- Update README.md file.
+
 ## [0.97.0](https://github.com/Ogekuri/PI-useReq/compare/v0.96.0..v0.97.0) - 2026-11-05
 ### 🚜  Changes
 - BREAKING CHANGE: migrate runtime and workflow actions to Node.js 24 [useReq] *(package)*
@@ -1325,6 +1336,7 @@
 - \[0.95.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.95.0
 - \[0.96.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.96.0
 - \[0.97.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.97.0
+- \[0.98.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.98.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1421,3 +1433,4 @@
 [0.95.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.94.0..v0.95.0
 [0.96.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.95.0..v0.96.0
 [0.97.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.96.0..v0.97.0
+[0.98.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.97.0..v0.98.0
