@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.99.1](https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.99.1) - 2026-11-07
+### ⛰️  Features
+- Update prompts.
+
+### 🐛  Bug Fixes
+- report manifest latest instead of installed version [useReq] *(package-manager)*
+  - Carry the resolved npmjs manifest latest version on the current
+  - classification outcome of probeLatestRegistryVersion instead of
+  - discarding it, so an installed version newer than the published
+  - latest still reports the published latest verbatim.
+  - Map both newer and current probe outcomes to the manifest latest in
+  - resolveRegistryProbeLatestVersionText, fixing --ver and --upgrade
+  - printing the installed version as npmjs latest (REQ-475, REQ-489).
+  - Add failing-first reproducer test for installed-newer-than-latest
+  - case and update current-outcome assertions with latestVersion.
+
+### 🚜  Changes
+- resolve npmjs latest from the package manifest [useReq] *(package-manager)*
+  - Probe the npmjs package manifest document (registry packument backing
+  - npmjs.com/package/pi-usereq) instead of the /latest shorthand so --ver
+  - searches available versions per npm best practices (REQ-477).
+  - Resolve the npmjs latest version from dist-tags.latest with fallback
+  - to the highest semver-ordered versions entry and release-over-
+  - prerelease ordering (REQ-489, TST-171).
+  - Print the manifest latest version on default-channel --upgrade in the
+  - already-latest line and resolve the completion summary updated version
+  - as the latest npmjs version (REQ-480, REQ-484).
+  - Update tests, WORKFLOW call traces, and SRS to version 0.0.115.
+- add version, upgrade, and uninstall commands [useReq] *(package-manager)*
+  - Add src/core/package-manager.ts implementing --ver|--version, --upgrade
+  - [--dev|--develop], and --uninstall with injectable npm-registry plus
+  - GitHub-releases probes and guarded child execution (PRJ-009, DES-026,
+  - REQ-473..REQ-487).
+  - Dispatch management commands from src/cli.ts main before flag parsing
+  - (DES-027, REQ-473, REQ-474).
+  - Distribute the pi-usereq npm bin launcher scripts/pi-usereq.js via
+  - package.json bin metadata plus .gitignore include (DES-028).
+  - Add scripts/pi-usereq.sh wrapper forwarding arguments to the local tsx
+  - CLI entry with a missing-dependency guard (REQ-488).
+  - Add tests/package-manager.test.ts covering parsing, probes, upgrade
+  - channels, uninstall, launcher, and wrapper (TST-163..TST-170).
+- send completed Pushover output from Outcome marker only [useReq] *(pi-notify)*
+  - REQ-469..REQ-472: for completed prompt-end outcomes, the Pushover title and
+  - message channels substitute only the final-agent-output substring starting at
+  - the first '## **Outcome**' occurrence through the output end; outputs without
+  - the marker keep the previous full-output behavior, interrupted and failed
+  - outcomes keep the full raw output, and PI_NOTIFY_CMD substitution is
+  - unaffected. Implemented via resolvePiNotifyPushoverAgentOutput plus an
+  - optional Pushover-channel %%OUTPUT%% override in substitutePiNotifyTextTemplate;
+  - REQ-445 head truncation still composes after the slice. Requirements,
+  - WORKFLOW.md call traces, and REFERENCES.md updated accordingly.
+
+### 📚  Documentation
+- Update TODO.md file.
+
 ## [0.99.0](https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0) - 2026-11-05
 ### 🐛  Bug Fixes
 - restore strict tsc, hermetic archives, agent_settled scenarios [useReq] *(tests)*
@@ -1353,6 +1408,7 @@
 - \[0.97.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.97.0
 - \[0.98.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.98.0
 - \[0.99.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.0
+- \[0.99.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.1
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1451,3 +1507,4 @@
 [0.97.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.96.0..v0.97.0
 [0.98.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.97.0..v0.98.0
 [0.99.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0
+[0.99.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.99.1
