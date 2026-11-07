@@ -11,12 +11,15 @@ import {
   PACKAGE_UNINSTALL_COMMAND,
   PACKAGE_UPGRADE_COMMAND,
   buildDevelopUpgradeCommand,
+  comparePackageManagerVersionOrder,
   isNewerPackageManagerVersion,
   parsePackageManagerCommand,
   parsePackageManagerUpgradeChannel,
   probeLatestGitHubRelease,
   probeLatestRegistryVersion,
+  resolveHighestPackageManagerVersion,
   resolvePackageManagerInstalledVersion,
+  resolvePackageManagerManifestLatest,
   runPackageManagerManagementCommand,
   runPackageManagerUninstallCommand,
   runPackageManagerUpgradeCommand,
@@ -176,38 +179,63 @@ test("develop upgrade command embeds the raw GitHub release tag", () => {
   );
 });
 
-test("registry probe resolves the documented registry endpoint", async () => {
-  const { urls, fetchImpl } = createFetchJsonDouble({ version: "1.0.0" });
+test("registry probe resolves the documented npmjs package manifest endpoint", async () => {
+  const { urls, fetchImpl } = createFetchJsonDouble({ "dist-tags": { latest: "1.0.0" } });
   await probeLatestRegistryVersion({ currentVersion: "1.0.0", fetchImpl });
-  assert.deepEqual(urls, [`${PACKAGE_MANAGER_REGISTRY_BASE_URL}/pi-usereq/latest`]);
+  assert.deepEqual(urls, [`${PACKAGE_MANAGER_REGISTRY_BASE_URL}/pi-usereq`]);
 });
 
-test("registry probe classifies newer, current, and older payloads", async () => {
+test("registry probe classifies newer, current, and older manifest payloads", async () => {
   const newer = await probeLatestRegistryVersion({
     currentVersion: "1.0.0",
-    fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl,
+    fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl,
   });
   assert.deepEqual(newer, { status: "newer", currentVersion: "1.0.0", latestVersion: "2.0.0" });
   const current = await probeLatestRegistryVersion({
     currentVersion: "2.0.0",
-    fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl,
+    fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl,
   });
   assert.deepEqual(current, { status: "current", currentVersion: "2.0.0" });
   const older = await probeLatestRegistryVersion({
     currentVersion: "3.0.0",
-    fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl,
+    fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl,
   });
   assert.deepEqual(older, { status: "current", currentVersion: "3.0.0" });
   const prerelease = await probeLatestRegistryVersion({
     currentVersion: "2.0.0",
-    fetchImpl: createFetchJsonDouble({ version: "2.1.0-beta.1" }).fetchImpl,
+    fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.1.0-beta.1" } }).fetchImpl,
   });
   assert.deepEqual(prerelease, { status: "current", currentVersion: "2.0.0" });
 });
 
+test("manifest resolution prefers dist-tags.latest and falls back to the highest versions entry", async () => {
+  assert.equal(
+    resolvePackageManagerManifestLatest({
+      "dist-tags": { latest: "1.9.0" },
+      versions: { "2.0.0": {}, "1.0.0": {} },
+    }),
+    "1.9.0",
+  );
+  assert.equal(
+    resolvePackageManagerManifestLatest({ versions: { "1.0.0": {}, "2.1.0": {}, "2.0.0-beta.1": {} } }),
+    "2.1.0",
+  );
+  assert.equal(resolvePackageManagerManifestLatest({ versions: { "2.1.0": {}, "2.1.0-beta.1": {} } }), "2.1.0");
+  assert.equal(resolvePackageManagerManifestLatest({}), undefined);
+  assert.equal(resolvePackageManagerManifestLatest("not-an-object"), undefined);
+});
+
+test("version order comparator ranks releases above equal-numeric prereleases", () => {
+  assert.ok(comparePackageManagerVersionOrder("2.1.0", "2.1.0-beta.1") > 0);
+  assert.ok(comparePackageManagerVersionOrder("1.10.0", "1.9.9") > 0);
+  assert.ok(comparePackageManagerVersionOrder("1.2", "1.2.0") === 0);
+  assert.equal(resolveHighestPackageManagerVersion(["bad-version", "2.0.0", ""]), "2.0.0");
+  assert.equal(resolveHighestPackageManagerVersion([]), undefined);
+});
+
 test("registry probe maps failures and missing inputs to deterministic outcomes", async () => {
   const missingVersion = await probeLatestRegistryVersion({
-    fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl,
+    fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl,
   });
   assert.deepEqual(missingVersion, { status: "unknown-version" });
   const httpError = await probeLatestRegistryVersion({
@@ -270,7 +298,7 @@ test("version command prints the exact three-line report and returns zero", asyn
     { installedVersion: "1.0.0" },
     {
       stdout: sink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
       githubCheck: { fetchImpl: createFetchJsonDouble({ tag_name: "v1.5.0" }).fetchImpl },
     },
   );
@@ -300,12 +328,12 @@ test("default-channel upgrade skips spawning and reports already-latest when cur
     {
       spawn,
       stdout: sink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
     },
   );
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 0);
-  assert.deepEqual(sink.chunks, ["pi-usereq 2.0.0 is already the latest available version.\n"]);
+  assert.deepEqual(sink.chunks, ["pi-usereq 2.0.0 is already the latest available version (npmjs latest: 2.0.0).\n"]);
 });
 
 test("default-channel upgrade installs the latest package and prints the completion summary", async () => {
@@ -316,7 +344,7 @@ test("default-channel upgrade installs the latest package and prints the complet
     {
       spawn,
       stdout: sink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
     },
   );
   assert.equal(exitCode, 0);
@@ -353,7 +381,7 @@ test("default-channel upgrade propagates child failure without printing a summar
     {
       spawn,
       stdout: sink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
     },
   );
   assert.equal(exitCode, 3);
@@ -450,7 +478,7 @@ test("management dispatch routes every canonical command to its handler", async 
     { installedVersion: "1.0.0" },
     {
       stdout: versionSink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ version: "1.0.0" }).fetchImpl },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "1.0.0" } }).fetchImpl },
       githubCheck: { fetchImpl: createFetchJsonDouble({ tag_name: "v1.0.0" }).fetchImpl },
     },
   );
@@ -465,12 +493,12 @@ test("management dispatch routes every canonical command to its handler", async 
     {
       spawn: currentSpawn.spawn,
       stdout: currentSink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ version: "2.0.0" }).fetchImpl },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
     },
   );
   assert.equal(upgradeExit, 0);
   assert.equal(currentSpawn.calls.length, 0);
-  assert.deepEqual(currentSink.chunks, ["pi-usereq 2.0.0 is already the latest available version.\n"]);
+  assert.deepEqual(currentSink.chunks, ["pi-usereq 2.0.0 is already the latest available version (npmjs latest: 2.0.0).\n"]);
 });
 
 test("package manifest declares the pi-usereq distribution bin launcher", () => {

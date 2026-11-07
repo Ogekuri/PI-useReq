@@ -31,11 +31,14 @@
       - `resolvePackageManagerInstalledVersion(...)`: resolve the installed version backing the management commands from installation-owned package metadata [`src/core/package-manager.ts`]
         - `getInstallationPackageMetadata(...)`: read cached installation package name and version from the installation-owned `package.json` [`src/core/path-context.ts`]
       - `runPackageManagerManagementCommand(...)`: route `--ver|--version`, `--upgrade`, and `--uninstall` to their handlers and return the handler exit code consumed by `process.exitCode` [`src/core/package-manager.ts`]
-        - `runPackageManagerVersionCommand(...)`: run the concurrent npm-registry plus GitHub-releases probes and print the three-line installed/npmjs/GitHub version report [`src/core/package-manager.ts`]
-          - `probeLatestRegistryVersion(...)`: GET the npm registry latest document with timeout deadline and classify newer, current, unknown-version, or error outcomes [`src/core/package-manager.ts`]
+        - `runPackageManagerVersionCommand(...)`: run the concurrent npmjs-manifest plus GitHub-releases probes and print the three-line installed/npmjs/GitHub version report [`src/core/package-manager.ts`]
+          - `probeLatestRegistryVersion(...)`: GET the npmjs package manifest document `{registry}/{package}` with timeout deadline and classify newer, current, unknown-version, or error outcomes from the manifest latest version [`src/core/package-manager.ts`]
+            - `resolvePackageManagerManifestLatest(...)`: resolve the manifest `dist-tags.latest` value with fallback to the highest semver-ordered manifest `versions` entry [`src/core/package-manager.ts`]
+              - `resolveHighestPackageManagerVersion(...)`: select the highest parseable version candidate [`src/core/package-manager.ts`]
+                - `comparePackageManagerVersionOrder(...)`: order dotted versions with release-over-prerelease semantics [`src/core/package-manager.ts`]
             - `isNewerPackageManagerVersion(...)`: compare dotted numeric versions segment-by-segment and treat non-integer or prerelease segments as never newer [`src/core/package-manager.ts`]
           - `probeLatestGitHubRelease(...)`: GET the GitHub releases latest document with timeout deadline plus user-agent header and strip the leading tag prefix [`src/core/package-manager.ts`]
-        - `runPackageManagerUpgradeCommand(...)`: gate the default channel on one forced registry probe with an already-latest skip, install the probed GitHub release tag on the develop channel, and print the completion summary with the follow-up resolved version [`src/core/package-manager.ts`]
+        - `runPackageManagerUpgradeCommand(...)`: gate the default channel on one forced npmjs package-manifest probe with an already-latest skip carrying the manifest latest version, install the probed GitHub release tag on the develop channel, and print the completion summary with the follow-up manifest-resolved npmjs latest version [`src/core/package-manager.ts`]
           - `buildDevelopUpgradeCommand(...)`: build the `github:Ogekuri/PI-useReq#<tag>` install command tuple [`src/core/package-manager.ts`]
           - `runPackageManagerChildCommand(...)`: run one package-manager child process with user-home cwd, inherited stdio, and Windows shell resolution, mapping spawn failures to exit code `1` plus a manual-command hint [`src/core/package-manager.ts`]
         - `runPackageManagerUninstallCommand(...)`: run the global package uninstall child command and propagate its exit code [`src/core/package-manager.ts`]
@@ -376,7 +379,7 @@
   - Filesystem access for config, canonical docs discovery, and source reads.
   - Git and arbitrary configured checker subprocesses via child-process execution.
   - npm package-manager child processes for `--upgrade` and `--uninstall` global installs executed from the user home.
-  - Outbound HTTPS requests to the npm registry and the GitHub releases API for `--ver|--version` and `--upgrade` probes.
+  - Outbound HTTPS requests to the npmjs package-manifest document and the GitHub releases API for `--ver|--version` and `--upgrade` probes.
 
 ### `PROC:pi-host`
 - Entrypoints:

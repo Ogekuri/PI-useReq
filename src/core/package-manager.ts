@@ -202,6 +202,111 @@ export function isNewerPackageManagerVersion(candidate: string, current: string)
 }
 
 /**
+ * @brief Tests whether one dotted version string parses into numeric release segments.
+ * @details Splits the release part on `.`, accepting only integer segments; a trailing `-prerelease` suffix is stripped before segment validation so both release and prerelease candidates are parseable. Runtime is O(k) in segment count. Pure; no side effects.
+ * @param[in] version {string} Candidate dotted version string.
+ * @return {boolean} `true` when the release segments are all non-negative integers.
+ * @note Complexity: O(k) in segment count. Pure; no side effects.
+ */
+function isParseablePackageManagerVersion(version: string): boolean {
+  const releasePart = version.trim().split("-")[0] ?? "";
+  return releasePart.split(".").every((segment) => /^\d+$/.test(segment));
+}
+
+/**
+ * @brief Orders two dotted version strings with release-over-prerelease semantics.
+ * @details Parses each input into integer release segments plus an optional prerelease suffix, compares numeric segments segment-by-segment with zero padding, then breaks ties by placing releases above prereleases and finally by lexicographic prerelease ordering; unparseable inputs sort below every parseable input. Runtime is O(k) in segment count. Pure; no side effects.
+ * @param[in] left {string} Left dotted version string.
+ * @param[in] right {string} Right dotted version string.
+ * @return {number} Negative when `left` sorts before `right`, positive when after, `0` when equivalent.
+ * @note Complexity: O(k) in segment count. Pure; no side effects.
+ */
+export function comparePackageManagerVersionOrder(left: string, right: string): number {
+  const parse = (version: string): { segments: number[]; prerelease: string | null } | undefined => {
+    const trimmed = version.trim();
+    const separatorIndex = trimmed.indexOf("-");
+    const releasePart = separatorIndex >= 0 ? trimmed.slice(0, separatorIndex) : trimmed;
+    const segments = releasePart.split(".").map((segment) =>
+      /^\d+$/.test(segment) ? Number(segment) : Number.NaN,
+    );
+    if (segments.some((segment) => !Number.isInteger(segment))) {
+      return undefined;
+    }
+    return { segments, prerelease: separatorIndex >= 0 ? trimmed.slice(separatorIndex + 1) : null };
+  };
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  if (leftParts === undefined || rightParts === undefined) {
+    if (leftParts === rightParts) return 0;
+    return leftParts === undefined ? -1 : 1;
+  }
+  const length = Math.max(leftParts.segments.length, rightParts.segments.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftSegment = leftParts.segments[index] ?? 0;
+    const rightSegment = rightParts.segments[index] ?? 0;
+    if (leftSegment !== rightSegment) {
+      return leftSegment < rightSegment ? -1 : 1;
+    }
+  }
+  if (leftParts.prerelease === rightParts.prerelease) {
+    return (leftParts.prerelease ?? "").localeCompare(rightParts.prerelease ?? "");
+  }
+  return leftParts.prerelease === null ? 1 : -1;
+}
+
+/**
+ * @brief Resolves the highest semver-ordered version from one candidate list.
+ * @details Filters out empty and unparseable candidates, then selects the maximum through `comparePackageManagerVersionOrder(...)` so releases outrank equal-numeric prereleases. Runtime is O(n * k) in candidate count and segment count. Pure; no side effects.
+ * @param[in] versions {readonly string[]} Candidate dotted version strings.
+ * @return {string | undefined} Highest parseable candidate, or `undefined` when none is parseable.
+ * @note Complexity: O(n * k). Pure; no side effects.
+ * @see comparePackageManagerVersionOrder
+ */
+export function resolveHighestPackageManagerVersion(
+  versions: readonly string[],
+): string | undefined {
+  let highest: string | undefined;
+  for (const version of versions) {
+    const candidate = version.trim();
+    if (!candidate || !isParseablePackageManagerVersion(candidate)) {
+      continue;
+    }
+    if (highest === undefined || comparePackageManagerVersionOrder(candidate, highest) > 0) {
+      highest = candidate;
+    }
+  }
+  return highest;
+}
+
+/**
+ * @brief Resolves the npmjs latest version from one registry package manifest document.
+ * @details Follows the npm best-practice resolution order: a non-empty `dist-tags.latest` string defines the canonical npmjs latest version; otherwise the highest semver-ordered entry of the manifest `versions` map is selected so releases outrank equal-numeric prereleases; every other payload shape resolves to `undefined`. Runtime is O(v * k) over manifest version keys. Pure; no side effects.
+ * @param[in] payload {unknown} Parsed npmjs package manifest document (packument).
+ * @return {string | undefined} Resolved latest version text, or `undefined` when the manifest exposes neither field.
+ * @note Complexity: O(v * k) in manifest version count and segment count. Pure; no side effects.
+ * @see resolveHighestPackageManagerVersion
+ * @satisfies REQ-489
+ */
+export function resolvePackageManagerManifestLatest(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+  const record = payload as Record<string, unknown>;
+  const distTags = record["dist-tags"];
+  if (typeof distTags === "object" && distTags !== null) {
+    const latest = (distTags as Record<string, unknown>).latest;
+    if (typeof latest === "string" && latest.trim() !== "") {
+      return latest.trim();
+    }
+  }
+  const versions = record.versions;
+  if (typeof versions === "object" && versions !== null) {
+    return resolveHighestPackageManagerVersion(Object.keys(versions));
+  }
+  return undefined;
+}
+
+/**
  * @brief Strips the release-tag prefix from a GitHub release tag.
  * @details Trims surrounding whitespace and removes one leading `v`/`V` character, returning the remaining text.
  * @param[in] tag {string} Raw `tag_name` value from the GitHub releases API.
@@ -213,11 +318,13 @@ function stripPackageManagerReleaseTagPrefix(tag: string): string {
 }
 
 /**
- * @brief Probes the npm registry for the latest published package version.
- * @details Logging-free resolution order: installed-version guard (missing `currentVersion` returns `unknown-version` with zero network calls) -> single `GET {registry}/{package}/latest` with the timeout deadline -> `response.ok` and `payload.version` validation -> `isNewerPackageManagerVersion` gate. Every failure is returned as a discriminated outcome; never throws.
+ * @brief Probes the npmjs package manifest document for the latest published package version.
+ * @details Logging-free resolution order: installed-version guard (missing `currentVersion` returns `unknown-version` with zero network calls) -> single `GET {registry}/{package}` fetching the npmjs package manifest document (packument) backing `https://www.npmjs.com/package/{package}` with the timeout deadline -> `response.ok` validation -> `resolvePackageManagerManifestLatest(...)` dist-tags/versions resolution -> `isNewerPackageManagerVersion` gate. Every failure is returned as a discriminated outcome; never throws.
  * @param[in] deps {PackageManagerRegistryProbeDeps} Optional dependency overrides; production defaults when omitted.
- * @return {Promise<PackageManagerRegistryProbe>} Discriminated probe outcome; `message` carries the final diagnostic text without logging.
+ * @return {Promise<PackageManagerRegistryProbe>} Discriminated probe outcome carrying the manifest latest version; `message` carries the final diagnostic text without logging.
  * @note Complexity: one HTTP round-trip bounded by the timeout deadline.
+ * @satisfies REQ-477, REQ-489
+ * @see resolvePackageManagerManifestLatest
  */
 export async function probeLatestRegistryVersion(
   deps: PackageManagerRegistryProbeDeps = {},
@@ -231,21 +338,22 @@ export async function probeLatestRegistryVersion(
   const timeoutMs = deps.timeoutMs ?? PACKAGE_MANAGER_PROBE_TIMEOUT_MS;
   const fetchImpl = deps.fetchImpl ?? fetch;
   try {
-    const response = await fetchImpl(`${registryBaseUrl}/${packageName}/latest`, {
+    const response = await fetchImpl(`${registryBaseUrl}/${packageName}`, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       return { status: "error", message: `registry responded with HTTP ${response.status}.` };
     }
-    const payload = (await response.json()) as { version?: unknown };
-    if (typeof payload?.version !== "string") {
-      return { status: "error", message: "registry response has no version field." };
+    const payload = (await response.json()) as unknown;
+    const latestVersion = resolvePackageManagerManifestLatest(payload);
+    if (latestVersion === undefined) {
+      return { status: "error", message: "registry manifest exposes no latest version." };
     }
-    if (!isNewerPackageManagerVersion(payload.version, currentVersion)) {
+    if (!isNewerPackageManagerVersion(latestVersion, currentVersion)) {
       return { status: "current", currentVersion };
     }
-    return { status: "newer", currentVersion, latestVersion: payload.version };
+    return { status: "newer", currentVersion, latestVersion };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return { status: "error", message };
@@ -462,7 +570,7 @@ function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["s
 
 /**
  * @brief Handles `--upgrade`: channel selection, package reinstall, then stdout summary.
- * @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always proceeding with the tagged GitHub update; a failed GitHub probe prints one stderr diagnostic and returns `1` without spawning any child process, while a successful probe installs `github:<repository>#<tag>` and summarizes with the probed release version. Default npm channel: one forced registry probe bypassing every cache; `current` writes the already-latest stdout line and returns `0` without spawning any child; any other outcome runs `npm install -g pi-usereq@latest` with inherited stdio, propagates a non-zero child exit code without printing any summary, resolves the updated version through one follow-up probe, and prints the completion summary.
+ * @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always proceeding with the tagged GitHub update; a failed GitHub probe prints one stderr diagnostic and returns `1` without spawning any child process, while a successful probe installs `github:<repository>#<tag>` and summarizes with the probed release version. Default npm channel: one forced npmjs package-manifest probe bypassing every cache; `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child; any other outcome runs `npm install -g pi-usereq@latest` with inherited stdio, propagates a non-zero child exit code without printing any summary, resolves the updated version as the latest npmjs version through one follow-up manifest probe, and prints the completion summary.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version and channel.
  * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout overrides.
  * @return {Promise<number>} `0` when the installed version is already the latest available; otherwise the upgrade exit code when non-zero, else `0` after a successful reinstall.
@@ -496,7 +604,7 @@ export async function runPackageManagerUpgradeCommand(
   });
   if (!isPackageManagerUpgradeNecessary(precheck.status)) {
     stdout.write(
-      `${PACKAGE_MANAGER_PACKAGE_NAME} ${options.installedVersion} is already the latest available version.\n`,
+      `${PACKAGE_MANAGER_PACKAGE_NAME} ${options.installedVersion} is already the latest available version (npmjs latest: ${resolveRegistryProbeLatestVersionText(precheck)}).\n`,
     );
     return 0;
   }
