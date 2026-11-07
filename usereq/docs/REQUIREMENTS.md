@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.113"
+version: "0.0.114"
 date: "2026-11-07"
 author: "OpenAI Codex"
 scope:
@@ -36,7 +36,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, and the pi CLI reference updater. `.github/workflows/` contains the npm release workflow in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, and the distribution bin launcher. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -49,6 +49,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
 - **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery, base-path session restoration, and force cleanup of generated worktrees plus branches.
+- **PRJ-009**: MUST expose a distributable `pi-usereq` npm bin program accepting the management commands `--ver`/`--version`, `--upgrade [--dev|--develop]`, and `--uninstall`.
 
 ### 2.2 Project Constraints
 - **CTN-001**: MUST persist local project configuration only at `<base-path>/.pi-usereq.json` with default `docs-dir=usereq/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
@@ -110,6 +111,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-023**: MUST implement the pi CLI reference updater in `scripts/pi-cli-update-src-docs.sh` as a standalone bash process using `git` plus core shell utilities only.
 - **DES-024**: MUST implement the process-scoped deferred-notification replay store plus its session-start replay gate in one dedicated `src/core/` module outside `src/index.ts` business logic.
 - **DES-025**: MUST implement npm publication metadata compliance declaratively in `package.json` plus `package-lock.json` root version identity, without modifying `.github/workflows/release-npm.yml` publication steps.
+- **DES-026**: MUST implement `--ver|--version`, `--upgrade [--dev|--develop]`, and `--uninstall` handlers in `src/core/package-manager.ts` with injectable fetch, spawn, logger, and stdout dependencies.
+- **DES-027**: MUST dispatch management commands from `src/cli.ts` `main(...)` before standard flag parsing, scheduling the async handler and assigning its exit code to `process.exitCode` on completion.
+- **DES-028**: MUST declare `package.json` `bin` entry `pi-usereq` pointing to the shebang `scripts/pi-usereq.js` launcher that registers the bundled tsx ESM loader and invokes `main` from `src/cli.ts`.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -556,6 +560,22 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-470**: MUST keep the Pushover-channel `%%OUTPUT%%` unchanged for completed prompt-end outcomes whose final agent output does not contain `## **Outcome**`.
 - **REQ-471**: MUST NOT substitute into Pushover title or Pushover text any final-agent-output text preceding the first `## **Outcome**` occurrence for completed prompt-end outcomes.
 - **REQ-472**: MUST restrict the `## **Outcome**` Pushover extraction to completed prompt-end outcomes and MUST NOT apply it to `PI_NOTIFY_CMD` command-notify substitution.
+- **REQ-473**: MUST detect management commands as exactly one argv token among `--ver`, `--version`, `--upgrade`, `--uninstall`, or exactly two tokens pairing `--upgrade` with `--dev` or `--develop` in either order.
+- **REQ-474**: MUST return no management command for every other argv shape so standard flag parsing stays untouched.
+- **REQ-475**: MUST make `--ver` and `--version` write exactly three stdout lines — installed version, `npmjs latest: <version>`, `GitHub latest: <version>` — and return exit code `0`.
+- **REQ-476**: MUST render installed, npm-latest, or GitHub-latest versions as `unknown` whenever the value is missing, unreadable, or its probe fails.
+- **REQ-477**: MUST probe `https://registry.npmjs.org/pi-usereq/latest` and `https://api.github.com/repos/Ogekuri/PI-useReq/releases/latest` concurrently for `--ver`/`--version` without consulting any persisted cache.
+- **REQ-478**: MUST bound every registry and GitHub probe with a 2000-millisecond timeout deadline and send the GitHub-mandatory `user-agent` header.
+- **REQ-479**: MUST compare published against installed dotted numeric versions segment-by-segment and MUST treat non-integer or prerelease segments as never newer.
+- **REQ-480**: MUST make default-channel `--upgrade` probe the npm registry first and MUST return `0` after printing an already-latest stdout line without spawning any child process when no newer version exists.
+- **REQ-481**: MUST make default-channel `--upgrade` run `npm install -g pi-usereq@latest` with inherited stdio and MUST propagate a non-zero child exit code without printing any summary.
+- **REQ-482**: MUST make `--dev` and `--develop` select the develop channel that installs `github:Ogekuri/PI-useReq#<tag>` from the latest GitHub release without any registry comparison.
+- **REQ-483**: MUST make develop-channel `--upgrade` return `1` with one stderr diagnostic and no child spawn when the GitHub release probe fails.
+- **REQ-484**: MUST print stdout line `pi-usereq upgrade completed: <starting> -> <updated>` after a successful upgrade, resolving `<updated>` through one follow-up probe and defaulting to `unknown`.
+- **REQ-485**: MUST run every package-manager child process with user-home cwd, inherited stdio, and Windows shell resolution, mapping spawn failures to exit code `1` plus one stderr manual-command hint.
+- **REQ-486**: MUST make `--uninstall` run `npm uninstall -g pi-usereq` with inherited stdio and return the child exit code.
+- **REQ-487**: MUST resolve the management-command installed version from installation-owned package metadata and fall back to `unknown` when the manifest is unreadable.
+- **REQ-488**: MUST provide `scripts/pi-usereq.sh` forwarding every argument unchanged to the local CLI entry executed through `node --import tsx`, failing with remediation guidance when runtime dependencies are missing.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
@@ -718,6 +738,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-160**: MUST verify `package.json` declares SPDX `GPL-3.0-only` matching the committed `LICENSE` text plus non-empty `description`, `author`, `keywords`, and `engines.node` metadata.
 - **TST-161**: MUST verify `package.json` declares `prepublishOnly` executing `npm test` and the release workflow keeps `npm publish` without `--ignore-scripts`.
 - **TST-162**: MUST verify `.github/workflows/release-npm.yml` pins the four Node24-native composite action versions and declares no Node20 transitional environment opt-outs.
+- **TST-163**: MUST verify management-command argv detection accepts the documented exact shapes, both channel-option orderings, and rejects every other shape.
+- **TST-164**: MUST verify `--ver`/`--version` emits the three-line report with injected probe doubles, exit code `0`, and `unknown` fallbacks.
+- **TST-165**: MUST verify default-channel `--upgrade` skips spawning when current, spawns the documented install command otherwise, and prints the completion summary.
+- **TST-166**: MUST verify develop-channel `--upgrade` fails without spawn when the GitHub probe fails and installs the probed tag otherwise.
+- **TST-167**: MUST verify `--uninstall` spawns the documented uninstall command and maps spawn failures to exit code `1` with the manual-command hint.
+- **TST-168**: MUST verify dotted numeric version comparison treats prerelease and non-integer segments as never newer and equal versions as not newer.
+- **TST-169**: MUST verify package metadata declares the `pi-usereq` bin launcher and the launcher registers tsx and invokes the CLI `main`.
+- **TST-170**: MUST verify `scripts/pi-usereq.sh` forwards arguments through the local tsx CLI entry and fails with remediation guidance when tsx is missing.
 
 ## 5. Observed Component Model
 

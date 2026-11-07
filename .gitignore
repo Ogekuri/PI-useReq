@@ -37,6 +37,7 @@
 !scripts/
 !scripts/lib/
 !scripts/**/*.sh
+!scripts/**/*.js
 !scripts/**/*.ts
 !.pi-usereq.json
 !usereq/

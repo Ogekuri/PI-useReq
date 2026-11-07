@@ -26,6 +26,9 @@
   },
   "homepage": "https://github.com/Ogekuri/PI-useReq#readme",
   "type": "module",
+  "bin": {
+    "pi-usereq": "scripts/pi-usereq.js"
+  },
   "files": [
     "src",
     "scripts"

@@ -34,6 +34,12 @@ import {
   runStaticCheck,
   validateStaticCheckEntry,
 } from "./core/static-check.js";
+import {
+  parsePackageManagerCommand,
+  parsePackageManagerUpgradeChannel,
+  resolvePackageManagerInstalledVersion,
+  runPackageManagerManagementCommand,
+} from "./core/package-manager.js";
 
 /**
  * @brief Represents the parsed CLI flag state for one invocation.
@@ -244,14 +250,33 @@ function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseR
 
 /**
  * @brief Executes one pi-usereq CLI invocation.
- * @details Parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes and stdout/stderr output.
+ * @details Dispatches package-management commands (`--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`) before standard flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode` on completion, then parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes, stdout/stderr output, and management-command HTTP probes or package-manager child processes.
  * @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
- * @return {number} Process exit code for the invocation.
+ * @return {number} Process exit code for the invocation; `0` for dispatched management commands whose async completion assigns the final `process.exitCode`.
  * @throws {ReqError} Internally catches `ReqError` and returns its code; other errors are coerced into exit code `1` with stderr output.
+ * @satisfies PRJ-009, DES-026, DES-027, REQ-473, REQ-474, REQ-487
  */
 export function main(argv = process.argv.slice(2)): number {
   try {
     if (argv.length === 0) {
+      return 0;
+    }
+    const managementCommand = parsePackageManagerCommand(argv);
+    if (managementCommand !== undefined) {
+      void runPackageManagerManagementCommand(managementCommand, {
+        installedVersion: resolvePackageManagerInstalledVersion(),
+        channel: parsePackageManagerUpgradeChannel(argv),
+      })
+        .then((managementExitCode) => {
+          process.exitCode = managementExitCode;
+        })
+        .catch((managementError: unknown) => {
+          const managementMessage = managementError instanceof Error
+            ? managementError.message
+            : String(managementError);
+          process.stderr.write(`${managementMessage}\n`);
+          process.exitCode = 1;
+        });
       return 0;
     }
     const args = parseArgs(argv);

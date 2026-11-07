@@ -21,11 +21,24 @@
   - `main(...)`: CLI runtime root [`src/cli.ts`]
 - Lifecycle/trigger:
   - Start trigger: Node executes `src/cli.ts` as a one-shot command.
-  - Stop trigger: returns numeric exit code after one dispatch path or caught `ReqError`.
+  - Stop trigger: returns numeric exit code after one dispatch path or caught `ReqError`; management-command dispatches keep the process alive until the scheduled async handler assigns `process.exitCode`.
   - Looping model: single-pass argument parse followed by single branch dispatch.
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
-  - `main(...)`: parse argv, enforce project-selection rules, load or repair effective config, dispatch the first matching runner branch, and serialize the result; on caught `ReqError` emits captured stdout plus stderr through `writeStdout(...)` and `writeStderr(...)` [`src/cli.ts`]
+  - `main(...)`: dispatch package-management commands before flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode`, then parse argv, enforce project-selection rules, load or repair effective config, dispatch the first matching runner branch, and serialize the result; on caught `ReqError` emits captured stdout plus stderr through `writeStdout(...)` and `writeStderr(...)` [`src/cli.ts`]
+    - `parsePackageManagerCommand(...)`: detect exact single-token `--ver|--version|--upgrade|--uninstall` argv shapes or the two-token `--upgrade` plus `--dev|--develop` pairing in either order [`src/core/package-manager.ts`]
+      - `parsePackageManagerUpgradeChannel(...)`: resolve the develop channel option from the raw argv [`src/core/package-manager.ts`]
+      - `resolvePackageManagerInstalledVersion(...)`: resolve the installed version backing the management commands from installation-owned package metadata [`src/core/package-manager.ts`]
+        - `getInstallationPackageMetadata(...)`: read cached installation package name and version from the installation-owned `package.json` [`src/core/path-context.ts`]
+      - `runPackageManagerManagementCommand(...)`: route `--ver|--version`, `--upgrade`, and `--uninstall` to their handlers and return the handler exit code consumed by `process.exitCode` [`src/core/package-manager.ts`]
+        - `runPackageManagerVersionCommand(...)`: run the concurrent npm-registry plus GitHub-releases probes and print the three-line installed/npmjs/GitHub version report [`src/core/package-manager.ts`]
+          - `probeLatestRegistryVersion(...)`: GET the npm registry latest document with timeout deadline and classify newer, current, unknown-version, or error outcomes [`src/core/package-manager.ts`]
+            - `isNewerPackageManagerVersion(...)`: compare dotted numeric versions segment-by-segment and treat non-integer or prerelease segments as never newer [`src/core/package-manager.ts`]
+          - `probeLatestGitHubRelease(...)`: GET the GitHub releases latest document with timeout deadline plus user-agent header and strip the leading tag prefix [`src/core/package-manager.ts`]
+        - `runPackageManagerUpgradeCommand(...)`: gate the default channel on one forced registry probe with an already-latest skip, install the probed GitHub release tag on the develop channel, and print the completion summary with the follow-up resolved version [`src/core/package-manager.ts`]
+          - `buildDevelopUpgradeCommand(...)`: build the `github:Ogekuri/PI-useReq#<tag>` install command tuple [`src/core/package-manager.ts`]
+          - `runPackageManagerChildCommand(...)`: run one package-manager child process with user-home cwd, inherited stdio, and Windows shell resolution, mapping spawn failures to exit code `1` plus a manual-command hint [`src/core/package-manager.ts`]
+        - `runPackageManagerUninstallCommand(...)`: run the global package uninstall child command and propagate its exit code [`src/core/package-manager.ts`]
     - `parseArgs(...)`: map argv tokens into a structured command selection [`src/cli.ts`]
       - `takeUntilOption(...)`: collect positional operands until the next option token [`src/cli.ts`]
     - `applyEnableStaticCheckSpecs(...)`: branch `--enable-static-check`; merge CLI static-check enable specs into persisted global checker lists, preserve existing entries, and force targeted local enable flags on before command dispatch [`src/cli.ts`]
@@ -362,6 +375,8 @@
   - Node process APIs for argv, cwd, environment, stdout, stderr, and exit code.
   - Filesystem access for config, canonical docs discovery, and source reads.
   - Git and arbitrary configured checker subprocesses via child-process execution.
+  - npm package-manager child processes for `--upgrade` and `--uninstall` global installs executed from the user home.
+  - Outbound HTTPS requests to the npm registry and the GitHub releases API for `--ver|--version` and `--upgrade` probes.
 
 ### `PROC:pi-host`
 - Entrypoints:
