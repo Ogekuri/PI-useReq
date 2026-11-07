@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.115"
+version: "0.0.116"
 date: "2026-11-07"
 author: "OpenAI Codex"
 scope:
@@ -10,7 +10,6 @@ scope:
     - "scripts/**"
     - ".github/workflows/**"
     - "tests/**/*.ts"
-    - "tests/python_oracle_stubs/**/*.py"
     - "tests/fixtures_attended_results/**/*.json"
   excludes:
     - "node_modules/**"
@@ -578,12 +577,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-488**: MUST provide `scripts/pi-usereq.sh` forwarding every argument unchanged to the local CLI entry executed through `node --import tsx`, failing with remediation guidance when runtime dependencies are missing.
 - **REQ-489**: MUST resolve the npmjs latest version from the manifest `dist-tags.latest` field, falling back to the highest semver-ordered manifest `versions` entry, and MUST NOT resolve any version when the manifest exposes neither.
 
+- **REQ-490**: MUST execute analysis commands using installation-owned TypeScript implementations and declared dependencies independently of the external req application and its source checkout.
+
 ## 4. Test Requirements
+- **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
 - **TST-002**: MUST verify installed bundled prompt, commit-instruction, template, and guideline resources remain readable from `installation-path`.
 - **TST-060**: MUST verify prompt rendering replaces `%%PROMPT%%` and expands `%%COMMIT%%` from rendered `git_commit.md` or `git_read-only.md` according to `AUTO_GIT_COMMIT`, excluding the verbatim `%%CONTEXT_FILES%%` block from placeholder-absence assertions.
-- **TST-003**: MUST verify standalone `files-tokens` outputs match the Python oracle, `--test-static-check` dummy or command outputs match archived fixtures, and `files-summarize`, `files-compress`, plus `files-find` preserve leading source tabs.
-- **TST-004**: MUST verify project `tokens` outputs match the Python oracle, verify `files-static-check` plus `static-check` against archived fixtures, and verify `summarize`, `compress`, plus `find` preserve leading source tabs.
+- **TST-003**: MUST verify standalone `files-tokens` outputs match committed expected-result fixtures, `--test-static-check` dummy or command outputs match archived fixtures, and `files-summarize`, `files-compress`, plus `files-find` preserve leading source tabs.
+- **TST-004**: MUST verify project `tokens` outputs match committed expected-result fixtures, verify `files-static-check` plus `static-check` against archived fixtures, and verify `summarize`, `compress`, plus `find` preserve leading source tabs.
 - **TST-005**: MUST verify the configuration menu saves `docs-dir` locally and `AUTO_GIT_COMMIT`, `GIT_WORKTREE_ENABLED`, plus `GIT_WORKTREE_PREFIX` globally immediately after each change.
 - **TST-084**: MUST verify local configuration persistence trims trailing `/` and keeps `docs-dir`, `tests-dir`, and `src-dir` relative.
 - **TST-046**: MUST verify `Language static code checkers` omits module selection, raw-spec actions, supported-language reference actions, and hides `Dummy`, `Pylance`, and `Ruff` from user-configurable actions.
@@ -625,7 +627,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-088**: MUST verify pi.dev-aware prompt rendering requires `pi.dev-src/` validation for bug fixes or problem resolution influenced by extension-to-pi-client interface implementations.
 - **TST-012**: MUST verify TypeScript CLI parity for standalone command-option regressions covering `--files-tokens`, `--files-summarize`, `--files-compress`, `--files-find`, `--test-static-check`, `--enable-line-numbers`, `--enable-static-check`, and `--verbose`.
 - **TST-013**: MUST verify TypeScript CLI parity for project-scoped command-option regressions covering `--summarize`, `--compress`, `--find`, `--tokens`, `--files-static-check`, and `--static-check`.
-- **TST-014**: MUST maintain an executable mapping from each imported command-option regression case to one TypeScript test case identifier and fail verification when any mapped case is missing.
+- **TST-014**: MUST maintain an executable repository-owned mapping from each command-option regression case to one TypeScript test case identifier and fail verification when any mapped case is missing.
 - **TST-015**: MUST verify archive-backed standalone CLI scenarios load expected results from `tests/fixtures_attended_results/standalone` and compare exact normalized exit code, stdout, and stderr for every file under `tests/fixtures/`.
 - **TST-016**: MUST verify archive-backed repository CLI scenarios load expected results from `tests/fixtures_attended_results/project` and compare exact normalized exit code, stdout, and stderr for the archived command set.
 - **TST-017**: MUST verify every archive-backed scenario required by `REQ-042` and `REQ-043` has a committed expected-result fixture file before executing TypeScript output comparisons.
@@ -650,7 +652,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-027**: MUST verify harness inspection surfaces `files-compress` and `compress` descriptions covering parameters, line-number behavior, monolithic markdown output, and failure details.
 - **TST-028**: MUST verify `files-static-check` and `static-check` agent-tool outputs place the monolithic static-check report in `content[0].text` and restrict `details` to execution metadata.
 - **TST-029**: MUST verify harness inspection surfaces `files-static-check` and `static-check` descriptions covering parameters, monolithic output, selection rules, and failure details.
-- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML when `PyYAML` is available, keeps the existing tag filter, gates npm publication on `origin/master` containment, uses Node.js `24.15.0`, publishes through OIDC trusted publishing without `NODE_AUTH_TOKEN`, and creates the GitHub Release.
+- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML using a declared Node dependency without optional skips, keeps the existing tag filter, gates npm publication on `origin/master` containment, uses Node.js `24.15.0`, publishes through OIDC trusted publishing without `NODE_AUTH_TOKEN`, and creates the GitHub Release.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify local and global configuration files omit derived static and dynamic path fields while runtime path context and status rendering still derive them correctly.
@@ -819,8 +821,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── tests/
 │   ├── extension-registration.test.ts
 │   ├── helpers.ts
-│   ├── oracle-project.test.ts
-│   ├── oracle-standalone.test.ts
+│   ├── project-source-tabs.test.ts
+│   ├── runtime-independence.test.ts
 │   ├── prompt-rendering.test.ts
 │   ├── release-workflow.test.ts
 │   └── fixtures/{fixture_c.c,fixture_cpp.cpp,fixture_csharp.cs,fixture_elixir.ex,fixture_go.go,fixture_haskell.hs,fixture_java.java,fixture_javascript.js,fixture_kotlin.kt,fixture_lua.lua,fixture_perl.pl,fixture_php.php,fixture_python.py,fixture_rust.rs,fixture_scala.scala,fixture_shell.sh,fixture_swift.swift,fixture_typescript.ts,fixture_zig.zig}
@@ -848,10 +850,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ### 7.1 Covered Behaviors
 - `tests/extension-registration.test.ts` covers extension registration, config-menu persistence, startup-tool enablement, static-check menu mutation flows, bundled prompt-command worktree orchestration, and specialized `req-references` direct commit orchestration.
 - `tests/prompt-rendering.test.ts` covers home-resource synchronization and placeholder replacement in rendered prompts.
-- `tests/oracle-standalone.test.ts` compares non-tab-sensitive standalone `files-*` outputs against the Python `usereq.cli` oracle, asserts Go-fixture tab preservation, and compares `--test-static-check` dummy/command outputs against archived fixtures.
-- `tests/oracle-project.test.ts` compares non-tab-sensitive project commands against the Python oracle, asserts Go-source tab preservation for project extraction commands, and verifies archived `files-static-check` plus `static-check` outputs.
+- `tests/attended-results.test.ts` owns the exact standalone and project output contracts, including token counts and static-check results, using committed archives without executing a reference application.
+- `tests/project-source-tabs.test.ts` preserves focused Go-source tab assertions for project commands; standalone tab assertions remain in `tests/cli-command-option-parity.test.ts`.
+- `tests/runtime-independence.test.ts` executes eight analysis commands with a Git-only PATH and unusable legacy interpreter overrides, and rejects legacy fixture configuration or virtualenv artifacts.
 - `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, npm publication steps, GitHub release creation directives in `.github/workflows/release-npm.yml`, plus npm manifest compliance for license, discoverability, engines, lockfile version identity, and the `prepublishOnly` test gate.
-- Test business logic focuses on parity with the Python oracle, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
+- Test business logic focuses on repository-owned output contracts, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
 
 ## 8. Evidence Matrix
 
@@ -971,8 +974,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | --- | --- |
 | TST-001 | `tests/extension-registration.test.ts` :: `extension registers all required prompt commands, tool wrappers, and agent tools` validates command and tool registration sets. |
 | TST-002 | `tests/prompt-rendering.test.ts` :: `embedded resources are copied ...` and `prompt rendering replaces all dynamic placeholders ...`. |
-| TST-003 | `tests/oracle-standalone.test.ts` :: preserves Python-oracle coverage for non-tab-sensitive fixtures, asserts Go-fixture tab preservation for `files-summarize`, `files-compress`, and `files-find`, and keeps archived `test-static-check` coverage. |
-| TST-004 | `tests/oracle-project.test.ts` :: preserves Python-oracle coverage for non-tab-sensitive project fixtures, asserts Go-source tab preservation for `summarize`, `compress`, and `find`, and keeps archived static-check coverage. |
+| TST-003 | `tests/attended-results.test.ts` :: compares standalone token results and all explicit-file command outputs against unchanged committed archives. |
+| TST-004 | `tests/attended-results.test.ts` :: compares project token results and project command outputs against unchanged committed archives; `tests/project-source-tabs.test.ts` retains focused Go tab-preservation assertions. |
+| TST-172 | `tests/runtime-independence.test.ts` :: runs eight analysis commands with only Git on PATH; fixture setup creates neither `.req` nor `.venv`. |
 | TST-005 | `tests/extension-registration.test.ts` :: `configuration menu saves updated docs-dir`, `configuration menu can disable ... tools`, and `configuration menu can add guided static-check entries ...`. |
 | TST-046 | `tests/extension-registration.test.ts` :: `configuration menu hides removed static-check modules from user-facing actions`. |
 | TST-073 | `tests/extension-registration.test.ts` :: `debug menu dims locked rows and persists debug settings with focus-preserving re-renders` validates `DEBUG_WORKFLOW_EVENTS` alongside the existing Debug fields. |
@@ -993,7 +997,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-023 | `tests/extension-registration.test.ts` :: `summary tools register agent-oriented descriptions and schema details`. |
 | TST-024 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-search` and `search` monolithic-output tests. |
 | TST-026 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-compress` and `compress` monolithic-output tests. |
-| TST-039 | `tests/release-workflow.test.ts` :: workflow-content assertions cover semver gating, `origin/master`-gated npm publication, Node.js `24.15.0`, and GitHub release generation. |
+| TST-039 | `tests/release-workflow.test.ts` :: mandatory Node YAML parsing and workflow-content assertions cover semver gating, `origin/master`-gated npm publication, Node.js `24.15.0`, and GitHub release generation. |
 | TST-133 | `tests/extension-registration.test.ts` :: `req-references` direct-commit workflow coverage verifies the guarded commit path against staged-change presence. |
 | TST-158 | `tests/extension-registration.test.ts` :: `prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates` verifies the superseded legacy default pushes the final assistant output while a distinct user-configured template is delivered unchanged. |
 | TST-159 | `tests/release-workflow.test.ts` :: `package manifest and lockfile keep one identical semver version for npm publication` verifies manifest/lock root version identity. |

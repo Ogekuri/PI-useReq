@@ -18,7 +18,7 @@ import { initFixtureRepo, saveFixtureConfigs } from "./helpers.js";
 
 /**
  * @brief Persists a targeted enabled-tool list into a fixture project config.
- * @details Loads the effective split config, replaces the global `enabled-tools` array with the supplied values, and rewrites the local/global plus oracle mirror files so offline harness tests observe the same runtime state. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
+ * @details Loads the effective split config, replaces the global `enabled-tools` array with the supplied values, and rewrites the local/global config files so offline harness tests observe the same runtime state. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] enabledTools {string[]} Enabled-tool names to persist.
  * @return {void} No return value.
@@ -260,7 +260,7 @@ test("replayCommand captures prompt command payloads", async () => {
     const config = loadConfig(projectBase);
     config.GIT_WORKTREE_ENABLED = "disable";
     saveFixtureConfigs(projectBase, config);
-    assert.equal(spawnSync("git", ["add", ".pi-usereq.json", ".req/config.json"], {
+    assert.equal(spawnSync("git", ["add", ".pi-usereq.json"], {
       cwd: projectBase,
       encoding: "utf8",
     }).status, 0);

@@ -22,8 +22,6 @@ import {
   readGlobalConfigJson,
   readProjectConfigJson,
   runNodeCli,
-  runPythonCli,
-  runPythonInline,
 } from "./helpers.js";
 
 /**
@@ -69,13 +67,12 @@ interface ScenarioExecution {
 
 /**
  * @brief Describes one committed expected-result CLI scenario.
- * @details Each scenario owns a stable identifier, an archive-relative output path, and a builder capable of preparing the runtime context for both Python archive capture and TypeScript verification. The interface is compile-time only and introduces no runtime side effects.
+ * @details Each scenario owns a stable identifier, an archive-relative output path, and a builder capable of preparing the runtime context for TypeScript output verification. The interface is compile-time only and introduces no runtime side effects.
  */
 export interface AttendedScenario {
   id: string;
   archiveRelativePath: string;
   buildExecution: () => ScenarioExecution;
-  buildPythonResult?: () => ArchivedCliResult;
 }
 
 /**
@@ -355,7 +352,7 @@ function buildStandaloneScenarios(): AttendedScenario[] {
 
 /**
  * @brief Builds the shared project configuration used by failing static-check archive scenarios.
- * @details Configures Python command-based static checks to call `false`, yielding deterministic failing stdout/stderr blocks in both Python and TypeScript implementations. Runtime is O(1). No side effects occur.
+ * @details Configures Python command-based static checks to call `false`, yielding deterministic failing stdout/stderr blocks in the TypeScript implementation. Runtime is O(1). No side effects occur.
  * @return {UseReqConfig["static-check"]} Static-check config payload.
  */
 function getFailingStaticCheckConfig(): UseReqConfig["static-check"] {
@@ -483,37 +480,6 @@ function buildProjectScenarios(): AttendedScenario[] {
           },
         };
       },
-      buildPythonResult: () => {
-        const { projectBase } = initFixtureRepo({ fixtures: [] });
-        fs.mkdirSync(path.join(projectBase, "docs"), { recursive: true });
-        try {
-          const script = [
-            "from pathlib import Path",
-            "import json",
-            `project_base = Path(${JSON.stringify(projectBase)})`,
-            "project_base.mkdir(parents=True, exist_ok=True)",
-            "payload = {",
-            "  'guidelines-dir': 'guidelines',",
-            "  'docs-dir': 'docs',",
-            "  'tests-dir': 'tests',",
-            "  'src-dir': ['src'],",
-            "  'static-check': {",
-            "    'Python': {",
-            "      'enabled': 'enable',",
-            "      'checkers': [{'module': 'Command', 'cmd': 'git', 'params': ['--version']}],",
-            "    },",
-            "  },",
-            "}",
-            "config_dir = project_base / '.req'",
-            "config_dir.mkdir(parents=True, exist_ok=True)",
-            "(config_dir / 'config.json').write_text(json.dumps(payload, indent=2) + '\\n', encoding='utf8')",
-          ].join("\n");
-          const result = runPythonInline(script, projectBase);
-          return createProjectNormalizer(projectBase)(toArchivedCliResult(result));
-        } finally {
-          removePath(projectBase);
-        }
-      },
     },
     createProjectScenario("project/enable-static-check-invalid-command", path.posix.join("project", "enable-static-check-invalid-command.json"), () => {
       const { projectBase } = initFixtureRepo({ fixtures: [] });
@@ -629,25 +595,6 @@ export function saveArchivedCliResult(scenario: AttendedScenario, result: Archiv
   const archivePath = getArchiveFilePath(scenario);
   fs.mkdirSync(path.dirname(archivePath), { recursive: true });
   fs.writeFileSync(archivePath, serializeArchivedCliResult(result), "utf8");
-}
-
-/**
- * @brief Executes one attended scenario with the Python CLI and returns its normalized result.
- * @details Builds the scenario execution context, runs the Python subprocess, applies optional side-effect assertions, normalizes the result, and always executes the cleanup callback. Runtime is dominated by subprocess execution and temporary filesystem setup. Side effects include temporary repository creation and cleanup.
- * @param[in] scenario {AttendedScenario} Target scenario descriptor.
- * @return {ArchivedCliResult} Normalized Python CLI result.
- */
-export function runPythonAttendedScenario(scenario: AttendedScenario): ArchivedCliResult {
-  if (scenario.buildPythonResult) {
-    return scenario.buildPythonResult();
-  }
-  const execution = scenario.buildExecution();
-  try {
-    const result = runPythonCli(execution.args, execution.cwd, execution.envOverrides);
-    return execution.normalize(toArchivedCliResult(result));
-  } finally {
-    execution.cleanup();
-  }
 }
 
 /**

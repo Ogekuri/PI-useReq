@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Verifies imported CLI command-option regressions against the TypeScript implementation.
- * @details Maintains an executable mapping from imported source regression identifiers to TypeScript parity targets, executes oracle-backed and direct-behavior command scenarios, and inspects persisted config side effects for CLI-only static-check enablement. Runtime is dominated by subprocess execution, git operations, and temporary filesystem setup. Side effects are limited to temporary files, temporary git repositories, and child processes.
+ * @details Maintains an executable mapping from imported source regression identifiers to TypeScript parity targets, executes repository-owned output-contract and direct-behavior command scenarios, and inspects persisted config side effects for CLI-only static-check enablement. Runtime is dominated by subprocess execution, git operations, and temporary filesystem setup. Side effects are limited to temporary files, temporary git repositories, and child processes.
  */
 
 import test, { type TestContext } from "node:test";
@@ -25,7 +25,6 @@ import {
   readGlobalConfigJson,
   readProjectConfigJson,
   runNodeCli,
-  runPythonCli,
   saveFixtureConfigs,
   writeExecutableScript,
 } from "./helpers.js";
@@ -48,22 +47,6 @@ interface TargetParityCase {
 interface ImportedCaseMapping {
   sourceId: string;
   targetId: string;
-}
-
-/**
- * @brief Compares one Node CLI invocation with the Python oracle.
- * @details Executes both CLIs with the same arguments, cwd, and optional environment overrides, then asserts identical exit status, stdout, and stderr payloads. Runtime is dominated by subprocess execution. Side effects are limited to child-process creation.
- * @param[in] args {string[]} CLI arguments forwarded to both implementations.
- * @param[in] cwd {string} Working directory for both subprocesses.
- * @param[in] envOverrides {NodeJS.ProcessEnv | undefined} Optional shared environment overrides.
- * @return {void} No return value.
- */
-function assertCliParity(args: string[], cwd: string, envOverrides?: NodeJS.ProcessEnv): void {
-  const node = runNodeCli(args, cwd, envOverrides);
-  const python = runPythonCli(args, cwd, envOverrides);
-  assert.equal(node.status, python.status, `exit code mismatch for ${args.join(" ")}`);
-  assert.equal(node.stdout, python.stdout, `stdout mismatch for ${args.join(" ")}`);
-  assert.equal(node.stderr, python.stderr, `stderr mismatch for ${args.join(" ")}`);
 }
 
 /**
@@ -172,38 +155,38 @@ printf '%s|%s\n' '${escapedTag}' "$*" >> '${escapedLogPath}'
  * @details Each mapping identifies one imported source regression and the TypeScript target that executes its analogous behavior. The array is treated as normative test metadata for TST-014. Access complexity is O(1).
  */
 const IMPORTED_CASE_MAPPINGS: ImportedCaseMapping[] = [
-  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_basic", targetId: "oracle::standalone::files-tokens-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_no_base_required", targetId: "oracle::standalone::files-tokens-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_skip_missing", targetId: "oracle::standalone::files-tokens-explicit-files" },
-  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_all_missing_errors", targetId: "oracle::standalone::files-tokens-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_basic", targetId: "direct::standalone::files-tokens-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_no_base_required", targetId: "direct::standalone::files-tokens-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_skip_missing", targetId: "direct::standalone::files-tokens-explicit-files" },
+  { sourceId: "test_files_commands.py::TestFilesTokensCommand::test_files_tokens_all_missing_errors", targetId: "direct::standalone::files-tokens-explicit-files" },
   { sourceId: "test_files_commands.py::TestFilesSummarizeCommand::test_files_summarize_basic", targetId: "direct::files-summarize-explicit-files" },
   { sourceId: "test_files_commands.py::TestFilesSummarizeCommand::test_files_summarize_no_base_required", targetId: "direct::files-summarize-explicit-files" },
   { sourceId: "test_files_commands.py::TestFilesSummarizeCommand::test_files_summarize_verbose_outputs_progress", targetId: "direct::files-summarize-verbose" },
-  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_basic", targetId: "oracle::standalone::files-compress-line-number-modes" },
-  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_base_required", targetId: "oracle::standalone::files-compress-line-number-modes" },
-  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_line_numbers_by_default", targetId: "oracle::standalone::files-compress-line-number-modes" },
-  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_enable_line_numbers", targetId: "oracle::standalone::files-compress-line-number-modes" },
-  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_verbose_outputs_progress", targetId: "oracle::standalone::files-compress-verbose" },
+  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_basic", targetId: "direct::standalone::files-compress-line-number-modes" },
+  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_base_required", targetId: "direct::standalone::files-compress-line-number-modes" },
+  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_line_numbers_by_default", targetId: "direct::standalone::files-compress-line-number-modes" },
+  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_enable_line_numbers", targetId: "direct::standalone::files-compress-line-number-modes" },
+  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_verbose_outputs_progress", targetId: "direct::standalone::files-compress-verbose" },
   { sourceId: "test_files_commands.py::TestSummarizeCommand::test_rejects_base", targetId: "direct::summarize-modes" },
   { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_with_here", targetId: "direct::summarize-modes" },
   { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_prepends_files_structure", targetId: "direct::summarize-modes" },
   { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_from_config", targetId: "direct::summarize-modes" },
-  { sourceId: "test_files_commands.py::TestCompressCommand::test_rejects_base", targetId: "oracle::project::compress-modes" },
-  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_with_here", targetId: "oracle::project::compress-modes" },
-  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_no_line_numbers_by_default", targetId: "oracle::project::compress-modes" },
-  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_enable_line_numbers", targetId: "oracle::project::compress-modes" },
-  { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_rejects_base", targetId: "oracle::project::tokens-doc-selection" },
-  { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_implies_here_and_uses_config_docs_dir", targetId: "oracle::project::tokens-doc-selection" },
-  { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_counts_docs_files", targetId: "oracle::project::tokens-doc-selection" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_default_suppresses_progress", targetId: "oracle::standalone::files-find-modes" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_verbose_outputs_progress", targetId: "oracle::standalone::files-find-modes" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_enable_line_numbers", targetId: "oracle::standalone::files-find-modes" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_verbose_outputs_progress", targetId: "oracle::project::find-modes" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_enable_line_numbers", targetId: "oracle::project::find-modes" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_rejects_base", targetId: "oracle::project::find-modes" },
-  { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_dispatches_dummy", targetId: "oracle::standalone::test-static-check-dispatch" },
-  { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_dispatches_unknown_subcommand", targetId: "oracle::standalone::test-static-check-dispatch" },
-  { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_static_check_is_standalone", targetId: "oracle::standalone::test-static-check-dispatch" },
+  { sourceId: "test_files_commands.py::TestCompressCommand::test_rejects_base", targetId: "direct::project::compress-modes" },
+  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_with_here", targetId: "direct::project::compress-modes" },
+  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_no_line_numbers_by_default", targetId: "direct::project::compress-modes" },
+  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_enable_line_numbers", targetId: "direct::project::compress-modes" },
+  { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_rejects_base", targetId: "direct::project::tokens-doc-selection" },
+  { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_implies_here_and_uses_config_docs_dir", targetId: "direct::project::tokens-doc-selection" },
+  { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_counts_docs_files", targetId: "direct::project::tokens-doc-selection" },
+  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_default_suppresses_progress", targetId: "direct::standalone::files-find-modes" },
+  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_verbose_outputs_progress", targetId: "direct::standalone::files-find-modes" },
+  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_enable_line_numbers", targetId: "direct::standalone::files-find-modes" },
+  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_verbose_outputs_progress", targetId: "direct::project::find-modes" },
+  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_enable_line_numbers", targetId: "direct::project::find-modes" },
+  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_rejects_base", targetId: "direct::project::find-modes" },
+  { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_dispatches_dummy", targetId: "direct::standalone::test-static-check-dispatch" },
+  { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_dispatches_unknown_subcommand", targetId: "direct::standalone::test-static-check-dispatch" },
+  { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_static_check_is_standalone", targetId: "direct::standalone::test-static-check-dispatch" },
   { sourceId: "test_static_check.py::TestFilesStaticCheckCLI::test_files_static_check_dummy_language", targetId: "direct::files-static-check-matrix" },
   { sourceId: "test_static_check.py::TestFilesStaticCheckCLI::test_files_static_check_unknown_extension_skipped", targetId: "direct::files-static-check-matrix" },
   { sourceId: "test_static_check.py::TestFilesStaticCheckCLI::test_files_static_check_lang_not_in_config_skipped", targetId: "direct::files-static-check-matrix" },
@@ -242,7 +225,7 @@ const IMPORTED_CASE_MAPPINGS: ImportedCaseMapping[] = [
  */
 const TARGET_CASES: TargetParityCase[] = [
   {
-    id: "oracle::standalone::files-tokens-explicit-files",
+    id: "direct::standalone::files-tokens-explicit-files",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "def hello():\n    return 'world'\n");
       const missingOne = path.join(path.dirname(filePath), "missing-one.py");
@@ -268,10 +251,8 @@ const TARGET_CASES: TargetParityCase[] = [
       );
       const cwd = path.dirname(filePath);
       const node = runNodeCli(["--files-summarize", filePath], cwd);
-      const python = runPythonCli(["--files-summarize", filePath], cwd);
-      assert.equal(node.status, python.status);
-      assert.equal(node.stdout, python.stdout);
-      assert.equal(node.stderr, python.stderr);
+      assert.equal(node.status, 0, node.stderr);
+      assert.equal(node.stderr, "");
       assert.match(node.stdout, /# sample\.ts \| TypeScript/);
       assert.match(node.stdout, /## Definitions/);
       assert.match(node.stdout, /### fn `export function buildSample\(input: string\): string`/);
@@ -283,27 +264,34 @@ const TARGET_CASES: TargetParityCase[] = [
       const filePath = createScratchFile(t, "sample.py", "value = 1\n");
       const cwd = path.dirname(filePath);
       const node = runNodeCli(["--verbose", "--files-summarize", filePath], cwd);
-      const python = runPythonCli(["--verbose", "--files-summarize", filePath], cwd);
-      assert.equal(node.status, python.status);
-      assert.equal(node.stdout, python.stdout);
-      assert.equal(node.stderr, python.stderr);
+      assert.equal(node.status, 0, node.stderr);
+      assert.match(node.stdout, /# sample\.py \| Python/);
       assert.match(node.stderr, /OK/);
     },
   },
   {
-    id: "oracle::standalone::files-compress-line-number-modes",
+    id: "direct::standalone::files-compress-line-number-modes",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "# comment\nvalue = 1\n");
       const cwd = path.dirname(filePath);
-      assertCliParity(["--files-compress", filePath], cwd);
-      assertCliParity(["--files-compress", filePath, "--enable-line-numbers"], cwd);
+      const plain = runNodeCli(["--files-compress", filePath], cwd);
+      assert.equal(plain.status, 0, plain.stderr);
+      assert.equal(plain.stderr, "");
+      assert.equal(plain.stdout, "@@@ sample.py | python\n> Lines: 2-2\n```\nvalue = 1\n```\n");
+      const numbered = runNodeCli(["--files-compress", filePath, "--enable-line-numbers"], cwd);
+      assert.equal(numbered.status, 0, numbered.stderr);
+      assert.equal(numbered.stderr, "");
+      assert.equal(numbered.stdout, "@@@ sample.py | python\n> Lines: 2-2\n```\n2: value = 1\n```\n");
     },
   },
   {
-    id: "oracle::standalone::files-compress-verbose",
+    id: "direct::standalone::files-compress-verbose",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "value = 1\n");
-      assertCliParity(["--verbose", "--files-compress", filePath], path.dirname(filePath));
+      const result = runNodeCli(["--verbose", "--files-compress", filePath], path.dirname(filePath));
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, "@@@ sample.py | python\n> Lines: 1-1\n```\nvalue = 1\n```\n");
+      assert.equal(result.stderr, `  OK    ${filePath}\n\n  Compressed: 1 ok, 0 failed\n`);
     },
   },
   {
@@ -315,19 +303,16 @@ const TARGET_CASES: TargetParityCase[] = [
       fs.writeFileSync(path.join(projectBase, "src", "nested", "beta.ts"), "export function beta(): number {\n  return 2;\n}\n", "utf8");
 
       const directNode = runNodeCli(["--summarize"], projectBase);
-      const directPython = runPythonCli(["--summarize"], projectBase);
-      assert.equal(directNode.status, directPython.status);
-      assert.equal(directNode.stdout, directPython.stdout);
-      assert.equal(directNode.stderr, directPython.stderr);
+      assert.equal(directNode.status, 0, directNode.stderr);
+      assert.equal(directNode.stderr, "");
       assert.match(directNode.stdout, /# Files Structure/);
       assert.match(directNode.stdout, /src\/nested\/beta\.ts/);
       assert.match(directNode.stdout, /# beta\.ts \| TypeScript/);
 
       const hereNode = runNodeCli(["--here", "--summarize"], projectBase);
-      const herePython = runPythonCli(["--here", "--summarize"], projectBase);
-      assert.equal(hereNode.status, herePython.status);
-      assert.equal(hereNode.stdout, herePython.stdout);
-      assert.equal(hereNode.stderr, herePython.stderr);
+      assert.equal(hereNode.status, 0, hereNode.stderr);
+      assert.equal(hereNode.stdout, directNode.stdout);
+      assert.equal(hereNode.stderr, "");
 
       const baseRejected = runNodeCli(["--base", projectBase, "--summarize"], projectBase);
       assert.notEqual(baseRejected.status, 0);
@@ -335,20 +320,24 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "oracle::project::compress-modes",
+    id: "direct::project::compress-modes",
     run(t) {
-      const fixtures = getFixtureFiles().filter((fixture) => path.basename(fixture) !== TAB_SENSITIVE_FIXTURE_NAME);
-      const { projectBase } = createFixtureRepo(t, { fixtures });
-      assertCliParity(["--compress"], projectBase);
-      assertCliParity(["--here", "--compress"], projectBase);
-      assertCliParity(["--compress", "--enable-line-numbers"], projectBase);
+      const { projectBase } = createFixtureRepo(t, { fixtures: [] });
+      fs.writeFileSync(path.join(projectBase, "src", "sample.py"), "# comment\nvalue = 1\n", "utf8");
+      for (const args of [["--compress"], ["--here", "--compress"], ["--compress", "--enable-line-numbers"]]) {
+        const result = runNodeCli(args, projectBase);
+        const sourceLine = args.includes("--enable-line-numbers") ? "2: value = 1" : "value = 1";
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stderr, "");
+        assert.equal(result.stdout, `@@@ src/sample.py | python\n> Lines: 2-2\n\`\`\`\n${sourceLine}\n\`\`\`\n`);
+      }
       const rejected = runNodeCli(["--base", projectBase, "--compress"], projectBase);
       assert.notEqual(rejected.status, 0);
       assert.match(rejected.stderr, /do not allow --base/);
     },
   },
   {
-    id: "oracle::project::tokens-doc-selection",
+    id: "direct::project::tokens-doc-selection",
     run(t) {
       const { projectBase, config } = createFixtureRepo(t, {
         fixtures: [],
@@ -365,14 +354,28 @@ const TARGET_CASES: TargetParityCase[] = [
       fs.writeFileSync(path.join(projectBase, "docs", "IGNORED.md"), "# Ignored\n", "utf8");
       const updatedConfig: UseReqConfig = { ...config, "docs-dir": "docs" };
       saveFixtureConfigs(projectBase, updatedConfig);
-      assertCliParity(["--tokens"], projectBase);
+      const result = runNodeCli(["--tokens"], projectBase);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr, "");
+      assert.equal(result.stdout, [
+        "  📄 REQUIREMENTS.md: 4 tokens, 19 chars",
+        "  📄 WORKFLOW.md: 4 tokens, 15 chars",
+        "  📄 REFERENCES.md: 4 tokens, 17 chars",
+        "",
+        "📊 Pack Summary:",
+        "────────────────",
+        "  Total Files: 3 files",
+        " Total Tokens: 12 tokens",
+        "  Total Chars: 51 chars",
+        "",
+      ].join("\n"));
       const rejected = runNodeCli(["--base", projectBase, "--tokens"], projectBase);
       assert.notEqual(rejected.status, 0);
       assert.match(rejected.stderr, /do not allow --base/);
     },
   },
   {
-    id: "oracle::standalone::files-find-modes",
+    id: "direct::standalone::files-find-modes",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "def foo():\n    return 1\n");
       const cwd = path.dirname(filePath);
@@ -389,7 +392,7 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "oracle::project::find-modes",
+    id: "direct::project::find-modes",
     run(t) {
       const { projectBase } = createFixtureRepo(t, { fixtures: [] });
       fs.writeFileSync(path.join(projectBase, "src", "find_target.py"), "def foo():\n    return 1\n", "utf8");
@@ -407,7 +410,7 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "oracle::standalone::test-static-check-dispatch",
+    id: "direct::standalone::test-static-check-dispatch",
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "value = 1\n");
       const cwd = path.dirname(filePath);
@@ -737,10 +740,8 @@ const TARGET_CASES: TargetParityCase[] = [
         await t.test(path.basename(fixture), () => {
           const cwd = path.dirname(fixture);
           const node = runNodeCli(["--files-summarize", fixture], cwd);
-          const python = runPythonCli(["--files-summarize", fixture], cwd);
-          assert.equal(node.status, python.status);
-          assert.equal(node.stdout, python.stdout);
-          assert.equal(node.stderr, python.stderr);
+          assert.equal(node.status, 0, node.stderr);
+          assert.equal(node.stderr, "");
           assert.match(node.stdout, new RegExp(`# ${path.basename(fixture).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\|`));
           assert.match(node.stdout, /## Symbol Index/);
         });
@@ -748,14 +749,17 @@ const TARGET_CASES: TargetParityCase[] = [
     },
   },
   {
-    id: "oracle::fixtures::files-find-fixture-parity",
+    id: "direct::fixtures::files-find-fixture-parity",
     async run(t) {
       for (const fixture of getFixtureFiles()) {
         if (path.basename(fixture) === TAB_SENSITIVE_FIXTURE_NAME) {
           continue;
         }
         await t.test(path.basename(fixture), () => {
-          assertCliParity(["--files-find", getFixtureTagFilter(fixture), ".*", fixture], path.dirname(fixture));
+          const result = runNodeCli(["--files-find", getFixtureTagFilter(fixture), ".*", fixture], path.dirname(fixture));
+          assert.equal(result.status, 0, result.stderr);
+          assert.equal(result.stderr, "");
+          assert.match(result.stdout, /### [A-Z_]+: `/);
         });
       }
     },
@@ -784,6 +788,8 @@ const TARGET_CASES: TargetParityCase[] = [
 
 test("imported CLI regression mappings resolve to executable TypeScript targets", () => {
   const implementedTargetIds = new Set(TARGET_CASES.map((target) => target.id));
+  assert.equal(implementedTargetIds.size, TARGET_CASES.length, "duplicate executable target identifier");
+  assert.equal(new Set(IMPORTED_CASE_MAPPINGS.map((mapping) => mapping.sourceId)).size, IMPORTED_CASE_MAPPINGS.length, "duplicate regression mapping");
   assert.ok(IMPORTED_CASE_MAPPINGS.length > 0, "expected imported CLI regression mappings");
   for (const mapping of IMPORTED_CASE_MAPPINGS) {
     assert.ok(implementedTargetIds.has(mapping.targetId), `missing target ${mapping.targetId} for ${mapping.sourceId}`);

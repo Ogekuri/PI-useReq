@@ -117,7 +117,7 @@ type RegisteredShortcut = { description?: string; handler: (ctx: any) => Promise
 
 /**
  * @brief Applies targeted effective-config overrides inside one test project.
- * @details Loads the merged local/global config, merges the supplied top-level overrides, rewrites the split Node config files plus the oracle mirror, and commits the repository-local config artifacts when the fixture is a git repo. Runtime is O(n) in config size. Side effects include filesystem reads, file overwrite, and optional git commits.
+ * @details Loads the merged local/global config, merges the supplied top-level overrides, rewrites the split Node config files, and commits staged repository-local config changes when the fixture is a git repo. Global-only or unchanged overrides do not create empty commits. Runtime is O(n) in config size. Side effects include filesystem reads, file overwrite, and optional git commits.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] overrides {Record<string, unknown>} Top-level config overrides.
  * @return {void} No return value.
@@ -134,10 +134,18 @@ function writeProjectConfigOverrides(projectBase: string, overrides: Record<stri
       GIT_COMMITTER_NAME: "pi-usereq",
       GIT_COMMITTER_EMAIL: "pi-usereq@example.com",
     };
-    assert.equal(spawnSync("git", ["add", ".pi-usereq.json", ".req/config.json"], {
+    assert.equal(spawnSync("git", ["add", ".pi-usereq.json"], {
       cwd: projectBase,
       encoding: "utf8",
     }).status, 0);
+    const staged = spawnSync("git", ["diff", "--cached", "--quiet"], {
+      cwd: projectBase,
+      encoding: "utf8",
+    });
+    assert.ok(staged.status === 0 || staged.status === 1, staged.stderr);
+    if (staged.status === 0) {
+      return;
+    }
     const commit = spawnSync("git", ["commit", "-m", "config override"], {
       cwd: projectBase,
       encoding: "utf8",
@@ -3053,7 +3061,7 @@ test("provider error payload capture follows base config when the worktree check
       }).status,
       0,
     );
-    fs.writeFileSync(path.join(projectBase, ".gitignore"), ".pi-usereq.json\n.req/\n", "utf8");
+    fs.writeFileSync(path.join(projectBase, ".gitignore"), ".pi-usereq.json\n", "utf8");
     assert.equal(spawnSync("git", ["add", ".gitignore"], {
       cwd: projectBase,
       encoding: "utf8",

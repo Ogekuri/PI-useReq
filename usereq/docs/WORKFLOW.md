@@ -19,6 +19,12 @@
 ### `PROC:main`
 - Entrypoints:
   - `main(...)`: CLI runtime root [`src/cli.ts`]
+- Analysis dependency boundary (REQ-490, TST-172):
+  - Analysis dispatch uses installation-owned TypeScript and declared Node dependencies, never the external `req` application, a Python interpreter, or an upstream checkout. Git remains the repository-discovery dependency; explicitly configured static checkers remain external command integrations.
+  - `runNodeCli(...)` resolves the current Node executable and declared `tsx` loader; `saveFixtureConfigs(...)` writes only the local/global pi-usereq config scopes, without `.req` mirrors or virtualenv links [`tests/helpers.ts`].
+  - `runNodeAttendedScenario(...)` compares normalized CLI observations against committed expected-result archives through the archive suite; normal verification never regenerates expectations [`tests/attended-results-scenarios.ts`, `tests/attended-results.test.ts`].
+  - The runtime-independence test restricts child PATH to Git and poisons legacy interpreter overrides; CLI-option regression identifiers retain historical provenance as repository-owned metadata only [`tests/runtime-independence.test.ts`, `tests/cli-command-option-parity.test.ts`].
+  - Release YAML validation uses the declared Node `yaml` development dependency without interpreter probing or conditional skips [`tests/release-workflow.test.ts`].
 - Lifecycle/trigger:
   - Start trigger: Node executes `src/cli.ts` as a one-shot command.
   - Stop trigger: returns numeric exit code after one dispatch path or caught `ReqError`; management-command dispatches keep the process alive until the scheduled async handler assigns `process.exitCode`.
