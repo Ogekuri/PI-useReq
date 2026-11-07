@@ -89,11 +89,11 @@ export type PackageManagerSpawn = (
   options: PackageManagerSpawnOptions,
 ) => PackageManagerSpawnResult;
 
-/** Discriminated outcome of one npm-registry latest-version probe. */
+/** Discriminated outcome of one npmjs package-manifest latest-version probe; `current` carries the resolved manifest latest even when it is not strictly newer than the installed version. */
 export type PackageManagerRegistryProbe =
   | { status: "unknown-version" }
   | { status: "error"; message: string }
-  | { status: "current"; currentVersion: string }
+  | { status: "current"; currentVersion: string; latestVersion: string }
   | { status: "newer"; currentVersion: string; latestVersion: string };
 
 /** Discriminated outcome of one GitHub latest-release probe. */
@@ -319,7 +319,7 @@ function stripPackageManagerReleaseTagPrefix(tag: string): string {
 
 /**
  * @brief Probes the npmjs package manifest document for the latest published package version.
- * @details Logging-free resolution order: installed-version guard (missing `currentVersion` returns `unknown-version` with zero network calls) -> single `GET {registry}/{package}` fetching the npmjs package manifest document (packument) backing `https://www.npmjs.com/package/{package}` with the timeout deadline -> `response.ok` validation -> `resolvePackageManagerManifestLatest(...)` dist-tags/versions resolution -> `isNewerPackageManagerVersion` gate. Every failure is returned as a discriminated outcome; never throws.
+ * @details Logging-free resolution order: installed-version guard (missing `currentVersion` returns `unknown-version` with zero network calls) -> single `GET {registry}/{package}` fetching the npmjs package manifest document (packument) backing `https://www.npmjs.com/package/{package}` with the timeout deadline -> `response.ok` validation -> `resolvePackageManagerManifestLatest(...)` dist-tags/versions resolution -> `isNewerPackageManagerVersion` gate; both `newer` and `current` outcomes carry the resolved manifest latest version so reporting never substitutes the installed version. Every failure is returned as a discriminated outcome; never throws.
  * @param[in] deps {PackageManagerRegistryProbeDeps} Optional dependency overrides; production defaults when omitted.
  * @return {Promise<PackageManagerRegistryProbe>} Discriminated probe outcome carrying the manifest latest version; `message` carries the final diagnostic text without logging.
  * @note Complexity: one HTTP round-trip bounded by the timeout deadline.
@@ -351,7 +351,7 @@ export async function probeLatestRegistryVersion(
       return { status: "error", message: "registry manifest exposes no latest version." };
     }
     if (!isNewerPackageManagerVersion(latestVersion, currentVersion)) {
-      return { status: "current", currentVersion };
+      return { status: "current", currentVersion, latestVersion };
     }
     return { status: "newer", currentVersion, latestVersion };
   } catch (error: unknown) {
@@ -403,18 +403,16 @@ export async function probeLatestGitHubRelease(
 }
 
 /**
- * @brief Maps one registry probe outcome to its latest-version text.
- * @details `newer` maps to `latestVersion`, `current` maps to the running version, and every other outcome maps to the `unknown` placeholder. Pure; never throws.
+ * @brief Maps one registry probe outcome to its manifest latest-version text.
+ * @details `newer` and `current` both map to the resolved npmjs manifest latest version carried by the probe, so an installed version newer than the published latest still reports the published latest verbatim; every other outcome maps to the `unknown` placeholder. Pure; never throws.
  * @param[in] probe {PackageManagerRegistryProbe} Logging-free registry probe outcome.
- * @return {string} Latest npm-published version text, or `unknown`.
+ * @return {string} Latest npmjs-manifest version text, or `unknown`.
  * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-475, REQ-489
  */
 function resolveRegistryProbeLatestVersionText(probe: PackageManagerRegistryProbe): string {
-  if (probe.status === "newer") {
+  if (probe.status === "newer" || probe.status === "current") {
     return probe.latestVersion;
-  }
-  if (probe.status === "current") {
-    return probe.currentVersion;
   }
   return PACKAGE_MANAGER_UNKNOWN_VERSION;
 }
@@ -540,7 +538,7 @@ export async function runPackageManagerVersionCommand(
 
 /**
  * @brief Resolves the updated package version reported by the upgrade summary.
- * @details Runs one logging-free registry probe after the upgrade child succeeds, forwarding the injected registry dependencies, and delegates the outcome-to-version mapping to `resolveRegistryProbeLatestVersionText`: `newer` maps to the registry latest version, `current` to the running version, and every other outcome to `unknown`. Never throws.
+ * @details Runs one logging-free registry probe after the upgrade child succeeds, forwarding the injected registry dependencies, and delegates the outcome-to-version mapping to `resolveRegistryProbeLatestVersionText`: `newer` and `current` map to the npmjs manifest latest version and every other outcome to `unknown`. Never throws.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version.
  * @param[in] deps {PackageManagerCommandDeps} Optional registry overrides.
  * @return {Promise<string>} Updated version string; `unknown` when undeterminable.

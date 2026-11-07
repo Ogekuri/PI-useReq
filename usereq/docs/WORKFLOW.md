@@ -32,7 +32,7 @@
         - `getInstallationPackageMetadata(...)`: read cached installation package name and version from the installation-owned `package.json` [`src/core/path-context.ts`]
       - `runPackageManagerManagementCommand(...)`: route `--ver|--version`, `--upgrade`, and `--uninstall` to their handlers and return the handler exit code consumed by `process.exitCode` [`src/core/package-manager.ts`]
         - `runPackageManagerVersionCommand(...)`: run the concurrent npmjs-manifest plus GitHub-releases probes and print the three-line installed/npmjs/GitHub version report [`src/core/package-manager.ts`]
-          - `probeLatestRegistryVersion(...)`: GET the npmjs package manifest document `{registry}/{package}` with timeout deadline and classify newer, current, unknown-version, or error outcomes from the manifest latest version [`src/core/package-manager.ts`]
+          - `probeLatestRegistryVersion(...)`: GET the npmjs package manifest document `{registry}/{package}` with timeout deadline and classify newer, current, unknown-version, or error outcomes, carrying the resolved manifest latest version on both newer and current outcomes so reporting never substitutes the installed version [`src/core/package-manager.ts`]
             - `resolvePackageManagerManifestLatest(...)`: resolve the manifest `dist-tags.latest` value with fallback to the highest semver-ordered manifest `versions` entry [`src/core/package-manager.ts`]
               - `resolveHighestPackageManagerVersion(...)`: select the highest parseable version candidate [`src/core/package-manager.ts`]
                 - `comparePackageManagerVersionOrder(...)`: order dotted versions with release-over-prerelease semantics [`src/core/package-manager.ts`]

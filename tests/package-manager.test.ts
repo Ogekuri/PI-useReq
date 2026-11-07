@@ -195,17 +195,17 @@ test("registry probe classifies newer, current, and older manifest payloads", as
     currentVersion: "2.0.0",
     fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl,
   });
-  assert.deepEqual(current, { status: "current", currentVersion: "2.0.0" });
+  assert.deepEqual(current, { status: "current", currentVersion: "2.0.0", latestVersion: "2.0.0" });
   const older = await probeLatestRegistryVersion({
     currentVersion: "3.0.0",
     fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl,
   });
-  assert.deepEqual(older, { status: "current", currentVersion: "3.0.0" });
+  assert.deepEqual(older, { status: "current", currentVersion: "3.0.0", latestVersion: "2.0.0" });
   const prerelease = await probeLatestRegistryVersion({
     currentVersion: "2.0.0",
     fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.1.0-beta.1" } }).fetchImpl,
   });
-  assert.deepEqual(prerelease, { status: "current", currentVersion: "2.0.0" });
+  assert.deepEqual(prerelease, { status: "current", currentVersion: "2.0.0", latestVersion: "2.1.0-beta.1" });
 });
 
 test("manifest resolution prefers dist-tags.latest and falls back to the highest versions entry", async () => {
@@ -290,6 +290,20 @@ test("installed version resolves from the installation-owned package manifest", 
     fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
   ) as { version: string };
   assert.equal(resolvePackageManagerInstalledVersion(), manifest.version);
+});
+
+test("version command prints the manifest latest even when it is not newer than installed", async () => {
+  const sink = createStdoutSink();
+  const exitCode = await runPackageManagerVersionCommand(
+    { installedVersion: "0.99.0" },
+    {
+      stdout: sink.stdout,
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "0.95.0" } }).fetchImpl },
+      githubCheck: { fetchImpl: createFetchJsonDouble({ tag_name: "v1.5.0" }).fetchImpl },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.deepEqual(sink.chunks, ["0.99.0\nnpmjs latest: 0.95.0\nGitHub latest: 1.5.0\n"]);
 });
 
 test("version command prints the exact three-line report and returns zero", async () => {
