@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.112"
-date: "2026-11-05"
+version: "0.0.113"
+date: "2026-11-07"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -552,6 +552,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-463**: On hosts emitting `agent_settled`, MUST determine the terminal prompt-orchestration outcome only at `agent_settled`, classifying interrupted, completed, or failed from the final agent run.
 - **REQ-464**: On hosts emitting `agent_settled`, MUST NOT park workflow state `error`, emit the worktree-retention error notification, or clear prompt-run ownership at intermediate `agent_end` events.
 - **REQ-465**: On hosts without `agent_settled`, MUST determine the terminal prompt-orchestration outcome at the final `agent_end` event.
+- **REQ-469**: MUST resolve the Pushover-channel `%%OUTPUT%%` for completed prompt-end outcomes as the substring of the final agent output starting at its first `## **Outcome**` occurrence through the output end.
+- **REQ-470**: MUST keep the Pushover-channel `%%OUTPUT%%` unchanged for completed prompt-end outcomes whose final agent output does not contain `## **Outcome**`.
+- **REQ-471**: MUST NOT substitute into Pushover title or Pushover text any final-agent-output text preceding the first `## **Outcome**` occurrence for completed prompt-end outcomes.
+- **REQ-472**: MUST restrict the `## **Outcome**` Pushover extraction to completed prompt-end outcomes and MUST NOT apply it to `PI_NOTIFY_CMD` command-notify substitution.
 
 ## 4. Test Requirements
 - **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
