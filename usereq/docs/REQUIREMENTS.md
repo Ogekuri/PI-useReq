@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.118"
+version: "0.0.119"
 date: "2026-11-08"
 author: "OpenAI Codex"
 scope:
@@ -587,6 +587,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-496**: MUST make `scripts/pre-release-check.sh` remove every untracked or ignored repository entry created by its stages, including build outputs and intermediate files, before process exit.
 - **REQ-497**: MUST make the `scripts/pre-release-check.sh` artifact cleanup execute on successful, failed, and signal-induced exits and preserve the first failing stage exit code.
 - **REQ-498**: MUST restrict `scripts/pre-release-check.sh` artifact removal to `??` or `!!` entries absent from the pre-run inventory, always skipping `node_modules`.
+- **REQ-499**: MUST make `.github/workflows/release-npm.yml` run the full `npm test` suite inside `build-release` after `npm ci` for every canonical tag.
+- **REQ-500**: MUST make `.github/workflows/release-npm.yml` create the GitHub Release and upload release assets only when the test stage succeeds.
+- **REQ-501**: MUST make `.github/workflows/release-npm.yml` publish to npm only when both the `origin/master` gate and the test stage succeed.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -791,7 +794,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `prepublishOnly`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
 - `package.json` declares a `files` allowlist of `src` and `scripts` so npm consumer installs ship only runtime-required code and omit the `tests/` directory.
 - `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
-- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, pins every composite action to a Node24-native release, publishes the package to npm only for tags contained in `origin/master`, and creates the matching GitHub Release for every canonical tag.
+- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, pins every composite action to a Node24-native release, executes the full `npm test` suite inside `build-release` before release creation, publishes the package to npm only for tags contained in `origin/master` with a passing test stage, and creates the matching GitHub Release with release assets for every canonical tag whose test stage succeeds.
 - `package.json` and `package-lock.json` resolve the top-level package as the identical semver version `0.95.0`, and the manifest declares `description`, `author`, `keywords`, `license`, `engines.node`, and a `prepublishOnly` test gate for npm publication.
 
 ## 6. Repository Structure

@@ -63,15 +63,21 @@ jobs:
       - name: Build if present
         run: npm run build --if-present
 
+      # Test gate: the full suite must pass before any release artifact is
+      # uploaded or published; a failing run skips every step below.
+      - name: Run test suite
+        run: npm test
+
       - name: Remove private package flag
         run: npm pkg delete private
 
       # OIDC trusted publishing: the workflow-level `id-token: write` permission plus
       # the configured registry-url let npm authenticate without any NPM_TOKEN secret.
-      # Publication runs only when the tagged commit is contained in origin/master;
-      # develop-only tags skip this step and still produce the GitHub Release below.
+      # Publication runs only when the tagged commit is contained in origin/master
+      # and the test suite passed; develop-only tags skip this step and still
+      # produce the GitHub Release below.
       - name: Publish package to npm
-        if: needs.check-branch.outputs.is_master == 'true'
+        if: needs.check-branch.outputs.is_master == 'true' && success()
         run: npm publish --provenance --access public
 
       - name: Build Changelog
@@ -123,6 +129,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release and upload assets
+        if: success()
         uses: softprops/action-gh-release@v3
         with:
           draft: false
