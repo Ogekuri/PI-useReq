@@ -253,7 +253,7 @@ import type { ToolResult } from "./tool-runner.js";
 
 ---
 
-# bin-deploy.ts | TypeScript | 194L | 9 symbols | 4 imports | 18 comments
+# bin-deploy.ts | TypeScript | 206L | 10 symbols | 4 imports | 19 comments
 > Path: `src/core/bin-deploy.ts`
 
 ## Imports
@@ -287,15 +287,23 @@ import { getInstallationPath, isSameOrAncestorPath } from "./path-context.js";
 - @note Complexity: O(p) in path length.
 - @satisfies REQ-504
 
-### fn `export function resolvePiUsereqLauncherTarget(` (L88-92)
+### fn `function resolveLauncherPackageRoot(explicitInstallationPath: string | undefined): string` (L88-93)
+- @brief Resolves the npm package root anchoring launcher target composition plus ownership containment.
+- @details Returns an explicit caller override resolved to an absolute path verbatim so deterministic test and CLI overrides keep their documented package-root meaning, and derives the production default as the parent directory of the source-root installation path exposed by `getInstallationPath()` because the executing module lives under `<packageRoot>/src/core` while the npm `bin` launcher declared by DES-028 lives at `<packageRoot>/scripts/pi-usereq.js`. Runtime is O(p) in path length. No external state is mutated.
+- @param[in] explicitInstallationPath {string | undefined} Caller-supplied package-root override; `undefined` selects the derived default.
+- @return {string} Absolute package root directory anchoring launcher target composition plus ownership containment.
+- @note Complexity: O(p) in path length. Pure; no side effects.
+- @satisfies REQ-504, REQ-508, REQ-509
+
+### fn `export function resolvePiUsereqLauncherTarget(installationPath?: string): string` (L103-105)
 - @brief Resolves the installation-owned launcher target backing the deployed link.
-- @details Joins the installation root with `scripts/pi-usereq.js`, the shebang launcher declared by the npm `bin` metadata, so the deployed symlink executes the same entry as global npm installations. Runtime is O(p) in path length. No external state is mutated.
-- @param[in] installationPath {string} Absolute installation root. Defaults to the runtime installation path.
+- @details Anchors on the npm package root resolved through `resolveLauncherPackageRoot` and joins `scripts/pi-usereq.js`, the shebang launcher declared by the npm `bin` metadata, so the deployed symlink executes the same entry as global npm installations. Runtime is O(p) in path length. No external state is mutated.
+- @param[in] installationPath {string} Absolute package root override. Defaults to the package root derived from the runtime source-root installation path.
 - @return {string} Absolute launcher target path.
 - @note Complexity: O(p) in path length.
 - @satisfies REQ-504
 
-### fn `export function isPiPackageInstallation(` (L103-113)
+### fn `export function isPiPackageInstallation(` (L116-126)
 - @brief Tests whether the executing installation resides inside the pi package installation tree.
 - @details Resolves the pi agent directory using the same `PI_CODING_AGENT_DIR` plus `<user-home>/.pi/agent` contract as the pi CLI host, then applies the repository-ancestry containment rule against `<agent-dir>/npm/node_modules`, the local npm prefix install root the pi package manager uses for npm sources. Source checkouts, global npm installs, and offline harnesses fail the containment test so activation-side launcher deployment stays scoped to real pi-package installations. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] installationPath {string} Candidate installation root. Defaults to the runtime installation path.
@@ -304,17 +312,17 @@ import { getInstallationPath, isSameOrAncestorPath } from "./path-context.js";
 - @note Complexity: O(p) in path length.
 - @satisfies REQ-504
 
-### fn `export function deployPiUsereqLauncher(` (L123-124)
+### fn `export function deployPiUsereqLauncher(` (L136-137)
 - @brief Best-effort deploys one idempotent `pi-usereq` launcher symlink into the pi agent bin directory.
-- @details Skips deployment with `launcher-missing` when the installation-owned launcher target does not exist, creates the agent bin directory when required, skips links already resolving to the current target for idempotence, replaces divergent symlinks so relocated installations stay reachable, skips non-symlink `pi-usereq` entries with `foreign-entry` instead of overwriting user-owned files, and converts every filesystem failure into a skipped outcome carrying the diagnostic reason so extension activation never aborts. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include directory creation, symlink creation, and symlink deletion inside the resolved agent bin directory only.
+- @details Anchors the launcher target on the npm package root derived from the caller override or the source-root installation path parent, skips deployment with `launcher-missing` when the installation-owned launcher target does not exist, creates the agent bin directory when required, skips links already resolving to the current target for idempotence, replaces divergent symlinks so relocated installations stay reachable, skips non-symlink `pi-usereq` entries with `foreign-entry` instead of overwriting user-owned files, and converts every filesystem failure into a skipped outcome carrying the diagnostic reason so extension activation never aborts. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include directory creation, symlink creation, and symlink deletion inside the resolved agent bin directory only.
 - @param[in] options {PiUsereqLauncherDeployOptions} Optional installation and agent-bin directory overrides consumed by deterministic tests.
 - @return {PiUsereqLauncherDeployResult} Deployment outcome facts; never throws.
 - @note Complexity: O(1) plus bounded filesystem metadata calls.
 - @satisfies REQ-504, REQ-505, REQ-506, REQ-507
 
-### fn `export function removeDeployedPiUsereqLauncher(` (L169-170)
+### fn `export function removeDeployedPiUsereqLauncher(` (L181-182)
 - @brief Best-effort removes the deployed `pi-usereq` launcher link owned by the executing installation.
-- @details Removes the agent-bin `pi-usereq` entry only when it is a symlink resolving inside the executing installation path so relocated or upgraded installations are cleaned up, leaves foreign symlinks and non-symlink entries untouched, and converts every filesystem failure into `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved agent bin directory only.
+- @details Removes the agent-bin `pi-usereq` entry only when it is a symlink resolving inside the executing npm package root derived from the caller override or the source-root installation path parent so relocated or upgraded installations are cleaned up, leaves foreign symlinks and non-symlink entries untouched, and converts every filesystem failure into `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved agent bin directory only.
 - @param[in] options {PiUsereqLauncherDeployOptions} Optional installation and agent-bin directory overrides consumed by deterministic tests.
 - @return {boolean} `true` when the installation-owned launcher link was removed; `false` when absent, foreign, or the removal failed.
 - @note Complexity: O(1) plus bounded filesystem metadata calls.
@@ -328,10 +336,11 @@ import { getInstallationPath, isSameOrAncestorPath } from "./path-context.js";
 |`PiUsereqLauncherDeployOptions`|iface||38-43|export interface PiUsereqLauncherDeployOptions|
 |`expandLeadingTilde`|fn||53-61|function expandLeadingTilde(value: string, homeDir: strin...|
 |`resolvePiAgentBinDir`|fn||71-78|export function resolvePiAgentBinDir(homeDirImpl: () => s...|
-|`resolvePiUsereqLauncherTarget`|fn||88-92|export function resolvePiUsereqLauncherTarget(|
-|`isPiPackageInstallation`|fn||103-113|export function isPiPackageInstallation(|
-|`deployPiUsereqLauncher`|fn||123-124|export function deployPiUsereqLauncher(|
-|`removeDeployedPiUsereqLauncher`|fn||169-170|export function removeDeployedPiUsereqLauncher(|
+|`resolveLauncherPackageRoot`|fn||88-93|function resolveLauncherPackageRoot(explicitInstallationP...|
+|`resolvePiUsereqLauncherTarget`|fn||103-105|export function resolvePiUsereqLauncherTarget(installatio...|
+|`isPiPackageInstallation`|fn||116-126|export function isPiPackageInstallation(|
+|`deployPiUsereqLauncher`|fn||136-137|export function deployPiUsereqLauncher(|
+|`removeDeployedPiUsereqLauncher`|fn||181-182|export function removeDeployedPiUsereqLauncher(|
 
 
 ---

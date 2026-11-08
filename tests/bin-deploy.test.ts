@@ -9,6 +9,7 @@ import {
   isPiPackageInstallation,
   removeDeployedPiUsereqLauncher,
   resolvePiAgentBinDir,
+  resolvePiUsereqLauncherTarget,
   type PiUsereqLauncherDeployOptions,
 } from "../src/core/bin-deploy.js";
 import {
@@ -164,4 +165,39 @@ test("uninstall removes only the installation-owned launcher link before spawnin
   assert.deepEqual(calls[0].args, [...PACKAGE_UNINSTALL_COMMAND.slice(1)]);
   const removal = removeDeployedPiUsereqLauncher(fixture.options);
   assert.equal(removal, false);
+});
+
+test("launcher deployment resolves the default package-root target without injected overrides", () => {
+  // Arrange: redirect the pi agent bin directory into a temporary sandbox through the
+  // PI_CODING_AGENT_DIR contract so the DEFAULT installation-path resolution is exercised
+  // against the real npm package layout (<packageRoot>/src module root plus
+  // <packageRoot>/scripts/pi-usereq.js launcher) without touching the developer home.
+  const sandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-bin-deploy-default-"));
+  const expectedTarget = resolvePiUsereqLauncherTarget();
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = sandboxDir;
+  try {
+    // Act
+    const deployed = deployPiUsereqLauncher();
+    // Assert: default resolution anchors on the package root, so the real shebang
+    // launcher exists and the sandboxed agent bin receives the owned symlink.
+    assert.equal(
+      fs.existsSync(expectedTarget),
+      true,
+      "default launcher target must resolve to <packageRoot>/scripts/pi-usereq.js",
+    );
+    assert.deepEqual(deployed, { deployed: true, outcome: "created" });
+    const linkPath = path.join(sandboxDir, "bin", PI_USEREQ_LAUNCHER_NAME);
+    assert.equal(fs.realpathSync(linkPath), fs.realpathSync(expectedTarget));
+    // Act + Assert: uninstall containment anchored on the same package root removes the owned link.
+    assert.equal(removeDeployedPiUsereqLauncher(), true);
+    assert.equal(fs.existsSync(linkPath), false);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+    fs.rmSync(sandboxDir, { recursive: true, force: true });
+  }
 });

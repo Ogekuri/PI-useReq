@@ -78,17 +78,30 @@ export function resolvePiAgentBinDir(homeDirImpl: () => string = os.homedir): st
 }
 
 /**
+ * @brief Resolves the npm package root anchoring launcher target composition plus ownership containment.
+ * @details Returns an explicit caller override resolved to an absolute path verbatim so deterministic test and CLI overrides keep their documented package-root meaning, and derives the production default as the parent directory of the source-root installation path exposed by `getInstallationPath()` because the executing module lives under `<packageRoot>/src/core` while the npm `bin` launcher declared by DES-028 lives at `<packageRoot>/scripts/pi-usereq.js`. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] explicitInstallationPath {string | undefined} Caller-supplied package-root override; `undefined` selects the derived default.
+ * @return {string} Absolute package root directory anchoring launcher target composition plus ownership containment.
+ * @note Complexity: O(p) in path length. Pure; no side effects.
+ * @satisfies REQ-504, REQ-508, REQ-509
+ */
+function resolveLauncherPackageRoot(explicitInstallationPath: string | undefined): string {
+  if (explicitInstallationPath !== undefined) {
+    return path.resolve(explicitInstallationPath);
+  }
+  return path.resolve(getInstallationPath(), "..");
+}
+
+/**
  * @brief Resolves the installation-owned launcher target backing the deployed link.
- * @details Joins the installation root with `scripts/pi-usereq.js`, the shebang launcher declared by the npm `bin` metadata, so the deployed symlink executes the same entry as global npm installations. Runtime is O(p) in path length. No external state is mutated.
- * @param[in] installationPath {string} Absolute installation root. Defaults to the runtime installation path.
+ * @details Anchors on the npm package root resolved through `resolveLauncherPackageRoot` and joins `scripts/pi-usereq.js`, the shebang launcher declared by the npm `bin` metadata, so the deployed symlink executes the same entry as global npm installations. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] installationPath {string} Absolute package root override. Defaults to the package root derived from the runtime source-root installation path.
  * @return {string} Absolute launcher target path.
  * @note Complexity: O(p) in path length.
  * @satisfies REQ-504
  */
-export function resolvePiUsereqLauncherTarget(
-  installationPath: string = getInstallationPath(),
-): string {
-  return path.join(installationPath, PI_USEREQ_LAUNCHER_RELATIVE_PATH);
+export function resolvePiUsereqLauncherTarget(installationPath?: string): string {
+  return path.join(resolveLauncherPackageRoot(installationPath), PI_USEREQ_LAUNCHER_RELATIVE_PATH);
 }
 
 /**
@@ -114,7 +127,7 @@ export function isPiPackageInstallation(
 
 /**
  * @brief Best-effort deploys one idempotent `pi-usereq` launcher symlink into the pi agent bin directory.
- * @details Skips deployment with `launcher-missing` when the installation-owned launcher target does not exist, creates the agent bin directory when required, skips links already resolving to the current target for idempotence, replaces divergent symlinks so relocated installations stay reachable, skips non-symlink `pi-usereq` entries with `foreign-entry` instead of overwriting user-owned files, and converts every filesystem failure into a skipped outcome carrying the diagnostic reason so extension activation never aborts. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include directory creation, symlink creation, and symlink deletion inside the resolved agent bin directory only.
+ * @details Anchors the launcher target on the npm package root derived from the caller override or the source-root installation path parent, skips deployment with `launcher-missing` when the installation-owned launcher target does not exist, creates the agent bin directory when required, skips links already resolving to the current target for idempotence, replaces divergent symlinks so relocated installations stay reachable, skips non-symlink `pi-usereq` entries with `foreign-entry` instead of overwriting user-owned files, and converts every filesystem failure into a skipped outcome carrying the diagnostic reason so extension activation never aborts. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include directory creation, symlink creation, and symlink deletion inside the resolved agent bin directory only.
  * @param[in] options {PiUsereqLauncherDeployOptions} Optional installation and agent-bin directory overrides consumed by deterministic tests.
  * @return {PiUsereqLauncherDeployResult} Deployment outcome facts; never throws.
  * @note Complexity: O(1) plus bounded filesystem metadata calls.
@@ -124,8 +137,7 @@ export function deployPiUsereqLauncher(
   options: PiUsereqLauncherDeployOptions = {},
 ): PiUsereqLauncherDeployResult {
   try {
-    const installationPath = path.resolve(options.installationPath ?? getInstallationPath());
-    const target = path.join(installationPath, PI_USEREQ_LAUNCHER_RELATIVE_PATH);
+    const target = resolvePiUsereqLauncherTarget(options.installationPath);
     const binDir = path.resolve(options.agentBinDir ?? resolvePiAgentBinDir());
     const linkPath = path.join(binDir, PI_USEREQ_LAUNCHER_NAME);
     if (!fs.existsSync(target)) {
@@ -160,7 +172,7 @@ export function deployPiUsereqLauncher(
 
 /**
  * @brief Best-effort removes the deployed `pi-usereq` launcher link owned by the executing installation.
- * @details Removes the agent-bin `pi-usereq` entry only when it is a symlink resolving inside the executing installation path so relocated or upgraded installations are cleaned up, leaves foreign symlinks and non-symlink entries untouched, and converts every filesystem failure into `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved agent bin directory only.
+ * @details Removes the agent-bin `pi-usereq` entry only when it is a symlink resolving inside the executing npm package root derived from the caller override or the source-root installation path parent so relocated or upgraded installations are cleaned up, leaves foreign symlinks and non-symlink entries untouched, and converts every filesystem failure into `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved agent bin directory only.
  * @param[in] options {PiUsereqLauncherDeployOptions} Optional installation and agent-bin directory overrides consumed by deterministic tests.
  * @return {boolean} `true` when the installation-owned launcher link was removed; `false` when absent, foreign, or the removal failed.
  * @note Complexity: O(1) plus bounded filesystem metadata calls.
@@ -170,7 +182,7 @@ export function removeDeployedPiUsereqLauncher(
   options: PiUsereqLauncherDeployOptions = {},
 ): boolean {
   try {
-    const installationPath = path.resolve(options.installationPath ?? getInstallationPath());
+    const installationPath = resolveLauncherPackageRoot(options.installationPath);
     const binDir = path.resolve(options.agentBinDir ?? resolvePiAgentBinDir());
     const linkPath = path.join(binDir, PI_USEREQ_LAUNCHER_NAME);
     let existing: fs.Stats;
