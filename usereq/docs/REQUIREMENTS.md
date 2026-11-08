@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.117"
+version: "0.0.118"
 date: "2026-11-08"
 author: "OpenAI Codex"
 scope:
@@ -583,6 +583,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-492**: MUST make `scripts/pre-release-check.sh` stop at the first failing stage, print one status banner per stage, exit `0` only after every stage succeeds, and exit non-zero otherwise.
 - **REQ-493**: MUST make `scripts/pre-release-check.sh` support `--skip-install` reusing the existing `node_modules` tree, print usage for `--help`, and reject unknown options with non-zero exit.
 - **REQ-494**: MUST make `scripts/pre-release-check.sh` resolve the repository root from its own script location and execute every stage from that root regardless of the caller working directory.
+- **REQ-495**: MUST make `scripts/pre-release-check.sh` capture the repository `git status --porcelain --ignored` inventory before executing any stage.
+- **REQ-496**: MUST make `scripts/pre-release-check.sh` remove every untracked or ignored repository entry created by its stages, including build outputs and intermediate files, before process exit.
+- **REQ-497**: MUST make the `scripts/pre-release-check.sh` artifact cleanup execute on successful, failed, and signal-induced exits and preserve the first failing stage exit code.
+- **REQ-498**: MUST restrict `scripts/pre-release-check.sh` artifact removal to `??` or `!!` entries absent from the pre-run inventory, always skipping `node_modules`.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -770,7 +774,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
-- `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, optional build, strict type-check, and the full test suite from the repository root.
+- `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, optional build, strict type-check, and the full test suite from the repository root, then removes repository entries its stages created, such as build outputs and intermediate files, while keeping `node_modules` and every pre-existing entry.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@earendil-works/pi-coding-agent` (>=1.4.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.

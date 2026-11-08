@@ -2,8 +2,8 @@
 ##
 # @file scripts/pre-release-check.sh
 # @brief Executes the official pi-usereq pre-release verification gate.
-# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), clean dependency install (`npm ci`), optional build (`npm run build --if-present`), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), and the full test suite (`npm test`). The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Supports `--skip-install` to reuse the existing `node_modules` tree and `--help` for usage; rejects unknown options with exit code `2`. Runtime is dominated by `npm ci` plus `npm test`. Side effects include `node_modules` replacement, npm lifecycle scripts, and child process spawning.
-# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494
+# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), clean dependency install (`npm ci`), optional build (`npm run build --if-present`), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), and the full test suite (`npm test`). The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Supports `--skip-install` to reuse the existing `node_modules` tree and `--help` for usage; rejects unknown options with exit code `2`. After the stages finish, the gate removes every repository entry its stages created — build outputs and intermediate files included — by diffing the pre-run and post-run `git status --porcelain --untracked-files=normal --ignored` inventories, keeping `node_modules` and every pre-existing or tracked-status entry untouched. Cleanup runs on success, failure, and signal-induced exits while preserving the first failing stage exit code. Runtime is dominated by `npm ci` plus `npm test`. Side effects include `node_modules` replacement, npm lifecycle scripts, child process spawning, and deletion of run-created repository entries.
+# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498
 ##
 
 set -euo pipefail
@@ -21,6 +21,90 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # @details Defaults to `0`; the argument parser sets `1` when `--skip-install` is supplied so the install stage reuses the existing `node_modules` tree instead of running `npm ci`.
 ##
 SKIP_INSTALL=0
+
+##
+# Holds the absolute path of the pre-run repository inventory snapshot file.
+# @details Written by `capture_pre_run_inventory(...)` and consumed by `cleanup_generated_artifacts(...)` as the `comm` diff baseline, then removed at exit.
+##
+PRC_PRE_INVENTORY_FILE=""
+
+##
+# Holds the guard flag arming run-created artifact removal.
+# @details Stays `0` until the pre-run inventory snapshot succeeds so help, unknown-option, and pre-snapshot failures exit without running any removal pass.
+##
+PRC_INVENTORY_READY=0
+
+##
+# @brief Captures one sorted repository artifact inventory snapshot.
+# @details Emits one line per visible untracked (`??`) or ignored (`!!`) entry reported by `git status --porcelain --untracked-files=normal --ignored`, with directories collapsed to their root path, then sorts the lines with the C locale so later `comm` differencing stays deterministic. Runtime is O(n) in inventory size. Side effects are limited to read-only git probing.
+# @return {string} Sorted inventory lines emitted on stdout.
+# @satisfies REQ-495
+##
+capture_repo_inventory() {
+  git status --porcelain --untracked-files=normal --ignored 2>/dev/null | LC_ALL=C sort
+}
+
+##
+# @brief Captures the pre-run repository artifact inventory snapshot.
+# @details Writes the `capture_repo_inventory(...)` output into one temporary file and arms `PRC_INVENTORY_READY` so the `EXIT` trap may remove only entries created after this point. Runtime is O(n) in inventory size. Side effects include one temporary file creation.
+# @return {void} No return value; assigns `PRC_PRE_INVENTORY_FILE` and sets `PRC_INVENTORY_READY=1`.
+# @satisfies REQ-495
+##
+capture_pre_run_inventory() {
+  PRC_PRE_INVENTORY_FILE="$(mktemp "${TMPDIR:-/tmp}/pi-usereq-pre-release-check.XXXXXX")"
+  capture_repo_inventory > "${PRC_PRE_INVENTORY_FILE}"
+  PRC_INVENTORY_READY=1
+}
+
+##
+# @brief Removes repository artifacts created by the gate stages.
+# @details Diffs the post-run `capture_repo_inventory(...)` output against the pre-run snapshot and removes with `rm -rf` every `??` or `!!` entry absent from the snapshot so build outputs and intermediate files created by `npm ci`, the optional build, `tsc --noEmit`, or `npm test` never survive the gate. Skips `node_modules` entries so the dependency tree installed by the gate stays reusable, skips every pre-existing or tracked-status entry, and removes its temporary inventory files. Runtime is O(n) in inventory diff size. Side effects include deletion of run-created repository entries and temporary-file removal.
+# @return {void} No return value; always returns `0` so the `EXIT` trap re-exits with the preserved gate exit code.
+# @satisfies REQ-496, REQ-497, REQ-498
+##
+cleanup_generated_artifacts() {
+  if [[ "${PRC_INVENTORY_READY}" -ne 1 ]]; then
+    return 0
+  fi
+  local post_inventory_file
+  post_inventory_file="$(mktemp "${TMPDIR:-/tmp}/pi-usereq-pre-release-check.XXXXXX")" || post_inventory_file=""
+  if [[ -n "${post_inventory_file}" ]]; then
+    capture_repo_inventory > "${post_inventory_file}" || :
+    local entry entry_path
+    while IFS= read -r entry || [[ -n "${entry}" ]]; do
+      [[ -n "${entry}" ]] || continue
+      case "${entry}" in
+        '?? '*|'!! '*) entry_path="${entry#?? }" ;;
+        *) continue ;;
+      esac
+      case "${entry_path}" in
+        node_modules|node_modules/*) continue ;;
+      esac
+      if [[ "${entry_path}" == '"'* ]]; then
+        entry_path="${entry_path#\"}"
+        entry_path="${entry_path%\"}"
+      fi
+      if [[ -e "${entry_path}" || -L "${entry_path}" ]]; then
+        rm -rf -- "${entry_path}"
+        printf 'pre-release-check: removed generated artifact: %s\n' "${entry_path}"
+      fi
+    done < <(comm -13 "${PRC_PRE_INVENTORY_FILE}" "${post_inventory_file}")
+    rm -f -- "${post_inventory_file}"
+  fi
+  rm -f -- "${PRC_PRE_INVENTORY_FILE}"
+  PRC_PRE_INVENTORY_FILE=""
+  PRC_INVENTORY_READY=0
+  return 0
+}
+
+##
+# @brief Routes every gate exit path through artifact cleanup.
+# @details Installs the `EXIT` trap that forwards the observed exit code into `cleanup_generated_artifacts(...)` and re-exits with the same code, plus `INT` and `TERM` traps that convert signal termination into trap-routed exits so interrupted runs still remove their created artifacts. Runtime is O(1). Side effects are limited to trap registration.
+# @satisfies REQ-497
+##
+trap 'prc_gate_exit_code=$?; cleanup_generated_artifacts || :; exit "${prc_gate_exit_code}"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 ##
 # @brief Prints the English usage document for the pre-release gate.
@@ -44,6 +128,9 @@ Options:
   -h, --help      Print this usage and exit 0
 
 Exits 0 only when every stage succeeds; exits non-zero on the first failure.
+
+Removes repository entries created by this run (build outputs, intermediate
+files) before exiting; node_modules and pre-existing entries are kept.
 USAGE
 }
 
@@ -155,10 +242,10 @@ run_test_suite() {
 
 ##
 # @brief Parses gate options and executes every stage in the documented order.
-# @details Accepts exactly `--skip-install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root before dispatching the five stages in order and prints the final success summary. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages.
+# @details Accepts exactly `--skip-install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, captures the pre-run repository inventory snapshot, dispatches the five stages in order, prints the final success summary, and lets the exit trap remove repository entries created by the stages before the process returns the gate exit code. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus run-created artifact removal at exit.
 # @param[in] arguments {string...} Raw command-line arguments passed to the script.
 # @return {void} No return value on success; exits non-zero on any failure.
-# @satisfies REQ-491, REQ-492, REQ-493, REQ-494
+# @satisfies REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498
 ##
 main() {
   while [[ $# -gt 0 ]]; do
@@ -179,7 +266,8 @@ main() {
     shift
   done
   cd "${REPO_ROOT}"
-  printf 'pi-usereq pre-release check\nrepository root: %s\n' "${REPO_ROOT}"
+  capture_pre_run_inventory
+  printf 'pi-usereq pre-release check\nrepository root: %s\nartifact cleanup: enabled (removes entries created by this run; keeps node_modules)\n' "${REPO_ROOT}"
   run_stage 'stage 1/5: environment preflight (git, node >=24, npm)' check_environment
   run_stage 'stage 2/5: clean dependency install (npm ci)' install_dependencies
   run_stage 'stage 3/5: optional build (npm run build --if-present)' run_optional_build
