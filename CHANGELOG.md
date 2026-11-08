@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.99.1](https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.99.1) - 2026-11-07
+## [0.100.0](https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0) - 2026-11-08
 ### ⛰️  Features
 - Update prompts.
 
@@ -17,6 +17,7 @@
   - case and update current-outcome assertions with latestVersion.
 
 ### 🚜  Changes
+- remove external Python oracle dependencies [useReq] *(tests)*
 - resolve npmjs latest from the package manifest [useReq] *(package-manager)*
   - Probe the npmjs package manifest document (registry packument backing
   - npmjs.com/package/pi-usereq) instead of the /latest shorthand so --ver
@@ -1408,7 +1409,7 @@
 - \[0.97.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.97.0
 - \[0.98.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.98.0
 - \[0.99.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.0
-- \[0.99.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.1
+- \[0.100.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.100.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1507,4 +1508,4 @@
 [0.97.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.96.0..v0.97.0
 [0.98.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.97.0..v0.98.0
 [0.99.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0
-[0.99.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.99.1
+[0.100.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0
