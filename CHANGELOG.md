@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.102.1](https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.102.1) - 2026-11-08
+### 🐛  Bug Fixes
+- anchor launcher target and removal containment on package root [useReq] *(bin-deploy)*
+  - Deploy and remove launcher helpers resolved the npm package root from
+  - the source-root installation path, so the composed target pointed at
+  - <pkg>/src/scripts/pi-usereq.js and every real pi-package activation
+  - silently skipped deployment with launcher-missing (REQ-504), while
+  - uninstall containment would misclassify correctly placed launchers as
+  - foreign (REQ-508/REQ-509). Anchored target composition plus ownership
+  - containment on the package root and added a default-resolution
+  - reproducer covering the real npm package layout (TST-173, TST-174).
+
 ## [0.102.0](https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.102.0) - 2026-11-08
 ### ⛰️  Features
 - Update prompts files.
@@ -1451,6 +1463,7 @@
 - \[0.100.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.100.0
 - \[0.101.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.0
 - \[0.102.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.102.0
+- \[0.102.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.102.1
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1552,3 +1565,4 @@
 [0.100.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0
 [0.101.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0
 [0.102.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.102.0
+[0.102.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.102.1
