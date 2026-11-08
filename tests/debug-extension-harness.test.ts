@@ -17,15 +17,18 @@ import { PI_USEREQ_STATUS_HOOK_NAMES } from "../src/core/extension-status.js";
 import { initFixtureRepo, saveFixtureConfigs } from "./helpers.js";
 
 /**
- * @brief Persists a targeted enabled-tool list into a fixture project config.
- * @details Loads the effective split config, replaces the global `enabled-tools` array with the supplied values, and rewrites the local/global config files so offline harness tests observe the same runtime state. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
+ * @brief Persists a deterministic session-start fixture config into a fixture project.
+ * @details Loads the effective split config, replaces the global `enabled-tools` array with the supplied values, disables every effective static-check language so host checker availability can never emit the REQ-341 missing-checker warning into recorded session-start notifications, and rewrites the local/global config files so offline harness tests observe identical runtime state on every host. Runtime is O(n) in config size. Side effects include filesystem reads and file overwrite.
  * @param[in] projectBase {string} Fixture project root.
  * @param[in] enabledTools {string[]} Enabled-tool names to persist.
  * @return {void} No return value.
  */
-function writeEnabledTools(projectBase: string, enabledTools: string[]): void {
+function persistSessionStartFixtureConfig(projectBase: string, enabledTools: string[]): void {
   const config = loadConfig(projectBase);
   config["enabled-tools"] = enabledTools;
+  for (const languageConfig of Object.values(config["static-check"])) {
+    languageConfig.enabled = "disable";
+  }
   saveFixtureConfigs(projectBase, config);
 }
 
@@ -221,7 +224,7 @@ test("inspectExtension surfaces static-check tool descriptions and schema detail
 test("replaySessionStart captures active tools, statuses, and cwd semantics", async () => {
   const { projectBase } = initFixtureRepo();
   try {
-    writeEnabledTools(projectBase, ["files-tokens", "static-check"]);
+    persistSessionStartFixtureConfig(projectBase, ["files-tokens", "static-check"]);
     const report = await replaySessionStart(projectBase);
     const status = report.ui.statuses["pi-usereq"] ?? "";
 
