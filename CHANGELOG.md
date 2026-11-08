@@ -1,8 +1,22 @@
 # Changelog
 
-## [0.101.1](https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.101.1) - 2026-11-08
+## [0.102.0](https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.102.0) - 2026-11-08
 ### ⛰️  Features
 - Update prompts files.
+
+### 🚜  Changes
+- deploy PATH pi-usereq launcher for pi package installs [useReq] *(bin-deploy)*
+  - Add src/core/bin-deploy.ts: best-effort idempotent pi-usereq launcher symlink under ~/.pi/agent/bin during extension activation of pi-package installs (REQ-504..REQ-507, DES-030).
+  - --uninstall removes only the installation-owned launcher link before spawning the global uninstall child, preserving its exit code (REQ-508, REQ-509).
+  - Preserve npm bin contract (PRJ-009, DES-028, CTN-021) and scripts/pi-usereq.sh wrapper (REQ-488).
+  - Add tests/bin-deploy.test.ts covering deploy idempotence, divergent-symlink replacement, foreign-entry preservation, layout gating, and uninstall removal (TST-173..TST-175).
+  - Update REQUIREMENTS.md (v0.0.121), WORKFLOW.md call traces, and regenerated REFERENCES.md.
+  - Verification: static-check clean; full npm test 464/464 passing.
+- surface GitHub probe failure reason in version report [useReq] *(package-manager)*
+  - Capture the upstream GitHub error-response `message` field (e.g. API rate limit exceeded) as an optional `reason` on the failed GitHub probe outcome (REQ-503).
+  - Render failed GitHub probes as `GitHub latest: unknown (<reason>)` in --ver/--version, keeping plain `unknown` when no upstream reason is extractable (REQ-502, REQ-476).
+  - Update REQUIREMENTS.md (REQ-502/REQ-503), WORKFLOW.md call-trace nodes, and regenerate REFERENCES.md.
+  - Verification: static-check clean; full npm test suite 459/459 passing.
 
 ## [0.101.0](https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0) - 2026-11-08
 ### ⛰️  Features
@@ -1436,7 +1450,7 @@
 - \[0.99.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.0
 - \[0.100.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.100.0
 - \[0.101.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.0
-- \[0.101.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.1
+- \[0.102.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.102.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1537,4 +1551,4 @@
 [0.99.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0
 [0.100.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0
 [0.101.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0
-[0.101.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.101.1
+[0.102.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.102.0
