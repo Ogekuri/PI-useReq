@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.101.1](https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.101.1) - 2026-11-08
+### ⛰️  Features
+- Update prompts files.
+
 ## [0.101.0](https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0) - 2026-11-08
 ### ⛰️  Features
 - add pre-release-check.sh official release gate [useReq] *(scripts)*
@@ -1432,6 +1436,7 @@
 - \[0.99.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.0
 - \[0.100.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.100.0
 - \[0.101.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.0
+- \[0.101.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.1
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1532,3 +1537,4 @@
 [0.99.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0
 [0.100.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0
 [0.101.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0
+[0.101.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.101.1
