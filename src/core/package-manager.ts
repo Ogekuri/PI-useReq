@@ -7,6 +7,7 @@
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
+import { removeDeployedPiUsereqLauncher } from "./bin-deploy.js";
 import { getInstallationPackageMetadata } from "./path-context.js";
 
 /** npm package name probed and mutated by every management command. */
@@ -149,6 +150,8 @@ export interface PackageManagerCommandDeps {
   registryCheck?: PackageManagerRegistryProbeDeps;
   /** Overrides forwarded to `probeLatestGitHubRelease` by the version report and develop channel. */
   githubCheck?: PackageManagerGitHubProbeDeps;
+  /** Launcher-link remover invoked by `--uninstall` before the uninstall child. Default: `removeDeployedPiUsereqLauncher`. */
+  removeLauncher?: () => boolean;
 }
 
 /** Default stderr-only diagnostic sink used when no logger is injected. */
@@ -662,13 +665,16 @@ export async function runPackageManagerUpgradeCommand(
 }
 
 /**
- * @brief Handles `--uninstall`: removes the globally installed package.
- * @details Runs `npm uninstall -g pi-usereq` with inherited stdio and returns the child exit code; spawn failures map to exit code `1` with the manual command hint on stderr.
- * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger overrides.
+ * @brief Handles `--uninstall`: removes the globally installed package and the deployed PATH launcher link.
+ * @details Best-effort removes the `pi-usereq` launcher symlink deployed by extension activation when it resolves inside the executing installation (leaving foreign entries untouched), then runs `npm uninstall -g pi-usereq` with inherited stdio and returns the child exit code; spawn failures map to exit code `1` with the manual command hint on stderr.
+ * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger overrides plus the injectable launcher remover.
  * @return {number} Child exit code, or `1` when spawning failed.
  * @note Complexity: dominated by the child process execution.
+ * @satisfies REQ-486, REQ-508, REQ-509
  */
 export function runPackageManagerUninstallCommand(deps: PackageManagerCommandDeps = {}): number {
+  const removeLauncher = deps.removeLauncher ?? removeDeployedPiUsereqLauncher;
+  removeLauncher();
   return runPackageManagerChildCommand(PACKAGE_UNINSTALL_COMMAND, deps);
 }
 

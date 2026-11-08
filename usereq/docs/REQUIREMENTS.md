@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.120"
+version: "0.0.121"
 date: "2026-11-08"
 author: "OpenAI Codex"
 scope:
@@ -114,6 +114,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-027**: MUST dispatch management commands from `src/cli.ts` `main(...)` before standard flag parsing, scheduling the async handler and assigning its exit code to `process.exitCode` on completion.
 - **DES-028**: MUST declare `package.json` `bin` entry `pi-usereq` pointing to the shebang `scripts/pi-usereq.js` launcher that registers the bundled tsx ESM loader and invokes `main` from `src/cli.ts`.
 - **DES-029**: MUST implement the official pre-release verification gate in `scripts/pre-release-check.sh` as a standalone bash process using `git`, `npm`, `node`, and core shell utilities only.
+- **DES-030**: MUST implement pi-usereq launcher deployment plus removal helpers in one dedicated `src/core/bin-deploy.ts` module outside `src/index.ts` business logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -592,6 +593,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-501**: MUST make `.github/workflows/release-npm.yml` publish to npm only when both the `origin/master` gate and the test stage succeed.
 - **REQ-502**: MUST render a failed GitHub probe as `GitHub latest: unknown (<reason>)`, where `<reason>` is the failure reason captured from the upstream error response.
 - **REQ-503**: MUST capture the GitHub probe failure reason from the upstream error response `message` field and omit the reason when the response exposes no usable message.
+- **REQ-504**: MUST best-effort create one `pi-usereq` launcher symlink under `~/.pi/agent/bin` targeting the installation-owned `scripts/pi-usereq.js` during extension activation of pi-package installations.
+- **REQ-505**: MUST skip launcher deployment when an existing `pi-usereq` link already resolves to the current launcher target, keeping deployment idempotent.
+- **REQ-506**: MUST replace an existing `pi-usereq` symlink that resolves to a different target and MUST NOT overwrite a non-symlink `pi-usereq` entry.
+- **REQ-507**: MUST NOT abort extension activation or transition workflow state when launcher deployment fails.
+- **REQ-508**: MUST remove the deployed `pi-usereq` launcher link best-effort during `--uninstall` before the global uninstall child runs, preserving its exit code.
+- **REQ-509**: MUST remove the launcher only when it resolves inside the executing installation path and MUST leave foreign `pi-usereq` entries untouched.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -764,6 +771,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-169**: MUST verify package metadata declares the `pi-usereq` bin launcher and the launcher registers tsx and invokes the CLI `main`.
 - **TST-170**: MUST verify `scripts/pi-usereq.sh` forwards arguments through the local tsx CLI entry and fails with remediation guidance when tsx is missing.
 - **TST-171**: MUST verify the manifest probe prefers `dist-tags.latest`, falls back to the highest `versions` entry with release-over-prerelease ordering, hits the manifest endpoint, and fails deterministically when the manifest exposes neither.
+- **TST-173**: MUST verify extension activation deploys an idempotent best-effort `pi-usereq` launcher symlink without aborting on failure.
+- **TST-174**: MUST verify launcher deployment skips matching links, replaces divergent symlinks, and never overwrites non-symlink entries.
+- **TST-175**: MUST verify `--uninstall` removes only the installation-owned launcher link before spawning the documented uninstall child.
 
 ## 5. Observed Component Model
 
