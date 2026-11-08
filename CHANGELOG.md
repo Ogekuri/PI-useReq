@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.101.0](https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0) - 2026-11-08
+### ⛰️  Features
+- add pre-release-check.sh official release gate [useReq] *(scripts)*
+  - Adds scripts/pre-release-check.sh running, from the repository root, environment preflight with the Node>=24 engine gate, clean npm ci install, optional build (--if-present), strict tsc --noEmit, and the full npm test suite.
+  - Adds DES-029 and REQ-491..REQ-494: stop at first failing stage with per-stage banners, exit 0 only when all stages pass, --skip-install reuse, --help usage, unknown options rejected with exit 2.
+  - Verified: full gate exit 0 (459/459 tests), induced stage failure exits 1 without running later stages, caller-cwd independence, static-check clean.
+
+### 🐛  Bug Fixes
+- make session-start replay fixture host-checker independent [useReq] *(tests)*
+  - The replaySessionStart offline harness test asserted zero recorded notifications while the fixture kept default-enabled static-check languages, so hosts without cppcheck/clang-format (CI runners) legitimately emitted the REQ-341 missing-checker warning and failed the build. Disable every effective static-check language in the persisted fixture config so checker availability cannot reach recorded session-start notifications; product behavior and all other suites unchanged (459/459 pass).
+
+### 🚜  Changes
+- gate release assets and npm publish on tests [useReq] *(release-workflow)*
+  - Requirements: add REQ-499..499..501 — run the full npm test suite inside build-release after npm ci for every canonical tag, create the GitHub Release and upload release assets only on a passing test stage, and require both the origin/master gate and the passing test stage for npm publication; bump SRS version to 0.0.119.
+  - Workflow: .github/workflows/release-npm.yml gains a Run test suite step between Build if present and Remove private package flag; Publish package to npm now requires needs.check-branch.outputs.is_master == 'true' && success(); Create GitHub Release and upload assets requires success(); failing tests skip changelog, release-asset upload, and publication.
+  - Verification: tests/release-workflow.test.ts 10/10, full suite 459/459, static-check clean, parsed-YAML step-order and gate-condition checks OK.
+- remove gate-created build artifacts on exit [useReq] *(pre-release-check)*
+  - Requirements: add REQ-495..498 covering the pre-run git inventory snapshot, removal of stage-created untracked/ignored entries (build outputs, intermediate files), cleanup on success/failure/signal exits with preserved stage exit codes, and node_modules plus pre-existing-entry safety limits; bump SRS version to 0.0.118.
+  - Implementation: scripts/pre-release-check.sh snapshots git status --porcelain --untracked-files=normal --ignored before stage 1 and routes EXIT/INT/TERM through a cleanup pass that rm -rf's every ??/!! entry absent from the pre-run snapshot, skipping node_modules and tracked-status entries while preserving the gate exit code.
+  - Verification: full gate passed (npm ci, type-check, 459/459 tests); created artifacts removed, pre-existing entries and node_modules kept; exit code preserved on the failure path.
+
 ## [0.100.0](https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0) - 2026-11-08
 ### ⛰️  Features
 - Update prompts.
@@ -1410,6 +1431,7 @@
 - \[0.98.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.98.0
 - \[0.99.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.99.0
 - \[0.100.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.100.0
+- \[0.101.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1509,3 +1531,4 @@
 [0.98.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.97.0..v0.98.0
 [0.99.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.98.0..v0.99.0
 [0.100.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0
+[0.101.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0
