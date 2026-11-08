@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.116"
-date: "2026-11-07"
+version: "0.0.117"
+date: "2026-11-08"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -35,7 +35,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, and the distribution bin launcher. `.github/workflows/` contains the npm release workflow in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, the distribution bin launcher, and the pre-release verification gate. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -113,6 +113,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-026**: MUST implement `--ver|--version`, `--upgrade [--dev|--develop]`, and `--uninstall` handlers in `src/core/package-manager.ts` with injectable fetch, spawn, logger, and stdout dependencies.
 - **DES-027**: MUST dispatch management commands from `src/cli.ts` `main(...)` before standard flag parsing, scheduling the async handler and assigning its exit code to `process.exitCode` on completion.
 - **DES-028**: MUST declare `package.json` `bin` entry `pi-usereq` pointing to the shebang `scripts/pi-usereq.js` launcher that registers the bundled tsx ESM loader and invokes `main` from `src/cli.ts`.
+- **DES-029**: MUST implement the official pre-release verification gate in `scripts/pre-release-check.sh` as a standalone bash process using `git`, `npm`, `node`, and core shell utilities only.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -578,6 +579,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-489**: MUST resolve the npmjs latest version from the manifest `dist-tags.latest` field, falling back to the highest semver-ordered manifest `versions` entry, and MUST NOT resolve any version when the manifest exposes neither.
 
 - **REQ-490**: MUST execute analysis commands using installation-owned TypeScript implementations and declared dependencies independently of the external req application and its source checkout.
+- **REQ-491**: MUST make `scripts/pre-release-check.sh` execute, in order, environment preflight with the Node 24 engine gate, clean dependency install via `npm ci`, optional build via `npm run build --if-present`, strict `tsc --noEmit`, and full `npm test`.
+- **REQ-492**: MUST make `scripts/pre-release-check.sh` stop at the first failing stage, print one status banner per stage, exit `0` only after every stage succeeds, and exit non-zero otherwise.
+- **REQ-493**: MUST make `scripts/pre-release-check.sh` support `--skip-install` reusing the existing `node_modules` tree, print usage for `--help`, and reject unknown options with non-zero exit.
+- **REQ-494**: MUST make `scripts/pre-release-check.sh` resolve the repository root from its own script location and execute every stage from that root regardless of the caller working directory.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -765,6 +770,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
+- `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, optional build, strict type-check, and the full test suite from the repository root.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@earendil-works/pi-coding-agent` (>=1.4.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
@@ -831,6 +837,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   ├── debug-extension.ts
 │   ├── pi-prompts-update.sh
 │   ├── pi-usereq-debug.sh
+│   ├── pre-release-check.sh
 │   └── lib/{extension-debug-harness.ts,recording-extension-api.ts,sdk-smoke.ts}
 ├── .github/
 │   ├── workflows/
