@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.119"
+version: "0.0.120"
 date: "2026-11-08"
 author: "OpenAI Codex"
 scope:
@@ -563,7 +563,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-473**: MUST detect management commands as exactly one argv token among `--ver`, `--version`, `--upgrade`, `--uninstall`, or exactly two tokens pairing `--upgrade` with `--dev` or `--develop` in either order.
 - **REQ-474**: MUST return no management command for every other argv shape so standard flag parsing stays untouched.
 - **REQ-475**: MUST make `--ver` and `--version` write exactly three stdout lines — installed version, `npmjs latest: <version>`, `GitHub latest: <version>` — and return exit code `0`.
-- **REQ-476**: MUST render installed, npm-latest, or GitHub-latest versions as `unknown` whenever the value is missing, unreadable, or its probe fails.
+- **REQ-476**: MUST render installed, npm-latest, or GitHub-latest versions as `unknown` whenever the value is missing, unreadable, or its probe fails without a captured failure reason.
 - **REQ-477**: MUST probe the npmjs package manifest document `https://registry.npmjs.org/pi-usereq` backing `https://www.npmjs.com/package/pi-usereq` and the GitHub releases URL concurrently for `--ver`/`--version` without consulting any persisted cache.
 - **REQ-478**: MUST bound every registry and GitHub probe with a 2000-millisecond timeout deadline and send the GitHub-mandatory `user-agent` header.
 - **REQ-479**: MUST compare published against installed dotted numeric versions segment-by-segment and MUST treat non-integer or prerelease segments as never newer.
@@ -590,6 +590,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-499**: MUST make `.github/workflows/release-npm.yml` run the full `npm test` suite inside `build-release` after `npm ci` for every canonical tag.
 - **REQ-500**: MUST make `.github/workflows/release-npm.yml` create the GitHub Release and upload release assets only when the test stage succeeds.
 - **REQ-501**: MUST make `.github/workflows/release-npm.yml` publish to npm only when both the `origin/master` gate and the test stage succeed.
+- **REQ-502**: MUST render a failed GitHub probe as `GitHub latest: unknown (<reason>)`, where `<reason>` is the failure reason captured from the upstream error response.
+- **REQ-503**: MUST capture the GitHub probe failure reason from the upstream error response `message` field and omit the reason when the response exposes no usable message.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.

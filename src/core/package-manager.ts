@@ -96,10 +96,14 @@ export type PackageManagerRegistryProbe =
   | { status: "current"; currentVersion: string; latestVersion: string }
   | { status: "newer"; currentVersion: string; latestVersion: string };
 
-/** Discriminated outcome of one GitHub latest-release probe. */
+/**
+ * Discriminated outcome of one GitHub latest-release probe.
+ * - `message`: deterministic probe diagnostic such as the HTTP-status text or the transport error message.
+ * - `reason`: upstream failure reason captured from the GitHub error response `message` field when the failing response exposes one; omitted when the response body carries no usable message.
+ */
 export type PackageManagerGitHubProbe =
   | { status: "ok"; version: string; tag: string }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; reason?: string };
 
 /** Dependency surface of the npm-registry probe. */
 export interface PackageManagerRegistryProbeDeps {
@@ -361,11 +365,32 @@ export async function probeLatestRegistryVersion(
 }
 
 /**
+ * @brief Extracts the upstream failure reason from one GitHub error response body.
+ * @details Parses the failing response body as JSON and accepts only a non-empty string `message` field as the upstream reason, returning `undefined` for non-JSON bodies, malformed payloads, or missing messages so the probe outcome stays deterministic without exposing the response-read failure itself. Runtime is O(n) in body size. Never throws.
+ * @param[in] response {Response} Failing HTTP response whose body should be inspected.
+ * @return {Promise<string | undefined>} Upstream failure reason when extractable; otherwise `undefined`.
+ * @note Complexity: O(n) in body size.
+ * @satisfies REQ-503
+ */
+async function resolveGitHubProbeFailureReason(response: Response): Promise<string | undefined> {
+  try {
+    const payload = (await response.json()) as { message?: unknown };
+    if (typeof payload?.message === "string" && payload.message.trim()) {
+      return payload.message.trim();
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
  * @brief Probes the GitHub releases API for the latest published release version.
- * @details Logging-free resolution order: single `GET {releasesUrl}` with the timeout deadline and the GitHub-mandatory `user-agent` header -> `response.ok` validation -> `payload.tag_name` validation -> leading `v` prefix strip. Never consults any persisted cache; callers own the manual-command context. Every failure is returned as a discriminated outcome; never throws.
+ * @details Logging-free resolution order: single `GET {releasesUrl}` with the timeout deadline and the GitHub-mandatory `user-agent` header -> `response.ok` validation -> upstream failure-reason capture from the error-response `message` field -> `payload.tag_name` validation -> leading `v` prefix strip. Never consults any persisted cache; callers own the manual-command context. Every failure is returned as a discriminated outcome carrying the deterministic HTTP-status diagnostic plus the optional upstream `reason`; never throws.
  * @param[in] deps {PackageManagerGitHubProbeDeps} Optional dependency overrides; production defaults when omitted.
- * @return {Promise<PackageManagerGitHubProbe>} `ok` with the stripped version text plus the raw `tag_name`, or `error` with the diagnostic message.
+ * @return {Promise<PackageManagerGitHubProbe>} `ok` with the stripped version text plus the raw `tag_name`, or `error` with the diagnostic message plus the optional captured upstream failure reason.
  * @note Complexity: O(n) in tag length plus one HTTP round-trip bounded by the timeout deadline.
+ * @satisfies REQ-477, REQ-478, REQ-503
  */
 export async function probeLatestGitHubRelease(
   deps: PackageManagerGitHubProbeDeps = {},
@@ -382,9 +407,11 @@ export async function probeLatestGitHubRelease(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
+      const reason = await resolveGitHubProbeFailureReason(response);
       return {
         status: "error",
         message: `GitHub releases API responded with HTTP ${response.status}.`,
+        ...(reason ? { reason } : {}),
       };
     }
     const payload = (await response.json()) as { tag_name?: unknown };
@@ -413,6 +440,24 @@ export async function probeLatestGitHubRelease(
 function resolveRegistryProbeLatestVersionText(probe: PackageManagerRegistryProbe): string {
   if (probe.status === "newer" || probe.status === "current") {
     return probe.latestVersion;
+  }
+  return PACKAGE_MANAGER_UNKNOWN_VERSION;
+}
+
+/**
+ * @brief Maps one GitHub probe outcome to its version-report text.
+ * @details `ok` maps to the stripped release version; failed outcomes map to `unknown (<reason>)` when the probe captured an upstream failure reason and to the plain `unknown` placeholder when it did not, so rate-limited or otherwise rejected GitHub requests surface the actual upstream error verbatim. Pure; never throws.
+ * @param[in] probe {PackageManagerGitHubProbe} Logging-free GitHub probe outcome.
+ * @return {string} GitHub-latest report text.
+ * @note Complexity: O(1) plus reason length. Pure; no side effects.
+ * @satisfies REQ-475, REQ-476, REQ-502
+ */
+function resolveGitHubProbeLatestVersionText(probe: PackageManagerGitHubProbe): string {
+  if (probe.status === "ok") {
+    return probe.version;
+  }
+  if (probe.reason) {
+    return `${PACKAGE_MANAGER_UNKNOWN_VERSION} (${probe.reason})`;
   }
   return PACKAGE_MANAGER_UNKNOWN_VERSION;
 }
@@ -512,11 +557,12 @@ function runPackageManagerChildCommand(
 
 /**
  * @brief Handles `--ver`/`--version`: dual online probe plus three-line version report.
- * @details Runs the npm-registry probe and the GitHub-releases probe concurrently, bypassing every persisted cache, then writes exactly three stdout lines — the installed version, `npmjs latest: <version>`, and `GitHub latest: <version>` — and returns `0`. Any undeterminable version prints as `unknown`.
+ * @details Runs the npm-registry probe and the GitHub-releases probe concurrently, bypassing every persisted cache, then writes exactly three stdout lines — the installed version, `npmjs latest: <version>`, and `GitHub latest: <version>` — and returns `0`. Undeterminable versions print as `unknown`, and a failed GitHub probe carrying a captured upstream failure reason prints `GitHub latest: unknown (<reason>)` reflecting the actual error such as an API rate-limit response.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version.
  * @param[in] deps {PackageManagerCommandDeps} Optional registry/GitHub/stdout overrides.
  * @return {Promise<number>} Exit code `0`.
  * @note Complexity: two concurrent HTTP round-trips bounded by the probe timeout.
+ * @satisfies REQ-473, REQ-475, REQ-476, REQ-502
  */
 export async function runPackageManagerVersionCommand(
   options: PackageManagerCommandOptions,
@@ -528,7 +574,7 @@ export async function runPackageManagerVersionCommand(
   ]);
   const installedVersion = options.installedVersion || PACKAGE_MANAGER_UNKNOWN_VERSION;
   const registryLatest = resolveRegistryProbeLatestVersionText(registryProbe);
-  const githubLatest = githubProbe.status === "ok" ? githubProbe.version : PACKAGE_MANAGER_UNKNOWN_VERSION;
+  const githubLatest = resolveGitHubProbeLatestVersionText(githubProbe);
   const stdout = deps.stdout ?? defaultPackageManagerStdout;
   stdout.write(
     `${installedVersion}\nnpmjs latest: ${registryLatest}\nGitHub latest: ${githubLatest}\n`,

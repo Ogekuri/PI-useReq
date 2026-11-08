@@ -2810,7 +2810,7 @@ import { SourceAnalyzer, formatMarkdown } from "./source-analyzer.js";
 
 ---
 
-# package-manager.ts | TypeScript | 651L | 37 symbols | 4 imports | 68 comments
+# package-manager.ts | TypeScript | 697L | 39 symbols | 4 imports | 70 comments
 > Path: `src/core/package-manager.ts`
 - @brief Implements pi-usereq package-management commands (`--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`).
 - @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, npm-registry-gated or GitHub-release-tagged global reinstall for `--upgrade`, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
@@ -2840,18 +2840,18 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 
 - type `export type PackageManagerSpawn = (` (L86)
 - type `export type PackageManagerRegistryProbe =` (L93)
-- type `export type PackageManagerGitHubProbe =` (L100)
-### iface `export interface PackageManagerRegistryProbeDeps` (L105-116)
+- type `export type PackageManagerGitHubProbe =` (L104)
+### iface `export interface PackageManagerRegistryProbeDeps` (L109-120)
 
-### iface `export interface PackageManagerGitHubProbeDeps` (L119-126)
+### iface `export interface PackageManagerGitHubProbeDeps` (L123-130)
 
-### iface `export interface PackageManagerCommandOptions` (L129-134)
+### iface `export interface PackageManagerCommandOptions` (L133-138)
 
-### iface `export interface PackageManagerCommandDeps` (L137-148)
+### iface `export interface PackageManagerCommandDeps` (L141-152)
 
-### fn `const defaultPackageManagerSpawn: PackageManagerSpawn = (file, args, options) =>` (L168-174)
+### fn `const defaultPackageManagerSpawn: PackageManagerSpawn = (file, args, options) =>` (L172-178)
 
-### fn `export function isNewerPackageManagerVersion(candidate: string, current: string): boolean` (L179-202)
+### fn `export function isNewerPackageManagerVersion(candidate: string, current: string): boolean` (L183-206)
 - @brief Compares two dotted numeric version strings for strict-newness.
 - @details Splits both inputs on `.` into integer segments, right-pads the shorter sequence with zeroes, and returns on the first differing segment. Any non-integer segment (including prerelease suffixes such as `3-beta.1`) forces `false`, so unparseable or prerelease candidates never trigger an upgrade.
 - @param[in] candidate {string} Version reported as available (latest).
@@ -2859,16 +2859,16 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @return {boolean} `true` only when `candidate` is strictly newer than `current`.
 - @note Complexity: O(k) in the number of dotted segments. Pure; no side effects.
 
-### fn `const toSegments = (version: string): number[] =>` (L180-192)
+### fn `const toSegments = (version: string): number[] =>` (L184-196)
 
-### fn `function isParseablePackageManagerVersion(version: string): boolean` (L211-214)
+### fn `function isParseablePackageManagerVersion(version: string): boolean` (L215-218)
 - @brief Tests whether one dotted version string parses into numeric release segments.
 - @details Splits the release part on `.`, accepting only integer segments; a trailing `-prerelease` suffix is stripped before segment validation so both release and prerelease candidates are parseable. Runtime is O(k) in segment count. Pure; no side effects.
 - @param[in] version {string} Candidate dotted version string.
 - @return {boolean} `true` when the release segments are all non-negative integers.
 - @note Complexity: O(k) in segment count. Pure; no side effects.
 
-### fn `export function comparePackageManagerVersionOrder(left: string, right: string): number` (L224-255)
+### fn `export function comparePackageManagerVersionOrder(left: string, right: string): number` (L228-259)
 - @brief Orders two dotted version strings with release-over-prerelease semantics.
 - @details Parses each input into integer release segments plus an optional prerelease suffix, compares numeric segments segment-by-segment with zero padding, then breaks ties by placing releases above prereleases and finally by lexicographic prerelease ordering; unparseable inputs sort below every parseable input. Runtime is O(k) in segment count. Pure; no side effects.
 - @param[in] left {string} Left dotted version string.
@@ -2876,9 +2876,9 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @return {number} Negative when `left` sorts before `right`, positive when after, `0` when equivalent.
 - @note Complexity: O(k) in segment count. Pure; no side effects.
 
-### fn `const parse = (version: string): { segments: number[]; prerelease: string | null } | undefined =>` (L225-236)
+### fn `const parse = (version: string): { segments: number[]; prerelease: string | null } | undefined =>` (L229-240)
 
-### fn `export function resolveHighestPackageManagerVersion(` (L265-279)
+### fn `export function resolveHighestPackageManagerVersion(` (L269-283)
 - @brief Resolves the highest semver-ordered version from one candidate list.
 - @details Filters out empty and unparseable candidates, then selects the maximum through `comparePackageManagerVersionOrder(...)` so releases outrank equal-numeric prereleases. Runtime is O(n * k) in candidate count and segment count. Pure; no side effects.
 - @param[in] versions {readonly string[]} Candidate dotted version strings.
@@ -2886,7 +2886,7 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @note Complexity: O(n * k). Pure; no side effects.
 - @see comparePackageManagerVersionOrder
 
-### fn `export function resolvePackageManagerManifestLatest(payload: unknown): string | undefined` (L290-307)
+### fn `export function resolvePackageManagerManifestLatest(payload: unknown): string | undefined` (L294-311)
 - @brief Resolves the npmjs latest version from one registry package manifest document.
 - @details Follows the npm best-practice resolution order: a non-empty `dist-tags.latest` string defines the canonical npmjs latest version; otherwise the highest semver-ordered entry of the manifest `versions` map is selected so releases outrank equal-numeric prereleases; every other payload shape resolves to `undefined`. Runtime is O(v * k) over manifest version keys. Pure; no side effects.
 - @param[in] payload {unknown} Parsed npmjs package manifest document (packument).
@@ -2895,14 +2895,14 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @see resolveHighestPackageManagerVersion
 - @satisfies REQ-489
 
-### fn `function stripPackageManagerReleaseTagPrefix(tag: string): string` (L316-318)
+### fn `function stripPackageManagerReleaseTagPrefix(tag: string): string` (L320-322)
 - @brief Strips the release-tag prefix from a GitHub release tag.
 - @details Trims surrounding whitespace and removes one leading `v`/`V` character, returning the remaining text.
 - @param[in] tag {string} Raw `tag_name` value from the GitHub releases API.
 - @return {string} Version text without the leading `v`; possibly empty.
 - @note Complexity: O(n) in tag length. Pure; no side effects.
 
-### fn `export async function probeLatestRegistryVersion(` (L329-330)
+### fn `export async function probeLatestRegistryVersion(` (L333-334)
 - @brief Probes the npmjs package manifest document for the latest published package version.
 - @details Logging-free resolution order: installed-version guard (missing `currentVersion` returns `unknown-version` with zero network calls) -> single `GET {registry}/{package}` fetching the npmjs package manifest document (packument) backing `https://www.npmjs.com/package/{package}` with the timeout deadline -> `response.ok` validation -> `resolvePackageManagerManifestLatest(...)` dist-tags/versions resolution -> `isNewerPackageManagerVersion` gate; both `newer` and `current` outcomes carry the resolved manifest latest version so reporting never substitutes the installed version. Every failure is returned as a discriminated outcome; never throws.
 - @param[in] deps {PackageManagerRegistryProbeDeps} Optional dependency overrides; production defaults when omitted.
@@ -2911,14 +2911,23 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @see resolvePackageManagerManifestLatest
 - @satisfies REQ-477, REQ-489
 
-### fn `export async function probeLatestGitHubRelease(` (L370-371)
-- @brief Probes the GitHub releases API for the latest published release version.
-- @details Logging-free resolution order: single `GET {releasesUrl}` with the timeout deadline and the GitHub-mandatory `user-agent` header -> `response.ok` validation -> `payload.tag_name` validation -> leading `v` prefix strip. Never consults any persisted cache; callers own the manual-command context. Every failure is returned as a discriminated outcome; never throws.
-- @param[in] deps {PackageManagerGitHubProbeDeps} Optional dependency overrides; production defaults when omitted.
-- @return {Promise<PackageManagerGitHubProbe>} `ok` with the stripped version text plus the raw `tag_name`, or `error` with the diagnostic message.
-- @note Complexity: O(n) in tag length plus one HTTP round-trip bounded by the timeout deadline.
+### fn `async function resolveGitHubProbeFailureReason(response: Response): Promise<string | undefined>` (L375-385)
+- @brief Extracts the upstream failure reason from one GitHub error response body.
+- @details Parses the failing response body as JSON and accepts only a non-empty string `message` field as the upstream reason, returning `undefined` for non-JSON bodies, malformed payloads, or missing messages so the probe outcome stays deterministic without exposing the response-read failure itself. Runtime is O(n) in body size. Never throws.
+- @param[in] response {Response} Failing HTTP response whose body should be inspected.
+- @return {Promise<string | undefined>} Upstream failure reason when extractable; otherwise `undefined`.
+- @note Complexity: O(n) in body size.
+- @satisfies REQ-503
 
-### fn `function resolveRegistryProbeLatestVersionText(probe: PackageManagerRegistryProbe): string` (L413-418)
+### fn `export async function probeLatestGitHubRelease(` (L395-396)
+- @brief Probes the GitHub releases API for the latest published release version.
+- @details Logging-free resolution order: single `GET {releasesUrl}` with the timeout deadline and the GitHub-mandatory `user-agent` header -> `response.ok` validation -> upstream failure-reason capture from the error-response `message` field -> `payload.tag_name` validation -> leading `v` prefix strip. Never consults any persisted cache; callers own the manual-command context. Every failure is returned as a discriminated outcome carrying the deterministic HTTP-status diagnostic plus the optional upstream `reason`; never throws.
+- @param[in] deps {PackageManagerGitHubProbeDeps} Optional dependency overrides; production defaults when omitted.
+- @return {Promise<PackageManagerGitHubProbe>} `ok` with the stripped version text plus the raw `tag_name`, or `error` with the diagnostic message plus the optional captured upstream failure reason.
+- @note Complexity: O(n) in tag length plus one HTTP round-trip bounded by the timeout deadline.
+- @satisfies REQ-477, REQ-478, REQ-503
+
+### fn `function resolveRegistryProbeLatestVersionText(probe: PackageManagerRegistryProbe): string` (L440-445)
 - @brief Maps one registry probe outcome to its manifest latest-version text.
 - @details `newer` and `current` both map to the resolved npmjs manifest latest version carried by the probe, so an installed version newer than the published latest still reports the published latest verbatim; every other outcome maps to the `unknown` placeholder. Pure; never throws.
 - @param[in] probe {PackageManagerRegistryProbe} Logging-free registry probe outcome.
@@ -2926,33 +2935,41 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @note Complexity: O(1). Pure; no side effects.
 - @satisfies REQ-475, REQ-489
 
-### fn `export function buildDevelopUpgradeCommand(tag: string): readonly string[]` (L427-429)
+### fn `function resolveGitHubProbeLatestVersionText(probe: PackageManagerGitHubProbe): string` (L455-463)
+- @brief Maps one GitHub probe outcome to its version-report text.
+- @details `ok` maps to the stripped release version; failed outcomes map to `unknown (<reason>)` when the probe captured an upstream failure reason and to the plain `unknown` placeholder when it did not, so rate-limited or otherwise rejected GitHub requests surface the actual upstream error verbatim. Pure; never throws.
+- @param[in] probe {PackageManagerGitHubProbe} Logging-free GitHub probe outcome.
+- @return {string} GitHub-latest report text.
+- @note Complexity: O(1) plus reason length. Pure; no side effects.
+- @satisfies REQ-475, REQ-476, REQ-502
+
+### fn `export function buildDevelopUpgradeCommand(tag: string): readonly string[]` (L472-474)
 - @brief Builds the package-manager command installing one GitHub release tag.
 - @details Produces `npm install -g github:<repository>#<tag>` where `<tag>` is the raw `tag_name` probed from the GitHub releases API, so the develop channel installs the latest tagged release independent of the branch carrying it. Child exit-code and spawn-failure semantics are identical to `PACKAGE_UPGRADE_COMMAND`.
 - @param[in] tag {string} Raw GitHub release tag (`tag_name`, e.g. `v1.2.3`); MUST be non-empty.
 - @return {readonly string[]} Executable-plus-arguments command tuple.
 - @note Complexity: O(n) in tag length. Pure; no side effects.
 
-### fn `export function parsePackageManagerCommand(` (L438-456)
+### fn `export function parsePackageManagerCommand(` (L483-501)
 - @brief Detects an exact management-command argv shape in a raw argv array.
 - @details Single-token shape: exactly one of `--ver`, `--version`, `--upgrade`, `--uninstall`. Two-token shape: `--upgrade` paired with the `--develop` option or its equivalent `--dev` alias, in either order. Any other shape yields `undefined` so standard flag dispatch stays untouched.
 - @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
 - @return {PackageManagerCommandName | undefined} Canonical command name, or `undefined` when no management shape matches.
 - @note Complexity: O(1). Pure; no side effects.
 
-### fn `export function parsePackageManagerUpgradeChannel(args: readonly string[]): PackageManagerUpgradeChannel` (L465-467)
+### fn `export function parsePackageManagerUpgradeChannel(args: readonly string[]): PackageManagerUpgradeChannel` (L510-512)
 - @brief Resolves the `--upgrade` install channel from a raw argv array.
 - @details Returns `develop` when the argv contains the `--develop` option or its equivalent `--dev` alias, and `npm` (default channel) otherwise. Pure; no side effects.
 - @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
 - @return {PackageManagerUpgradeChannel} `develop` or `npm`.
 - @note Complexity: O(n) in argv length. Pure; no side effects.
 
-### fn `export function resolvePackageManagerInstalledVersion(): string` (L474-476)
+### fn `export function resolvePackageManagerInstalledVersion(): string` (L519-521)
 - @brief Resolves the installed package version backing the management commands.
 - @details Reads the installation-owned package metadata resolved from the executing module location and returns its `version` field, which degrades to `unknown` when the manifest is missing, malformed, or incomplete. Runtime is O(n) on the first call in manifest size and O(1) afterwards due to the shared process-scoped cache. Side effects are limited to one filesystem read and module-local cache mutation.
 - @return {string} Installed package version, or `unknown`.
 
-### fn `function runPackageManagerChildCommand(` (L486-488)
+### fn `function runPackageManagerChildCommand(` (L531-533)
 - @brief Runs one package-manager command as a child process with inherited stdio.
 - @details Spawns `command[0]` with the remaining tokens, inheriting stdio so npm output streams through unchanged; Windows spawns run through a shell so `npm.cmd` resolves via `PATHEXT`. The child runs with an explicit neutral working directory (the user home), never the caller's cwd, because management installs are routinely invoked from inside a source checkout of the same package being replaced. Spawn failures print the error plus the exact manual command hint on stderr and map to exit code `1`; otherwise the child exit code propagates (`null` status maps to `1`).
 - @param[in] command {readonly string[]} Executable plus argument vector.
@@ -2960,17 +2977,18 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @return {number} Child exit code, or `1` when spawning failed.
 - @note Complexity: dominated by the child process execution.
 
-### fn `const reportSpawnFailure = (message: string): number =>` (L492-496)
+### fn `const reportSpawnFailure = (message: string): number =>` (L537-541)
 
-### fn `export async function runPackageManagerVersionCommand(` (L521-523)
+### fn `export async function runPackageManagerVersionCommand(` (L567-569)
 - @brief Handles `--ver`/`--version`: dual online probe plus three-line version report.
-- @details Runs the npm-registry probe and the GitHub-releases probe concurrently, bypassing every persisted cache, then writes exactly three stdout lines — the installed version, `npmjs latest: <version>`, and `GitHub latest: <version>` — and returns `0`. Any undeterminable version prints as `unknown`.
+- @details Runs the npm-registry probe and the GitHub-releases probe concurrently, bypassing every persisted cache, then writes exactly three stdout lines — the installed version, `npmjs latest: <version>`, and `GitHub latest: <version>` — and returns `0`. Undeterminable versions print as `unknown`, and a failed GitHub probe carrying a captured upstream failure reason prints `GitHub latest: unknown (<reason>)` reflecting the actual error such as an API rate-limit response.
 - @param[in] options {PackageManagerCommandOptions} Options carrying the installed version.
 - @param[in] deps {PackageManagerCommandDeps} Optional registry/GitHub/stdout overrides.
 - @return {Promise<number>} Exit code `0`.
 - @note Complexity: two concurrent HTTP round-trips bounded by the probe timeout.
+- @satisfies REQ-473, REQ-475, REQ-476, REQ-502
 
-### fn `async function resolveUpdatedPackageManagerVersion(` (L547-556)
+### fn `async function resolveUpdatedPackageManagerVersion(` (L593-602)
 - @brief Resolves the updated package version reported by the upgrade summary.
 - @details Runs one logging-free registry probe after the upgrade child succeeds, forwarding the injected registry dependencies, and delegates the outcome-to-version mapping to `resolveRegistryProbeLatestVersionText`: `newer` and `current` map to the npmjs manifest latest version and every other outcome to `unknown`. Never throws.
 - @param[in] options {PackageManagerCommandOptions} Options carrying the installed version.
@@ -2978,14 +2996,14 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @return {Promise<string>} Updated version string; `unknown` when undeterminable.
 - @note Complexity: one HTTP round-trip bounded by the probe timeout.
 
-### fn `function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["status"]): boolean` (L565-567)
+### fn `function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["status"]): boolean` (L611-613)
 - @brief Decides whether the default-channel `--upgrade` flow must proceed after the pre-upgrade probe.
 - @details Decision table over `PackageManagerRegistryProbe.status`: `newer` -> `true`; `current` -> `false` because the installed version is already the latest available; `unknown-version` and `error` -> `true` because upgrade necessity is undeterminable and the update path is preserved.
 - @param[in] status {PackageManagerRegistryProbe["status"]} Status of the pre-upgrade registry probe.
 - @return {boolean} `true` when the package-update child process must run.
 - @note Complexity: O(1). Pure; no side effects.
 
-### fn `export async function runPackageManagerUpgradeCommand(` (L577-579)
+### fn `export async function runPackageManagerUpgradeCommand(` (L623-625)
 - @brief Handles `--upgrade`: channel selection, package reinstall, then stdout summary.
 - @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always proceeding with the tagged GitHub update; a failed GitHub probe prints one stderr diagnostic and returns `1` without spawning any child process, while a successful probe installs `github:<repository>#<tag>` and summarizes with the probed release version. Default npm channel: one forced npmjs package-manifest probe bypassing every cache; `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child; any other outcome runs `npm install -g pi-usereq@latest` with inherited stdio, propagates a non-zero child exit code without printing any summary, resolves the updated version as the latest npmjs version through one follow-up manifest probe, and prints the completion summary.
 - @param[in] options {PackageManagerCommandOptions} Options carrying the installed version and channel.
@@ -2993,14 +3011,14 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 - @return {Promise<number>} `0` when the installed version is already the latest available; otherwise the upgrade exit code when non-zero, else `0` after a successful reinstall.
 - @note Complexity: one to two HTTP round-trips plus at most one child process execution.
 
-### fn `export function runPackageManagerUninstallCommand(deps: PackageManagerCommandDeps = {}): number` (L625-627)
+### fn `export function runPackageManagerUninstallCommand(deps: PackageManagerCommandDeps = {}): number` (L671-673)
 - @brief Handles `--uninstall`: removes the globally installed package.
 - @details Runs `npm uninstall -g pi-usereq` with inherited stdio and returns the child exit code; spawn failures map to exit code `1` with the manual command hint on stderr.
 - @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger overrides.
 - @return {number} Child exit code, or `1` when spawning failed.
 - @note Complexity: dominated by the child process execution.
 
-### fn `export async function runPackageManagerManagementCommand(` (L637-640)
+### fn `export async function runPackageManagerManagementCommand(` (L683-686)
 - @brief Dispatches one management command to its handler.
 - @details Single dispatch surface for the CLI entry intercept: `--ver`/`--version` routes to `runPackageManagerVersionCommand`, `--upgrade` routes to `runPackageManagerUpgradeCommand` honoring the forwarded channel option, and `--uninstall` routes to `runPackageManagerUninstallCommand`.
 - @param[in] command {PackageManagerCommandName} Canonical management command name.
@@ -3019,35 +3037,37 @@ import { getInstallationPackageMetadata } from "./path-context.js";
 |`PackageManagerSpawnOptions`|iface||76-83|export interface PackageManagerSpawnOptions|
 |`PackageManagerSpawn`|type||86||
 |`PackageManagerRegistryProbe`|type||93||
-|`PackageManagerGitHubProbe`|type||100||
-|`PackageManagerRegistryProbeDeps`|iface||105-116|export interface PackageManagerRegistryProbeDeps|
-|`PackageManagerGitHubProbeDeps`|iface||119-126|export interface PackageManagerGitHubProbeDeps|
-|`PackageManagerCommandOptions`|iface||129-134|export interface PackageManagerCommandOptions|
-|`PackageManagerCommandDeps`|iface||137-148|export interface PackageManagerCommandDeps|
-|`defaultPackageManagerSpawn`|fn||168-174|const defaultPackageManagerSpawn: PackageManagerSpawn = (...|
-|`isNewerPackageManagerVersion`|fn||179-202|export function isNewerPackageManagerVersion(candidate: s...|
-|`toSegments`|fn||180-192|const toSegments = (version: string): number[] =>|
-|`isParseablePackageManagerVersion`|fn||211-214|function isParseablePackageManagerVersion(version: string...|
-|`comparePackageManagerVersionOrder`|fn||224-255|export function comparePackageManagerVersionOrder(left: s...|
-|`parse`|fn||225-236|const parse = (version: string): { segments: number[]; pr...|
-|`resolveHighestPackageManagerVersion`|fn||265-279|export function resolveHighestPackageManagerVersion(|
-|`resolvePackageManagerManifestLatest`|fn||290-307|export function resolvePackageManagerManifestLatest(paylo...|
-|`stripPackageManagerReleaseTagPrefix`|fn||316-318|function stripPackageManagerReleaseTagPrefix(tag: string)...|
-|`probeLatestRegistryVersion`|fn||329-330|export async function probeLatestRegistryVersion(|
-|`probeLatestGitHubRelease`|fn||370-371|export async function probeLatestGitHubRelease(|
-|`resolveRegistryProbeLatestVersionText`|fn||413-418|function resolveRegistryProbeLatestVersionText(probe: Pac...|
-|`buildDevelopUpgradeCommand`|fn||427-429|export function buildDevelopUpgradeCommand(tag: string): ...|
-|`parsePackageManagerCommand`|fn||438-456|export function parsePackageManagerCommand(|
-|`parsePackageManagerUpgradeChannel`|fn||465-467|export function parsePackageManagerUpgradeChannel(args: r...|
-|`resolvePackageManagerInstalledVersion`|fn||474-476|export function resolvePackageManagerInstalledVersion(): ...|
-|`runPackageManagerChildCommand`|fn||486-488|function runPackageManagerChildCommand(|
-|`reportSpawnFailure`|fn||492-496|const reportSpawnFailure = (message: string): number =>|
-|`runPackageManagerVersionCommand`|fn||521-523|export async function runPackageManagerVersionCommand(|
-|`resolveUpdatedPackageManagerVersion`|fn||547-556|async function resolveUpdatedPackageManagerVersion(|
-|`isPackageManagerUpgradeNecessary`|fn||565-567|function isPackageManagerUpgradeNecessary(status: Package...|
-|`runPackageManagerUpgradeCommand`|fn||577-579|export async function runPackageManagerUpgradeCommand(|
-|`runPackageManagerUninstallCommand`|fn||625-627|export function runPackageManagerUninstallCommand(deps: P...|
-|`runPackageManagerManagementCommand`|fn||637-640|export async function runPackageManagerManagementCommand(|
+|`PackageManagerGitHubProbe`|type||104||
+|`PackageManagerRegistryProbeDeps`|iface||109-120|export interface PackageManagerRegistryProbeDeps|
+|`PackageManagerGitHubProbeDeps`|iface||123-130|export interface PackageManagerGitHubProbeDeps|
+|`PackageManagerCommandOptions`|iface||133-138|export interface PackageManagerCommandOptions|
+|`PackageManagerCommandDeps`|iface||141-152|export interface PackageManagerCommandDeps|
+|`defaultPackageManagerSpawn`|fn||172-178|const defaultPackageManagerSpawn: PackageManagerSpawn = (...|
+|`isNewerPackageManagerVersion`|fn||183-206|export function isNewerPackageManagerVersion(candidate: s...|
+|`toSegments`|fn||184-196|const toSegments = (version: string): number[] =>|
+|`isParseablePackageManagerVersion`|fn||215-218|function isParseablePackageManagerVersion(version: string...|
+|`comparePackageManagerVersionOrder`|fn||228-259|export function comparePackageManagerVersionOrder(left: s...|
+|`parse`|fn||229-240|const parse = (version: string): { segments: number[]; pr...|
+|`resolveHighestPackageManagerVersion`|fn||269-283|export function resolveHighestPackageManagerVersion(|
+|`resolvePackageManagerManifestLatest`|fn||294-311|export function resolvePackageManagerManifestLatest(paylo...|
+|`stripPackageManagerReleaseTagPrefix`|fn||320-322|function stripPackageManagerReleaseTagPrefix(tag: string)...|
+|`probeLatestRegistryVersion`|fn||333-334|export async function probeLatestRegistryVersion(|
+|`resolveGitHubProbeFailureReason`|fn||375-385|async function resolveGitHubProbeFailureReason(response: ...|
+|`probeLatestGitHubRelease`|fn||395-396|export async function probeLatestGitHubRelease(|
+|`resolveRegistryProbeLatestVersionText`|fn||440-445|function resolveRegistryProbeLatestVersionText(probe: Pac...|
+|`resolveGitHubProbeLatestVersionText`|fn||455-463|function resolveGitHubProbeLatestVersionText(probe: Packa...|
+|`buildDevelopUpgradeCommand`|fn||472-474|export function buildDevelopUpgradeCommand(tag: string): ...|
+|`parsePackageManagerCommand`|fn||483-501|export function parsePackageManagerCommand(|
+|`parsePackageManagerUpgradeChannel`|fn||510-512|export function parsePackageManagerUpgradeChannel(args: r...|
+|`resolvePackageManagerInstalledVersion`|fn||519-521|export function resolvePackageManagerInstalledVersion(): ...|
+|`runPackageManagerChildCommand`|fn||531-533|function runPackageManagerChildCommand(|
+|`reportSpawnFailure`|fn||537-541|const reportSpawnFailure = (message: string): number =>|
+|`runPackageManagerVersionCommand`|fn||567-569|export async function runPackageManagerVersionCommand(|
+|`resolveUpdatedPackageManagerVersion`|fn||593-602|async function resolveUpdatedPackageManagerVersion(|
+|`isPackageManagerUpgradeNecessary`|fn||611-613|function isPackageManagerUpgradeNecessary(status: Package...|
+|`runPackageManagerUpgradeCommand`|fn||623-625|export async function runPackageManagerUpgradeCommand(|
+|`runPackageManagerUninstallCommand`|fn||671-673|export function runPackageManagerUninstallCommand(deps: P...|
+|`runPackageManagerManagementCommand`|fn||683-686|export async function runPackageManagerManagementCommand(|
 
 
 ---
