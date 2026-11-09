@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.125"
+version: "0.0.126"
 date: "2026-11-09"
 author: "OpenAI Codex"
 scope:
@@ -799,7 +799,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/source-analyzer.ts` defines `SourceElement`, language specs, extraction heuristics, Doxygen attachment, and Markdown rendering support.
 - `src/core/generate-markdown.ts`, `src/core/compress.ts`, and `src/core/find-constructs.ts` share analyzer and compressor logic to produce reusable Markdown outputs.
 - `src/core/static-check.ts` maps languages/extensions, parses Command-only enable specs, preserves debug `Dummy` handling, resolves inputs, and dispatches modular checker classes.
-- `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, home-resource synchronization, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
+- `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, installation-owned bundled-resource resolution, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
@@ -890,7 +890,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ### 7.1 Covered Behaviors
 - `tests/extension-registration.test.ts` covers extension registration, config-menu persistence, startup-tool enablement, static-check menu mutation flows, bundled prompt-command worktree orchestration, and specialized `req-references` direct commit orchestration.
-- `tests/prompt-rendering.test.ts` covers home-resource synchronization and placeholder replacement in rendered prompts.
+- `tests/prompt-rendering.test.ts` covers installation-owned bundled-resource accessibility and placeholder replacement in rendered prompts.
 - `tests/attended-results.test.ts` owns the exact standalone and project output contracts, including token counts and static-check results, using committed archives without executing a reference application.
 - `tests/project-source-tabs.test.ts` preserves focused Go-source tab assertions for project commands; standalone tab assertions remain in `tests/cli-command-option-parity.test.ts`.
 - `tests/runtime-independence.test.ts` executes eight analysis commands with a Git-only PATH and unusable legacy interpreter overrides, and rejects legacy fixture configuration or virtualenv artifacts.
@@ -906,8 +906,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | PRJ-002 | `src/index.ts` :: `registerAgentTools` :: tool names include `files-tokens`, `summarize`, `compress`, `search`, `files-static-check`, and `static-check`. |
 | PRJ-003 | `src/index.ts` :: `buildPiUsereqMenuChoices`, `configurePiUsereq`, and `configureDebugMenu` :: expose project paths, git automation, static-check, startup tools, notifications, and debug logging controls. |
 | PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` and `executeReqReferencesCommandExecution` :: keep git orchestration internal to slash-command execution. |
-| PRJ-005 | `src/core/resources.ts` :: `ensureHomeResources` :: copies bundled resources; bundled tree exists under `src/resources/{prompts,templates,guidelines}`. |
-| CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `.pi/pi-usereq/config.json`, `usereq/docs`, `tests`, and `["src"]`. |
+| PRJ-005 | `src/core/resources.ts` :: `ensureBundledResourcesAccessible` :: validates installation-owned `resources/{prompts,instructions,templates,guidelines}` directories; bundled tree exists under `src/resources/{prompts,instructions,templates,guidelines}`. |
+| CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `<base-path>/.pi-usereq.json`, `usereq/docs`, `tests`, and `["src"]`. |
 | CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
 | CTN-003 | `src/core/tool-runner.ts` :: `SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG))`; `src/core/source-analyzer.ts` :: alias assignments `specs.cc = specs.cpp`, `specs.cxx = specs.cpp`, `specs.hpp = specs.cpp`, `specs.exs = specs.elixir`. |
 | CTN-004 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` :: defines `fixtureRoots` with `tests/fixtures` and `${testsDirRel}/fixtures`, then filters matching files out before execution. |
@@ -915,7 +915,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | CTN-006 | `tsconfig.json` :: `"strict": true`, `"noEmit": true`, `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
 | CTN-007 | `package.json` :: `"pi": { "extensions": ["./src/index.ts"] }`. |
 | CTN-008 | `package.json` :: `"scripts"` :: `"test": "node --import tsx --test tests/**/*.test.ts"`, `"test:watch": ...`, `"cli": "node --import tsx ./src/cli.ts"`. |
-| CTN-011 | `src/core/config.ts` :: `buildPromptReplacementPaths` :: emits `%%TEMPLATE_PATH%%` from `~/.pi/pi-usereq/resources/templates`; bundled template files exist under `src/resources/templates/`. |
+| CTN-011 | `src/core/config.ts` :: `buildPromptReplacementPaths` :: emits `%%TEMPLATE_PATH%%` from `<install-path>/resources/templates` derived via `buildRuntimePathContext` (`src/core/path-context.ts`); bundled template files exist under `src/resources/templates/`. |
 | CTN-013 | `src/core/config.ts` :: `getDefaultConfig` and `loadConfig`; `src/core/debug-runtime.ts` :: `DEFAULT_DEBUG_WORKFLOW_EVENTS` and `normalizeDebugWorkflowEvents` :: default and normalize the persisted debug configuration including `DEBUG_WORKFLOW_EVENTS`. |
 | CTN-021 | `package.json` :: `"files": ["src", "scripts"]` :: npm-published file set ships runtime-required `src/` and `scripts/` only and omits the `tests/` directory. |
 | CTN-023 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` mandatory reference mandate for analysis, implementation, verification, and bug fixing. |
@@ -982,7 +982,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-008 | `src/index.ts` :: `configureStaticCheckMenu` :: supports Command-only guided addition, configured-language removal, and reset-only static-check management. |
 | REQ-160 | `src/index.ts` :: `buildStaticCheckMenuChoices` and `configureStaticCheckMenu` :: omit user-facing module selection and hardcode `Command` for guided additions. |
 | REQ-161 | `src/core/static-check.ts` :: `dispatchStaticCheckForFile` and `runStaticCheck` :: keep `Dummy` only for existing config entries and the debug driver. |
-| REQ-009 | `src/index.ts` :: `pi.on("session_start", ...)` :: calls `ensureHomeResources()`, `applyConfiguredPiUsereqTools`, and `ctx.ui.setStatus(...)`. |
+| REQ-009 | `src/index.ts` :: `handleExtensionStatusEvent` session-start branch :: calls `ensureBundledResourcesAccessible()`, `applyConfiguredPiUsereqTools`, and status publishing through `updateExtensionStatus(...)`/`renderPiUsereqStatus(...)`. |
 | REQ-010 | `src/core/token-counter.ts` :: `new TokenCounter("cl100k_base")`; `formatPackSummary`; `src/core/tool-runner.ts` :: `runFilesTokens` validates files and returns summary plus warnings. |
 | REQ-011 | `src/core/tool-runner.ts` :: `runFilesSummarize` :: returns `generateMarkdown(...)`; `src/core/source-analyzer.ts` :: `formatMarkdown` renders source-derived lines with preserved leading tabs. |
 | REQ-012 | `src/core/compress.ts` :: `INDENT_SIGNIFICANT`, `normalizeRetainedLineIndentation`, and `compressSourceDetailed` :: preserve full indentation for indentation-significant languages and preserve leading tabs for other languages. |
@@ -1014,7 +1014,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | ID | Evidence |
 | --- | --- |
 | TST-001 | `tests/extension-registration.test.ts` :: `extension registers all required prompt commands, tool wrappers, and agent tools` validates command and tool registration sets. |
-| TST-002 | `tests/prompt-rendering.test.ts` :: `embedded resources are copied ...` and `prompt rendering replaces all dynamic placeholders ...`. |
+| TST-002 | `tests/prompt-rendering.test.ts` :: `installed bundled resources remain readable from the installation path` and `prompt rendering replaces dynamic placeholders, expands commit instructions, and adapts req tool references`. |
 | TST-003 | `tests/attended-results.test.ts` :: compares standalone token results and all explicit-file command outputs against unchanged committed archives. |
 | TST-004 | `tests/attended-results.test.ts` :: compares project token results and project command outputs against unchanged committed archives; `tests/project-source-tabs.test.ts` retains focused Go tab-preservation assertions. |
 | TST-172 | `tests/runtime-independence.test.ts` :: runs eight analysis commands with only Git on PATH; fixture setup creates neither `.req` nor `.venv`. |

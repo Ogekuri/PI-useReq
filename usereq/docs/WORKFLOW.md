@@ -1057,7 +1057,7 @@
       - `getPiUsereqStartupTools(...)`: enumerate configurable tools from runtime inventory in documented menu order [`src/index.ts`]
 - External Boundaries:
   - pi ExtensionAPI plus command-context APIs for command registration, tool registration, shortcut registration, user-message delivery, session events, active-tool mutation, editor updates, notifications, selections, text input, durable custom session-entry persistence, and transcript entry rendering.
-  - Filesystem access for home resource cache, bundled prompt reads, and project config persistence.
+  - Filesystem access for installation-owned bundled-resource reads, bundled prompt reads, and project config persistence.
   - Git and static-check subprocesses reused through the same tool-runner and static-check functions documented under `PROC:main`.
   - Detached shell command execution and native outbound HTTPS requests for prompt-end command-notify, sound, and Pushover delivery via `src/core/pi-notify.ts`.
 
