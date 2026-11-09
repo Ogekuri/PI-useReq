@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.127"
+version: "0.0.128"
 date: "2026-11-09"
 author: "OpenAI Codex"
 scope:
@@ -48,7 +48,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
 - **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery, base-path session restoration, and force cleanup of generated worktrees plus branches.
-- **PRJ-009**: MUST expose a distributable `pi-usereq` npm bin program accepting the management commands `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop]`, and `--uninstall`.
+- **PRJ-009**: MUST expose a distributable `pi-usereq` npm bin program accepting the management commands `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop] [--force]`, and `--uninstall`.
 
 ### 2.2 Project Constraints
 - **CTN-001**: MUST persist local project configuration only at `<base-path>/.pi-usereq.json` with default `docs-dir=usereq/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
@@ -110,7 +110,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-023**: MUST implement the pi CLI reference updater in `scripts/pi-cli-update-src-docs.sh` as a standalone bash process using `git` plus core shell utilities only.
 - **DES-024**: MUST implement the process-scoped deferred-notification replay store plus its session-start replay gate in one dedicated `src/core/` module outside `src/index.ts` business logic.
 - **DES-025**: MUST implement npm publication metadata compliance declaratively in `package.json` plus `package-lock.json` root version identity, without modifying `.github/workflows/release-npm.yml` publication steps.
-- **DES-026**: MUST implement `--help`, `--ver|--version`, `--upgrade [--dev|--develop]`, and `--uninstall` handlers in `src/core/package-manager.ts` with injectable fetch, spawn, logger, and stdout dependencies.
+- **DES-026**: MUST implement `--help`, `--ver|--version`, `--upgrade [--dev|--develop] [--force]`, and `--uninstall` handlers in `src/core/package-manager.ts` with injectable fetch, spawn, logger, and stdout dependencies.
 - **DES-027**: MUST dispatch management commands from `src/cli.ts` `main(...)` before standard flag parsing, scheduling the async handler and assigning its exit code to `process.exitCode` on completion.
 - **DES-028**: MUST declare `package.json` `bin` entry `pi-usereq` pointing to the shebang `scripts/pi-usereq.js` launcher that registers the bundled tsx ESM loader and invokes `main` from `src/cli.ts`.
 - **DES-029**: MUST implement the official pre-release verification gate in `scripts/pre-release-check.sh` as a standalone bash process using `git`, `npm`, `node`, and core shell utilities only.
@@ -563,8 +563,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-471**: MUST NOT substitute into Pushover title or Pushover text any final-agent-output text outside the `## **Summary**` section for completed prompt-end outcomes.
 - **REQ-472**: MUST restrict the `## **Summary**` Pushover extraction to completed prompt-end outcomes and MUST NOT apply it to `PI_NOTIFY_CMD` command-notify substitution.
 - **REQ-510**: MUST resolve the Pushover-channel `%%OUTPUT%%` through the output end as trimmed text after the first `## **Summary**` heading when no subsequent `## **Outcome**` heading exists for completed outcomes.
-- **REQ-473**: MUST detect management commands as exactly one argv token among `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`, or exactly two tokens pairing `--upgrade` with `--dev` or `--develop` in either order.
+- **REQ-473**: MUST detect management commands as exactly one argv token among `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`.
 - **REQ-474**: MUST return no management command for every other non-empty argv shape so standard flag parsing stays untouched.
+- **REQ-524**: MUST detect two-token management argv shapes pairing `--upgrade` with exactly one of `--dev`, `--develop`, or `--force`, in either order.
+- **REQ-525**: MUST detect three-token `--upgrade` management argv shapes composed of `--upgrade`, `--force`, and `--dev` or `--develop`, in any order.
+- **REQ-526**: MUST make forced `--upgrade` runs skip the already-latest registry gate and always execute the channel-specific package-install child process.
+- **REQ-527**: MUST execute forced `--upgrade` installation through the pi CLI update command with its force reinstall option targeting the channel-specific package source.
+- **REQ-528**: MUST keep non-forced `--upgrade` executions on the standard already-latest-gated `pi install` process for both channels.
 - **REQ-515**: MUST make an empty argv print the full help screen to stdout with exit code `0`, equivalent to the `--help` command without a topic.
 - **REQ-511**: MUST detect `--help <topic>` as exactly two argv tokens pairing `--help` with one of `--upgrade`, `--dev`, `--develop`, `--uninstall`, `--ver`, or `--version`, in either order.
 - **REQ-512**: MUST make `--help` without a topic print the full help screen to stdout with first line `Usage: pi-usereq [command] [options] (<installed-version>)` and exit code `0`.
@@ -788,6 +793,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-173**: MUST verify extension activation deploys an idempotent best-effort `pi-usereq` launcher symlink without aborting on failure.
 - **TST-174**: MUST verify launcher deployment skips matching links, replaces divergent symlinks, and never overwrites non-symlink entries.
 - **TST-175**: MUST verify `--uninstall` removes only the installation-owned launcher link before spawning the documented uninstall child.
+- **TST-176**: MUST verify `--force` detection accepts the documented two-token and three-token shapes in any order and forced `--upgrade` runs skip the already-latest gate while spawning the documented `pi update` force command for both channels.
 
 ## 5. Observed Component Model
 

@@ -1,7 +1,7 @@
 /**
  * @file
- * @brief Implements pi-usereq package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`).
- * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI reinstall matching the manual install forms (`pi install npm:pi-usereq` on the default `--upgrade` channel and `pi install git:github.com/Ogekuri/PI-useReq` on the develop channel), and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
+ * @brief Implements pi-usereq package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`).
+ * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI reinstall matching the manual install forms (`pi install npm:pi-usereq` on the default `--upgrade` channel and `pi install git:github.com/Ogekuri/PI-useReq` on the develop channel), forced full re-download plus reinstallation through the documented pi CLI update force form (`pi update <source> --force`) for `--upgrade --force`, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
  */
 
 import process from "node:process";
@@ -41,6 +41,22 @@ export const PACKAGE_DEVELOP_UPGRADE_COMMAND: readonly string[] = [
   "pi",
   "install",
   `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
+];
+
+/** Package-manager command executed by a forced default-channel `--upgrade`, matching the documented pi CLI `pi update <source> --force` force-reinstall form that forces full package download and reinstallation. */
+export const PACKAGE_FORCED_UPGRADE_COMMAND: readonly string[] = [
+  "pi",
+  "update",
+  `npm:${PACKAGE_MANAGER_PACKAGE_NAME}`,
+  "--force",
+];
+
+/** Package-manager command executed by a forced develop-channel `--upgrade`, matching the documented pi CLI `pi update <source> --force` force-reinstall form for the git source. */
+export const PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND: readonly string[] = [
+  "pi",
+  "update",
+  `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
+  "--force",
 ];
 
 /** Package-manager command executed by `--uninstall`. */
@@ -156,6 +172,8 @@ export interface PackageManagerCommandOptions {
   installedVersion: string;
   /** `--upgrade` install source; `develop` selects the latest tagged GitHub release. Default: `npm`. */
   channel?: PackageManagerUpgradeChannel;
+  /** `--upgrade` force mode; `true` skips the already-latest gate and executes the pi CLI force-reinstall update command for the selected channel. Default: `false`. */
+  force?: boolean;
   /** `--help` topic selecting single-command help; `undefined` selects the full help screen. */
   helpTopic?: PackageManagerHelpTopic;
 }
@@ -491,11 +509,11 @@ function resolveGitHubProbeLatestVersionText(probe: PackageManagerGitHubProbe): 
 
 /**
  * @brief Detects an exact management-command argv shape in a raw argv array.
- * @details Single-token shape: exactly one of `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`. Two-token shapes: `--upgrade` paired with the `--develop` option or its equivalent `--dev` alias, or `--help` paired with one documented help topic, in either order. Any other shape yields `undefined` so standard flag dispatch stays untouched.
+ * @details Single-token shape: exactly one of `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`. Two-token shapes: `--upgrade` paired with the `--develop` option, its equivalent `--dev` alias, or the `--force` auxiliary option, or `--help` paired with one documented help topic, in either order. Three-token shapes: `--upgrade`, `--force`, and the `--develop` option or its `--dev` alias in any order. Any other shape yields `undefined` so standard flag dispatch stays untouched.
  * @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
  * @return {PackageManagerCommandName | undefined} Canonical command name, or `undefined` when no management shape matches.
  * @note Complexity: O(1). Pure; no side effects.
- * @satisfies REQ-473, REQ-511
+ * @satisfies REQ-473, REQ-511, REQ-524, REQ-525
  */
 export function parsePackageManagerCommand(
   args: readonly string[],
@@ -513,12 +531,23 @@ export function parsePackageManagerCommand(
   if (args.length === 2) {
     const hasUpgrade = args.includes("--upgrade");
     const hasDevelop = args.includes("--develop") || args.includes("--dev");
-    if (hasUpgrade && hasDevelop) {
+    if (hasUpgrade && (hasDevelop || args.includes("--force"))) {
       return "--upgrade";
     }
     if (parsePackageManagerHelpTopic(args) !== undefined) {
       return "--help";
     }
+  }
+  if (
+    args.length === 3 &&
+    args.includes("--upgrade") &&
+    args.includes("--force") &&
+    (args.includes("--develop") || args.includes("--dev")) &&
+    args.every((token) =>
+      token === "--upgrade" || token === "--dev" || token === "--develop" || token === "--force"
+    )
+  ) {
+    return "--upgrade";
   }
   return undefined;
 }
@@ -532,6 +561,18 @@ export function parsePackageManagerCommand(
  */
 export function parsePackageManagerUpgradeChannel(args: readonly string[]): PackageManagerUpgradeChannel {
   return args.includes("--develop") || args.includes("--dev") ? "develop" : "npm";
+}
+
+/**
+ * @brief Resolves the `--force` auxiliary option from a raw argv array.
+ * @details Returns `true` only when the argv contains the `--force` auxiliary token accepted by the `--upgrade` management shapes; every other management command ignores the token because non-upgrade `--force` shapes never match a management command and fall through to standard flag parsing. Pure; no side effects.
+ * @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
+ * @return {boolean} `true` when the `--force` auxiliary option is present.
+ * @note Complexity: O(n) in argv length. Pure; no side effects.
+ * @satisfies REQ-524, REQ-525
+ */
+export function parsePackageManagerForceFlag(args: readonly string[]): boolean {
+  return args.includes("--force");
 }
 
 /**
@@ -664,21 +705,34 @@ function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["s
 }
 
 /**
- * @brief Handles `--upgrade`: channel selection, pi-CLI package reinstall, then stdout summary.
- * @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always spawning `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi install git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; a non-zero child exit code propagates without printing any summary, and a successful child resolves the summary `<updated>` through one follow-up npmjs manifest probe. Default npm channel: one forced npmjs package-manifest probe bypassing every cache; `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child; any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi install npm:pi-usereq`) with inherited stdio, propagates a non-zero child exit code without printing any summary, resolves the updated version as the latest npmjs version through one follow-up manifest probe, and prints the completion summary.
- * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version and channel.
+ * @brief Handles `--upgrade`: channel selection, force mode, pi-CLI package reinstall, then stdout summary.
+ * @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always spawning `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi install git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; forced develop runs (`--force`) instead spawn `PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq --force`), the documented pi CLI force-reinstall update form that forces full package download and reinstallation. Default npm channel: forced runs skip the pre-upgrade probe and the already-latest skip path entirely and spawn `PACKAGE_FORCED_UPGRADE_COMMAND` (`pi update npm:pi-usereq --force`); otherwise one forced npmjs package-manifest probe bypassing every cache, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi install npm:pi-usereq`) with inherited stdio. Every non-zero child exit code propagates without printing any summary; every successful child resolves the summary `<updated>` through one follow-up npmjs manifest probe and prints the completion summary.
+ * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version, channel, and force mode.
  * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout overrides.
- * @return {Promise<number>} `0` when the installed version is already the latest available; otherwise the upgrade exit code when non-zero, else `0` after a successful reinstall.
- * @note Complexity: one to two HTTP round-trips plus at most one child process execution.
- * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, DES-026
+ * @return {Promise<number>} `0` when the non-forced installed version is already the latest available; otherwise the upgrade exit code when non-zero, else `0` after a successful reinstall.
+ * @note Complexity: zero to two HTTP round-trips plus at most one child process execution.
+ * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, REQ-526, REQ-527, REQ-528, DES-026
  */
 export async function runPackageManagerUpgradeCommand(
   options: PackageManagerCommandOptions,
   deps: PackageManagerCommandDeps = {},
 ): Promise<number> {
   const stdout = deps.stdout ?? defaultPackageManagerStdout;
+  const force = options.force === true;
   if ((options.channel ?? "npm") === "develop") {
-    const upgraded = runPackageManagerChildCommand(PACKAGE_DEVELOP_UPGRADE_COMMAND, deps);
+    const upgraded = runPackageManagerChildCommand(
+      force ? PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND : PACKAGE_DEVELOP_UPGRADE_COMMAND,
+      deps,
+    );
+    if (upgraded !== 0) {
+      return upgraded;
+    }
+    const updatedVersion = await resolveUpdatedPackageManagerVersion(options, deps);
+    stdout.write(`pi-usereq upgrade completed: ${options.installedVersion} -> ${updatedVersion}\n`);
+    return 0;
+  }
+  if (force) {
+    const upgraded = runPackageManagerChildCommand(PACKAGE_FORCED_UPGRADE_COMMAND, deps);
     if (upgraded !== 0) {
       return upgraded;
     }
@@ -734,12 +788,12 @@ const PACKAGE_MANAGER_HELP_ROWS: readonly PackageManagerHelpRow[] = [
   {
     token: "--upgrade",
     description:
-      "Reinstall pi-usereq through the pi CLI package manager; print the manual command when spawning fails.",
+      "Reinstall pi-usereq through the pi CLI package manager; --force forces full re-download and reinstallation; print the manual command when spawning fails.",
   },
   {
     token: "--dev",
     description:
-      "With --upgrade: install directly from the pi-usereq git repository instead of the npm registry (alias: --develop).",
+      "With --upgrade: install directly from the pi-usereq git repository instead of the npm registry (alias: --develop); combine with --force.",
   },
   {
     token: "--uninstall",
@@ -834,9 +888,9 @@ export async function runPackageManagerHelpCommand(
 
 /**
  * @brief Dispatches one management command to its handler.
- * @details Single dispatch surface for the CLI entry intercept: `--ver`/`--version` routes to `runPackageManagerVersionCommand`, `--upgrade` routes to `runPackageManagerUpgradeCommand` honoring the forwarded channel option, `--uninstall` routes to `runPackageManagerUninstallCommand`, and `--help` routes to `runPackageManagerHelpCommand` honoring the forwarded topic option.
+ * @details Single dispatch surface for the CLI entry intercept: `--ver`/`--version` routes to `runPackageManagerVersionCommand`, `--upgrade` routes to `runPackageManagerUpgradeCommand` honoring the forwarded channel and force options, `--uninstall` routes to `runPackageManagerUninstallCommand`, and `--help` routes to `runPackageManagerHelpCommand` honoring the forwarded topic option.
  * @param[in] command {PackageManagerCommandName} Canonical management command name.
- * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version and upgrade channel.
+ * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version, upgrade channel, and force mode.
  * @param[in] deps {PackageManagerCommandDeps} Optional dependency overrides.
  * @return {Promise<number>} Handler exit code suitable for `process.exitCode`.
  */

@@ -36,6 +36,7 @@ import {
 } from "./core/static-check.js";
 import {
   parsePackageManagerCommand,
+  parsePackageManagerForceFlag,
   parsePackageManagerHelpTopic,
   parsePackageManagerUpgradeChannel,
   resolvePackageManagerInstalledVersion,
@@ -251,7 +252,7 @@ function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseR
 
 /**
  * @brief Executes one pi-usereq CLI invocation.
- * @details Dispatches package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`) before standard flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode` on completion, mapping an empty argv to the `--help` command so a no-argument invocation prints the full help screen, then parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes, stdout/stderr output, and management-command HTTP probes or package-manager child processes.
+ * @details Dispatches package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`) before standard flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode` on completion, mapping an empty argv to the `--help` command so a no-argument invocation prints the full help screen, then parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes, stdout/stderr output, and management-command HTTP probes or package-manager child processes.
  * @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
  * @return {number} Process exit code for the invocation; `0` for dispatched management commands whose async completion assigns the final `process.exitCode`.
  * @throws {ReqError} Internally catches `ReqError` and returns its code; other errors are coerced into exit code `1` with stderr output.
@@ -264,6 +265,7 @@ export function main(argv = process.argv.slice(2)): number {
       void runPackageManagerManagementCommand(managementCommand, {
         installedVersion: resolvePackageManagerInstalledVersion(),
         channel: parsePackageManagerUpgradeChannel(argv),
+        force: parsePackageManagerForceFlag(argv),
         helpTopic: parsePackageManagerHelpTopic(argv),
       })
         .then((managementExitCode) => {

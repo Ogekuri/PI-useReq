@@ -6,6 +6,8 @@ import process from "node:process";
 import test from "node:test";
 import {
   PACKAGE_DEVELOP_UPGRADE_COMMAND,
+  PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND,
+  PACKAGE_FORCED_UPGRADE_COMMAND,
   PACKAGE_MANAGER_GITHUB_RELEASES_API_URL,
   PACKAGE_MANAGER_GITHUB_REPOSITORY,
   PACKAGE_MANAGER_REGISTRY_BASE_URL,
@@ -14,6 +16,7 @@ import {
   comparePackageManagerVersionOrder,
   isNewerPackageManagerVersion,
   parsePackageManagerCommand,
+  parsePackageManagerForceFlag,
   parsePackageManagerUpgradeChannel,
   probeLatestGitHubRelease,
   probeLatestRegistryVersion,
@@ -153,11 +156,50 @@ test("management command parsing rejects every other argv shape", () => {
   assert.equal(parsePackageManagerCommand(["--uninstall", "--dev"]), undefined);
 });
 
+test("management command parsing accepts the force option in either order with --upgrade", () => {
+  assert.equal(parsePackageManagerCommand(["--upgrade", "--force"]), "--upgrade");
+  assert.equal(parsePackageManagerCommand(["--force", "--upgrade"]), "--upgrade");
+});
+
+/**
+ * @brief Verifies the documented three-token `--upgrade` force shapes in every token order.
+ * @details Exercises `--upgrade`, `--force`, and the `--dev` plus `--develop` aliases in all permutations, asserting each resolves to the `--upgrade` management command. Deterministic: pure function, no I/O. Arrange builds the permutations; Act parses them; Assert compares against `--upgrade`.
+ */
+test("management command parsing accepts force with develop in any three-token order", () => {
+  for (const develop of ["--dev", "--develop"] as const) {
+    assert.equal(parsePackageManagerCommand(["--upgrade", develop, "--force"]), "--upgrade");
+    assert.equal(parsePackageManagerCommand(["--upgrade", "--force", develop]), "--upgrade");
+    assert.equal(parsePackageManagerCommand([develop, "--upgrade", "--force"]), "--upgrade");
+    assert.equal(parsePackageManagerCommand([develop, "--force", "--upgrade"]), "--upgrade");
+    assert.equal(parsePackageManagerCommand(["--force", "--upgrade", develop]), "--upgrade");
+    assert.equal(parsePackageManagerCommand(["--force", develop, "--upgrade"]), "--upgrade");
+  }
+});
+
+test("management command parsing rejects force shapes on other management commands", () => {
+  assert.equal(parsePackageManagerCommand(["--force"]), undefined);
+  assert.equal(parsePackageManagerCommand(["--ver", "--force"]), undefined);
+  assert.equal(parsePackageManagerCommand(["--upgrade", "--dev", "--develop"]), undefined);
+  assert.equal(parsePackageManagerCommand(["--upgrade", "--force", "--force"]), undefined);
+  assert.equal(parsePackageManagerCommand(["--upgrade", "--force", "--version"]), undefined);
+  assert.equal(parsePackageManagerCommand(["--upgrade", "--dev", "--force", "--develop"]), undefined);
+});
+
 test("upgrade channel parsing selects develop only for the documented aliases", () => {
   assert.equal(parsePackageManagerUpgradeChannel(["--upgrade"]), "npm");
   assert.equal(parsePackageManagerUpgradeChannel(["--upgrade", "--develop"]), "develop");
   assert.equal(parsePackageManagerUpgradeChannel(["--dev", "--upgrade"]), "develop");
   assert.equal(parsePackageManagerUpgradeChannel(["--uninstall"]), "npm");
+  assert.equal(parsePackageManagerUpgradeChannel(["--upgrade", "--force"]), "npm");
+  assert.equal(parsePackageManagerUpgradeChannel(["--upgrade", "--force", "--dev"]), "develop");
+});
+
+test("force flag parsing reports presence only for the force token", () => {
+  assert.equal(parsePackageManagerForceFlag(["--upgrade", "--force"]), true);
+  assert.equal(parsePackageManagerForceFlag(["--force", "--upgrade"]), true);
+  assert.equal(parsePackageManagerForceFlag(["--upgrade"]), false);
+  assert.equal(parsePackageManagerForceFlag(["--upgrade", "--develop"]), false);
+  assert.equal(parsePackageManagerForceFlag([]), false);
 });
 
 test("dotted numeric version comparison admits only strictly newer candidates", () => {
@@ -177,6 +219,16 @@ test("develop upgrade command matches the manual pi install git form", () => {
     "pi",
     "install",
     `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
+  ]);
+});
+
+test("forced upgrade commands match the documented pi update force-reinstall forms", () => {
+  assert.deepEqual(PACKAGE_FORCED_UPGRADE_COMMAND, ["pi", "update", "npm:pi-usereq", "--force"]);
+  assert.deepEqual(PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND, [
+    "pi",
+    "update",
+    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
+    "--force",
   ]);
 });
 
@@ -435,6 +487,67 @@ test("develop-channel upgrade propagates child failure without printing a summar
   assert.equal(exitCode, 2);
   assert.equal(calls.length, 1);
   assert.deepEqual(sink.chunks, []);
+});
+
+/**
+ * @brief Verifies that a forced default-channel run skips the already-latest gate.
+ * @details Uses an installed version equal to the registry latest so the non-forced path would print the already-latest skip line, then asserts the forced run spawns exactly the documented `pi update npm:pi-usereq --force` child with inherited stdio from the user home and prints the completion summary instead. Deterministic: spawn and fetch doubles, no network or child processes. Arrange prepares equal installed and latest versions; Act runs the forced upgrade; Assert compares the recorded child invocation plus stdout against the documented force contract.
+ * @satisfies REQ-526, REQ-527
+ */
+test("forced default-channel upgrade skips the already-latest gate and runs the pi update force command", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "2.0.0", channel: "npm", force: true },
+    {
+      spawn,
+      stdout: sink.stdout,
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].file, PACKAGE_FORCED_UPGRADE_COMMAND[0]);
+  assert.deepEqual(calls[0].args, [...PACKAGE_FORCED_UPGRADE_COMMAND.slice(1)]);
+  assert.equal(calls[0].options.cwd, homedir());
+  assert.equal(calls[0].options.stdio, "inherit");
+  assert.equal(calls[0].options.shell, process.platform === "win32");
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 2.0.0 -> 2.0.0\n"]);
+  assert.ok(!sink.chunks.join("").includes("already the latest"));
+});
+
+test("forced default-channel upgrade propagates child failure without printing a summary", async () => {
+  const { calls, spawn } = createSpawnDouble({ status: 4 });
+  const sink = createStdoutSink();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", force: true },
+    { spawn, stdout: sink.stdout },
+  );
+  assert.equal(exitCode, 4);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args, [...PACKAGE_FORCED_UPGRADE_COMMAND.slice(1)]);
+  assert.deepEqual(sink.chunks, []);
+});
+
+test("forced develop-channel upgrade runs the git pi update force command and prints the summary", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "develop", force: true },
+    {
+      spawn,
+      stdout: sink.stdout,
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].file, PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND[0]);
+  assert.deepEqual(calls[0].args, [...PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND.slice(1)]);
+  assert.equal(calls[0].options.cwd, homedir());
+  assert.equal(calls[0].options.stdio, "inherit");
+  assert.equal(calls[0].options.shell, process.platform === "win32");
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
 });
 
 test("uninstall command runs the documented uninstall child command", () => {
