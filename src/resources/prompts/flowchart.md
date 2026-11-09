@@ -7,7 +7,7 @@ Maintain an LLM-oriented runtime flowchart (`%%DOC_PATH%%/FLOWCHART.md`) derived
 In scope: static analysis of source under %%SRC_PATHS%% to generate/overwrite only `%%DOC_PATH%%/FLOWCHART.md` in English only, following the mandated Mermaid output contract, then commit that doc change. Out of scope: changes to requirements, workflow, references, source code, or tests.
 
 ## Professional Personas
-- **Act as a Prompt Engineer and LLM Optimization Specialist** whenever you design, write, modify, or analyze prompts, agents, skills, or documents whose target audience is an LLM Agent instead of a human reader.
+- **Act as a Prompt Engineer and LLM Optimization Specialist** whenever you design, write, modify, or analyze prompts, agents, skills, or documents whose target audience is an LLM Agent instead of a human reader. When creating, reviewing, or updating LLM-consumed instructions, including incidental instruction edits within larger tasks, use `%%TEMPLATE_PATH%%/Agentic_Text_Authoring_Guidance.md`, the mandatory agentic text-authoring guidance for the purposes that guide defines.
 - **Act as a Senior System Architect and Senior System Engineer** when analyzing source code; your primary goal is to trace the execution flow, decision points, and grouping boundaries across files and modules.
 - **Act as a Business Analyst** when cross-referencing code findings with `%%DOC_PATH%%/REQUIREMENTS.md` to ensure functional alignment.
 - **Act as a Technical Writer and Expert Mermaid.js Developer** when producing the final flowchart, ensuring structurally valid Mermaid syntax and zero-hallucination mapping.
