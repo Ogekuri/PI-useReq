@@ -7,7 +7,7 @@
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
-import { removeDeployedPiUsereqLauncher } from "./bin-deploy.js";
+import { removeDeployedPiUsereqLauncher, removeUserBinPiUsereqLauncher } from "./bin-deploy.js";
 import { getInstallationPackageMetadata } from "./path-context.js";
 
 /** npm package name probed and mutated by every management command. */
@@ -168,6 +168,8 @@ export interface PackageManagerCommandDeps {
   githubCheck?: PackageManagerGitHubProbeDeps;
   /** Launcher-link remover invoked by `--uninstall` before the uninstall child. Default: `removeDeployedPiUsereqLauncher`. */
   removeLauncher?: () => boolean;
+  /** User-home bin launcher-link remover invoked before `removeLauncher`. Default: `removeUserBinPiUsereqLauncher`. */
+  removeUserBinLauncher?: () => boolean;
 }
 
 /** Default stderr-only diagnostic sink used when no logger is injected. */
@@ -716,14 +718,16 @@ export async function runPackageManagerUpgradeCommand(
 }
 
 /**
- * @brief Handles `--uninstall`: removes the globally installed package and the deployed PATH launcher link.
- * @details Best-effort removes the `pi-usereq` launcher symlink deployed by extension activation when it resolves inside the executing installation (leaving foreign entries untouched), then runs `npm uninstall -g pi-usereq` with inherited stdio and returns the child exit code; spawn failures map to exit code `1` with the manual command hint on stderr.
- * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger overrides plus the injectable launcher remover.
+ * @brief Handles `--uninstall`: removes the globally installed package plus the deployed agent-bin and user-home bin launcher links.
+ * @details Best-effort removes the `~/bin/pi-usereq` launcher link first when it resolves to the pi agent bin `pi-usereq` entry (leaving foreign entries untouched), then best-effort removes the `pi-usereq` agent-bin launcher symlink deployed by extension activation when it resolves inside the executing installation, then runs `npm uninstall -g pi-usereq` with inherited stdio and returns the child exit code; every removal failure and spawn failure map deterministically without changing the uninstall exit-code contract, and spawn failures map to exit code `1` with the manual command hint on stderr.
+ * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger overrides plus the injectable agent-bin and user-home bin launcher removers.
  * @return {number} Child exit code, or `1` when spawning failed.
  * @note Complexity: dominated by the child process execution.
- * @satisfies REQ-486, REQ-508, REQ-509
+ * @satisfies REQ-486, REQ-508, REQ-509, REQ-521, REQ-522, REQ-523, DES-031
  */
 export function runPackageManagerUninstallCommand(deps: PackageManagerCommandDeps = {}): number {
+  const removeUserBinLauncher = deps.removeUserBinLauncher ?? removeUserBinPiUsereqLauncher;
+  removeUserBinLauncher();
   const removeLauncher = deps.removeLauncher ?? removeDeployedPiUsereqLauncher;
   removeLauncher();
   return runPackageManagerChildCommand(PACKAGE_UNINSTALL_COMMAND, deps);

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.124"
+version: "0.0.125"
 date: "2026-11-09"
 author: "OpenAI Codex"
 scope:
@@ -115,6 +115,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-028**: MUST declare `package.json` `bin` entry `pi-usereq` pointing to the shebang `scripts/pi-usereq.js` launcher that registers the bundled tsx ESM loader and invokes `main` from `src/cli.ts`.
 - **DES-029**: MUST implement the official pre-release verification gate in `scripts/pre-release-check.sh` as a standalone bash process using `git`, `npm`, `node`, and core shell utilities only.
 - **DES-030**: MUST implement pi-usereq launcher deployment plus removal helpers in one dedicated `src/core/bin-deploy.ts` module outside `src/index.ts` business logic.
+- **DES-031**: MUST implement `~/bin` launcher deployment plus removal helpers in the same dedicated `src/core/bin-deploy.ts` module outside `src/index.ts` business logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -605,6 +606,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-507**: MUST NOT abort extension activation or transition workflow state when launcher deployment fails.
 - **REQ-508**: MUST remove the deployed `pi-usereq` launcher link best-effort during `--uninstall` before the global uninstall child runs, preserving its exit code.
 - **REQ-509**: MUST remove the launcher only when it resolves inside the executing installation path and MUST leave foreign `pi-usereq` entries untouched.
+- **REQ-516**: MUST best-effort create one `pi-usereq` symlink inside `~/bin` targeting the deployed `pi-usereq` launcher in the pi agent bin directory during extension activation of pi-package installations.
+- **REQ-517**: MUST skip `~/bin` launcher deployment whenever the `~/bin` directory does not exist and MUST NOT create it.
+- **REQ-518**: MUST skip `~/bin` launcher deployment when the pi agent bin `pi-usereq` entry is missing or is not a symlink.
+- **REQ-519**: MUST skip an existing `~/bin/pi-usereq` symlink resolving to the agent-bin launcher, replace a divergent symlink, and MUST NOT overwrite a non-symlink `~/bin/pi-usereq` entry.
+- **REQ-520**: MUST convert every `~/bin` launcher deployment filesystem failure into a skipped outcome carrying a diagnostic reason and MUST NOT abort extension activation.
+- **REQ-521**: MUST remove the `~/bin/pi-usereq` launcher link best-effort during `--uninstall` before the agent-bin launcher removal and the global uninstall child.
+- **REQ-522**: MUST remove the `~/bin/pi-usereq` link only when it is a symlink resolving to the pi agent bin `pi-usereq` entry and MUST leave foreign entries untouched.
+- **REQ-523**: MUST preserve the `--uninstall` exit code when `~/bin` launcher removal fails.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
