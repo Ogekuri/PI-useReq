@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.104.0](https://github.com/Ogekuri/PI-useReq/compare/v0.103.0..v0.104.0) - 2026-11-09
+### ⛰️  Features
+- Update prompts.
+
+### 🚜  Changes
+- add conditional ~/bin pi-usereq launcher symlink layer [useReq] *(bin-deploy)*
+  - Deploy a best-effort ~/bin/pi-usereq symlink targeting the deployed
+  - pi agent-bin launcher during activation of pi-package installations,
+  - only when ~/bin already exists and the agent-bin launcher entry is a
+  - deployed symlink; idempotent, foreign-entry protected, never aborts
+  - activation (REQ-516..REQ-520, DES-031). --uninstall removes the
+  - ~/bin link before the agent-bin launcher removal and the global
+  - uninstall child while preserving the exit-code contract
+  - (REQ-521..REQ-523). Updates REQUIREMENTS.md, WORKFLOW.md, and
+  - REFERENCES.md.
+- print full help when pi-usereq runs without arguments [useReq] *(cli)*
+  - Map empty argv to the --help management command so pi-usereq and scripts/pi-usereq.sh print the help screen with exit code 0 (REQ-515).
+  - Keep standard flag parsing untouched for every non-empty argv shape (REQ-474).
+  - Update REQUIREMENTS/WORKFLOW/REFERENCES documentation for the no-argument behavior.
+- add pi-usereq --help management command [useReq] *(package-manager)*
+  - Add --help full help screen with usage header and fixed-order Management Commands rows (REQ-512, REQ-513).
+  - Add --help <topic> single-row help for --upgrade/--dev/--develop/--uninstall/--ver/--version in either order (REQ-511, REQ-514).
+  - Extend management argv detection and dispatch with --help (PRJ-009, DES-026, REQ-473).
+  - Update REQUIREMENTS/WORKFLOW/REFERENCES documentation for the new command surface.
+
 ## [0.103.0](https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.103.0) - 2026-11-09
 ### ⛰️  Features
 - Update prompt files.
@@ -1478,6 +1503,7 @@
 - \[0.101.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.0
 - \[0.102.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.102.0
 - \[0.103.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.103.0
+- \[0.104.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.104.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1580,3 +1606,4 @@
 [0.101.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0
 [0.102.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.102.0
 [0.103.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.103.0
+[0.104.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.103.0..v0.104.0
