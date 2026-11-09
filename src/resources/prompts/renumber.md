@@ -83,14 +83,16 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Produce and include in the final report an explicit old-ID → new-ID mapping in document order.
    - Save changes by overwriting `%%DOC_PATH%%/REQUIREMENTS.md` with only the ID and cross-reference updates applied.
 2. Validate the **Software Requirements Specification**
-   - Review `%%DOC_PATH%%/REQUIREMENTS.md` and validate the renumbering invariants:
-      - Only requirement IDs and requirement-ID cross-references changed; all other text is identical.
-      - Requirement IDs are unique and strictly progressive in document order.
-      - All internal cross-references point to an existing renumbered requirement ID.
-      - Report `OK` if the invariants hold. Report `FAIL` if any invariant is violated.
+   - Review `%%DOC_PATH%%/REQUIREMENTS.md`. If previously read and present in context, use that content; otherwise read the file and cross-reference with the source code.
+      - Verify that the renumbered requirements still **accurately reflect the actual code behavior** (True State); renumbering MUST NOT alter requirement meaning, so the post-renumber document MUST remain behavior-equivalent to the pre-renumber draft.
+      - Validate the renumbering invariants:
+         - Only requirement IDs and requirement-ID cross-references changed; all other text is identical.
+         - Requirement IDs are unique and strictly progressive in document order.
+         - All internal cross-references point to an existing renumbered requirement ID.
+      - Report `OK` if the invariants hold and the document accurately describes the code (even if the code is buggy). Report `FAIL` if any invariant is violated or the document makes assertions that are not present or contradicted by the source code.
 3. %%COMMIT%%
 4. Present results
-   - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. Use the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**. Final line MUST be exactly: STATUS: OK or STATUS: ERROR.
+   - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. PRINT first a ## **Summary** section containing a synthetic summary (at most 1024 UTF-8 characters) of the entire final output, then the verbose report using the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**. Final line MUST be exactly: STATUS: OK or STATUS: ERROR.
 
 
 ## Context Files

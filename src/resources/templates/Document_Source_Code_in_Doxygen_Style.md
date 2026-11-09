@@ -9,6 +9,12 @@ All documentation and comments inside source code MUST:
 -   Use **Atomic Syntax** designed for machine logic inference.
 -   Be formatted using standard Doxygen syntax (`/** ... */` for C/C++ or `""" ... """` for Python) leveraging Markdown within the comments.
 
+### Scope Exclusion (Agentic Instruction Markdown)
+-   **Excluded artifacts**: Doxygen-tag documentation MUST NOT be applied to LLM-facing instruction Markdown: `SKILL.md`, prompt and prompt-template files, `BOOTSTRAP.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `AGENTS.md`, and harness/CLI system Markdown of the agentic workflow.
+-   **Boundary**: the exclusion holds even when such documents are stored inside repository source directories (for example `src/templates/` or `src/prompts/`); repository membership alone does not turn a document into a code component.
+-   **Scope**: the Section 4 Tag Taxonomy targets code components exclusively (functions, classes, objects, structures, modules, variables).
+-   **Required format** for excluded artifacts: structured Markdown sections (purpose, contract, procedure, validation); Doxygen-tag blocks inside these artifacts are non-conforming and MUST be removed on update.
+
 ## 2) Language & Format Constraints
 * **Format:** Standard Doxygen with Markdown support.
 * **Language:** English (Strict US English).
@@ -128,3 +134,16 @@ def process_telemetry(data: Dict[str, Any], threshold: int = 10) -> List[float]:
 - Include only repository-relevant Doxygen rules, tags, and compact examples.
 - Exclude generic Doxygen handbook/tutorial material that does not change repository behavior.
 - Prefer atomic constraints and deterministic examples over narrative explanations.
+
+## 8) Scope Exemption: Harness/CLI System Markdown Documents
+
+**CRITICAL:** Doxygen-style documentation tags (`@brief`, `@details`, `@param`, `@return`, and any other **Tag Taxonomy** tag) are **NOT required** — and MUST NOT be mandated — inside the following harness/CLI system Markdown documents, even when those files are tracked as part of the harness/CLI sources:
+-   **SKILL Markdown documents** (e.g., `SKILL.md`).
+-   **PROMPT Markdown documents** (bundled agent prompts and system prompt files).
+-   Harness/CLI system documents: `BOOTSTRAP.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `AGENTS.md`.
+-   **Generalization:** any other system Markdown document belonging to the harness/CLI agentic flow.
+
+Rules:
+-   Exempted documents are LLM-facing prose/instruction artifacts, not executable code components; the **Tag Taxonomy** (Section 4) and **Operational Rules** (Section 5) do not apply to them.
+-   Exempted documents keep plain Markdown structure (headings, lists, fenced code blocks) with zero Doxygen tags; documentation compliance checks MUST NOT flag their missing Doxygen tags as failures.
+-   The exemption is class-scoped ONLY: executable code components remain fully subject to Sections 1-7.
