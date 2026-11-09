@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.106.0](https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0) - 2026-11-09
+### 🚜  Changes
+- add --force upgrade reinstall support [useReq] *(package-manager)*
+Accept the auxiliary --force option on --upgrade and --upgrade --dev|--develop
+management argv shapes (two- and three-token forms, any order) per REQ-473,
+REQ-524, REQ-525; other shapes still fall through to standard parsing.
+Forced upgrades skip the already-latest registry gate and run the pi CLI
+force-reinstall update form (pi update npm:pi-usereq --force on the default
+channel, pi update git:github.com/Ogekuri/PI-useReq --force on the develop
+channel) forcing full package download and reinstallation (REQ-526, REQ-527).
+Non-forced upgrades keep the standard already-latest-gated pi install flow
+on both channels (REQ-528).
+Update PRJ-009 and DES-026 surfaces, WORKFLOW.md call traces, REFERENCES.md,
+and add 9 force-coverage unit tests (package-manager suite: 37 cases).
+- upgrade via pi CLI manual install commands [useReq] *(package-manager)*
+REQ-481: default-channel --upgrade runs pi install npm:pi-usereq.; REQ-482: --dev/--develop runs pi install git:github.com/Ogekuri/PI-useReq
+without registry comparison or GitHub release probe.
+REQ-483 removed: the develop-channel GitHub-probe failure gate no longer
+exists; child exit codes and spawn-failure hints still propagate (REQ-485).
+Both channels resolve the completion summary through the follow-up npmjs
+manifest probe (REQ-484); --help rows document the pi CLI install forms.
+tests/package-manager.test.ts aligned to TST-165/TST-166; 464/464 pass.
+
 ## [0.105.0](https://github.com/Ogekuri/PI-useReq/compare/v0.104.0..v0.105.0) - 2026-11-09
 ### 🚜  Changes
 - replace stale home-resource evidence with installation-owned facts [useReq] *(requirements)*
@@ -1278,6 +1301,7 @@ generate req/docs/REFERENCES.md from repository source; capture modules, symbols
 - \[0.103.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.103.0
 - \[0.104.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.104.0
 - \[0.105.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.105.0
+- \[0.106.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.106.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1382,3 +1406,4 @@ generate req/docs/REFERENCES.md from repository source; capture modules, symbols
 [0.103.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.103.0
 [0.104.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.103.0..v0.104.0
 [0.105.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.104.0..v0.105.0
+[0.106.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0
