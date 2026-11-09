@@ -1,6 +1,9 @@
 # Changelog
 
-## [0.102.1](https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.102.1) - 2026-11-08
+## [0.103.0](https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.103.0) - 2026-11-09
+### ⛰️  Features
+- Update prompt files.
+
 ### 🐛  Bug Fixes
 - anchor launcher target and removal containment on package root [useReq] *(bin-deploy)*
   - Deploy and remove launcher helpers resolved the npm package root from
@@ -11,6 +14,17 @@
   - foreign (REQ-508/REQ-509). Anchored target composition plus ownership
   - containment on the package root and added a default-resolution
   - reproducer covering the real npm package layout (TST-173, TST-174).
+
+### 🚜  Changes
+- extract Pushover message text from Summary report section [useReq] *(notify)*
+  - REQ-469 now slices the completed prompt-end Pushover %%OUTPUT%% as the
+  - trimmed text after the first '## **Summary**' heading and before the
+  - subsequent '## **Outcome**' heading; new REQ-510 extends the slice through
+  - the output end when no subsequent outcome heading exists, and REQ-470,
+  - REQ-471, and REQ-472 were updated to the renamed report schema.
+  - Head truncation at the 1024-character Pushover Message API limit
+  - (REQ-445/REQ-453) is preserved unchanged; WORKFLOW.md call traces and
+  - REFERENCES.md were regenerated for the updated extraction contract.
 
 ## [0.102.0](https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.102.0) - 2026-11-08
 ### ⛰️  Features
@@ -1463,7 +1477,7 @@
 - \[0.100.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.100.0
 - \[0.101.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.101.0
 - \[0.102.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.102.0
-- \[0.102.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.102.1
+- \[0.103.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.103.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1565,4 +1579,4 @@
 [0.100.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.99.0..v0.100.0
 [0.101.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.100.0..v0.101.0
 [0.102.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.101.0..v0.102.0
-[0.102.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.102.1
+[0.103.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.102.0..v0.103.0
