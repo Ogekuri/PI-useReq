@@ -1,7 +1,7 @@
 /**
  * @file
- * @brief Implements pi-usereq package-management commands (`--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`).
- * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, npm-registry-gated or GitHub-release-tagged global reinstall for `--upgrade`, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
+ * @brief Implements pi-usereq package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`).
+ * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, npm-registry-gated or GitHub-release-tagged global reinstall for `--upgrade`, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
  */
 
 import process from "node:process";
@@ -46,10 +46,24 @@ export const PACKAGE_UNINSTALL_COMMAND: readonly string[] = [
 ];
 
 /** Canonical names of the top-level management commands. */
-export type PackageManagerCommandName = "--ver" | "--version" | "--upgrade" | "--uninstall";
+export type PackageManagerCommandName =
+  | "--ver"
+  | "--version"
+  | "--upgrade"
+  | "--uninstall"
+  | "--help";
 
 /** Install source selected for the `--upgrade` command. */
 export type PackageManagerUpgradeChannel = "npm" | "develop";
+
+/** Management topic tokens accepted as the operand of the two-token `--help <topic>` argv shape. */
+export type PackageManagerHelpTopic =
+  | "--upgrade"
+  | "--dev"
+  | "--develop"
+  | "--uninstall"
+  | "--ver"
+  | "--version";
 
 /** Diagnostic sink consumed by the management handlers; both channels are stderr-only in production. */
 export interface PackageManagerLogger {
@@ -136,6 +150,8 @@ export interface PackageManagerCommandOptions {
   installedVersion: string;
   /** `--upgrade` install source; `develop` selects the latest tagged GitHub release. Default: `npm`. */
   channel?: PackageManagerUpgradeChannel;
+  /** `--help` topic selecting single-command help; `undefined` selects the full help screen. */
+  helpTopic?: PackageManagerHelpTopic;
 }
 
 /** Aggregate dependency surface of the management dispatch. */
@@ -478,17 +494,21 @@ export function buildDevelopUpgradeCommand(tag: string): readonly string[] {
 
 /**
  * @brief Detects an exact management-command argv shape in a raw argv array.
- * @details Single-token shape: exactly one of `--ver`, `--version`, `--upgrade`, `--uninstall`. Two-token shape: `--upgrade` paired with the `--develop` option or its equivalent `--dev` alias, in either order. Any other shape yields `undefined` so standard flag dispatch stays untouched.
+ * @details Single-token shape: exactly one of `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`. Two-token shapes: `--upgrade` paired with the `--develop` option or its equivalent `--dev` alias, or `--help` paired with one documented help topic, in either order. Any other shape yields `undefined` so standard flag dispatch stays untouched.
  * @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
  * @return {PackageManagerCommandName | undefined} Canonical command name, or `undefined` when no management shape matches.
  * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-473, REQ-511
  */
 export function parsePackageManagerCommand(
   args: readonly string[],
 ): PackageManagerCommandName | undefined {
   if (args.length === 1) {
     const arg = args[0];
-    if (arg === "--ver" || arg === "--version" || arg === "--upgrade" || arg === "--uninstall") {
+    if (arg === "--ver" || arg === "--version" || arg === "--upgrade") {
+      return arg;
+    }
+    if (arg === "--uninstall" || arg === "--help") {
       return arg;
     }
     return undefined;
@@ -498,6 +518,9 @@ export function parsePackageManagerCommand(
     const hasDevelop = args.includes("--develop") || args.includes("--dev");
     if (hasUpgrade && hasDevelop) {
       return "--upgrade";
+    }
+    if (parsePackageManagerHelpTopic(args) !== undefined) {
+      return "--help";
     }
   }
   return undefined;
@@ -512,6 +535,34 @@ export function parsePackageManagerCommand(
  */
 export function parsePackageManagerUpgradeChannel(args: readonly string[]): PackageManagerUpgradeChannel {
   return args.includes("--develop") || args.includes("--dev") ? "develop" : "npm";
+}
+
+/**
+ * @brief Resolves the `--help` topic operand from a raw argv array.
+ * @details Accepts exactly two tokens where one is `--help` and the other is one of `--upgrade`, `--dev`, `--develop`, `--uninstall`, `--ver`, or `--version`, in either order, returning the topic token; every other shape, including a doubled `--help`, yields `undefined` so the full help screen stays selected.
+ * @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
+ * @return {PackageManagerHelpTopic | undefined} Requested help topic, or `undefined` when absent.
+ * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-511
+ */
+export function parsePackageManagerHelpTopic(
+  args: readonly string[],
+): PackageManagerHelpTopic | undefined {
+  if (args.length !== 2 || !args.includes("--help")) {
+    return undefined;
+  }
+  const candidate = args.find((token) => token !== "--help");
+  if (
+    candidate === "--upgrade" ||
+    candidate === "--dev" ||
+    candidate === "--develop" ||
+    candidate === "--uninstall" ||
+    candidate === "--ver" ||
+    candidate === "--version"
+  ) {
+    return candidate;
+  }
+  return undefined;
 }
 
 /**
@@ -678,9 +729,120 @@ export function runPackageManagerUninstallCommand(deps: PackageManagerCommandDep
   return runPackageManagerChildCommand(PACKAGE_UNINSTALL_COMMAND, deps);
 }
 
+/** Management help row rendered by the `--help` screen and topic help. */
+interface PackageManagerHelpRow {
+  /** Primary management token shown as the row label. */
+  readonly token: "--upgrade" | "--dev" | "--uninstall" | "--ver" | "--version" | "--help";
+  /** Single-line command description rendered after the token label. */
+  readonly description: string;
+}
+
+/** Fixed-order management help rows backing the full `--help` screen and topic help. */
+const PACKAGE_MANAGER_HELP_ROWS: readonly PackageManagerHelpRow[] = [
+  {
+    token: "--upgrade",
+    description:
+      "Reinstall pi-usereq globally through npm; print the manual command when spawning fails.",
+  },
+  {
+    token: "--dev",
+    description:
+      "With --upgrade: upgrade from the latest GitHub release tag instead of the npm registry (alias: --develop).",
+  },
+  {
+    token: "--uninstall",
+    description:
+      "Uninstall the global pi-usereq npm package; print the manual command when spawning fails.",
+  },
+  {
+    token: "--ver",
+    description: "Print the pi-usereq version plus latest npmjs and GitHub versions.",
+  },
+  {
+    token: "--version",
+    description: "Print the pi-usereq version plus latest npmjs and GitHub versions.",
+  },
+  {
+    token: "--help",
+    description: "Print the full help screen or the help text of a specific command.",
+  },
+];
+
+/** Rendered width of the longest management help token, aligning every help row description. */
+const PACKAGE_MANAGER_HELP_TOKEN_WIDTH = Math.max(
+  ...PACKAGE_MANAGER_HELP_ROWS.map((row) => row.token.length),
+);
+
+/**
+ * @brief Formats one management help row as an indented `<token> - <description>` line.
+ * @details Left-pads the row token to the longest management token width so every description aligns in one column. Runtime is O(n) in description length. Pure; no side effects.
+ * @param[in] row {PackageManagerHelpRow} Management help row to format.
+ * @return {string} Formatted help row line prefixed with two leading spaces.
+ */
+function formatPackageManagerHelpRow(row: PackageManagerHelpRow): string {
+  return `  ${row.token.padEnd(PACKAGE_MANAGER_HELP_TOKEN_WIDTH)} - ${row.description}`;
+}
+
+/**
+ * @brief Builds the full `--help` screen for one installed version.
+ * @details Emits the usage header `Usage: pi-usereq [command] [options] (<version>)`, one blank line, the `Management Commands:` heading, and the fixed-order management help rows, each formatted `<token> - <description>`, terminated by one trailing newline. An empty installed version degrades to the `unknown` placeholder.
+ * @param[in] installedVersion {string} Installed package version rendered inside the usage header parentheses.
+ * @return {string} Complete multi-line help screen text.
+ * @note Complexity: O(n) in aggregate row length. Pure; no side effects.
+ * @satisfies REQ-512, REQ-513
+ */
+export function buildPackageManagerHelpScreen(installedVersion: string): string {
+  const usageLine = `Usage: ${PACKAGE_MANAGER_PACKAGE_NAME} [command] [options] (${
+    installedVersion || PACKAGE_MANAGER_UNKNOWN_VERSION
+  })`;
+  const lines = [
+    usageLine,
+    "",
+    "Management Commands:",
+    ...PACKAGE_MANAGER_HELP_ROWS.map((row) => formatPackageManagerHelpRow(row)),
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * @brief Builds the single-row help text for one management topic token.
+ * @details Maps the `--develop` alias onto the primary `--dev` row and returns only that management help row line with one trailing newline, so `--help <topic>` output stays limited to the requested command.
+ * @param[in] topic {PackageManagerHelpTopic} Requested management help topic token.
+ * @return {string} Formatted single help row line, or the empty string when no row matches.
+ * @note Complexity: O(1) in row count. Pure; no side effects.
+ * @satisfies REQ-514
+ */
+export function buildPackageManagerHelpTopicText(topic: PackageManagerHelpTopic): string {
+  const rowToken: PackageManagerHelpRow["token"] = topic === "--develop" ? "--dev" : topic;
+  const row = PACKAGE_MANAGER_HELP_ROWS.find((entry) => entry.token === rowToken);
+  return row === undefined ? "" : `${formatPackageManagerHelpRow(row)}\n`;
+}
+
+/**
+ * @brief Handles `--help`: full help screen or single management topic row.
+ * @details Writes the full help screen to stdout when no topic option is supplied, or only the management help row of the requested topic token when one is supplied, and returns `0`. Executes no network probe and no package-manager child process.
+ * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version and optional help topic.
+ * @param[in] deps {PackageManagerCommandDeps} Optional stdout overrides.
+ * @return {Promise<number>} Exit code `0`.
+ * @note Complexity: O(1). Pure aside from the delegated stdout write.
+ * @satisfies REQ-512, REQ-513, REQ-514
+ */
+export async function runPackageManagerHelpCommand(
+  options: PackageManagerCommandOptions,
+  deps: PackageManagerCommandDeps = {},
+): Promise<number> {
+  const stdout = deps.stdout ?? defaultPackageManagerStdout;
+  if (options.helpTopic !== undefined) {
+    stdout.write(buildPackageManagerHelpTopicText(options.helpTopic));
+    return 0;
+  }
+  stdout.write(buildPackageManagerHelpScreen(options.installedVersion));
+  return 0;
+}
+
 /**
  * @brief Dispatches one management command to its handler.
- * @details Single dispatch surface for the CLI entry intercept: `--ver`/`--version` routes to `runPackageManagerVersionCommand`, `--upgrade` routes to `runPackageManagerUpgradeCommand` honoring the forwarded channel option, and `--uninstall` routes to `runPackageManagerUninstallCommand`.
+ * @details Single dispatch surface for the CLI entry intercept: `--ver`/`--version` routes to `runPackageManagerVersionCommand`, `--upgrade` routes to `runPackageManagerUpgradeCommand` honoring the forwarded channel option, `--uninstall` routes to `runPackageManagerUninstallCommand`, and `--help` routes to `runPackageManagerHelpCommand` honoring the forwarded topic option.
  * @param[in] command {PackageManagerCommandName} Canonical management command name.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version and upgrade channel.
  * @param[in] deps {PackageManagerCommandDeps} Optional dependency overrides.
@@ -699,5 +861,7 @@ export async function runPackageManagerManagementCommand(
       return runPackageManagerUpgradeCommand(options, deps);
     case "--uninstall":
       return runPackageManagerUninstallCommand(deps);
+    case "--help":
+      return runPackageManagerHelpCommand(options, deps);
   }
 }
