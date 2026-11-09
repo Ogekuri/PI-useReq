@@ -86,9 +86,16 @@ export const DEFAULT_PI_NOTIFY_PUSHOVER_TITLE = "%%PROMT%% @ %%BASE%% [%%TIME%%]
 export const DEFAULT_PI_NOTIFY_PUSHOVER_TEXT = "%%RESULT%%\n%%OUTPUT%%";
 
 /**
- * @brief Defines the outcome-section marker extracted from completed prompt-end agent output.
- * @details Anchors the Pushover-channel output slice for completed prompt-end outcomes: `resolvePiNotifyPushoverAgentOutput` keeps the marker itself plus everything after its first occurrence and discards all preceding output so no pre-outcome text reaches the Pushover title or message fields. Access complexity is O(1).
- * @satisfies REQ-469, REQ-470, REQ-471
+ * @brief Defines the summary-section heading opening the final agent report.
+ * @details Starts the Pushover-channel output slice for completed prompt-end outcomes: `resolvePiNotifyPushoverAgentOutput` takes the text after this heading and before the subsequent outcome heading so no text outside the summary section reaches the Pushover title or message fields. Access complexity is O(1).
+ * @satisfies REQ-469, REQ-470, REQ-471, REQ-510
+ */
+const PI_NOTIFY_SUMMARY_SECTION_MARKER = "## **Summary**";
+
+/**
+ * @brief Defines the outcome-section heading terminating the Pushover summary slice.
+ * @details Ends the Pushover-channel output slice for completed prompt-end outcomes; the slice extends through the output end when this heading never follows the summary heading. Access complexity is O(1).
+ * @satisfies REQ-469, REQ-510
  */
 const PI_NOTIFY_OUTCOME_SECTION_MARKER = "## **Outcome**";
 
@@ -539,11 +546,11 @@ function formatPiNotifyResult(outcome: PiNotifyOutcome): string {
 
 /**
  * @brief Resolves the Pushover-channel agent-output value for one prompt-end request.
- * @details Returns the raw agent output unchanged for interrupted and failed outcomes, for empty outputs, and for completed outputs without the outcome marker; for completed prompt-end outcomes containing `## **Outcome**`, returns the substring starting at the first marker occurrence through the output end so no pre-outcome text is substituted into Pushover title or message fields. The `PI_NOTIFY_CMD` shell path never consumes this resolver and keeps the full raw output. Runtime is O(n) in output length for the marker scan. No external state is mutated.
+ * @details Returns the raw agent output unchanged for interrupted and failed outcomes, for empty outputs, and for completed outputs without the summary heading; for completed prompt-end outcomes containing `## **Summary**`, returns the trimmed text after that heading through the first subsequent `## **Outcome**` heading, or through the output end when no subsequent outcome heading exists, so no text outside the summary section is substituted into Pushover title or message fields. The `PI_NOTIFY_CMD` shell path never consumes this resolver and keeps the full raw output. Runtime is O(n) in output length for the marker scans. No external state is mutated.
  * @param[in] request {PiNotifyEventRequest | undefined} Prompt-end request metadata; `undefined` yields the empty string.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
  * @return {string} Pushover-channel `%%OUTPUT%%` value within the documented extraction contract.
- * @satisfies REQ-469, REQ-470, REQ-471, REQ-472
+ * @satisfies REQ-469, REQ-470, REQ-471, REQ-472, REQ-510
  */
 function resolvePiNotifyPushoverAgentOutput(
   request: PiNotifyEventRequest | undefined,
@@ -553,11 +560,14 @@ function resolvePiNotifyPushoverAgentOutput(
   if (outcome !== "completed" || rawOutput.length === 0) {
     return rawOutput;
   }
-  const markerIndex = rawOutput.indexOf(PI_NOTIFY_OUTCOME_SECTION_MARKER);
-  if (markerIndex < 0) {
+  const summaryIndex = rawOutput.indexOf(PI_NOTIFY_SUMMARY_SECTION_MARKER);
+  if (summaryIndex < 0) {
     return rawOutput;
   }
-  return rawOutput.slice(markerIndex);
+  const sectionStart = summaryIndex + PI_NOTIFY_SUMMARY_SECTION_MARKER.length;
+  const outcomeIndex = rawOutput.indexOf(PI_NOTIFY_OUTCOME_SECTION_MARKER, sectionStart);
+  const sectionEnd = outcomeIndex < 0 ? rawOutput.length : outcomeIndex;
+  return rawOutput.slice(sectionStart, sectionEnd).trim();
 }
 
 /**
@@ -653,7 +663,7 @@ function substitutePiNotifyShellTemplate(
 
 /**
  * @brief Substitutes runtime placeholders inside one text template.
- * @details Applies raw prompt name, home-relative base path, elapsed time, raw prompt arguments, terminal outcome text, and the effective `%%OUTPUT%%` value without shell escaping so Pushover payloads preserve literal text; the optional `outputText` override replaces the raw agent output so the Pushover channel can substitute the outcome-section slice while `PI_NOTIFY_CMD` keeps the full output. Runtime is O(n) in template length. No external state is mutated.
+ * @details Applies raw prompt name, home-relative base path, elapsed time, raw prompt arguments, terminal outcome text, and the effective `%%OUTPUT%%` value without shell escaping so Pushover payloads preserve literal text; the optional `outputText` override replaces the raw agent output so the Pushover channel can substitute the summary-section slice while `PI_NOTIFY_CMD` keeps the full output. Runtime is O(n) in template length. No external state is mutated.
  * @param[in] template {string} Raw text template.
  * @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
@@ -831,12 +841,12 @@ function shouldRunPiNotifyPushover(
 
 /**
  * @brief Builds the Pushover notification title for one prompt-end request.
- * @details Resolves the configured `notify-pushover-title` template with raw runtime placeholder substitution so the pushed title remains configurable and deterministic, overrides `%%OUTPUT%%` with the outcome-section slice resolved by `resolvePiNotifyPushoverAgentOutput` so completed prompt-end outcomes never push pre-outcome agent output, then head-truncates over-limit titles to the Pushover Message API `title` limit. Runtime is O(n) in template length. No external state is mutated.
+ * @details Resolves the configured `notify-pushover-title` template with raw runtime placeholder substitution so the pushed title remains configurable and deterministic, overrides `%%OUTPUT%%` with the summary-section slice resolved by `resolvePiNotifyPushoverAgentOutput` so completed prompt-end outcomes never push out-of-section agent output, then head-truncates over-limit titles to the Pushover Message API `title` limit. Runtime is O(n) in template length. No external state is mutated.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
  * @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
  * @return {string} Pushover title string within the 250-character API limit.
- * @satisfies REQ-185, REQ-186, REQ-187, REQ-199, REQ-453, REQ-469, REQ-470, REQ-471, REQ-472
+ * @satisfies REQ-185, REQ-186, REQ-187, REQ-199, REQ-453, REQ-469, REQ-470, REQ-471, REQ-472, REQ-510
  */
 function buildPiNotifyPushoverTitle(
   config: PiNotifyConfigFields,
@@ -872,12 +882,12 @@ function truncatePiNotifyPushoverText(text: string, limit: number): string {
 
 /**
  * @brief Builds the Pushover message body for one prompt-end request.
- * @details Resolves the configured `notify-pushover-text` template with raw runtime placeholder substitution, overrides `%%OUTPUT%%` with the outcome-section slice resolved by `resolvePiNotifyPushoverAgentOutput` so completed prompt-end outcomes never push pre-outcome agent output, falls back to the terminal outcome token when the fully substituted body resolves empty so Pushover delivery never targets an empty `message` field, then head-truncates over-limit bodies to the Pushover Message API `message` limit. Runtime is O(n) in template length. No external state is mutated.
+ * @details Resolves the configured `notify-pushover-text` template with raw runtime placeholder substitution, overrides `%%OUTPUT%%` with the summary-section slice resolved by `resolvePiNotifyPushoverAgentOutput` so completed prompt-end outcomes never push out-of-section agent output, falls back to the terminal outcome token when the fully substituted body resolves empty so Pushover delivery never targets an empty `message` field, then head-truncates over-limit bodies to the Pushover Message API `message` limit. Runtime is O(n) in template length. No external state is mutated.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] outcome {PiNotifyOutcome} Classified prompt-end outcome.
  * @param[in] request {PiNotifyEventRequest} Prompt-end request metadata.
  * @return {string} Pushover message body within the 1024-character API limit.
- * @satisfies REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-450, REQ-469, REQ-470, REQ-471, REQ-472
+ * @satisfies REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-450, REQ-469, REQ-470, REQ-471, REQ-472, REQ-510
  */
 function buildPiNotifyPushoverBody(
   config: PiNotifyConfigFields,
@@ -971,12 +981,12 @@ export function setPiNotifySpawnForTests(spawnImpl: PiNotifySpawn | undefined): 
 
 /**
  * @brief Dispatches prompt-end notify, sound, and Pushover effects for one agent-end payload.
- * @details Classifies the terminal outcome from the `agent_end` payload and delegates to `runPiNotifyEffectsForOutcome(...)`; `%%OUTPUT%%` resolves from the caller-supplied final agent output with Pushover title and body channels overriding it through the completed-outcome `## **Outcome**` section extraction while `PI_NOTIFY_CMD` keeps the full output, and Pushover bodies and titles are head-truncated to the provider message and title limits. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
+ * @details Classifies the terminal outcome from the `agent_end` payload and delegates to `runPiNotifyEffectsForOutcome(...)`; `%%OUTPUT%%` resolves from the caller-supplied final agent output with Pushover title and body channels overriding it through the completed-outcome `## **Summary**` section extraction while `PI_NOTIFY_CMD` keeps the full output, and Pushover bodies and titles are head-truncated to the provider message and title limits. Runtime is O(m + c + b) in message count, command length, and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] event {Pick<AgentEndEvent, "messages">} Agent-end payload subset.
  * @param[in] request {PiNotifyEventRequest | undefined} Optional prompt-end request metadata used for command-notify and Pushover substitution.
  * @return {void} No return value.
- * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-453, REQ-469, REQ-470, REQ-471
+ * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-453, REQ-469, REQ-470, REQ-471, REQ-510
  */
 export function runPiNotifyEffects(
   config: PiNotifyConfigFields,
@@ -988,12 +998,12 @@ export function runPiNotifyEffects(
 
 /**
  * @brief Dispatches prompt-end notify, sound, and Pushover effects for one explicit prompt-end outcome.
- * @details Executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied; `%%OUTPUT%%` resolves from the caller-supplied final agent output or command process output, completed prompt-end outcomes override the Pushover title and body `%%OUTPUT%%` with the `## **Outcome**` section slice while `PI_NOTIFY_CMD` and interrupted or failed outcomes keep the full output, and Pushover bodies and titles head-truncate to the provider message and title limits with an outcome-token fallback for empty bodies. Agentic callers classify the outcome from the `agent_end` payload through `runPiNotifyEffects(...)`; non-agentic `req-references` and `req-reset` command callers pass the explicit completed or failed outcome per REQ-447. Runtime is O(c + b) in command length and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
+ * @details Executes `PI_NOTIFY_CMD` when command-notify prerequisites are satisfied, executes the configured sound command when sound prerequisites are satisfied, and dispatches the native Pushover request when Pushover prerequisites are satisfied; `%%OUTPUT%%` resolves from the caller-supplied final agent output or command process output, completed prompt-end outcomes override the Pushover title and body `%%OUTPUT%%` with the `## **Summary**` section slice while `PI_NOTIFY_CMD` and interrupted or failed outcomes keep the full output, and Pushover bodies and titles head-truncate to the provider message and title limits with an outcome-token fallback for empty bodies. Agentic callers classify the outcome from the `agent_end` payload through `runPiNotifyEffects(...)`; non-agentic `req-references` and `req-reset` command callers pass the explicit completed or failed outcome per REQ-447. Runtime is O(c + b) in command length and Pushover payload size. Side effects include child-process spawning and outbound HTTPS requests.
  * @param[in] config {PiNotifyConfigFields} Effective notification configuration.
  * @param[in] outcome {PiNotifyOutcome} Explicit prompt-end outcome.
  * @param[in] request {PiNotifyEventRequest | undefined} Optional prompt-end request metadata used for command-notify and Pushover substitution.
  * @return {void} No return value.
- * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-447, REQ-450, REQ-453, REQ-469, REQ-470, REQ-471, REQ-472
+ * @satisfies REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-199, REQ-443, REQ-444, REQ-445, REQ-447, REQ-450, REQ-453, REQ-469, REQ-470, REQ-471, REQ-472, REQ-510
  */
 export function runPiNotifyEffectsForOutcome(
   config: PiNotifyConfigFields,
