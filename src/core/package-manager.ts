@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Implements pi-usereq package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`).
- * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, npm-registry-gated or GitHub-release-tagged global reinstall for `--upgrade`, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
+ * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI reinstall matching the manual install forms (`pi install npm:pi-usereq` on the default `--upgrade` channel and `pi install git:github.com/Ogekuri/PI-useReq` on the develop channel), and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
  */
 
 import process from "node:process";
@@ -16,7 +16,7 @@ export const PACKAGE_MANAGER_PACKAGE_NAME = "pi-usereq";
 /** npm registry origin without trailing slash. */
 export const PACKAGE_MANAGER_REGISTRY_BASE_URL = "https://registry.npmjs.org";
 
-/** GitHub repository owner/name resolved by the develop upgrade channel. */
+/** GitHub repository owner/name probed by the version report and installed from by the develop upgrade channel. */
 export const PACKAGE_MANAGER_GITHUB_REPOSITORY = "Ogekuri/PI-useReq";
 
 /** Default GitHub releases API URL resolving the latest published release of the distribution repository. */
@@ -29,12 +29,18 @@ export const PACKAGE_MANAGER_PROBE_TIMEOUT_MS = 2000;
 /** Placeholder rendered whenever an installed or probed version is undeterminable. */
 export const PACKAGE_MANAGER_UNKNOWN_VERSION = "unknown";
 
-/** Package-manager command executed by the default-channel `--upgrade`. */
+/** Package-manager command executed by the default-channel `--upgrade`, matching the manual `pi install npm:pi-usereq` install form. */
 export const PACKAGE_UPGRADE_COMMAND: readonly string[] = [
-  "npm",
+  "pi",
   "install",
-  "-g",
-  `${PACKAGE_MANAGER_PACKAGE_NAME}@latest`,
+  `npm:${PACKAGE_MANAGER_PACKAGE_NAME}`,
+];
+
+/** Package-manager command executed by the develop-channel `--upgrade`, matching the manual `pi install git:github.com/Ogekuri/PI-useReq` install form. */
+export const PACKAGE_DEVELOP_UPGRADE_COMMAND: readonly string[] = [
+  "pi",
+  "install",
+  `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
 ];
 
 /** Package-manager command executed by `--uninstall`. */
@@ -93,7 +99,7 @@ export interface PackageManagerSpawnOptions {
   cwd: string;
   /** Inherited stdio so npm output streams through unchanged. */
   stdio: "inherit";
-  /** Windows shell resolution so `npm.cmd` resolves via `PATHEXT`. */
+  /** Windows shell resolution so `npm.cmd` and `pi.cmd` resolve via `PATHEXT`. */
   shell: boolean;
 }
 
@@ -484,17 +490,6 @@ function resolveGitHubProbeLatestVersionText(probe: PackageManagerGitHubProbe): 
 }
 
 /**
- * @brief Builds the package-manager command installing one GitHub release tag.
- * @details Produces `npm install -g github:<repository>#<tag>` where `<tag>` is the raw `tag_name` probed from the GitHub releases API, so the develop channel installs the latest tagged release independent of the branch carrying it. Child exit-code and spawn-failure semantics are identical to `PACKAGE_UPGRADE_COMMAND`.
- * @param[in] tag {string} Raw GitHub release tag (`tag_name`, e.g. `v1.2.3`); MUST be non-empty.
- * @return {readonly string[]} Executable-plus-arguments command tuple.
- * @note Complexity: O(n) in tag length. Pure; no side effects.
- */
-export function buildDevelopUpgradeCommand(tag: string): readonly string[] {
-  return ["npm", "install", "-g", `github:${PACKAGE_MANAGER_GITHUB_REPOSITORY}#${tag}`];
-}
-
-/**
  * @brief Detects an exact management-command argv shape in a raw argv array.
  * @details Single-token shape: exactly one of `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`. Two-token shapes: `--upgrade` paired with the `--develop` option or its equivalent `--dev` alias, or `--help` paired with one documented help topic, in either order. Any other shape yields `undefined` so standard flag dispatch stays untouched.
  * @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
@@ -578,7 +573,7 @@ export function resolvePackageManagerInstalledVersion(): string {
 
 /**
  * @brief Runs one package-manager command as a child process with inherited stdio.
- * @details Spawns `command[0]` with the remaining tokens, inheriting stdio so npm output streams through unchanged; Windows spawns run through a shell so `npm.cmd` resolves via `PATHEXT`. The child runs with an explicit neutral working directory (the user home), never the caller's cwd, because management installs are routinely invoked from inside a source checkout of the same package being replaced. Spawn failures print the error plus the exact manual command hint on stderr and map to exit code `1`; otherwise the child exit code propagates (`null` status maps to `1`).
+ * @details Spawns `command[0]` with the remaining tokens, inheriting stdio so npm and pi output streams through unchanged; Windows spawns run through a shell so `npm.cmd` and `pi.cmd` resolve via `PATHEXT`. The child runs with an explicit neutral working directory (the user home), never the caller's cwd, because management installs are routinely invoked from inside a source checkout of the same package being replaced. Spawn failures print the error plus the exact manual command hint on stderr and map to exit code `1`; otherwise the child exit code propagates (`null` status maps to `1`).
  * @param[in] command {readonly string[]} Executable plus argument vector.
  * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger overrides.
  * @return {number} Child exit code, or `1` when spawning failed.
@@ -669,12 +664,13 @@ function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["s
 }
 
 /**
- * @brief Handles `--upgrade`: channel selection, package reinstall, then stdout summary.
- * @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always proceeding with the tagged GitHub update; a failed GitHub probe prints one stderr diagnostic and returns `1` without spawning any child process, while a successful probe installs `github:<repository>#<tag>` and summarizes with the probed release version. Default npm channel: one forced npmjs package-manifest probe bypassing every cache; `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child; any other outcome runs `npm install -g pi-usereq@latest` with inherited stdio, propagates a non-zero child exit code without printing any summary, resolves the updated version as the latest npmjs version through one follow-up manifest probe, and prints the completion summary.
+ * @brief Handles `--upgrade`: channel selection, pi-CLI package reinstall, then stdout summary.
+ * @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always spawning `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi install git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; a non-zero child exit code propagates without printing any summary, and a successful child resolves the summary `<updated>` through one follow-up npmjs manifest probe. Default npm channel: one forced npmjs package-manifest probe bypassing every cache; `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child; any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi install npm:pi-usereq`) with inherited stdio, propagates a non-zero child exit code without printing any summary, resolves the updated version as the latest npmjs version through one follow-up manifest probe, and prints the completion summary.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version and channel.
  * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout overrides.
  * @return {Promise<number>} `0` when the installed version is already the latest available; otherwise the upgrade exit code when non-zero, else `0` after a successful reinstall.
  * @note Complexity: one to two HTTP round-trips plus at most one child process execution.
+ * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, DES-026
  */
 export async function runPackageManagerUpgradeCommand(
   options: PackageManagerCommandOptions,
@@ -682,20 +678,12 @@ export async function runPackageManagerUpgradeCommand(
 ): Promise<number> {
   const stdout = deps.stdout ?? defaultPackageManagerStdout;
   if ((options.channel ?? "npm") === "develop") {
-    const githubProbe = await probeLatestGitHubRelease(deps.githubCheck);
-    if (githubProbe.status !== "ok") {
-      (deps.logger ?? defaultPackageManagerLogger).error(
-        `GitHub upgrade channel probe failed: ${githubProbe.message}`,
-      );
-      return 1;
-    }
-    const upgraded = runPackageManagerChildCommand(buildDevelopUpgradeCommand(githubProbe.tag), deps);
+    const upgraded = runPackageManagerChildCommand(PACKAGE_DEVELOP_UPGRADE_COMMAND, deps);
     if (upgraded !== 0) {
       return upgraded;
     }
-    stdout.write(
-      `pi-usereq upgrade completed: ${options.installedVersion} -> ${githubProbe.version}\n`,
-    );
+    const updatedVersion = await resolveUpdatedPackageManagerVersion(options, deps);
+    stdout.write(`pi-usereq upgrade completed: ${options.installedVersion} -> ${updatedVersion}\n`);
     return 0;
   }
   const precheck = await probeLatestRegistryVersion({
@@ -746,12 +734,12 @@ const PACKAGE_MANAGER_HELP_ROWS: readonly PackageManagerHelpRow[] = [
   {
     token: "--upgrade",
     description:
-      "Reinstall pi-usereq globally through npm; print the manual command when spawning fails.",
+      "Reinstall pi-usereq through the pi CLI package manager; print the manual command when spawning fails.",
   },
   {
     token: "--dev",
     description:
-      "With --upgrade: upgrade from the latest GitHub release tag instead of the npm registry (alias: --develop).",
+      "With --upgrade: install directly from the pi-usereq git repository instead of the npm registry (alias: --develop).",
   },
   {
     token: "--uninstall",

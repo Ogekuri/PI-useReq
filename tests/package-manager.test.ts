@@ -5,12 +5,12 @@ import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 import {
+  PACKAGE_DEVELOP_UPGRADE_COMMAND,
   PACKAGE_MANAGER_GITHUB_RELEASES_API_URL,
   PACKAGE_MANAGER_GITHUB_REPOSITORY,
   PACKAGE_MANAGER_REGISTRY_BASE_URL,
   PACKAGE_UNINSTALL_COMMAND,
   PACKAGE_UPGRADE_COMMAND,
-  buildDevelopUpgradeCommand,
   comparePackageManagerVersionOrder,
   isNewerPackageManagerVersion,
   parsePackageManagerCommand,
@@ -172,11 +172,12 @@ test("dotted numeric version comparison admits only strictly newer candidates", 
   assert.equal(isNewerPackageManagerVersion("not-a-version", "1.0.0"), false);
 });
 
-test("develop upgrade command embeds the raw GitHub release tag", () => {
-  assert.deepEqual(
-    buildDevelopUpgradeCommand("v1.2.3"),
-    ["npm", "install", "-g", `github:${PACKAGE_MANAGER_GITHUB_REPOSITORY}#v1.2.3`],
-  );
+test("develop upgrade command matches the manual pi install git form", () => {
+  assert.deepEqual(PACKAGE_DEVELOP_UPGRADE_COMMAND, [
+    "pi",
+    "install",
+    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
+  ]);
 });
 
 test("registry probe resolves the documented npmjs package manifest endpoint", async () => {
@@ -403,26 +404,7 @@ test("default-channel upgrade propagates child failure without printing a summar
   assert.deepEqual(sink.chunks, []);
 });
 
-test("develop-channel upgrade fails without spawning when the GitHub probe fails", async () => {
-  const { calls, spawn } = createSpawnDouble();
-  const sink = createStdoutSink();
-  const { errors, logger } = createLoggerDouble();
-  const exitCode = await runPackageManagerUpgradeCommand(
-    { installedVersion: "1.0.0", channel: "develop" },
-    {
-      spawn,
-      logger,
-      stdout: sink.stdout,
-      githubCheck: { fetchImpl: createFetchJsonDouble({}, false, 403).fetchImpl },
-    },
-  );
-  assert.equal(exitCode, 1);
-  assert.equal(calls.length, 0);
-  assert.deepEqual(sink.chunks, []);
-  assert.equal(errors.length, 1);
-});
-
-test("develop-channel upgrade installs the probed release tag and prints the summary", async () => {
+test("develop-channel upgrade installs the git repository and prints the completion summary", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();
   const exitCode = await runPackageManagerUpgradeCommand(
@@ -430,13 +412,17 @@ test("develop-channel upgrade installs the probed release tag and prints the sum
     {
       spawn,
       stdout: sink.stdout,
-      githubCheck: { fetchImpl: createFetchJsonDouble({ tag_name: "v1.2.3" }).fetchImpl },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
     },
   );
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args, [...buildDevelopUpgradeCommand("v1.2.3").slice(1)]);
-  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 1.2.3\n"]);
+  assert.equal(calls[0].file, PACKAGE_DEVELOP_UPGRADE_COMMAND[0]);
+  assert.deepEqual(calls[0].args, [...PACKAGE_DEVELOP_UPGRADE_COMMAND.slice(1)]);
+  assert.equal(calls[0].options.cwd, homedir());
+  assert.equal(calls[0].options.stdio, "inherit");
+  assert.equal(calls[0].options.shell, process.platform === "win32");
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
 });
 
 test("develop-channel upgrade propagates child failure without printing a summary", async () => {
@@ -444,11 +430,7 @@ test("develop-channel upgrade propagates child failure without printing a summar
   const sink = createStdoutSink();
   const exitCode = await runPackageManagerUpgradeCommand(
     { installedVersion: "1.0.0", channel: "develop" },
-    {
-      spawn,
-      stdout: sink.stdout,
-      githubCheck: { fetchImpl: createFetchJsonDouble({ tag_name: "v1.2.3" }).fetchImpl },
-    },
+    { spawn, stdout: sink.stdout },
   );
   assert.equal(exitCode, 2);
   assert.equal(calls.length, 1);

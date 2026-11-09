@@ -46,8 +46,7 @@
             - `isNewerPackageManagerVersion(...)`: compare dotted numeric versions segment-by-segment and treat non-integer or prerelease segments as never newer [`src/core/package-manager.ts`]
           - `probeLatestGitHubRelease(...)`: GET the GitHub releases latest document with timeout deadline plus user-agent header, capture the failing error-response `message` field as the upstream failure reason, and strip the leading tag prefix [`src/core/package-manager.ts`]
           - `resolveGitHubProbeLatestVersionText(...)`: map the GitHub probe outcome to the version-report text, emitting `unknown (<reason>)` for captured upstream failure reasons and plain `unknown` otherwise [`src/core/package-manager.ts`]
-        - `runPackageManagerUpgradeCommand(...)`: gate the default channel on one forced npmjs package-manifest probe with an already-latest skip carrying the manifest latest version, install the probed GitHub release tag on the develop channel, and print the completion summary with the follow-up manifest-resolved npmjs latest version [`src/core/package-manager.ts`]
-          - `buildDevelopUpgradeCommand(...)`: build the `github:Ogekuri/PI-useReq#<tag>` install command tuple [`src/core/package-manager.ts`]
+        - `runPackageManagerUpgradeCommand(...)`: gate the default channel on one forced npmjs package-manifest probe with an already-latest skip carrying the manifest latest version, run the documented pi CLI install command (`pi install npm:pi-usereq` on the default channel and `pi install git:github.com/Ogekuri/PI-useReq` on the develop channel without any registry comparison or GitHub probe), and print the completion summary with the follow-up manifest-resolved npmjs latest version [`src/core/package-manager.ts`]
           - `runPackageManagerChildCommand(...)`: run one package-manager child process with user-home cwd, inherited stdio, and Windows shell resolution, mapping spawn failures to exit code `1` plus a manual-command hint [`src/core/package-manager.ts`]
         - `runPackageManagerUninstallCommand(...)`: remove the user-home bin `pi-usereq` launcher link best-effort, then the installation-owned agent-bin `pi-usereq` launcher link best-effort, then run the global package uninstall child command and propagate its exit code [`src/core/package-manager.ts`]
           - `removeUserBinPiUsereqLauncher(...)`: remove the user-home bin `pi-usereq` launcher symlink only when it resolves to the pi agent bin `pi-usereq` entry, leaving foreign entries untouched [`src/core/bin-deploy.ts`]
@@ -394,7 +393,7 @@
   - Node process APIs for argv, cwd, environment, stdout, stderr, and exit code.
   - Filesystem access for config, canonical docs discovery, and source reads.
   - Git and arbitrary configured checker subprocesses via child-process execution.
-  - npm package-manager child processes for `--upgrade` and `--uninstall` global installs executed from the user home.
+  - pi CLI and npm package-manager child processes for `--upgrade` and `--uninstall` installs executed from the user home.
   - Outbound HTTPS requests to the npmjs package-manifest document and the GitHub releases API for `--ver|--version` and `--upgrade` probes.
 
 ### `PROC:pi-host`

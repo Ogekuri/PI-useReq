@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.126"
+version: "0.0.127"
 date: "2026-11-09"
 author: "OpenAI Codex"
 scope:
@@ -576,9 +576,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-478**: MUST bound every registry and GitHub probe with a 2000-millisecond timeout deadline and send the GitHub-mandatory `user-agent` header.
 - **REQ-479**: MUST compare published against installed dotted numeric versions segment-by-segment and MUST treat non-integer or prerelease segments as never newer.
 - **REQ-480**: MUST make default-channel `--upgrade` probe the npmjs package manifest first and return `0` after printing an already-latest stdout line carrying the manifest latest version without spawning children when no newer version exists.
-- **REQ-481**: MUST make default-channel `--upgrade` run `npm install -g pi-usereq@latest` with inherited stdio and MUST propagate a non-zero child exit code without printing any summary.
-- **REQ-482**: MUST make `--dev` and `--develop` select the develop channel that installs `github:Ogekuri/PI-useReq#<tag>` from the latest GitHub release without any registry comparison.
-- **REQ-483**: MUST make develop-channel `--upgrade` return `1` with one stderr diagnostic and no child spawn when the GitHub release probe fails.
+- **REQ-481**: MUST make default-channel `--upgrade` run `pi install npm:pi-usereq` with inherited stdio and MUST propagate a non-zero child exit code without printing any summary.
+- **REQ-482**: MUST make `--dev` and `--develop` select the develop channel that runs `pi install git:github.com/Ogekuri/PI-useReq` without any registry comparison.
 - **REQ-484**: MUST print stdout line `pi-usereq upgrade completed: <starting> -> <updated>` after a successful upgrade, resolving `<updated>` through one follow-up manifest probe as the latest npmjs version and defaulting to `unknown`.
 - **REQ-485**: MUST run every package-manager child process with user-home cwd, inherited stdio, and Windows shell resolution, mapping spawn failures to exit code `1` plus one stderr manual-command hint.
 - **REQ-486**: MUST make `--uninstall` run `npm uninstall -g pi-usereq` with inherited stdio and return the child exit code.
@@ -780,7 +779,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-163**: MUST verify management-command argv detection accepts the documented exact shapes, both channel-option orderings, and rejects every other shape.
 - **TST-164**: MUST verify `--ver`/`--version` emits the three-line report with injected probe doubles, exit code `0`, and `unknown` fallbacks.
 - **TST-165**: MUST verify default-channel `--upgrade` skips spawning when current, spawns the documented install command otherwise, and prints the completion summary.
-- **TST-166**: MUST verify develop-channel `--upgrade` fails without spawn when the GitHub probe fails and installs the probed tag otherwise.
+- **TST-166**: MUST verify develop-channel `--upgrade` spawns `pi install git:github.com/Ogekuri/PI-useReq` with inherited stdio and prints the completion summary.
 - **TST-167**: MUST verify `--uninstall` spawns the documented uninstall command and maps spawn failures to exit code `1` with the manual-command hint.
 - **TST-168**: MUST verify dotted numeric version comparison treats prerelease and non-integer segments as never newer and equal versions as not newer.
 - **TST-169**: MUST verify package metadata declares the `pi-usereq` bin launcher and the launcher registers tsx and invokes the CLI `main`.
