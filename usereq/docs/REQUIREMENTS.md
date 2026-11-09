@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.123"
+version: "0.0.124"
 date: "2026-11-09"
 author: "OpenAI Codex"
 scope:
@@ -563,7 +563,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-472**: MUST restrict the `## **Summary**` Pushover extraction to completed prompt-end outcomes and MUST NOT apply it to `PI_NOTIFY_CMD` command-notify substitution.
 - **REQ-510**: MUST resolve the Pushover-channel `%%OUTPUT%%` through the output end as trimmed text after the first `## **Summary**` heading when no subsequent `## **Outcome**` heading exists for completed outcomes.
 - **REQ-473**: MUST detect management commands as exactly one argv token among `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`, or exactly two tokens pairing `--upgrade` with `--dev` or `--develop` in either order.
-- **REQ-474**: MUST return no management command for every other argv shape so standard flag parsing stays untouched.
+- **REQ-474**: MUST return no management command for every other non-empty argv shape so standard flag parsing stays untouched.
+- **REQ-515**: MUST make an empty argv print the full help screen to stdout with exit code `0`, equivalent to the `--help` command without a topic.
 - **REQ-511**: MUST detect `--help <topic>` as exactly two argv tokens pairing `--help` with one of `--upgrade`, `--dev`, `--develop`, `--uninstall`, `--ver`, or `--version`, in either order.
 - **REQ-512**: MUST make `--help` without a topic print the full help screen to stdout with first line `Usage: pi-usereq [command] [options] (<installed-version>)` and exit code `0`.
 - **REQ-513**: MUST render the full help screen `Management Commands:` rows in the fixed order `--upgrade`, `--dev`, `--uninstall`, `--ver`, `--version`, `--help`, each formatted `<token> - <description>`.

@@ -42,7 +42,7 @@
     └── index.ts
 ```
 
-# cli.ts | TypeScript | 332L | 9 symbols | 6 imports | 9 comments
+# cli.ts | TypeScript | 329L | 9 symbols | 6 imports | 9 comments
 > Path: `src/cli.ts`
 - @brief Implements the standalone pi-usereq command-line entry point.
 - @details Parses CLI flags, resolves project configuration, dispatches tool-runner operations, and converts thrown `ReqError` instances into process-style stdout, stderr, and exit codes. Runtime is dominated by the selected subcommand. Side effects include stdout/stderr writes and any filesystem or git operations performed by delegated commands.
@@ -105,13 +105,13 @@ import {
 - @throws {ReqError} Throws when parsing or validation fails.
 - @satisfies REQ-035, REQ-036, REQ-037, REQ-253
 
-### fn `export function main(argv = process.argv.slice(2)): number` (L260-328)
+### fn `export function main(argv = process.argv.slice(2)): number` (L260-325)
 - @brief Executes one pi-usereq CLI invocation.
-- @details Dispatches package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`) before standard flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode` on completion, then parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes, stdout/stderr output, and management-command HTTP probes or package-manager child processes.
+- @details Dispatches package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop]`, `--uninstall`) before standard flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode` on completion, mapping an empty argv to the `--help` command so a no-argument invocation prints the full help screen, then parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes, stdout/stderr output, and management-command HTTP probes or package-manager child processes.
 - @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
 - @return {number} Process exit code for the invocation; `0` for dispatched management commands whose async completion assigns the final `process.exitCode`.
 - @throws {ReqError} Internally catches `ReqError` and returns its code; other errors are coerced into exit code `1` with stderr output.
-- @satisfies PRJ-009, DES-026, DES-027, REQ-473, REQ-474, REQ-487, REQ-511
+- @satisfies PRJ-009, DES-026, DES-027, REQ-473, REQ-474, REQ-487, REQ-511, REQ-515
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -124,7 +124,7 @@ import {
 |`writeResult`|fn||199-203|function writeResult(result: { stdout: string; stderr: st...|
 |`loadMutableProjectConfig`|fn||212-216|function loadMutableProjectConfig(projectBase: string): {...|
 |`applyEnableStaticCheckSpecs`|fn||227-250|function applyEnableStaticCheckSpecs(projectBase: string,...|
-|`main`|fn||260-328|export function main(argv = process.argv.slice(2)): number|
+|`main`|fn||260-325|export function main(argv = process.argv.slice(2)): number|
 
 
 ---

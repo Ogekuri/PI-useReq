@@ -31,7 +31,7 @@
   - Looping model: single-pass argument parse followed by single branch dispatch.
   - Threads: no explicit threads detected.
 - Internal Call-Trace Tree:
-  - `main(...)`: dispatch package-management commands before flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode`, then parse argv, enforce project-selection rules, load or repair effective config, dispatch the first matching runner branch, and serialize the result; on caught `ReqError` emits captured stdout plus stderr through `writeStdout(...)` and `writeStderr(...)` [`src/cli.ts`]
+  - `main(...)`: dispatch package-management commands before flag parsing by mapping an empty argv to `--help` and scheduling the async management handler whose exit code is assigned to `process.exitCode`, then parse non-empty argv, enforce project-selection rules, load or repair effective config, dispatch the first matching runner branch, and serialize the result; on caught `ReqError` emits captured stdout plus stderr through `writeStdout(...)` and `writeStderr(...)` [`src/cli.ts`]
     - `parsePackageManagerCommand(...)`: detect exact single-token `--ver|--version|--upgrade|--uninstall|--help` argv shapes, the two-token `--upgrade` plus `--dev|--develop` pairing, or the two-token `--help` plus topic pairing, in either order [`src/core/package-manager.ts`]
       - `parsePackageManagerHelpTopic(...)`: resolve the two-token `--help` topic operand from the raw argv [`src/core/package-manager.ts`]
       - `parsePackageManagerUpgradeChannel(...)`: resolve the develop channel option from the raw argv [`src/core/package-manager.ts`]
