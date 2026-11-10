@@ -214,10 +214,11 @@ test("dotted numeric version comparison admits only strictly newer candidates", 
   assert.equal(isNewerPackageManagerVersion("not-a-version", "1.0.0"), false);
 });
 
-test("develop upgrade command matches the manual pi install git form", () => {
+test("non-forced upgrade commands match the documented pi update forms", () => {
+  assert.deepEqual(PACKAGE_UPGRADE_COMMAND, ["pi", "update", "npm:pi-usereq"]);
   assert.deepEqual(PACKAGE_DEVELOP_UPGRADE_COMMAND, [
     "pi",
-    "install",
+    "update",
     `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
   ]);
 });
@@ -403,15 +404,18 @@ test("default-channel upgrade skips spawning and reports already-latest when cur
   assert.deepEqual(sink.chunks, ["pi-usereq 2.0.0 is already the latest available version (npmjs latest: 2.0.0).\n"]);
 });
 
-test("default-channel upgrade installs the latest package and prints the completion summary", async () => {
+test("default-channel upgrade runs the pi update command and prints the metadata-resolved completion summary", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();
+  const { logs, logger } = createLoggerDouble();
   const exitCode = await runPackageManagerUpgradeCommand(
     { installedVersion: "1.0.0", channel: "npm" },
     {
       spawn,
       stdout: sink.stdout,
+      logger,
       registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
     },
   );
   assert.equal(exitCode, 0);
@@ -422,6 +426,7 @@ test("default-channel upgrade installs the latest package and prints the complet
   assert.equal(calls[0].options.stdio, "inherit");
   assert.equal(calls[0].options.shell, process.platform === "win32");
   assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+  assert.deepEqual(logs, []);
 });
 
 test("default-channel upgrade proceeds when upgrade necessity is undeterminable", async () => {
@@ -433,6 +438,7 @@ test("default-channel upgrade proceeds when upgrade necessity is undeterminable"
       spawn,
       stdout: sink.stdout,
       registryCheck: { fetchImpl: createFetchRejectDouble("timeout").fetchImpl },
+      resolveUpgradedVersion: () => "unknown",
     },
   );
   assert.equal(exitCode, 0);
@@ -456,7 +462,7 @@ test("default-channel upgrade propagates child failure without printing a summar
   assert.deepEqual(sink.chunks, []);
 });
 
-test("develop-channel upgrade installs the git repository and prints the completion summary", async () => {
+test("develop-channel upgrade runs the git pi update command and prints the metadata-resolved summary", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();
   const exitCode = await runPackageManagerUpgradeCommand(
@@ -464,7 +470,7 @@ test("develop-channel upgrade installs the git repository and prints the complet
     {
       spawn,
       stdout: sink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
     },
   );
   assert.equal(exitCode, 0);
@@ -490,6 +496,32 @@ test("develop-channel upgrade propagates child failure without printing a summar
 });
 
 /**
+ * @brief Verifies the unchanged-version stderr warning for one non-forced upgrade child.
+ * @details Injects a post-upgrade installed-version resolver returning the same starting version so the completion report must surface the unchanged-version stderr warning while the stdout summary still prints and the exit code stays `0`. Deterministic: spawn, fetch, logger, stdout, and resolver doubles; no network, child processes, or filesystem metadata reads. Arrange prepares a newer registry latest plus an unchanged post-child version; Act runs the non-forced upgrade; Assert compares exit code, stdout summary, and captured stderr warning.
+ * @satisfies REQ-484, REQ-531
+ */
+test("non-forced upgrade warns on stderr when the re-read installed version stays unchanged", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const { logs, errors, logger } = createLoggerDouble();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "npm" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      logger,
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      resolveUpgradedVersion: () => "1.0.0",
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 1.0.0\n"]);
+  assert.equal(errors.length, 0);
+  assert.match(logs.join("\n"), /warning: pi-usereq installed version remained 1\.0\.0/);
+});
+
+/**
  * @brief Verifies that a forced default-channel run skips the already-latest gate.
  * @details Uses an installed version equal to the registry latest so the non-forced path would print the already-latest skip line, then asserts the forced run spawns exactly the documented `pi update npm:pi-usereq --force` child with inherited stdio from the user home and prints the completion summary instead. Deterministic: spawn and fetch doubles, no network or child processes. Arrange prepares equal installed and latest versions; Act runs the forced upgrade; Assert compares the recorded child invocation plus stdout against the documented force contract.
  * @satisfies REQ-526, REQ-527
@@ -497,12 +529,15 @@ test("develop-channel upgrade propagates child failure without printing a summar
 test("forced default-channel upgrade skips the already-latest gate and runs the pi update force command", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();
+  const { logs, logger } = createLoggerDouble();
   const exitCode = await runPackageManagerUpgradeCommand(
     { installedVersion: "2.0.0", channel: "npm", force: true },
     {
       spawn,
       stdout: sink.stdout,
+      logger,
       registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
     },
   );
   assert.equal(exitCode, 0);
@@ -514,6 +549,7 @@ test("forced default-channel upgrade skips the already-latest gate and runs the 
   assert.equal(calls[0].options.shell, process.platform === "win32");
   assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 2.0.0 -> 2.0.0\n"]);
   assert.ok(!sink.chunks.join("").includes("already the latest"));
+  assert.deepEqual(logs, []);
 });
 
 test("forced default-channel upgrade propagates child failure without printing a summary", async () => {
@@ -537,7 +573,7 @@ test("forced develop-channel upgrade runs the git pi update force command and pr
     {
       spawn,
       stdout: sink.stdout,
-      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
     },
   );
   assert.equal(exitCode, 0);

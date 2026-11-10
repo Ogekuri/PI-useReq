@@ -135,9 +135,18 @@ export function getInstallationPath(): string {
  * @return {InstallationPackageMetadata} Cached package name and version used by runtime status rendering.
  */
 export function getInstallationPackageMetadata(): InstallationPackageMetadata {
-  if (installationPackageMetadataCache !== undefined) {
-    return installationPackageMetadataCache;
+  if (installationPackageMetadataCache === undefined) {
+    installationPackageMetadataCache = readInstallationPackageMetadataFromDisk();
   }
+  return installationPackageMetadataCache;
+}
+
+/**
+ * @brief Reads the installation-owned package manifest from disk.
+ * @details Resolves `<installation-path>/../package.json`, parses the `name` plus `version` fields with surrounding-whitespace trimming, and falls back to `DEFAULT_INSTALLATION_PACKAGE_METADATA` when the manifest is missing, malformed, or incomplete. Runtime is O(n) in manifest size. Side effects are limited to one filesystem read.
+ * @return {InstallationPackageMetadata} Freshly read package name and version.
+ */
+function readInstallationPackageMetadataFromDisk(): InstallationPackageMetadata {
   const packageJsonPath = path.resolve(
     getInstallationPath(),
     "..",
@@ -154,13 +163,22 @@ export function getInstallationPackageMetadata(): InstallationPackageMetadata {
       ? packageJson.version.trim()
       : "";
     if (name !== "" && version !== "") {
-      installationPackageMetadataCache = { name, version };
-      return installationPackageMetadataCache;
+      return { name, version };
     }
   } catch {
     // Fallback handled below.
   }
-  installationPackageMetadataCache = { ...DEFAULT_INSTALLATION_PACKAGE_METADATA };
+  return { ...DEFAULT_INSTALLATION_PACKAGE_METADATA };
+}
+
+/**
+ * @brief Re-reads the installation-owned extension package metadata bypassing the process cache.
+ * @details Reads `<installation-path>/../package.json` from disk again, replaces the shared module-local cache with the fresh facts, and returns them so callers executing a pre-upgrade module image can observe the version written on disk by an external package-manager child. Runtime is O(n) in manifest size per call. Side effects are limited to one filesystem read and module-local cache mutation.
+ * @return {InstallationPackageMetadata} Freshly read package name and version.
+ * @satisfies REQ-484
+ */
+export function refreshInstallationPackageMetadata(): InstallationPackageMetadata {
+  installationPackageMetadataCache = readInstallationPackageMetadataFromDisk();
   return installationPackageMetadataCache;
 }
 

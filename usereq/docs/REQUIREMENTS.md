@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.130"
+version: "0.0.131"
 date: "2026-11-10"
 author: "OpenAI Codex"
 scope:
@@ -568,9 +568,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-474**: MUST return no management command for every other non-empty argv shape so standard flag parsing stays untouched.
 - **REQ-524**: MUST detect two-token management argv shapes pairing `--upgrade` with exactly one of `--dev`, `--develop`, or `--force`, in either order.
 - **REQ-525**: MUST detect three-token `--upgrade` management argv shapes composed of `--upgrade`, `--force`, and `--dev` or `--develop`, in any order.
-- **REQ-526**: MUST make forced `--upgrade` runs skip the already-latest registry gate and always execute the channel-specific package-install child process.
+- **REQ-526**: MUST make forced `--upgrade` runs skip the already-latest registry gate and always execute the channel-specific package-update child process.
 - **REQ-527**: MUST execute forced `--upgrade` installation through the pi CLI update command with its force reinstall option targeting the channel-specific package source.
-- **REQ-528**: MUST keep non-forced `--upgrade` executions on the standard already-latest-gated `pi install` process for both channels.
+- **REQ-528**: MUST keep non-forced `--upgrade` executions on the standard already-latest-gated `pi update` process for both channels.
 - **REQ-515**: MUST make an empty argv print the full help screen to stdout with exit code `0`, equivalent to the `--help` command without a topic.
 - **REQ-511**: MUST detect `--help <topic>` as exactly two argv tokens pairing `--help` with one of `--upgrade`, `--dev`, `--develop`, `--uninstall`, `--ver`, or `--version`, in either order.
 - **REQ-512**: MUST make `--help` without a topic print the full help screen to stdout with first line `Usage: pi-usereq [command] [options] (<installed-version>)` and exit code `0`.
@@ -582,9 +582,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-478**: MUST bound every registry and GitHub probe with a 2000-millisecond timeout deadline and send the GitHub-mandatory `user-agent` header.
 - **REQ-479**: MUST compare published against installed dotted numeric versions segment-by-segment and MUST treat non-integer or prerelease segments as never newer.
 - **REQ-480**: MUST make default-channel `--upgrade` probe the npmjs package manifest first and return `0` after printing an already-latest stdout line carrying the manifest latest version without spawning children when no newer version exists.
-- **REQ-481**: MUST make default-channel `--upgrade` run `pi install npm:pi-usereq` with inherited stdio and MUST propagate a non-zero child exit code without printing any summary.
-- **REQ-482**: MUST make `--dev` and `--develop` select the develop channel that runs `pi install git:github.com/Ogekuri/PI-useReq` without any registry comparison.
-- **REQ-484**: MUST print stdout line `pi-usereq upgrade completed: <starting> -> <updated>` after a successful upgrade, resolving `<updated>` through one follow-up manifest probe as the latest npmjs version and defaulting to `unknown`.
+- **REQ-481**: MUST make default-channel `--upgrade` run `pi update npm:pi-usereq` with inherited stdio and MUST propagate a non-zero child exit code without printing any summary.
+- **REQ-482**: MUST make `--dev` and `--develop` select the develop channel that runs `pi update git:github.com/Ogekuri/PI-useReq` without any registry comparison.
+- **REQ-484**: MUST print stdout line `pi-usereq upgrade completed: <starting> -> <updated>` after a successful upgrade child, resolving `<updated>` from re-read installation-owned package metadata and defaulting to `unknown`.
 - **REQ-485**: MUST run every package-manager child process with user-home cwd, inherited stdio, and Windows shell resolution, mapping spawn failures to exit code `1` plus one stderr manual-command hint.
 - **REQ-486**: MUST make `--uninstall` run `npm uninstall -g pi-usereq` with inherited stdio and return the child exit code.
 - **REQ-487**: MUST resolve the management-command installed version from installation-owned package metadata and fall back to `unknown` when the manifest is unreadable.
@@ -620,6 +620,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-522**: MUST remove the `~/bin/pi-usereq` link only when it is a symlink resolving to the pi agent bin `pi-usereq` entry and MUST leave foreign entries untouched.
 - **REQ-523**: MUST preserve the `--uninstall` exit code when `~/bin` launcher removal fails.
 - **REQ-529**: MUST right-pad every `--ver`/`--version` report label with spaces to the fixed 18-character `Current Installed ` column width so `:` separators and version numbers align vertically.
+- **REQ-531**: MUST emit one stderr warning without changing the exit code when a non-forced successful upgrade child leaves the re-read installation version equal to the starting version.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -785,8 +786,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-162**: MUST verify `.github/workflows/release-npm.yml` pins the four Node24-native composite action versions and declares no Node20 transitional environment opt-outs.
 - **TST-163**: MUST verify management-command argv detection accepts the documented exact shapes, both channel-option orderings, and rejects every other shape.
 - **TST-164**: MUST verify `--ver`/`--version` emits the three-line report with injected probe doubles, exit code `0`, and `unknown` fallbacks.
-- **TST-165**: MUST verify default-channel `--upgrade` skips spawning when current, spawns the documented install command otherwise, and prints the completion summary.
-- **TST-166**: MUST verify develop-channel `--upgrade` spawns `pi install git:github.com/Ogekuri/PI-useReq` with inherited stdio and prints the completion summary.
+- **TST-165**: MUST verify default-channel `--upgrade` skips spawning when current, spawns the documented update command otherwise, and prints the metadata-resolved completion summary.
+- **TST-166**: MUST verify develop-channel `--upgrade` spawns `pi update git:github.com/Ogekuri/PI-useReq` with inherited stdio and prints the completion summary.
 - **TST-167**: MUST verify `--uninstall` spawns the documented uninstall command and maps spawn failures to exit code `1` with the manual-command hint.
 - **TST-168**: MUST verify dotted numeric version comparison treats prerelease and non-integer segments as never newer and equal versions as not newer.
 - **TST-169**: MUST verify package metadata declares the `pi-usereq` bin launcher and the launcher registers tsx and invokes the CLI `main`.
@@ -796,6 +797,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-174**: MUST verify launcher deployment skips matching links, replaces divergent symlinks, and never overwrites non-symlink entries.
 - **TST-175**: MUST verify `--uninstall` removes only the installation-owned launcher link before spawning the documented uninstall child.
 - **TST-176**: MUST verify `--force` detection accepts the documented two-token and three-token shapes in any order and forced `--upgrade` runs skip the already-latest gate while spawning the documented `pi update` force command for both channels.
+- **TST-177**: MUST verify `--upgrade` emits the unchanged-version stderr warning only for non-forced runs whose re-read installed version equals the starting version.
 
 ## 5. Observed Component Model
 
