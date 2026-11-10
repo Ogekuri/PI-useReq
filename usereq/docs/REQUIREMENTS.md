@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.128"
-date: "2026-11-09"
+version: "0.0.129"
+date: "2026-11-10"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -575,7 +575,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-512**: MUST make `--help` without a topic print the full help screen to stdout with first line `Usage: pi-usereq [command] [options] (<installed-version>)` and exit code `0`.
 - **REQ-513**: MUST render the full help screen `Management Commands:` rows in the fixed order `--upgrade`, `--dev`, `--uninstall`, `--ver`, `--version`, `--help`, each formatted `<token> - <description>`.
 - **REQ-514**: MUST make `--help <topic>` print only the management help row of the requested topic to stdout and return exit code `0`.
-- **REQ-475**: MUST make `--ver` and `--version` write exactly three stdout lines — installed version, `npmjs latest: <version>`, `GitHub latest: <version>` — and return exit code `0`.
+- **REQ-475**: MUST make `--ver` and `--version` write exactly three stdout lines — `Current Installed : <installed>`, `Latest @ NPMjs    : <npmjs>`, `Latest @ GitHub   : <github>` — and return exit code `0`.
 - **REQ-476**: MUST render installed, npm-latest, or GitHub-latest versions as `unknown` whenever the value is missing, unreadable, or its probe fails without a captured failure reason.
 - **REQ-477**: MUST probe the npmjs package manifest document `https://registry.npmjs.org/pi-usereq` backing `https://www.npmjs.com/package/pi-usereq` and the GitHub releases URL concurrently for `--ver`/`--version` without consulting any persisted cache.
 - **REQ-478**: MUST bound every registry and GitHub probe with a 2000-millisecond timeout deadline and send the GitHub-mandatory `user-agent` header.
@@ -602,7 +602,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-499**: MUST make `.github/workflows/release-npm.yml` run the full `npm test` suite inside `build-release` after `npm ci` for every canonical tag.
 - **REQ-500**: MUST make `.github/workflows/release-npm.yml` create the GitHub Release and upload release assets only when the test stage succeeds.
 - **REQ-501**: MUST make `.github/workflows/release-npm.yml` publish to npm only when both the `origin/master` gate and the test stage succeed.
-- **REQ-502**: MUST render a failed GitHub probe as `GitHub latest: unknown (<reason>)`, where `<reason>` is the failure reason captured from the upstream error response.
+- **REQ-502**: MUST render a failed GitHub probe as `Latest @ GitHub   : unknown (<reason>)`, where `<reason>` is the failure reason captured from the upstream error response.
 - **REQ-503**: MUST capture the GitHub probe failure reason from the upstream error response `message` field and omit the reason when the response exposes no usable message.
 - **REQ-504**: MUST best-effort create one `pi-usereq` launcher symlink under `~/.pi/agent/bin` targeting the installation-owned `scripts/pi-usereq.js` during extension activation of pi-package installations.
 - **REQ-505**: MUST skip launcher deployment when an existing `pi-usereq` link already resolves to the current launcher target, keeping deployment idempotent.
@@ -618,6 +618,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-521**: MUST remove the `~/bin/pi-usereq` launcher link best-effort during `--uninstall` before the agent-bin launcher removal and the global uninstall child.
 - **REQ-522**: MUST remove the `~/bin/pi-usereq` link only when it is a symlink resolving to the pi agent bin `pi-usereq` entry and MUST leave foreign entries untouched.
 - **REQ-523**: MUST preserve the `--uninstall` exit code when `~/bin` launcher removal fails.
+- **REQ-529**: MUST right-pad every `--ver`/`--version` report label with spaces to the fixed 18-character `Current Installed ` column width so `:` separators and version numbers align vertically.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.

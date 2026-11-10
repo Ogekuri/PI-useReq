@@ -356,7 +356,7 @@ test("version command prints the manifest latest even when it is not newer than 
     },
   );
   assert.equal(exitCode, 0);
-  assert.deepEqual(sink.chunks, ["0.99.0\nnpmjs latest: 0.95.0\nGitHub latest: 1.5.0\n"]);
+  assert.deepEqual(sink.chunks, ["Current Installed : 0.99.0\nLatest @ NPMjs    : 0.95.0\nLatest @ GitHub   : 1.5.0\n"]);
 });
 
 test("version command prints the exact three-line report and returns zero", async () => {
@@ -370,7 +370,7 @@ test("version command prints the exact three-line report and returns zero", asyn
     },
   );
   assert.equal(exitCode, 0);
-  assert.deepEqual(sink.chunks, ["1.0.0\nnpmjs latest: 2.0.0\nGitHub latest: 1.5.0\n"]);
+  assert.deepEqual(sink.chunks, ["Current Installed : 1.0.0\nLatest @ NPMjs    : 2.0.0\nLatest @ GitHub   : 1.5.0\n"]);
 });
 
 test("version command renders unknown for missing and failed versions", async () => {
@@ -384,7 +384,7 @@ test("version command renders unknown for missing and failed versions", async ()
     },
   );
   assert.equal(exitCode, 0);
-  assert.deepEqual(sink.chunks, ["unknown\nnpmjs latest: unknown\nGitHub latest: unknown\n"]);
+  assert.deepEqual(sink.chunks, ["Current Installed : unknown\nLatest @ NPMjs    : unknown\nLatest @ GitHub   : unknown\n"]);
 });
 
 test("default-channel upgrade skips spawning and reports already-latest when current", async () => {
@@ -592,7 +592,7 @@ test("management dispatch routes every canonical command to its handler", async 
     },
   );
   assert.equal(versionExit, 0);
-  assert.deepEqual(versionSink.chunks, ["1.0.0\nnpmjs latest: 1.0.0\nGitHub latest: 1.0.0\n"]);
+  assert.deepEqual(versionSink.chunks, ["Current Installed : 1.0.0\nLatest @ NPMjs    : 1.0.0\nLatest @ GitHub   : 1.0.0\n"]);
 
   const currentSpawn = createSpawnDouble();
   const currentSink = createStdoutSink();

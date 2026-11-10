@@ -508,6 +508,25 @@ function resolveGitHubProbeLatestVersionText(probe: PackageManagerGitHubProbe): 
 }
 
 /**
+ * @brief Fixed right-padded label column width of the `--ver`/`--version` version report.
+ * @details Equals the longest report label `Current Installed` plus one trailing space (18 characters), so the three report labels fill the same column width and every `:` separator starts at the same column per REQ-529.
+ */
+const PACKAGE_MANAGER_VERSION_REPORT_LABEL_WIDTH = "Current Installed ".length;
+
+/**
+ * @brief Formats one aligned `--ver`/`--version` report line.
+ * @details Right-pads the supplied report label with spaces to the fixed 18-character `Current Installed ` column width so every `:` separator and version number aligns vertically across the three report lines, then appends `: ` plus the version text verbatim. Labels longer than the column keep their full text without truncation. Pure; no side effects.
+ * @param[in] label {string} Report label such as `Current Installed`, `Latest @ NPMjs`, or `Latest @ GitHub`.
+ * @param[in] versionText {string} Resolved version text, including `unknown (<reason>)` GitHub failure renderings.
+ * @return {string} One aligned report line without a trailing newline; the caller joins the three lines with `\n`.
+ * @note Complexity: O(n) in label length. Pure; no side effects.
+ * @satisfies REQ-475, REQ-529
+ */
+function formatPackageManagerVersionReportLine(label: string, versionText: string): string {
+  return `${label.padEnd(PACKAGE_MANAGER_VERSION_REPORT_LABEL_WIDTH)}: ${versionText}`;
+}
+
+/**
  * @brief Detects an exact management-command argv shape in a raw argv array.
  * @details Single-token shape: exactly one of `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`. Two-token shapes: `--upgrade` paired with the `--develop` option, its equivalent `--dev` alias, or the `--force` auxiliary option, or `--help` paired with one documented help topic, in either order. Three-token shapes: `--upgrade`, `--force`, and the `--develop` option or its `--dev` alias in any order. Any other shape yields `undefined` so standard flag dispatch stays untouched.
  * @param[in] args {readonly string[]} Raw CLI arguments excluding the executable and script path.
@@ -648,13 +667,13 @@ function runPackageManagerChildCommand(
 }
 
 /**
- * @brief Handles `--ver`/`--version`: dual online probe plus three-line version report.
- * @details Runs the npm-registry probe and the GitHub-releases probe concurrently, bypassing every persisted cache, then writes exactly three stdout lines — the installed version, `npmjs latest: <version>`, and `GitHub latest: <version>` — and returns `0`. Undeterminable versions print as `unknown`, and a failed GitHub probe carrying a captured upstream failure reason prints `GitHub latest: unknown (<reason>)` reflecting the actual error such as an API rate-limit response.
+ * @brief Handles `--ver`/`--version`: dual online probe plus three-line aligned version report.
+ * @details Runs the npm-registry probe and the GitHub-releases probe concurrently, bypassing every persisted cache, then writes exactly three stdout lines — `Current Installed : <installed>`, `Latest @ NPMjs    : <npmjs>`, `Latest @ GitHub   : <github>` — with labels right-padded to the fixed 18-character column so `:` separators and version numbers align, and returns `0`. Undeterminable versions print as `unknown`, and a failed GitHub probe carrying a captured upstream failure reason prints `Latest @ GitHub   : unknown (<reason>)` reflecting the actual error such as an API rate-limit response.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version.
  * @param[in] deps {PackageManagerCommandDeps} Optional registry/GitHub/stdout overrides.
  * @return {Promise<number>} Exit code `0`.
  * @note Complexity: two concurrent HTTP round-trips bounded by the probe timeout.
- * @satisfies REQ-473, REQ-475, REQ-476, REQ-502
+ * @satisfies REQ-473, REQ-475, REQ-476, REQ-502, REQ-529
  */
 export async function runPackageManagerVersionCommand(
   options: PackageManagerCommandOptions,
@@ -669,7 +688,11 @@ export async function runPackageManagerVersionCommand(
   const githubLatest = resolveGitHubProbeLatestVersionText(githubProbe);
   const stdout = deps.stdout ?? defaultPackageManagerStdout;
   stdout.write(
-    `${installedVersion}\nnpmjs latest: ${registryLatest}\nGitHub latest: ${githubLatest}\n`,
+    [
+      formatPackageManagerVersionReportLine("Current Installed", installedVersion),
+      formatPackageManagerVersionReportLine("Latest @ NPMjs", registryLatest),
+      formatPackageManagerVersionReportLine("Latest @ GitHub", githubLatest),
+    ].join("\n") + "\n",
   );
   return 0;
 }
