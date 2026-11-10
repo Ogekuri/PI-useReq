@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.107.1](https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.107.1) - 2026-11-10
+### 🚜  Changes
+- run pi update on --upgrade and report real installed version [useReq] *(package-manager)*
+REQ-481/482/526/528: default and develop --upgrade channels now spawn
+'pi update <source>' so an installed package advances past its saved range
+REQ-484: completion summary resolves the updated version from re-read
+installation-owned package metadata instead of a registry re-probe
+REQ-531: non-forced upgrades warn on stderr when the installed version
+is unchanged after the child, without changing the exit code
+TST-165/166/177: package-manager test suite updated accordingly
+
 ## [0.107.0](https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0) - 2026-11-10
 ### ⛰️  Features
 - Update docs/pi.dev and pi.dev-src to PI Cli v1.5.2.
@@ -1321,6 +1332,7 @@ generate req/docs/REFERENCES.md from repository source; capture modules, symbols
 - \[0.105.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.105.0
 - \[0.106.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.106.0
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
+- \[0.107.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.1
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1427,3 +1439,4 @@ generate req/docs/REFERENCES.md from repository source; capture modules, symbols
 [0.105.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.104.0..v0.105.0
 [0.106.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
+[0.107.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.107.1
