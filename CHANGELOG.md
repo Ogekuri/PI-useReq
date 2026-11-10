@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.107.0](https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0) - 2026-11-10
+### ⛰️  Features
+- Update docs/pi.dev and pi.dev-src to PI Cli v1.5.2.
+- Update prompts.
+
+### 🚜  Changes
+- require pi CLI v1.5.2 [useReq] *(core)*
+Align peer packages and lockfile with pi CLI v1.5.2.
+Use the v1.5.2 TypeBox schema module and update host compatibility checks.
+- Align --ver/--version report labels to one version column [useReq] *(package-manager)*
+REQ-475/REQ-502: render the three report lines as 'Current Installed :',
+'Latest @ NPMjs    :' and 'Latest @ GitHub   :' (failed GitHub probe renders
+'Latest @ GitHub   : unknown (<reason>)').
+REQ-529: right-pad report labels to the fixed 18-character column so ':'
+separators and version numbers align vertically.
+Update package-manager suite expectations; suite passes 37/37, static-check clean.; REQUIREMENTS.md bumped to 0.0.129; WORKFLOW.md call trace and REFERENCES.md
+regenerated for the new report formatter.
+
 ## [0.106.0](https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0) - 2026-11-09
 ### 🚜  Changes
 - add --force upgrade reinstall support [useReq] *(package-manager)*
@@ -1302,6 +1320,7 @@ generate req/docs/REFERENCES.md from repository source; capture modules, symbols
 - \[0.104.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.104.0
 - \[0.105.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.105.0
 - \[0.106.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.106.0
+- \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1407,3 +1426,4 @@ generate req/docs/REFERENCES.md from repository source; capture modules, symbols
 [0.104.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.103.0..v0.104.0
 [0.105.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.104.0..v0.105.0
 [0.106.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0
+[0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
