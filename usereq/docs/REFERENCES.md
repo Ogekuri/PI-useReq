@@ -3472,7 +3472,7 @@ import type { UseReqConfig } from "./config.js";
 ### fn `function parsePiHostSemanticVersion(value: string): [number, number, number] | undefined` (L70-86)
 - @brief Parses one version string into its leading numeric semantic triple.
 - @details Splits the input on dot separators, parses at most three leading integer components while ignoring pre-release suffixes and build metadata, and returns `undefined` when the first component is not a non-negative integer. Missing trailing components default to `0`. Runtime is O(n) in version length. No external state is mutated.
-- @param[in] value {string} Candidate version string such as `1.4.0` or `1.4.0-beta.1`.
+- @param[in] value {string} Candidate version string such as `1.5.2` or `1.5.2-beta.1`.
 - @return {[number, number, number] | undefined} `[major, minor, patch]` triple, or `undefined` when the version carries no numeric leading component.
 
 ### fn `export function comparePiHostVersions(left: string, right: string): number` (L95-107)
@@ -4103,7 +4103,7 @@ import {
 
 ### iface `interface PromptCommandSessionMessageOptions` (L219-221)
 - @brief Describes prompt-delivery options supported by replacement-session callbacks.
-- @details Mirrors the documented pi 1.4.0 `sendUserMessage(...)` delivery modes needed when prompt orchestration targets a replacement session after a slash-command-owned session switch; pi 1.4.0 sessions count as busy while a run starts and reject `sendUserMessage(...)` without `deliverAs` while streaming. The interface is compile-time only and introduces no runtime cost.
+- @details Mirrors the documented pi 1.5.2 `sendUserMessage(...)` delivery modes needed when prompt orchestration targets a replacement session after a slash-command-owned session switch; pi 1.5.2 sessions count as busy while a run starts and reject `sendUserMessage(...)` without `deliverAs` while streaming. The interface is compile-time only and introduces no runtime cost.
 
 ### iface `interface PromptCommandSessionSwitchOptions` (L227-229)
 - @brief Describes the replacement-session callback options accepted by session switching.
@@ -4111,7 +4111,7 @@ import {
 
 ### iface `interface PromptCommandActiveContext extends PromptCommandSessionContext` : PromptCommandSessionContext (L235-240)
 - @brief Describes the minimal session-bound surface available after session replacement.
-- @details Extends the shared prompt-command context with a string-only `sendUserMessage(...)` probe so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The string content parameter mirrors the prompt-delivery contract consumed by `deliverPromptCommand(...)` while remaining structurally compatible with the pi 1.4.0 replacement-session delivery signatures. The interface is compile-time only and introduces no runtime cost.
+- @details Extends the shared prompt-command context with a string-only `sendUserMessage(...)` probe so prompt dispatch can target the replacement session without reusing stale pre-switch runtime objects. The string content parameter mirrors the prompt-delivery contract consumed by `deliverPromptCommand(...)` while remaining structurally compatible with the pi 1.5.2 replacement-session delivery signatures. The interface is compile-time only and introduces no runtime cost.
 
 ### iface `interface PromptCommandSessionEntry` (L246-251)
 - @brief Describes one serializable session entry copied into a materialized execution-session file.
@@ -6352,8 +6352,8 @@ import path from "node:path";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+import { Type } from "typebox";
 import { Text } from "@earendil-works/pi-tui";
-import { Type } from "@sinclair/typebox";
 import {
 import type { FindToolScope } from "./core/find-payload.js";
 import {

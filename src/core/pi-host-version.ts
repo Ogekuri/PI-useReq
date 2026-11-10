@@ -8,7 +8,7 @@
  * @brief Declares the minimum pi CLI host version supported by the extension.
  * @details Versions below this value keep the extension enabled while `session_start` surfaces one compatibility warning; versions at or above this value are fully supported without warning. Compare with `comparePiHostVersions(...)` using numeric triple semantics.
  */
-export const MINIMUM_SUPPORTED_PI_HOST_VERSION = "1.4.0";
+export const MINIMUM_SUPPORTED_PI_HOST_VERSION = "1.5.2";
 
 /**
  * @brief Describes the process-scoped pi CLI host version probe state.
@@ -64,7 +64,7 @@ function getProcessScopedPiHostVersionStore(): ProcessScopedPiHostVersionStore {
 /**
  * @brief Parses one version string into its leading numeric semantic triple.
  * @details Splits the input on dot separators, parses at most three leading integer components while ignoring pre-release suffixes and build metadata, and returns `undefined` when the first component is not a non-negative integer. Missing trailing components default to `0`. Runtime is O(n) in version length. No external state is mutated.
- * @param[in] value {string} Candidate version string such as `1.4.0` or `1.4.0-beta.1`.
+ * @param[in] value {string} Candidate version string such as `1.5.2` or `1.5.2-beta.1`.
  * @return {[number, number, number] | undefined} `[major, minor, patch]` triple, or `undefined` when the version carries no numeric leading component.
  */
 function parsePiHostSemanticVersion(value: string): [number, number, number] | undefined {

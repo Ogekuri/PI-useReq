@@ -19,8 +19,8 @@ import type {
   ExtensionContext,
   ToolInfo,
 } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { Text } from "@earendil-works/pi-tui";
-import { Type } from "@sinclair/typebox";
 import {
   buildMonolithicToolExecuteResult,
   normalizeToolFailure,
@@ -1064,7 +1064,7 @@ function deliverPromptCommand(
     });
   }
   if (typeof replacementContext?.sendUserMessage === "function") {
-    // v1.4.0 sessions count as busy while a run starts, and `sendUserMessage(...)` rejects with
+    // v1.5.2 sessions count as busy while a run starts, and `sendUserMessage(...)` rejects with
     // "Agent is already processing" when it is streaming without `deliverAs`; `followUp` queues
     // the dispatched prompt for the next turn instead of failing the fallback delivery.
     return Promise.resolve(
