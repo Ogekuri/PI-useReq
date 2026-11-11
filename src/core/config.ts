@@ -104,7 +104,7 @@ export interface UseReqConfig {
   DEBUG_STATUS_CHANGES: "enable" | "disable";
   DEBUG_WORKFLOW_EVENTS: "enable" | "disable";
   DEBUG_TOOL_COMMANDS_ENABLED: DebugToolCommandsEnabled;
-  DEBUG_LOG_ON_STATUS: "any" | "idle" | "checking" | "running" | "merging" | "error";
+  DEBUG_LOG_ON_STATUS: "any" | "idle" | "checking" | "running" | "merging" | "warning" | "error";
   DEBUG_ENABLED_TOOLS: string[];
   DEBUG_ENABLED_PROMPTS: string[];
   "notify-enabled": boolean;
@@ -166,7 +166,7 @@ interface UseReqLocalConfig {
   DEBUG_STATUS_CHANGES: "enable" | "disable";
   DEBUG_WORKFLOW_EVENTS: "enable" | "disable";
   DEBUG_TOOL_COMMANDS_ENABLED: DebugToolCommandsEnabled;
-  DEBUG_LOG_ON_STATUS: "any" | "idle" | "checking" | "running" | "merging" | "error";
+  DEBUG_LOG_ON_STATUS: "any" | "idle" | "checking" | "running" | "merging" | "warning" | "error";
   DEBUG_ENABLED_TOOLS: string[];
   DEBUG_ENABLED_PROMPTS: string[];
 }

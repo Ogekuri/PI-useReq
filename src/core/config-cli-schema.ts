@@ -159,6 +159,7 @@ const DEBUG_LOG_ON_STATUS_MEANINGS: Record<string, string> = {
   checking: "Logs entries only while checking.",
   running: "Logs entries only while running.",
   merging: "Logs entries only while merging.",
+  warning: "Logs entries only on warning.",
   error: "Logs entries only on error.",
 };
 

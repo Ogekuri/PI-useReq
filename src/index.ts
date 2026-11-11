@@ -108,6 +108,7 @@ import {
   getPromptCommandErrorContext,
   preparePromptCommandExecution,
   reapplyPromptCommandSessionSelection,
+  resolvePromptCommandMergeGate,
   restorePromptCommandExecution,
   type PromptCommandExecutionPlan,
   type PromptCommandModelSelection,
@@ -1235,14 +1236,14 @@ function resolveDebugProjectBase(cwd: string, statusController: PiUsereqStatusCo
  * @details Attempts to use the supplied extension context for UI notification delivery; when no context is available or pi raises the documented stale-extension-context error because the context was invalidated by session replacement or reload, the exact message plus severity is enqueued into the process-scoped deferred-notification replay store so one later eligible `session_start` can redeliver it on the restored context instead of losing the evidence. The payload is enqueued only on failed delivery, so already-delivered notifications are never replayed. Runtime is O(1). Side effects are limited to user notification delivery when the context is still active and process-scoped queue mutation when delivery fails.
  * @param[in] ctx {ExtensionContext | ExtensionCommandContext | undefined} Candidate UI context.
  * @param[in] message {string} Notification message.
- * @param[in] level {"info" | "error"} Notification severity.
+ * @param[in] level {"info" | "warning" | "error"} Notification severity.
  * @return {boolean} `true` when the notification was delivered and `false` when delivery failed and the payload was deferred for replay.
  * @satisfies REQ-280, REQ-439, REQ-442
  */
 function notifyContextSafely(
   ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
   message: string,
-  level: "info" | "error",
+  level: "info" | "warning" | "error",
 ): boolean {
   if (ctx === undefined) {
     enqueueDeferredNotification(message, level);
@@ -1526,6 +1527,7 @@ async function finalizeMatchedPromptSuccess(
     notifyContextSafely(promptContext, finalization.warningMessage, "info");
   }
   statusController.state.pendingFinalizationOutcome = undefined;
+  statusController.state.pendingFinalizationStatusMarker = undefined;
   statusController.state.pendingPromptRequest = undefined;
   statusController.state.activePromptRequest = undefined;
   if (debugConfig) {
@@ -1725,6 +1727,7 @@ async function handleExtensionStatusEvent(
     }
   }
   if (hookName === "agent_end") {
+    const agentEndOutputText = buildAgentEndOutputText(event);
     if (statusController.config) {
       // Prompt-end effects are gated on post-update run association, not on UI-timer presence:
       // `updateExtensionStatus(...)` resolves the ended run's own duration (recovering the
@@ -1743,7 +1746,7 @@ async function handleExtensionStatusEvent(
             promptArgs: livePromptEndRequest.promptArgs,
             basePath: livePromptEndRequest.basePath,
             completionTimeMs: statusController.state.endedRunDurationMs,
-            agentOutput: buildAgentEndOutputText(event),
+            agentOutput: agentEndOutputText,
           }
         : undefined;
       runPiNotifyEffects(
@@ -1765,12 +1768,17 @@ async function handleExtensionStatusEvent(
       const outcome = classifyPromptCommandOutcome(
         event as { messages: AgentEndEvent["messages"] },
       );
+      const statusMarker = resolvePromptCommandMergeGate(agentEndOutputText);
       const closureFailureMessage = outcome !== "completed"
         && completionPromptRequest.worktreeDir !== undefined
         ? `ERROR: Prompt closure retained worktree ${completionPromptRequest.worktreeDir} after ${outcome} outcome.`
         : undefined;
       const shouldFinalizeMatchedSuccess = outcome === "completed"
-        && completionPromptRequest.worktreeDir !== undefined;
+        && completionPromptRequest.worktreeDir !== undefined
+        && statusMarker === "ok";
+      const markerBlockedOutcome = outcome === "completed"
+        && completionPromptRequest.worktreeDir !== undefined
+        && statusMarker !== "ok";
       if (debugConfig) {
         logPromptWorkflowEvent(
           completionPromptRequest.basePath,
@@ -1781,6 +1789,7 @@ async function handleExtensionStatusEvent(
           {
             hook: "agent_end",
             outcome,
+            status_marker: statusMarker,
           },
           {
             should_finalize_matched_success: shouldFinalizeMatchedSuccess,
@@ -1796,20 +1805,52 @@ async function handleExtensionStatusEvent(
         // compaction recovery, and queued work start another agent run after it while
         // the same prompt orchestration stays in flight, and the extension cannot
         // distinguish a terminal failure from a failure the host will retry. Record the
-        // run outcome as the terminal candidate and keep the workflow `running`;
-        // `agent_settled` performs the only terminal workflow-state transition.
+        // run outcome plus the inspected status marker as the terminal candidate and keep
+        // the workflow `running`; `agent_settled` performs the only terminal workflow-state
+        // transition.
         statusController.state.pendingFinalizationOutcome = outcome;
+        statusController.state.pendingFinalizationStatusMarker = statusMarker;
       } else if (shouldFinalizeMatchedSuccess) {
         // Legacy hosts never emit `agent_settled`, so no idle-waiting
         // `switchSession` deadlock exists; finalize the matched success
         // directly at `agent_end` to avoid parking in `merging` forever.
         statusController.state.pendingFinalizationOutcome = outcome;
+        statusController.state.pendingFinalizationStatusMarker = statusMarker;
         await finalizeMatchedPromptSuccess(
           pi,
           statusController,
           completionPromptRequest,
           promptContext,
         );
+      } else if (markerBlockedOutcome) {
+        // Status-marker gate (REQ-579/REQ-580/REQ-581): the completed run did not
+        // report `STATUS: OK`, so no merge and no worktree deletion may run. Keep
+        // the worktree execution session visible, park the workflow in `error` for
+        // `STATUS: ERROR` and in `warning` otherwise, and retain the active request
+        // so `req-reset` can restore `base-path` and remove the retained worktree.
+        const blockedWorkflowState = statusMarker === "error" ? "error" : "warning";
+        notifyContextSafely(
+          promptContext,
+          statusMarker === "error"
+            ? `ERROR: Prompt closure retained worktree ${completionPromptRequest.worktreeDir} after STATUS: ERROR.`
+            : `WARNING: Prompt closure retained worktree ${completionPromptRequest.worktreeDir}; the agent output carries no STATUS: OK marker.`,
+          blockedWorkflowState === "error" ? "error" : "warning",
+        );
+        statusController.state.activeRunBelongsToPrompt = false;
+        statusController.state.pendingFinalizationOutcome = undefined;
+        statusController.state.pendingFinalizationStatusMarker = undefined;
+        if (debugConfig) {
+          transitionPromptWorkflowState(
+            statusController,
+            promptContext,
+            completionPromptRequest.basePath,
+            debugConfig,
+            completionPromptRequest.promptName,
+            blockedWorkflowState,
+          );
+        } else {
+          setPiUsereqWorkflowState(statusController, blockedWorkflowState, promptContext);
+        }
       } else if (closureFailureMessage !== undefined) {
         // Legacy-host terminal failure (worktree-backed run that ended interrupted,
         // failed, aborted, or incomplete, REQ-209): keep the worktree execution session
@@ -1859,11 +1900,12 @@ async function handleExtensionStatusEvent(
           notifyContextSafely(promptContext, error instanceof Error ? error.message : String(error), "error");
         }
       }
-      if (closureFailureMessage === undefined && !shouldFinalizeMatchedSuccess) {
+      if (closureFailureMessage === undefined && !shouldFinalizeMatchedSuccess && !markerBlockedOutcome) {
         statusController.state.pendingPromptRequest = undefined;
         statusController.state.activePromptRequest = undefined;
         statusController.state.activeRunBelongsToPrompt = false;
         statusController.state.pendingFinalizationOutcome = undefined;
+        statusController.state.pendingFinalizationStatusMarker = undefined;
         if (debugConfig) {
           transitionPromptWorkflowState(
             statusController,
@@ -1885,6 +1927,7 @@ async function handleExtensionStatusEvent(
   if (hookName === "agent_settled") {
     const settledPromptRequest = statusController.state.activePromptRequest;
     const pendingOutcome = statusController.state.pendingFinalizationOutcome;
+    const pendingStatusMarker = statusController.state.pendingFinalizationStatusMarker;
     if (
       settledPromptRequest !== undefined
       && settledPromptRequest.worktreeDir !== undefined
@@ -1892,9 +1935,9 @@ async function handleExtensionStatusEvent(
     ) {
       // `agent_settled` is the orchestration-termination signal: the pi host emits it
       // only after retries, overflow compaction recovery, and queued work stopped
-      // starting new agent runs, so the recorded final-run outcome is now the
-      // terminal outcome of the whole prompt orchestration.
-      if (pendingOutcome === "completed") {
+      // starting new agent runs, so the recorded final-run outcome and inspected
+      // status marker are now terminal for the whole prompt orchestration.
+      if (pendingOutcome === "completed" && pendingStatusMarker === "ok") {
         const settledDebugConfig = statusController.config;
         if (settledDebugConfig) {
           transitionPromptWorkflowState(
@@ -1909,6 +1952,36 @@ async function handleExtensionStatusEvent(
           setPiUsereqWorkflowState(statusController, "merging", ctx);
         }
         await finalizeMatchedPromptSuccess(pi, statusController, settledPromptRequest, ctx);
+      } else if (pendingOutcome === "completed") {
+        // Status-marker gate (REQ-579/REQ-580/REQ-581): the settled completed run
+        // reported no `STATUS: OK`, so merge and worktree deletion MUST NOT run. Keep
+        // the worktree execution session visible, park the workflow in `error` for
+        // `STATUS: ERROR` and in `warning` otherwise, and retain the active request so
+        // `req-reset` can restore `base-path` and remove the retained worktree.
+        const blockedWorkflowState = pendingStatusMarker === "error" ? "error" : "warning";
+        notifyContextSafely(
+          ctx,
+          pendingStatusMarker === "error"
+            ? `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after STATUS: ERROR.`
+            : `WARNING: Prompt closure retained worktree ${settledPromptRequest.worktreeDir}; the agent output carries no STATUS: OK marker.`,
+          blockedWorkflowState === "error" ? "error" : "warning",
+        );
+        statusController.state.activeRunBelongsToPrompt = false;
+        statusController.state.pendingFinalizationOutcome = undefined;
+        statusController.state.pendingFinalizationStatusMarker = undefined;
+        const settledDebugConfig = statusController.config;
+        if (settledDebugConfig) {
+          transitionPromptWorkflowState(
+            statusController,
+            ctx,
+            settledPromptRequest.basePath,
+            settledDebugConfig,
+            settledPromptRequest.promptName,
+            blockedWorkflowState,
+          );
+        } else {
+          setPiUsereqWorkflowState(statusController, blockedWorkflowState, ctx);
+        }
       } else {
         // Terminal interrupted or failed outcome: keep the worktree execution session
         // visible, surface the closure-failure error, park the workflow in `error`, and
@@ -1924,6 +1997,7 @@ async function handleExtensionStatusEvent(
         // runs must not claim its prompt-end notification effects.
         statusController.state.activeRunBelongsToPrompt = false;
         statusController.state.pendingFinalizationOutcome = undefined;
+        statusController.state.pendingFinalizationStatusMarker = undefined;
         const settledDebugConfig = statusController.config;
         if (settledDebugConfig) {
           transitionPromptWorkflowState(

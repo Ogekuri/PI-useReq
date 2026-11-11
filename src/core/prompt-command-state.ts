@@ -9,9 +9,9 @@ import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
 
 /**
  * @brief Represents the workflow-state domain persisted across session rebinding.
- * @details Mirrors the prompt-orchestration states used by the status controller so the process-scoped store can remain independent from module-local controller instances. The alias is compile-time only and introduces no runtime cost.
+ * @details Mirrors the prompt-orchestration states used by the status controller, including the `warning` terminal state, so the process-scoped store can remain independent from module-local controller instances. The alias is compile-time only and introduces no runtime cost.
  */
-export type PromptCommandRuntimeWorkflowState = "idle" | "checking" | "running" | "merging" | "error";
+export type PromptCommandRuntimeWorkflowState = "idle" | "checking" | "running" | "merging" | "warning" | "error";
 
 /**
  * @brief Stores the prompt-command facts persisted across extension rebinding.

@@ -21,7 +21,7 @@ const DEFERRED_NOTIFICATION_REPLAY_SESSION_START_REASONS = new Set([
  */
 export interface DeferredNotificationRecord {
   message: string;
-  level: "info" | "error";
+  level: "info" | "warning" | "error";
 }
 
 /**
@@ -57,11 +57,11 @@ function getProcessScopedNotificationReplayStore(): ProcessScopedNotificationRep
  * @brief Queues one undeliverable notification for later replay.
  * @details Appends the exact message plus severity to the tail of the process-scoped replay queue so the payload survives extension rebinding and can be redelivered on the next eligible `session_start`. Already-delivered notifications are never enqueued by contract, so replay can never duplicate them. Runtime is O(1). Side effect: mutates process-scoped state.
  * @param[in] message {string} Exact notification message text whose stale-context delivery failed.
- * @param[in] level {"info" | "error"} Original notification severity preserved for the replayed delivery.
+ * @param[in] level {"info" | "warning" | "error"} Original notification severity preserved for the replayed delivery.
  * @return {void} No return value.
  * @satisfies REQ-439, REQ-442
  */
-export function enqueueDeferredNotification(message: string, level: "info" | "error"): void {
+export function enqueueDeferredNotification(message: string, level: "info" | "warning" | "error"): void {
   getProcessScopedNotificationReplayStore().queue.push({ message, level });
 }
 

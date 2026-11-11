@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.133"
+version: "0.0.134"
 date: "2026-11-11"
 author: "OpenAI Codex"
 scope:
@@ -290,7 +290,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-291**: MUST detect staged or unstaged `base-path` changes before successful closure merge and execute `git stash`, merge, and `git stash pop` in that order when changes exist.
 - **REQ-292**: MUST complete successful stash-assisted closure without surfacing an error and MUST emit a warning that the restored `base-path` is not clean after merge.
 - **REQ-209**: MUST retain the worktree execution session, worktree, and branch, notify the pi CLI of closure failure, park workflow state in `error`, and leave the original base-path session unresumed when orchestrated session closure is interrupted, failed, aborted, or incomplete.
-- **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, and `error`.
+- **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, `warning`, and `error`.
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
 - **REQ-224**: MUST reject every `req-*` slash command except `req-reset` before any operation when workflow state is not `idle`, surface the error to pi CLI, and transition workflow state to `error`.
@@ -565,6 +565,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-463**: On hosts emitting `agent_settled`, MUST determine the terminal prompt-orchestration outcome only at `agent_settled`, classifying interrupted, completed, or failed from the final agent run.
 - **REQ-464**: On hosts emitting `agent_settled`, MUST NOT park workflow state `error`, emit the worktree-retention error notification, or clear prompt-run ownership at intermediate `agent_end` events.
 - **REQ-465**: On hosts without `agent_settled`, MUST determine the terminal prompt-orchestration outcome at the final `agent_end` event.
+- **REQ-584**: MUST inspect the concatenated assistant text blocks of the final agent message before executing worktree merge or worktree deletion in every agentic prompt orchestration.
+- **REQ-585**: MUST execute worktree merge and worktree deletion only when the inspected final agent output contains the exact `STATUS: OK` marker.
+- **REQ-586**: MUST NOT execute worktree merge or worktree deletion when the inspected final agent output lacks the exact `STATUS: OK` marker.
+- **REQ-587**: MUST park workflow state `error`, retain the worktree, and emit one error notification when the inspected final agent output contains `STATUS: ERROR`.
+- **REQ-588**: MUST park workflow state `warning`, retain the worktree, and emit one warning notification when the inspected final agent output contains neither marker.
+- **REQ-589**: MUST treat a terminal agent run whose final assistant message exposes no text content block as merge-eligible.
+- **REQ-590**: MUST render `status:warning` with theme `error` plus terminal blink when supported, matching the `status:error` rendering.
 - **REQ-469**: MUST resolve the Pushover-channel `%%OUTPUT%%` for completed prompt-end outcomes as the trimmed text after the first `## **Summary**` heading and before the first subsequent `## **Outcome**` heading.
 - **REQ-470**: MUST keep the Pushover-channel `%%OUTPUT%%` unchanged for completed prompt-end outcomes whose final agent output does not contain `## **Summary**`.
 - **REQ-471**: MUST NOT substitute into Pushover title or Pushover text any final-agent-output text outside the `## **Summary**` section for completed prompt-end outcomes.
@@ -856,6 +863,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-182**: MUST verify `--get`, `--set`, and `--unset` JSON semantics, index bounds, reset rules, and no mutation on rejected operations.
 - **TST-183**: MUST verify `--print-raw` byte preservation plus global-config bootstrapping without overwriting an existing file.
 - **TST-184**: MUST verify `--info Global` renders `Global`-level detail prefixes `│   `, non-last leaf `│   │   `, last leaf `│       `, and last `Local` leaf eight spaces.
+- **TST-185**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: OK` merges, deletes the worktree plus branch, and returns workflow state `idle`.
+- **TST-186**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: ERROR` performs no merge or worktree deletion and parks workflow state `error`.
+- **TST-187**: MUST verify a completed worktree-backed run whose final assistant text contains neither marker performs no merge or worktree deletion and parks blinking `warning`.
+- **TST-188**: MUST verify a completed worktree-backed run whose final assistant message exposes no text content block remains merge-eligible.
 
 ## 5. Observed Component Model
 
@@ -1133,6 +1144,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-574 | `scripts/pre-release-check.sh` :: `cleanup_dist_artifacts(...)` :: removes run-generated `dist/*.tgz` on success, failure, and signal exits via the EXIT trap. |
 | REQ-575 | `.gitignore` :: include section :: keeps exclusion-first inverse rules and adds `!/dist/` plus `!/dist/**/*` traversal re-inclusions. |
 | REQ-576 | `.gitignore` :: exclude section :: replaces the indiscriminate `dist/` rule with the targeted `/dist/*.tgz` generated-artifact rule. |
+| REQ-584 | `src/index.ts` :: `handleExtensionStatusEvent` :: records the inspected status marker in the `workflow_closure` debug payload and the deferred terminal state. |
+| REQ-585 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandStatusMarker`; `src/index.ts` :: `handleExtensionStatusEvent` :: merges and deletes the worktree only for `ok` markers. |
+| REQ-586 | `src/index.ts` :: `handleExtensionStatusEvent` :: marker-blocked branches skip `finalizeMatchedPromptSuccess` and retain the worktree. |
+| REQ-587 | `src/index.ts` :: `handleExtensionStatusEvent` :: `STATUS: ERROR` parks workflow state `error` with one error notification. |
+| REQ-588 | `src/index.ts` :: `handleExtensionStatusEvent` :: missing markers park workflow state `warning` with one warning notification. |
+| REQ-589 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandMergeGate` :: empty inspected text stays merge-eligible. |
+| REQ-590 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `warning` with the blinking `error` theme token. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1176,6 +1194,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-182 | `tests/config-cli.test.ts` :: CLI behavior tests cover JSON reads, typed writes, bounds, resets, and no mutation on rejection. |
 | TST-183 | `tests/config-cli.test.ts` :: CLI behavior tests cover raw-byte output and global bootstrapping without overwrite. |
 | TST-184 | `tests/config-cli.test.ts` :: `--info Global` regression asserts `│   `, `│   │   `, `│       `, and eight-space detail prefixes. |
+| TST-185 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts merge plus deletion for `STATUS: OK` final assistant text. |
+| TST-186 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus workflow `error` for `STATUS: ERROR` final assistant text. |
+| TST-187 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus blinking workflow `warning` when neither marker is present. |
+| TST-188 | `tests/extension-registration.test.ts` :: existing worktree closure fixtures with empty assistant content remain merge-eligible. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

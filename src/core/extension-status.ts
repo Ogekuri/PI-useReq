@@ -15,7 +15,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { UseReqConfig } from "./config.js";
 import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
-import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
+import type { PromptCommandExecutionPlan, PromptCommandStatusMarker } from "./prompt-command-runtime.js";
 import {
   restorePersistedPromptCommandRuntimeStateForSession,
   writePersistedPromptCommandRuntimeState,
@@ -109,13 +109,13 @@ export type PiUsereqPromptRequest = PromptCommandExecutionPlan;
 
 /**
  * @brief Represents one prompt-orchestration workflow state displayed in the status bar.
- * @details Narrows workflow tracking to the documented `idle`, `checking`, `running`, `merging`, and `error` states reused by prompt-command gating, prompt-end orchestration, and status rendering. Compile-time only and introduces no runtime cost.
+ * @details Narrows workflow tracking to the documented `idle`, `checking`, `running`, `merging`, `warning`, and `error` states reused by prompt-command gating, prompt-end orchestration, and status rendering. Compile-time only and introduces no runtime cost.
  */
-export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" | "error";
+export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" | "warning" | "error";
 
 /**
  * @brief Stores the mutable runtime facts displayed by the status bar.
- * @details Persists the prompt-orchestration workflow state, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
+ * @details Persists the prompt-orchestration workflow state, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome plus inspected status marker recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqStatusState {
   workflowState: PiUsereqWorkflowState;
@@ -129,6 +129,7 @@ export interface PiUsereqStatusState {
   pendingPromptRequest: PiUsereqPromptRequest | undefined;
   activePromptRequest: PiUsereqPromptRequest | undefined;
   pendingFinalizationOutcome: PiNotifyOutcome | undefined;
+  pendingFinalizationStatusMarker: PromptCommandStatusMarker | undefined;
   agentSettledEventSupported: boolean | undefined;
 }
 
@@ -585,18 +586,18 @@ function formatRenderedStatusField(
 
 /**
  * @brief Formats the rendered workflow-state value for the `status` field.
- * @details Uses the standard warning-colored value renderer for non-error states and emits a blinking `error`-colored value for `status:error` so the footer highlights orchestration failures immediately. Runtime is O(n) in text length. No external state is mutated.
+ * @details Uses the standard warning-colored value renderer for neutral states, emits a blinking `error`-colored value for `status:error`, and emits the identical blinking `error`-colored value for `status:warning` so orchestration warnings match the documented error styling. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] workflowState {PiUsereqWorkflowState} Current workflow state.
  * @return {string} Rendered workflow-state value.
- * @satisfies REQ-112, REQ-223
+ * @satisfies REQ-112, REQ-223, REQ-582
  */
 function formatWorkflowStateValue(
   theme: StatusThemeAdapter,
   workflowState: PiUsereqWorkflowState,
 ): string {
-  if (workflowState === "error") {
-    return theme.colorize("error", "\u001b[5merror\u001b[25m");
+  if (workflowState === "error" || workflowState === "warning") {
+    return theme.colorize("error", `\u001b[5m${workflowState}\u001b[25m`);
   }
   return theme.value(workflowState);
 }
@@ -751,6 +752,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       pendingPromptRequest: undefined,
       activePromptRequest: undefined,
       pendingFinalizationOutcome: undefined,
+      pendingFinalizationStatusMarker: undefined,
       agentSettledEventSupported: undefined,
     },
     tickHandle: undefined,
@@ -912,6 +914,7 @@ export function updateExtensionStatus(
       controller.state.pendingPromptRequest = undefined;
       controller.state.activePromptRequest = undefined;
       controller.state.pendingFinalizationOutcome = undefined;
+      controller.state.pendingFinalizationStatusMarker = undefined;
     }
   }
 
@@ -991,6 +994,7 @@ export function updateExtensionStatus(
       controller.state.pendingPromptRequest = undefined;
       controller.state.activePromptRequest = undefined;
       controller.state.pendingFinalizationOutcome = undefined;
+      controller.state.pendingFinalizationStatusMarker = undefined;
       controller.state.workflowState = "idle";
     }
   }
