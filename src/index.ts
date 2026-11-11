@@ -920,7 +920,7 @@ function summarizeStructuredToolResult(
  * @brief Builds a custom `renderResult` implementation for one monolithic tool.
  * @details Reuses a mutable `Text` component when possible, keeps the default collapsed row compact with essential invocation parameters plus result status, and reveals the full monolithic content only when the tool row is expanded. Runtime is O(n) in expanded content length and compact argument-preview size. No external state is mutated.
  * @param[in] toolName {string} Registered tool name.
- * @return {(result: MonolithicToolRenderResult, options: { expanded?: boolean; isPartial?: boolean }, _theme: unknown, context: { args?: Record<string, unknown>; lastComponent?: unknown }) => Text} Custom result renderer.
+ * @return {(result: MonolithicToolRenderResult, options: { expanded?: boolean; isPartial?: boolean }, _theme: unknown, context: { args?: unknown; lastComponent?: unknown }) => Text} Custom result renderer.
  * @satisfies REQ-210
  */
 function buildStructuredToolRenderResult(toolName: string) {
@@ -928,8 +928,12 @@ function buildStructuredToolRenderResult(toolName: string) {
     result: MonolithicToolRenderResult,
     options: { expanded?: boolean; isPartial?: boolean },
     _theme: unknown,
-    context: { args?: Record<string, unknown>; lastComponent?: unknown },
+    context: { args?: unknown; lastComponent?: unknown },
   ): Text => {
+    const toolCallArgs =
+      context.args !== null && typeof context.args === "object"
+        ? (context.args as Record<string, unknown>)
+        : undefined;
     const textComponent = context.lastComponent instanceof Text
       ? context.lastComponent
       : new Text("", 0, 0);
@@ -937,7 +941,7 @@ function buildStructuredToolRenderResult(toolName: string) {
       textComponent.setText(`… ${toolName}`);
       return textComponent;
     }
-    const compactText = summarizeStructuredToolResult(toolName, result, context.args);
+    const compactText = summarizeStructuredToolResult(toolName, result, toolCallArgs);
     const fullText = getMonolithicToolText(result);
     textComponent.setText(options.expanded && fullText !== "" ? fullText : compactText);
     return textComponent;

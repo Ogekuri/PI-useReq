@@ -47,10 +47,16 @@
 !pi.dev-src/**/*
 !images/
 !images/**/*
+!/dist/
+!/dist/**/*
 
 ##########################################
 # Exlucde specific files and directories #
 ##########################################
+
+# Generated release artifacts (scripts/build.sh output)
+# dist/ stays traversable: only packed tarballs are ignored
+/dist/*.tgz
 
 # Exlude github agents and prompts
 .github/agents/
@@ -69,7 +75,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
