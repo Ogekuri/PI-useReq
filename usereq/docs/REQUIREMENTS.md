@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.131"
-date: "2026-11-10"
+version: "0.0.132"
+date: "2026-11-11"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -49,6 +49,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
 - **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery, base-path session restoration, and force cleanup of generated worktrees plus branches.
 - **PRJ-009**: MUST expose a distributable `pi-usereq` npm bin program accepting the management commands `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop] [--force]`, and `--uninstall`.
+- **PRJ-010**: MUST expose an additive configuration CLI with `--get`, `--set`, `--unset`, `--print`, `--info`, and `--print-raw` over the existing local and global JSON scopes.
 
 ### 2.2 Project Constraints
 - **CTN-001**: MUST persist local project configuration only at `<base-path>/.pi-usereq.json` with default `docs-dir=usereq/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
@@ -116,6 +117,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-029**: MUST implement the official pre-release verification gate in `scripts/pre-release-check.sh` as a standalone bash process using `git`, `npm`, `node`, and core shell utilities only.
 - **DES-030**: MUST implement pi-usereq launcher deployment plus removal helpers in one dedicated `src/core/bin-deploy.ts` module outside `src/index.ts` business logic.
 - **DES-031**: MUST implement `~/bin` launcher deployment plus removal helpers in the same dedicated `src/core/bin-deploy.ts` module outside `src/index.ts` business logic.
+- **DES-032**: MUST implement the configuration CLI schema, path resolution, typed validation, schema projection, and atomic persistence in `src/core/config-cli-schema.ts` and `src/core/config-cli.ts`.
+- **DES-033**: MUST implement the shared tree renderer plus display-width table formatter used by `--print` and `--info` in `src/core/config-cli-render.ts`.
+- **DES-034**: MUST dispatch leading configuration CLI invocations from `src/cli.ts` `main(...)` before standard flag parsing.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -621,6 +625,38 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-523**: MUST preserve the `--uninstall` exit code when `~/bin` launcher removal fails.
 - **REQ-529**: MUST right-pad every `--ver`/`--version` report label with spaces to the fixed 18-character `Current Installed ` column width so `:` separators and version numbers align vertically.
 - **REQ-531**: MUST emit one stderr warning without changing the exit code when a non-forced successful upgrade child leaves the re-read installation version equal to the starting version.
+- **REQ-532**: MUST keep the `pi-usereq` configuration menu, `req-*` slash commands, and agent tools observationally unchanged while adding the configuration CLI.
+- **REQ-533**: MUST resolve configuration CLI section `Local` from `<base-path>/.pi-usereq.json` and section `Global` from `~/.config/pi-usereq/config.json`.
+- **REQ-534**: MUST create missing global configuration directories and initialize the global JSON file from schema defaults before any configuration CLI command, without overwriting an existing file.
+- **REQ-535**: MUST validate every configuration CLI write against the strict schema before mutation and MUST fail without partial mutation.
+- **REQ-536**: MUST parse configuration CLI input into the schema type and MUST keep JSON numbers and booleans as typed values.
+- **REQ-537**: MUST persist configuration CLI mutations atomically through a same-directory temporary file, flush, fsync, and rename while preserving existing file permissions.
+- **REQ-538**: MUST write `--get`, `--print`, `--print-raw`, and `--info` success output to stdout and diagnostics to stderr with exit code `1` on failure.
+- **REQ-539**: MUST emit `--get` values as valid JSON without decoration, labels, or confirmations.
+- **REQ-540**: MUST emit `--print-raw` as the unmodified bytes of `~/.config/pi-usereq/config.json` without tree formatting.
+- **REQ-541**: MUST render `--print` and `--info` through one shared deterministic recursive tree renderer.
+- **REQ-542**: MUST emit structural `├── ` and `└── ` markers only for real schema nodes and attach metadata as marker-free detail lines.
+- **REQ-543**: MUST render `[Path: <canonical path>]` on every section heading in `--print` and `--info`.
+- **REQ-544**: MUST render a requested subtree with the requested node as an unconnected root without invented ancestors or dangling columns.
+- **REQ-545**: MUST resolve case-sensitive colon-separated paths against the schema and reject unknown tokens with an English diagnostic.
+- **REQ-546**: MUST support array path tokens `:<Idx>`, `:append`, `:+`, and `:insert:<Idx>` with contiguous zero-based index rules.
+- **REQ-547**: MUST render configuration tables with measured display widths, aligned borders, and the owning parameter detail prefix.
+- **REQ-548**: MUST render `--print` primitive values as JSON with `(default)` or `(custom | default: <JSON>)` status.
+- **REQ-549**: MUST render `--print` selection parameters with an attached `Sel | Value` table holding exactly one `[*]` active row.
+- **REQ-550**: MUST render `--print` array parameters with `Idx`-prefixed tables plus the documented count and target-path summaries.
+- **REQ-551**: MUST omit tables for empty collections and render a complete-path add hint instead.
+- **REQ-552**: MUST render `--info` parameter headings as `Token - [Type: constraints] Description`.
+- **REQ-553**: MUST attach `--info` default, set, and reset detail lines containing complete canonical paths and valid shell-quoted examples.
+- **REQ-554**: MUST render `--info` selection parameters with an `Allowed Values` table containing `Value`, `Default`, `Meaning`, and `Set cmd`.
+- **REQ-555**: MUST render `--info` object-array parameters with an `Item Schema` table and complete single-row commands using one JSON object plus whole-array commands using one JSON array.
+- **REQ-556**: MUST reject `--unset <Path>:<Idx>:<Field>` for a required field without a default while permitting optional field removal.
+- **REQ-557**: MUST emit every configuration CLI identifier, description, error, confirmation, and output line in English.
+- **REQ-558**: MUST treat a leading `--print`, `--info`, `--print-raw`, `--get`, `--set`, or `--unset` token as an exclusive configuration CLI invocation.
+- **REQ-559**: MUST reject `Global:notify-pushover-enabled=true` while either Pushover credential is empty.
+- **REQ-560**: MUST reject `Global:GIT_WORKTREE_ENABLED=enable` while `Global:AUTO_GIT_COMMIT=disable`.
+- **REQ-561**: MUST project persisted configuration onto the canonical schema before each configuration CLI write.
+- **REQ-562**: MUST derive configuration CLI defaults from `getDefaultConfig(...)` and enum domains from existing exported inventories instead of duplicating them.
+- **REQ-563**: MUST emit no stdout on successful `--set` or `--unset` invocations.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -798,6 +834,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-175**: MUST verify `--uninstall` removes only the installation-owned launcher link before spawning the documented uninstall child.
 - **TST-176**: MUST verify `--force` detection accepts the documented two-token and three-token shapes in any order and forced `--upgrade` runs skip the already-latest gate while spawning the documented `pi update` force command for both channels.
 - **TST-177**: MUST verify `--upgrade` emits the unchanged-version stderr warning only for non-forced runs whose re-read installed version equals the starting version.
+- **TST-178**: MUST verify complete `--print` output for a root with one child, two siblings, nested first/middle/last siblings, detail-bearing leaves, and table-bearing last children.
+- **TST-179**: MUST verify complete `--info` output for section reset rows, selection tables, array commands, and object-array item-schema tables.
+- **TST-180**: MUST verify structural tree invariants covering single markers, sibling order, detail prefixes, section path badges, and absence of orphan connectors.
+- **TST-181**: MUST verify rectangular configuration tables with aligned borders across Unicode and escaped-newline cells.
+- **TST-182**: MUST verify `--get`, `--set`, and `--unset` JSON semantics, index bounds, reset rules, and no mutation on rejected operations.
+- **TST-183**: MUST verify `--print-raw` byte preservation plus global-config bootstrapping without overwriting an existing file.
+- **TST-184**: MUST verify `--info Global` renders `Global`-level detail prefixes `│   `, non-last leaf `│   │   `, last leaf `│       `, and last `Local` leaf eight spaces.
 
 ## 5. Observed Component Model
 
@@ -809,6 +852,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/generate-markdown.ts`, `src/core/compress.ts`, and `src/core/find-constructs.ts` share analyzer and compressor logic to produce reusable Markdown outputs.
 - `src/core/static-check.ts` maps languages/extensions, parses Command-only enable specs, preserves debug `Dummy` handling, resolves inputs, and dispatches modular checker classes.
 - `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, installation-owned bundled-resource resolution, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
+- `src/core/config-cli-schema.ts`, `src/core/config-cli-render.ts`, and `src/core/config-cli.ts` provide the additive configuration CLI schema, deterministic tree plus table rendering, and CLI dispatch over the existing local and global scopes.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
@@ -850,6 +894,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   │   ├── compress-files.ts
 │   │   ├── compress.ts
 │   │   ├── config.ts
+│   │   ├── config-cli-render.ts
+│   │   ├── config-cli-schema.ts
+│   │   ├── config-cli.ts
 │   │   ├── doxygen-parser.ts
 │   │   ├── errors.ts
 │   │   ├── find-constructs.ts
@@ -868,6 +915,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │       ├── guidelines/{Google_Python_Style_Guide.md,Google_C++_Style_Guide.md}
 │       └── prompts/{analyze.md,change.md,check.md,cover.md,create.md,fix.md,flowchart.md,implement.md,new.md,readme.md,recreate.md,refactor.md,renumber.md,workflow.md,write.md}
 ├── tests/
+│   ├── config-cli.test.ts
 │   ├── extension-registration.test.ts
 │   ├── helpers.ts
 │   ├── project-source-tabs.test.ts
@@ -947,6 +995,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runFilesSummarize`, `runSummarize`, `runCompress`, `runSearch`, `runFilesStaticCheck`, and `runProjectStaticCheck`. |
 | DES-006 | `src/core/compress.ts` :: `normalizeRetainedLineIndentation`; `src/core/source-analyzer.ts` :: `normalizeSourceLineForExtraction`; `src/core/compress-files.ts` and `src/core/find-constructs.ts` reuse shared markdown emitters with preserved source tabs. |
 | DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags, gate npm publication on `origin/master` containment, and create the GitHub Release for every canonical tag. |
+| DES-032 | `src/core/config-cli-schema.ts` :: `getConfigSchema`, `resolveConfigTarget`, `validateScopePayload`, and `projectScopePayload`; `src/core/config-cli.ts` :: `runConfigCli` and `atomicWriteJsonPayload` :: implement additive schema-driven configuration operations. |
+| DES-033 | `src/core/config-cli-render.ts` :: `renderConfigTree` and `formatConfigTable` :: provide the single tree renderer plus display-width table formatter shared by `--print` and `--info`. |
+| DES-034 | `src/cli.ts` :: `main(...)` :: dispatches leading configuration CLI invocations through `isConfigCliInvocation(...)` and `runConfigCli(...)` before standard flag parsing. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -1018,6 +1069,38 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-378 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` read-only pi CLI client reference plus source-of-truth bullets injected into pi.dev-aware rendered prompts. |
 | REQ-451 | `src/core/pi-notify.ts` :: `LEGACY_PI_NOTIFY_PUSHOVER_TEXTS` plus `upgradeLegacyPiNotifyPushoverText` :: upgrade every superseded legacy `notify-pushover-text` default; `src/core/config.ts` :: `loadGlobalConfig` :: applies the upgrade to persisted global payloads. |
 | REQ-452 | `src/core/pi-notify.ts` :: `upgradeLegacyPiNotifyPushoverText` :: returns every distinct user-configured `notify-pushover-text` payload unchanged. |
+| REQ-532 | `src/cli.ts` :: `main(...)` :: adds configuration CLI dispatch without changing existing menu, prompt-command, or agent-tool registration. |
+| REQ-533 | `src/core/config-cli-schema.ts` :: `getConfigSchema` :: exposes `Local` and `Global` scopes backed by `getProjectConfigPath` and `getGlobalConfigPath`. |
+| REQ-534 | `src/core/config-cli.ts` :: `ensureGlobalConfigFile` :: initializes the missing global JSON file from defaults without rewriting an existing file. |
+| REQ-535 | `src/core/config-cli.ts` :: `resolveConfigMutation` :: validates the projected payload before writing and never mutates on rejection. |
+| REQ-536 | `src/core/config-cli-schema.ts` :: `parseParameterInput` :: parses schema types while keeping JSON numbers and booleans typed. |
+| REQ-537 | `src/core/config-cli.ts` :: `atomicWriteJsonPayload` :: writes a same-directory temporary file, flushes, fsyncs, renames, and preserves permissions. |
+| REQ-538 | `src/core/config-cli.ts` :: `runConfigCli` :: writes success payloads to stdout and diagnostics to stderr with exit code `1`. |
+| REQ-539 | `src/core/config-cli.ts` :: `runGetCommand` :: emits `JSON.stringify(...)` output only. |
+| REQ-540 | `src/core/config-cli.ts` :: `runPrintRawCommand` :: writes raw global config file bytes without tree formatting. |
+| REQ-541 | `src/core/config-cli-render.ts` :: `renderConfigTree` :: recursively renders both display commands. |
+| REQ-542 | `src/core/config-cli-render.ts` :: `renderConfigTree` :: emits markers only for real nodes and prefixes every detail line without markers. |
+| REQ-543 | `src/core/config-cli.ts` :: `buildSectionHeading` :: renders `[Path: ...]` on every section heading. |
+| REQ-544 | `src/core/config-cli-render.ts` :: `renderConfigTree` :: renders the requested root heading without a marker and without ancestors. |
+| REQ-545 | `src/core/config-cli-schema.ts` :: `resolveConfigTarget` :: resolves case-sensitive schema tokens and rejects unknown paths. |
+| REQ-546 | `src/core/config-cli-schema.ts` :: `resolveConfigTarget` and `applyArrayMutation` :: implement index, append, and insert tokens with range checks. |
+| REQ-547 | `src/core/config-cli-render.ts` :: `formatConfigTable` :: measures display widths and aligns borders and cell separators. |
+| REQ-548 | `src/core/config-cli.ts` :: `buildPrintParameterHeading` :: renders JSON values with default or custom status. |
+| REQ-549 | `src/core/config-cli.ts` :: `buildPrintParameterDetails` :: renders the `Sel | Value` selection table. |
+| REQ-550 | `src/core/config-cli.ts` :: `buildPrintParameterHeading` and `buildPrintParameterDetails` :: render array summaries and `Idx` tables. |
+| REQ-551 | `src/core/config-cli.ts` :: `buildPrintParameterHeading` :: renders empty-collection add hints without tables. |
+| REQ-552 | `src/core/config-cli.ts` :: `buildInfoParameterHeading` :: renders the documented type-constraint-description heading. |
+| REQ-553 | `src/core/config-cli.ts` :: `buildInfoParameterDetails` :: renders default, set, and reset lines with full paths and shell quoting. |
+| REQ-554 | `src/core/config-cli.ts` :: `buildInfoAllowedValuesTable` :: renders the allowed-values table. |
+| REQ-555 | `src/core/config-cli.ts` :: `buildInfoObjectArrayDetails` :: renders the item-schema table and single-object versus whole-array commands. |
+| REQ-556 | `src/core/config-cli-schema.ts` :: `applyFieldUnset` :: rejects required defaultless field resets and removes optional fields. |
+| REQ-557 | `src/core/config-cli.ts` :: `runConfigCli` :: emits English identifiers, descriptions, and diagnostics. |
+| REQ-558 | `src/cli.ts` :: `isConfigCliInvocation` :: routes leading configuration CLI tokens exclusively to `runConfigCli`. |
+| REQ-559 | `src/core/config-cli.ts` :: `validateCrossFieldConstraints` :: rejects Pushover enablement without both credentials. |
+| REQ-560 | `src/core/config-cli.ts` :: `validateCrossFieldConstraints` :: rejects worktree enablement while automatic commit is disabled. |
+| REQ-561 | `src/core/config-cli-schema.ts` :: `projectScopePayload` :: drops non-schema keys before each write. |
+| REQ-562 | `src/core/config-cli-schema.ts` :: `buildSchemaDefaults` :: derives defaults from `getDefaultConfig(...)` and enum domains from exported inventories. |
+| REQ-563 | `src/core/config-cli.ts` :: `runSetCommand` and `runUnsetCommand` :: return without stdout writes on success. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1054,6 +1137,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-160 | `tests/release-workflow.test.ts` :: `package manifest declares npm compliance metadata for license, discoverability, and engines` verifies license, LICENSE text, description, author, keywords, and engines. |
 | TST-161 | `tests/release-workflow.test.ts` :: `package manifest gates npm publish on the full test suite` verifies `prepublishOnly` plus the workflow publish step. |
 | TST-162 | `tests/release-workflow.test.ts` :: `release workflow pins Node24-native composite actions without Node20 transitional opt-outs` verifies the four action pins plus absence of Node20 escape variables. |
+| TST-178 | `tests/config-cli.test.ts` :: renderer fixtures cover complete `--print` shapes including tables on last children. |
+| TST-179 | `tests/config-cli.test.ts` :: renderer fixtures cover complete `--info` shapes including selection and object-array tables. |
+| TST-180 | `tests/config-cli.test.ts` :: `validateRenderedTree` asserts structural markers, sibling order, detail prefixes, and section badges. |
+| TST-181 | `tests/config-cli.test.ts` :: `validateRenderedTables` asserts rectangular borders and aligned separators for Unicode and escaped newlines. |
+| TST-182 | `tests/config-cli.test.ts` :: CLI behavior tests cover JSON reads, typed writes, bounds, resets, and no mutation on rejection. |
+| TST-183 | `tests/config-cli.test.ts` :: CLI behavior tests cover raw-byte output and global bootstrapping without overwrite. |
+| TST-184 | `tests/config-cli.test.ts` :: `--info Global` regression asserts `│   `, `│   │   `, `│       `, and eight-space detail prefixes. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

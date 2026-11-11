@@ -1092,6 +1092,28 @@ function writeConfigFile(configPath: string, payload: object): void {
 }
 
 /**
+ * @brief Builds the persisted local configuration payload for external writers.
+ * @details Exposes the same project-scoped projection used by `saveLocalConfig(...)` so additive CLI persistence layers can write an identical local JSON payload through their own atomic-write path without duplicating the schema mapping. Runtime is O(n) in config size. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective configuration object.
+ * @return {Record<string, unknown>} Persistable local configuration payload.
+ * @satisfies REQ-533, REQ-561
+ */
+export function getPersistedLocalConfigPayload(config: UseReqConfig): Record<string, unknown> {
+  return { ...buildPersistedLocalConfig(config) };
+}
+
+/**
+ * @brief Builds the persisted global configuration payload for external writers.
+ * @details Exposes the same cross-project projection used by `saveGlobalConfig(...)` so additive CLI persistence layers can write an identical global JSON payload through their own atomic-write path without duplicating the schema mapping. Runtime is O(n) in config size. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective configuration object.
+ * @return {Record<string, unknown>} Persistable global configuration payload.
+ * @satisfies REQ-533, REQ-561
+ */
+export function getPersistedGlobalConfigPayload(config: UseReqConfig): Record<string, unknown> {
+  return { ...buildPersistedGlobalConfig(config) };
+}
+
+/**
  * @brief Persists the local configuration scope to disk.
  * @details Serializes only project-scoped fields into `<base-path>/.pi-usereq.json`, excluding runtime-derived metadata and every global-scope configuration key. Runtime is O(n) in serialized local config size. Side effects include directory creation and file overwrite.
  * @param[in] projectBase {string} Absolute project root path.

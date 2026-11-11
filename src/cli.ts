@@ -29,6 +29,10 @@ import {
   runTokens,
 } from "./core/tool-runner.js";
 import {
+  isConfigCliInvocation,
+  runConfigCli,
+} from "./core/config-cli.js";
+import {
   buildStaticCheckEntryIdentity,
   parseEnableStaticCheck,
   runStaticCheck,
@@ -256,7 +260,7 @@ function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseR
  * @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
  * @return {number} Process exit code for the invocation; `0` for dispatched management commands whose async completion assigns the final `process.exitCode`.
  * @throws {ReqError} Internally catches `ReqError` and returns its code; other errors are coerced into exit code `1` with stderr output.
- * @satisfies PRJ-009, DES-026, DES-027, REQ-473, REQ-474, REQ-487, REQ-511, REQ-515
+ * @satisfies PRJ-009, DES-026, DES-027, DES-034, REQ-473, REQ-474, REQ-487, REQ-511, REQ-515, REQ-558
  */
 export function main(argv = process.argv.slice(2)): number {
   try {
@@ -279,6 +283,9 @@ export function main(argv = process.argv.slice(2)): number {
           process.exitCode = 1;
         });
       return 0;
+    }
+    if (isConfigCliInvocation(argv)) {
+      return runConfigCli(argv);
     }
     const args = parseArgs(argv);
     const hereOnlyProjectCommand = !!(
