@@ -180,6 +180,30 @@ test(
 );
 
 test(
+  "package manifest files allowlist ships only runtime-required src and scripts entries",
+  () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { files?: unknown };
+    assert.deepEqual(
+      manifest.files,
+      [
+        "src",
+        "!src/resources/pi-prompts-version.txt",
+        "scripts/pi-usereq.js",
+        "scripts/pi-usereq.sh",
+        "scripts/install-static-checkers.ts",
+        "scripts/debug-extension.ts",
+        "scripts/lib",
+        "scripts/pi-usereq-debug.sh",
+        "scripts/tool-args-to-params.ts",
+      ],
+      "npm files allowlist must exclude maintainer-only scripts and the updater version record",
+    );
+  },
+);
+
+test(
   "package manifest keeps canonical repository, bugs, and homepage metadata for npm provenance",
   assertCanonicalPackageProvenanceMetadata,
 );

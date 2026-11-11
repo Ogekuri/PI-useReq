@@ -31,7 +31,14 @@
   },
   "files": [
     "src",
-    "scripts"
+    "!src/resources/pi-prompts-version.txt",
+    "scripts/pi-usereq.js",
+    "scripts/pi-usereq.sh",
+    "scripts/install-static-checkers.ts",
+    "scripts/debug-extension.ts",
+    "scripts/lib",
+    "scripts/pi-usereq-debug.sh",
+    "scripts/tool-args-to-params.ts"
   ],
   "engines": {
     "node": ">=24.0.0"

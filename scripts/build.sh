@@ -64,7 +64,7 @@ die() {
 
 ##
 # @brief Executes one named build stage with stop-at-first-failure semantics.
-# @details Prints a start banner, invokes the stage command, prints an `OK` banner on success, and on failure prints a `FAILED` banner to stderr before exiting `1`, so the build stops at the first failing stage. Runtime is dominated by the delegated stage command. Side effects are those of the delegated command plus process termination on failure.
+# @details Prints a start banner, invokes the stage command, prints an `OK` banner on success, and on failure prints a `FAILED` banner to stderr before exiting `1`. Failure detection uses an `ERR` trap installed for the stage duration instead of an `if` condition, because Bash suspends `set -e` for every function body invoked inside an `if` condition, which would let non-final failing commands continue; the trap is inherited by stage functions through `set -E`, so the build stops at the first failing command of any stage. The banner is printed only by the main shell process (`BASHPID` equals `$$`), so command-substitution subshells do not duplicate it. Runtime is dominated by the delegated stage command. Side effects are those of the delegated command plus process termination on failure.
 # @param[in] stage_name {string} Human-readable stage label used in the status banners.
 # @param[in] stage_command {string...} Executable plus arguments invoked as the stage body.
 # @return {void} No return value on success; exits `1` on stage failure.
@@ -74,12 +74,10 @@ run_build_stage() {
   local stage_name="$1"
   shift
   printf '\n==> %s\n' "${stage_name}"
-  if "$@"; then
-    printf '==> %s: OK\n' "${stage_name}"
-    return 0
-  fi
-  printf '==> %s: FAILED\n' "${stage_name}" >&2
-  exit 1
+  trap 'if [[ "${BASHPID}" == "$$" ]]; then printf "==> %s: FAILED\n" "${stage_name}" >&2; fi; exit 1' ERR
+  "$@"
+  trap - ERR
+  printf '==> %s: OK\n' "${stage_name}"
 }
 
 ##
@@ -144,11 +142,10 @@ prune_stale_dist_tarballs() {
   if [[ ! -d "${DIST_DIR}" ]]; then
     return 0
   fi
-  local tarball
-  while IFS= read -r -d '' tarball; do
+  find "${DIST_DIR}" -maxdepth 1 -type f -name '*.tgz' -print0 | while IFS= read -r -d '' tarball; do
     rm -f -- "${tarball}"
     printf 'build: removed stale artifact: %s\n' "${tarball}"
-  done < <(find "${DIST_DIR}" -maxdepth 1 -type f -name '*.tgz' -print0)
+  done
 }
 
 ##
