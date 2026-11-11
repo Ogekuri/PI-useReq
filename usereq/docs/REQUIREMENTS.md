@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.134"
+version: "0.0.135"
 date: "2026-11-11"
 author: "OpenAI Codex"
 scope:
@@ -610,9 +610,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-493**: MUST make `scripts/pre-release-check.sh` support `--skip-install` reusing the existing `node_modules` tree, print usage for `--help`, and reject unknown options with non-zero exit.
 - **REQ-494**: MUST make `scripts/pre-release-check.sh` resolve the repository root from its own script location and execute every stage from that root regardless of the caller working directory.
 - **REQ-495**: MUST make `scripts/pre-release-check.sh` capture the repository `git status --porcelain --ignored` inventory before executing any stage.
-- **REQ-496**: MUST make `scripts/pre-release-check.sh` remove every untracked or ignored repository entry created by its stages, including build outputs and intermediate files, before process exit.
+- **REQ-496**: MUST make `scripts/pre-release-check.sh` remove every untracked or ignored repository entry created by its stages, including build outputs and intermediate files but excluding `dist/` release artifacts governed by REQ-574, before process exit.
 - **REQ-497**: MUST make the `scripts/pre-release-check.sh` artifact cleanup execute on successful, failed, and signal-induced exits and preserve the first failing stage exit code.
-- **REQ-498**: MUST restrict `scripts/pre-release-check.sh` artifact removal to `??` or `!!` entries absent from the pre-run inventory, always skipping `node_modules`.
+- **REQ-498**: MUST restrict `scripts/pre-release-check.sh` artifact removal to `??` or `!!` entries absent from the pre-run inventory, always skipping `node_modules` and `dist/` entries.
 - **REQ-499**: MUST make `.github/workflows/release-npm.yml` run the full `npm test` suite inside `build-release` after `npm ci` for every canonical tag.
 - **REQ-500**: MUST make `.github/workflows/release-npm.yml` create the GitHub Release and upload release assets only when the test stage succeeds.
 - **REQ-501**: MUST make `.github/workflows/release-npm.yml` publish to npm only when both the `origin/master` gate and the test stage succeed.
@@ -676,9 +676,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-571**: MUST make `scripts/build.sh` stop at the first failing stage and exit non-zero without presenting a failed build as successful.
 - **REQ-572**: MUST make `scripts/pre-release-check.sh` validate the generated tarball for existence, non-zero size, and required package entries before cleanup.
 - **REQ-573**: MUST make tarball validation require `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries inside the archive.
-- **REQ-574**: MUST make `scripts/pre-release-check.sh` remove the `dist/` tarballs its build stage generated on success, failure, and signal exits, preserving pre-existing non-generated `dist/` entries.
-- **REQ-575**: MUST keep the `.gitignore` exclusion-first inverse strategy unchanged while making `dist/` traversable through directory and content re-inclusion rules.
-- **REQ-576**: MUST ignore generated release tarballs under `dist/` only through the specific `/dist/*.tgz` rule, keeping other `dist/` content visible to Git.
+- **REQ-574**: MUST make `scripts/pre-release-check.sh` retain the `dist/` tarballs its build stage generated when all stages succeed, remove them on failure and signal exits, and preserve every pre-existing `dist/` entry.
+- **REQ-575**: MUST keep the `.gitignore` exclusion-first inverse strategy unchanged while declaring `!dist/` and `!dist/**/*` re-inclusion rules in the include section.
+- **REQ-576**: MUST declare no `.gitignore` exclusion rule targeting `dist/` paths so release artifacts under `dist/` remain tracked by Git.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -867,6 +867,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-186**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: ERROR` performs no merge or worktree deletion and parks workflow state `error`.
 - **TST-187**: MUST verify a completed worktree-backed run whose final assistant text contains neither marker performs no merge or worktree deletion and parks blinking `warning`.
 - **TST-188**: MUST verify a completed worktree-backed run whose final assistant message exposes no text content block remains merge-eligible.
+- **TST-189**: MUST verify `.gitignore` re-includes `dist/` through `!dist/` and `!dist/**/*`, declares no exclusion rule targeting `dist/`, and `git check-ignore --no-index` reports `dist/` release artifacts as not ignored.
+- **TST-190**: MUST verify `scripts/pre-release-check.sh` passes `bash -n` and excludes `dist/` entries from generic artifact removal.
 
 ## 5. Observed Component Model
 
@@ -884,7 +886,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
 - `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, prepares the dependency tree, runs the strict compilation gate, prunes stale generated `dist/` tarballs, packs the npm distribution tarball into `dist/`, and verifies plus summarizes the produced artifact.
-- `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release-artifact generation plus validation through `scripts/build.sh` from the repository root, then removes repository entries its stages created, including generated `dist/` tarballs and intermediate files, while keeping `node_modules` and every pre-existing entry.
+- `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release-artifact generation plus validation through `scripts/build.sh` from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, every `dist/` entry, and every pre-existing entry; generated `dist/` tarballs are removed only on failure or signal exits.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@earendil-works/pi-coding-agent` (>=1.5.2) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
@@ -1141,9 +1143,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-571 | `scripts/build.sh` :: `run_build_stage(...)` :: stops at the first failing stage with a non-zero exit. |
 | REQ-572 | `scripts/pre-release-check.sh` :: `validate_release_artifacts(...)` :: verifies generated-tarball existence, size, and required entries before cleanup. |
 | REQ-573 | `scripts/pre-release-check.sh` :: `validate_release_artifacts(...)` :: requires `package/package.json`, `package/LICENSE`, `package/README.md`, `package/src/index.ts`, and `package/scripts/pi-usereq.js` inside the archive. |
-| REQ-574 | `scripts/pre-release-check.sh` :: `cleanup_dist_artifacts(...)` :: removes run-generated `dist/*.tgz` on success, failure, and signal exits via the EXIT trap. |
-| REQ-575 | `.gitignore` :: include section :: keeps exclusion-first inverse rules and adds `!/dist/` plus `!/dist/**/*` traversal re-inclusions. |
-| REQ-576 | `.gitignore` :: exclude section :: replaces the indiscriminate `dist/` rule with the targeted `/dist/*.tgz` generated-artifact rule. |
+| REQ-574 | `scripts/pre-release-check.sh` :: `cleanup_dist_artifacts(...)` :: removes run-generated `dist/*.tgz` only on failure and signal exits via the EXIT trap; successful gates retain them. |
+| REQ-575 | `.gitignore` :: include section :: keeps exclusion-first inverse rules and adds `!dist/` plus `!dist/**/*` re-inclusions. |
+| REQ-576 | `.gitignore` :: exclude section :: declares no rule targeting `dist/` paths; `git check-ignore --no-index` reports `dist/` tarballs as not ignored (TST-189). |
 | REQ-584 | `src/index.ts` :: `handleExtensionStatusEvent` :: records the inspected status marker in the `workflow_closure` debug payload and the deferred terminal state. |
 | REQ-585 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandStatusMarker`; `src/index.ts` :: `handleExtensionStatusEvent` :: merges and deletes the worktree only for `ok` markers. |
 | REQ-586 | `src/index.ts` :: `handleExtensionStatusEvent` :: marker-blocked branches skip `finalizeMatchedPromptSuccess` and retain the worktree. |
@@ -1198,6 +1200,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-186 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus workflow `error` for `STATUS: ERROR` final assistant text. |
 | TST-187 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus blinking workflow `warning` when neither marker is present. |
 | TST-188 | `tests/extension-registration.test.ts` :: existing worktree closure fixtures with empty assistant content remain merge-eligible. |
+| TST-189 | `tests/gitignore-dist.test.ts` :: `.gitignore` include re-inclusions, absent `dist/` exclusion rule, and `git check-ignore --no-index` results. |
+| TST-190 | `tests/gitignore-dist.test.ts` :: `scripts/pre-release-check.sh` passes `bash -n` and declares the `dist/` cleanup exclusion. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.
