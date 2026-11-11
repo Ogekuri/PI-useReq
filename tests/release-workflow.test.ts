@@ -193,10 +193,6 @@ test(
         "scripts/pi-usereq.js",
         "scripts/pi-usereq.sh",
         "scripts/install-static-checkers.ts",
-        "scripts/debug-extension.ts",
-        "scripts/lib",
-        "scripts/pi-usereq-debug.sh",
-        "scripts/tool-args-to-params.ts",
       ],
       "npm files allowlist must exclude maintainer-only scripts and the updater version record",
     );

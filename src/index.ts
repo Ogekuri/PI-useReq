@@ -25,7 +25,11 @@ import {
   buildMonolithicToolExecuteResult,
   normalizeToolFailure,
 } from "./core/agent-tool-json.js";
-import type { FindToolScope } from "./core/find-payload.js";
+/**
+ * @brief Enumerates the search-tool scopes accepted by the search agent-tool registrations.
+ * @details Restricts parameter-schema and prompt-guideline builders to the explicit-file and configured-source-directory selection modes. The alias is compile-time only and introduces no runtime cost.
+ */
+type FindToolScope = "explicit-files" | "configured-source-directories";
 import {
   DEFAULT_CONTEXT_FILES_FLAG,
   DEFAULT_GIT_WORKTREE_PREFIX,
