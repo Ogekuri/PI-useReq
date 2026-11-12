@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.108.1](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.1) - 2026-11-12
+## [0.108.2](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.2) - 2026-11-12
 ### 🐛  Bug Fixes
 - make postinstall bootstrap dependency-free for git installs [useReq] *(package)*
   Add scripts/install-static-checkers.js plain-Node wrapper that defers bundled
@@ -16,6 +16,8 @@
   files allowlist assertion (PRJ-009, REQ-482, REQ-484, CTN-020).
 
 ### 🚜  Changes
+- reconcile npm and git install sources before upgrade [useReq] *(package-manager)*
+  identify installed npm-managed or git-managed package source before --upgrade; remove the identified package with pi remove before installing a different channel target; install the channel target with pi install and skip the already-latest gate on source switch; recognize npm, git, and project-scope .pi install trees for launcher deployment; update requirements, workflow runtime model, references, and unit tests
 - clean dist before build and fail on stale tarballs [useReq] *(build)*
   Update REQ-568 to cover symbolic-link tarball entries and add REQ-607/REQ-608
   requiring the previous-build cleanup verification to abort with a non-zero
@@ -1415,7 +1417,7 @@
 - \[0.106.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.106.0
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
-- \[0.108.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.1
+- \[0.108.2\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.2
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1523,4 +1525,4 @@
 [0.106.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
-[0.108.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.1
+[0.108.2]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.2
