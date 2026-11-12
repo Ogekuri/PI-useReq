@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.137"
+version: "0.0.138"
 date: "2026-11-12"
 author: "OpenAI Codex"
 scope:
@@ -81,7 +81,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-026**: MUST declare non-empty `package.json` `description`, `author`, and `keywords` entries for npm registry discoverability metadata.
 - **CTN-027**: MUST declare `package.json` `engines.node` as `>=24.0.0`, establishing Node.js 24 as the minimum supported runtime for the package.
 - **CTN-028**: MUST keep `package.json` `version` semver-valid and identical to both root-package `version` fields inside `package-lock.json`.
-- **CTN-029**: MUST declare a `prepublishOnly` package script executing the full `npm test` suite so `npm publish` packs only after tests pass.
+- **CTN-029**: MUST declare a `prepublishOnly` package script executing the full `npm test` suite for source-directory `npm publish` runs, while pre-built tarball publication bypasses package scripts.
 - **CTN-030**: MUST pin `.github/workflows/release-npm.yml` composite actions to Node24-native releases: `actions/checkout@v5`, `actions/setup-node@v5`, `mikepenz/release-changelog-builder-action@v6`, and `softprops/action-gh-release@v3`.
 
 ## 3. Requirements
@@ -100,7 +100,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-008**: MUST wrap affected agent-tool executions as one monolithic content text block plus minimal execution-only details instead of mirrored structured JSON payloads.
 - **DES-009**: MUST treat `docs/pi.dev/coding-agent-docs/` and documents referenced by `docs/pi.dev/agent-document-manifest.json` as the authoritative read-only contract for new or modified software that interfaces with the pi.dev CLI.
 - **DES-010**: MUST centralize event-driven context snapshots, run-timing state, prompt-orchestration workflow state, and status-bar rendering through shared extension-status helpers.
-- **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates npm publication inside `build-release`, preserving changelog-driven GitHub Release creation for every canonical tag.
+- **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates npm publication inside the release job, preserving changelog-driven GitHub Release creation for every canonical tag.
 - **DES-015**: MUST implement config-gated `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` slash-command wrappers in `src/index.ts` that reuse existing tool-runner execution paths.
 - **DES-016**: MUST deliver rendered bundled-prompt content to the LLM through `sendMessage` as a `display:false` custom message with `triggerTurn:true` and MUST NOT use `sendUserMessage` when `sendMessage` is available.
 - **DES-017**: MUST declare `pyright`, `ruff`, and `eslint` as pinned caret-range npm dependencies and register a `postinstall` script that installs bundled static checkers.
@@ -408,9 +408,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-043**: MUST archive repository scenarios for `summarize`, `compress`, `find`, `tokens`, `enable-static-check`, `files-static-check`, and `static-check`.
 - **REQ-138**: MUST make `.github/workflows/release-npm.yml` trigger release automation from pushed tags matched by the existing workflow filter `v[0-9]+.[0-9]+.[0-9]+`.
 - **REQ-139**: MUST gate the npm publication step on the `check-branch` output confirming the tagged commit is contained in `origin/master`.
-- **REQ-467**: MUST run `build-release` for every pushed canonical tag, including tags committed and tagged on `develop` but not `master`.
+- **REQ-467**: MUST run the `release` job for every pushed canonical tag, including tags committed and tagged on `develop` but not `master`.
 - **REQ-468**: MUST create the changelog-driven non-draft non-prerelease GitHub Release even when npm publication is skipped for a tag outside `origin/master`.
-- **REQ-140**: MUST configure `.github/workflows/release-npm.yml` to use Node.js `24.15.0`, run `npm ci`, remove manifest `private`, and publish with provenance and public access.
+- **REQ-140**: MUST configure `.github/workflows/release-npm.yml` to use Node.js `24.15.0` and publish the pre-built `dist/pi-usereq-<version>.tgz` tarball with provenance and public access.
 - **REQ-466**: MUST authenticate `.github/workflows/release-npm.yml` npm publication through OIDC trusted publishing with the `id-token: write` permission and configured registry URL, without npm token secrets.
 - **REQ-141**: MUST preserve the existing changelog-builder step and use its output as the non-draft non-prerelease GitHub Release body.
 - **REQ-155**: MUST keep `package.json` `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
@@ -614,9 +614,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-496**: MUST make `scripts/pre-release-check.sh` remove every untracked or ignored repository entry created by its stages, including build outputs and intermediate files but excluding `dist/` release artifacts governed by REQ-574, before process exit.
 - **REQ-497**: MUST make the `scripts/pre-release-check.sh` artifact cleanup execute on successful, failed, and signal-induced exits and preserve the first failing stage exit code.
 - **REQ-498**: MUST restrict `scripts/pre-release-check.sh` artifact removal to `??` or `!!` entries absent from the pre-run inventory, always skipping `node_modules` and `dist/` entries.
-- **REQ-499**: MUST make `.github/workflows/release-npm.yml` run the full `npm test` suite inside `build-release` after `npm ci` for every canonical tag.
-- **REQ-500**: MUST make `.github/workflows/release-npm.yml` create the GitHub Release and upload release assets only when the test stage succeeds.
-- **REQ-501**: MUST make `.github/workflows/release-npm.yml` publish to npm only when both the `origin/master` gate and the test stage succeed.
+- **REQ-499**: MUST make `.github/workflows/release-npm.yml` publish the pre-built `dist/pi-usereq-<version>.tgz` artifact from the tagged commit and MUST NOT run `npm ci`, `npm test`, or `scripts/build.sh`.
+- **REQ-500**: MUST make `.github/workflows/release-npm.yml` create the GitHub Release and upload every pre-built `dist/*.tgz` artifact present in the tagged commit.
+- **REQ-501**: MUST make `.github/workflows/release-npm.yml` publish to npm only when the `origin/master` gate succeeds.
 - **REQ-502**: MUST render a failed GitHub probe as `Latest @ GitHub   : unknown (<reason>)`, where `<reason>` is the failure reason captured from the upstream error response.
 - **REQ-503**: MUST capture the GitHub probe failure reason from the upstream error response `message` field and omit the reason when the response exposes no usable message.
 - **REQ-504**: MUST best-effort create one `pi-usereq` launcher symlink under `~/.pi/agent/bin` targeting the installation-owned `scripts/pi-usereq.js` during extension activation of pi-package installations.
@@ -685,6 +685,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-599**: MUST make `scripts/build.sh` remove every repository entry created by its own build run before process exit, leaving the repository free of intermediate build artifacts.
 - **REQ-600**: MUST make the `scripts/build.sh` post-build cleanup preserve `node_modules/`, every pre-existing repository entry, and the verified `dist/pi-usereq-<version>.tgz` artifact.
 - **REQ-601**: MUST make the `scripts/build.sh` post-build cleanup execute on successful, failed, and signal-induced exits while preserving the first failing stage exit code.
+- **REQ-602**: MUST limit `.github/workflows/release-npm.yml` to tag checkout, Node.js setup, pre-built artifact verification, changelog generation, npm publication, and GitHub Release asset upload, excluding `scripts/build.sh` and `scripts/pre-release-check.sh`.
+- **REQ-603**: MUST verify the expected `dist/pi-usereq-<version>.tgz` artifact exists non-empty in the tagged commit before npm publication or GitHub Release creation.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -759,7 +761,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-027**: MUST verify harness inspection surfaces `files-compress` and `compress` descriptions covering parameters, line-number behavior, monolithic markdown output, and failure details.
 - **TST-028**: MUST verify `files-static-check` and `static-check` agent-tool outputs place the monolithic static-check report in `content[0].text` and restrict `details` to execution metadata.
 - **TST-029**: MUST verify harness inspection surfaces `files-static-check` and `static-check` descriptions covering parameters, monolithic output, selection rules, and failure details.
-- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML using a declared Node dependency without optional skips, keeps the existing tag filter, gates npm publication on `origin/master` containment, uses Node.js `24.15.0`, publishes through OIDC trusted publishing without `NODE_AUTH_TOKEN`, and creates the GitHub Release.
+- **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML using a declared Node dependency, keeps the tag filter, gates npm publication on `origin/master`, and uses Node.js `24.15.0`.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
 - **TST-040**: MUST verify local and global configuration files omit derived static and dynamic path fields while runtime path context and status rendering still derive them correctly.
@@ -846,7 +848,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-158**: MUST verify configuration loading upgrades every superseded legacy `notify-pushover-text` default (`%%RESULT%%\n%%ARGS%%` and `%%OUTPUT%%`) to `%%RESULT%%\n%%OUTPUT%%` while delivering distinct user-configured templates unchanged.
 - **TST-159**: MUST verify `package.json` `version` is semver-valid and identical to both root-package `version` fields of `package-lock.json`.
 - **TST-160**: MUST verify `package.json` declares SPDX `GPL-3.0-only` matching the committed `LICENSE` text plus non-empty `description`, `author`, `keywords`, and `engines.node` metadata.
-- **TST-161**: MUST verify `package.json` declares `prepublishOnly` executing `npm test` and the release workflow keeps `npm publish` without `--ignore-scripts`.
+- **TST-161**: MUST verify `package.json` declares `prepublishOnly` executing `npm test` for source-directory publishes while the release workflow publishes the pre-built tarball without executing package scripts.
 - **TST-162**: MUST verify `.github/workflows/release-npm.yml` pins the four Node24-native composite action versions and declares no Node20 transitional environment opt-outs.
 - **TST-163**: MUST verify management-command argv detection accepts the documented exact shapes, both channel-option orderings, and rejects every other shape.
 - **TST-164**: MUST verify `--ver`/`--version` emits the three-line report with injected probe doubles, exit code `0`, and `unknown` fallbacks.
@@ -877,6 +879,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-190**: MUST verify `scripts/pre-release-check.sh` passes `bash -n` and excludes `dist/` entries from generic artifact removal.
 - **TST-193**: MUST verify `scripts/clean.sh` is absent and `scripts/build.sh` passes `bash -n`, removes every versioned `dist/*.tgz` tarball plus the emptied `dist/` directory, and preserves non-tarball `dist/` entries.
 - **TST-194**: MUST verify `scripts/build.sh` removes run-created temporary and intermediate repository entries on successful and failed exits while preserving `node_modules/`, pre-existing entries, and the verified release tarball.
+- **TST-195**: MUST verify `.github/workflows/release-npm.yml` authenticates npm publication through OIDC without `NODE_AUTH_TOKEN`, publishes the pre-built `dist/pi-usereq-<version>.tgz`, and creates the GitHub Release.
+- **TST-196**: MUST verify `.github/workflows/release-npm.yml` attaches every pre-built `dist/*.tgz` artifact from the tagged commit to the GitHub Release.
+- **TST-197**: MUST verify `.github/workflows/release-npm.yml` never runs `npm ci`, `npm test`, `npm run build`, `tsc`, `scripts/build.sh`, or `scripts/pre-release-check.sh`.
 
 ## 5. Observed Component Model
 
@@ -911,7 +916,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `package.json` declares `type: "module"`, `pi.extensions: ["./src/index.ts"]`, and the scripts `test`, `test:watch`, `prepublishOnly`, `cli`, `debug:ext`, `debug:ext:inspect`, `debug:ext:session`, `debug:ext:command`, `debug:ext:tool`, and `debug:ext:sdk`.
 - `package.json` declares a `files` allowlist of `src` and `scripts` so npm consumer installs ship only runtime-required code and omit the `tests/` directory.
 - `tsconfig.json` declares `target: "ES2022"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `strict: true`, `noEmit: true`, `skipLibCheck: true`, `resolveJsonModule: true`, and `types: ["node"]`.
-- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, pins every composite action to a Node24-native release, executes the full `npm test` suite inside `build-release` before release creation, publishes the package to npm only for tags contained in `origin/master` with a passing test stage, and creates the matching GitHub Release with release assets for every canonical tag whose test stage succeeds.
+- `.github/workflows/release-npm.yml` validates canonical release tags, pins Node.js `24.15.0` for release execution, pins every composite action to a Node24-native release, verifies the pre-built `dist/pi-usereq-<version>.tgz` artifact from the tagged commit without running any build or build-preparatory check, publishes that pre-built tarball to npm only for tags contained in `origin/master`, and creates the matching GitHub Release with every pre-built `dist/*.tgz` asset for every canonical tag.
 - `package.json` and `package-lock.json` resolve the top-level package as the identical semver version `0.95.0`, and the manifest declares `description`, `author`, `keywords`, `license`, `engines.node`, and a `prepublishOnly` test gate for npm publication.
 
 ## 6. Repository Structure
@@ -989,7 +994,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `tests/attended-results.test.ts` owns the exact standalone and project output contracts, including token counts and static-check results, using committed archives without executing a reference application.
 - `tests/project-source-tabs.test.ts` preserves focused Go-source tab assertions for project commands; standalone tab assertions remain in `tests/cli-command-option-parity.test.ts`.
 - `tests/runtime-independence.test.ts` executes eight analysis commands with a Git-only PATH and unusable legacy interpreter overrides, and rejects legacy fixture configuration or virtualenv artifacts.
-- `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, npm publication steps, GitHub release creation directives in `.github/workflows/release-npm.yml`, plus npm manifest compliance for license, discoverability, engines, lockfile version identity, and the `prepublishOnly` test gate.
+- `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, pre-built `dist/` artifact publication, absence of build or pre-release verification steps, GitHub release asset directives in `.github/workflows/release-npm.yml`, plus npm manifest compliance for license, discoverability, engines, and lockfile version identity.
 - `tests/build-script.test.ts` covers `scripts/build.sh` syntax, previous-build `dist/` cleanup across versioned tarballs, `node_modules/` and non-tarball `dist/` preservation, plus run-created intermediate artifact removal on successful and failed exits.
 - Test business logic focuses on repository-owned output contracts, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
 
@@ -1020,7 +1025,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | CTN-026 | `package.json` :: non-empty `"description"`, `"author"`, and `"keywords"` metadata fields. |
 | CTN-027 | `package.json` :: `"engines": { "node": ">=24.0.0" }` establishing the Node.js 24 minimum runtime. |
 | CTN-028 | `package.json` :: `"version": "0.95.0"`; `package-lock.json` :: root `version` plus `packages[""].version` both `0.95.0`. |
-| CTN-029 | `package.json` :: `"scripts"` :: `"prepublishOnly": "npm test"` executed automatically by `npm publish`. |
+| CTN-029 | `package.json` :: `"scripts"` :: `"prepublishOnly": "npm test"` applies to source-directory `npm publish` runs, while pre-built tarball publication bypasses package scripts. |
 | CTN-030 | `.github/workflows/release-npm.yml` :: `uses:` pins `actions/checkout@v5`, `actions/setup-node@v5`, `mikepenz/release-changelog-builder-action@v6`, and `softprops/action-gh-release@v3`, each running Node24. |
 
 ### 8.2 DES Evidence
@@ -1033,7 +1038,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-004 | `src/core/static-check.ts` :: `StaticCheckBase` and `StaticCheckCommand`; `dispatchStaticCheckForFile` switch selects the modular implementation by module name. |
 | DES-005 | `src/core/tool-runner.ts` :: exports `runFilesTokens`, `runFilesSummarize`, `runSummarize`, `runCompress`, `runSearch`, `runFilesStaticCheck`, and `runProjectStaticCheck`. |
 | DES-006 | `src/core/compress.ts` :: `normalizeRetainedLineIndentation`; `src/core/source-analyzer.ts` :: `normalizeSourceLineForExtraction`; `src/core/compress-files.ts` and `src/core/find-constructs.ts` reuse shared markdown emitters with preserved source tabs. |
-| DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags, gate npm publication on `origin/master` containment, and create the GitHub Release for every canonical tag. |
+| DES-011 | `.github/workflows/release-npm.yml` :: release jobs validate semver tags, gate npm publication on `origin/master` containment, and create the GitHub Release for every canonical tag from pre-built `dist/` artifacts. |
 | DES-032 | `src/core/config-cli-schema.ts` :: `getConfigSchema`, `resolveConfigTarget`, `validateScopePayload`, and `projectScopePayload`; `src/core/config-cli.ts` :: `runConfigCli` and `atomicWriteJsonPayload` :: implement additive schema-driven configuration operations. |
 | DES-033 | `src/core/config-cli-render.ts` :: `renderConfigTree` and `formatConfigTable` :: provide the single tree renderer plus display-width table formatter shared by `--print` and `--info`. |
 | DES-034 | `src/cli.ts` :: `main(...)` :: dispatches leading configuration CLI invocations through `isConfigCliInvocation(...)` and `runConfigCli(...)` before standard flag parsing. |
@@ -1101,10 +1106,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-030 | `src/index.ts` :: `loadProjectConfig` :: resolves the project base from cwd and normalizes the loaded config without persisting runtime-derived path metadata. |
 | REQ-031 | `src/index.ts` :: `registerConfigCommands` :: `pi-usereq-show-config` writes `JSON.stringify(config, null, 2)` into the editor. |
 | REQ-138 | `.github/workflows/release-npm.yml` :: `on.push.tags` plus release-tag validation restrict automation to canonical `v<major>.<minor>.<patch>` tags. |
-| REQ-139 | `.github/workflows/release-npm.yml` :: `build-release` publish step declares `if: needs.check-branch.outputs.is_master == 'true'`, gating npm publication on containment of `github.sha`. |
-| REQ-467 | `.github/workflows/release-npm.yml` :: `build-release` declares `needs: check-branch` with no job-level master gate, so it runs for every pushed canonical tag. |
-| REQ-468 | `.github/workflows/release-npm.yml` :: changelog-builder plus `softprops/action-gh-release@v3` steps run unconditionally inside `build-release`. |
-| REQ-140 | `.github/workflows/release-npm.yml` :: `env.NODE_VERSION` is `24.15.0`; publish job uses `actions/setup-node`, `npm ci`, `npm pkg delete private`, and `npm publish --provenance --access public`. |
+| REQ-139 | `.github/workflows/release-npm.yml` :: `release` publish step declares `if: needs.check-branch.outputs.is_master == 'true'`, gating npm publication on containment of `github.sha`. |
+| REQ-467 | `.github/workflows/release-npm.yml` :: `release` declares `needs: check-branch` with no job-level master gate, so it runs for every pushed canonical tag. |
+| REQ-468 | `.github/workflows/release-npm.yml` :: changelog-builder plus `softprops/action-gh-release@v3` steps run unconditionally inside `release`. |
+| REQ-140 | `.github/workflows/release-npm.yml` :: `env.NODE_VERSION` is `24.15.0`; publish step runs `npm publish "${{ steps.prebuilt.outputs.artifact_path }}" --provenance --access public` against the pre-built tarball. |
 | REQ-466 | `.github/workflows/release-npm.yml` :: top-level `id-token: write` permission plus `actions/setup-node` `registry-url` with a publish step that provides no `NODE_AUTH_TOKEN` :: npm OIDC trusted publishing. |
 | REQ-141 | `.github/workflows/release-npm.yml` :: release job uses changelog-builder output as `softprops/action-gh-release` body with non-draft and non-prerelease flags. |
 | REQ-378 | `src/core/prompts.ts` :: `PI_DEV_CONFORMANCE_BLOCK` :: emits the `pi.dev-src/` read-only pi CLI client reference plus source-of-truth bullets injected into pi.dev-aware rendered prompts. |
@@ -1161,6 +1166,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-599 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: removes every repository entry created by the run. |
 | REQ-600 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: skips `node_modules/`, pre-existing entries, and the verified artifact. |
 | REQ-601 | `scripts/build.sh` :: `EXIT` plus `INT`/`TERM` traps :: cleanup runs on success, failure, and signals while preserving the exit code. |
+| REQ-499 | `.github/workflows/release-npm.yml` :: `release` publish step runs `npm publish "${{ steps.prebuilt.outputs.artifact_path }}"` and contains no `npm ci`, `npm test`, or `scripts/build.sh` invocation. |
+| REQ-500 | `.github/workflows/release-npm.yml` :: `softprops/action-gh-release@v3` `files: dist/*.tgz` uploads the pre-built tarballs from the tagged commit. |
+| REQ-501 | `.github/workflows/release-npm.yml` :: publish step declares `if: needs.check-branch.outputs.is_master == 'true'` and has no test-stage condition. |
+| REQ-602 | `.github/workflows/release-npm.yml` :: step inventory contains only checkout, Node.js setup, pre-built artifact verification, changelog generation, npm publication, and GitHub Release upload. |
+| REQ-603 | `.github/workflows/release-npm.yml` :: `Resolve pre-built release artifact` step checks `dist/pi-usereq-<version>.tgz` with `test -s` before publication. |
 | REQ-584 | `src/index.ts` :: `handleExtensionStatusEvent` :: records the inspected status marker in the `workflow_closure` debug payload and the deferred terminal state. |
 | REQ-585 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandStatusMarker`; `src/index.ts` :: `handleExtensionStatusEvent` :: merges and deletes the worktree only for `ok` markers. |
 | REQ-586 | `src/index.ts` :: `handleExtensionStatusEvent` :: marker-blocked branches skip `finalizeMatchedPromptSuccess` and retain the worktree. |
@@ -1197,12 +1207,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-023 | `tests/extension-registration.test.ts` :: `summary tools register agent-oriented descriptions and schema details`. |
 | TST-024 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-search` and `search` monolithic-output tests. |
 | TST-026 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-compress` and `compress` monolithic-output tests. |
-| TST-039 | `tests/release-workflow.test.ts` :: mandatory Node YAML parsing and workflow-content assertions cover semver gating, `origin/master`-gated npm publication, Node.js `24.15.0`, and GitHub release generation. |
+| TST-039 | `tests/release-workflow.test.ts` :: mandatory Node YAML parsing plus tag-filter, `origin/master` gate, and Node.js `24.15.0` assertions. |
 | TST-133 | `tests/extension-registration.test.ts` :: `req-references` direct-commit workflow coverage verifies the guarded commit path against staged-change presence. |
 | TST-158 | `tests/extension-registration.test.ts` :: `prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates` verifies the superseded legacy default pushes the final assistant output while a distinct user-configured template is delivered unchanged. |
 | TST-159 | `tests/release-workflow.test.ts` :: `package manifest and lockfile keep one identical semver version for npm publication` verifies manifest/lock root version identity. |
 | TST-160 | `tests/release-workflow.test.ts` :: `package manifest declares npm compliance metadata for license, discoverability, and engines` verifies license, LICENSE text, description, author, keywords, and engines. |
-| TST-161 | `tests/release-workflow.test.ts` :: `package manifest gates npm publish on the full test suite` verifies `prepublishOnly` plus the workflow publish step. |
+| TST-161 | `tests/release-workflow.test.ts` :: `package manifest declares prepublishOnly while release workflow publishes the pre-built tarball` verifies the source-directory script plus the script-free pre-built publish step. |
 | TST-162 | `tests/release-workflow.test.ts` :: `release workflow pins Node24-native composite actions without Node20 transitional opt-outs` verifies the four action pins plus absence of Node20 escape variables. |
 | TST-178 | `tests/config-cli.test.ts` :: renderer fixtures cover complete `--print` shapes including tables on last children. |
 | TST-179 | `tests/config-cli.test.ts` :: renderer fixtures cover complete `--info` shapes including selection and object-array tables. |
@@ -1219,6 +1229,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-190 | `tests/gitignore-dist.test.ts` :: `scripts/pre-release-check.sh` passes `bash -n` and declares the `dist/` cleanup exclusion. |
 | TST-193 | `tests/build-script.test.ts` :: syntax check plus absent `scripts/clean.sh`, sandboxed previous-build cleanup across versioned tarballs, and non-tarball `dist/` preservation. |
 | TST-194 | `tests/build-script.test.ts` :: sandboxed success and failure runs asserting intermediate artifact removal, `node_modules/` and pre-existing entry preservation, and verified artifact retention. |
+| TST-195 | `tests/release-workflow.test.ts` :: workflow-content assertions cover OIDC publication of the resolved pre-built artifact and GitHub Release creation. |
+| TST-196 | `tests/release-workflow.test.ts` :: workflow-content assertions cover `files: dist/*.tgz` pre-built release assets. |
+| TST-197 | `tests/release-workflow.test.ts` :: workflow-content assertions reject `npm ci`, `npm test`, `npm run build`, `tsc`, `scripts/build.sh`, and `scripts/pre-release-check.sh`. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

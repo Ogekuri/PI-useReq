@@ -37,8 +37,10 @@ jobs:
             echo "is_master=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # 2. Effetua la build
-  build-release:
+  # 2. Publish the pre-built artifacts included in the tagged commit.
+  # No build and no build-preparatory checks run here: the
+  # dist/pi-usereq-<version>.tgz tarball is already part of the release commit.
+  release:
     needs: check-branch
     # Runs for every pushed canonical tag (master and develop); only the npm
     # publication step below is gated on the origin/master containment check.
@@ -57,28 +59,29 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false  # never use caching in release builds
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build if present
-        run: npm run build --if-present
-
-      # Test gate: the full suite must pass before any release artifact is
-      # uploaded or published; a failing run skips every step below.
-      - name: Run test suite
-        run: npm test
-
-      - name: Remove private package flag
-        run: npm pkg delete private
+      # Verify that the pre-built artifact is part of the tagged commit.
+      # Runs no build, install, test, or pre-release verification script.
+      - name: Resolve pre-built release artifact
+        id: prebuilt
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          artifact="dist/pi-usereq-${version}.tgz"
+          if [ ! -s "${artifact}" ]; then
+            echo "::error::Missing pre-built release artifact ${artifact} in the tagged commit. Run the local release packaging step and commit the generated dist tarball before tagging."
+            exit 1
+          fi
+          git cat-file -e "${GITHUB_SHA}:${artifact}"
+          echo "artifact_path=${artifact}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$(basename "${artifact}")" >> "$GITHUB_OUTPUT"
+          echo "Pre-built release artifact: ${artifact}"
 
       # OIDC trusted publishing: the workflow-level `id-token: write` permission plus
       # the configured registry-url let npm authenticate without any NPM_TOKEN secret.
-      # Publication runs only when the tagged commit is contained in origin/master
-      # and the test suite passed; develop-only tags skip this step and still
-      # produce the GitHub Release below.
-      - name: Publish package to npm
-        if: needs.check-branch.outputs.is_master == 'true' && success()
-        run: npm publish --provenance --access public
+      # Publication runs only when the tagged commit is contained in origin/master.
+      # The pre-built tarball is published directly, so no build or package script runs.
+      - name: Publish pre-built package to npm
+        if: needs.check-branch.outputs.is_master == 'true'
+        run: npm publish "${{ steps.prebuilt.outputs.artifact_path }}" --provenance --access public
 
       - name: Build Changelog
         id: build_changelog
@@ -128,13 +131,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release and upload assets
+      # GitHub Release assets are the pre-built tarballs already present in the
+      # tagged commit; no build output is generated in this workflow.
+      - name: Create GitHub Release and upload pre-built assets
         if: success()
         uses: softprops/action-gh-release@v3
         with:
           draft: false
           prerelease: false
-          files: src/**/*
+          files: dist/*.tgz
           fail_on_unmatched_files: true
           generate_release_notes: false
           tag_name: ${{ github.ref_name }}

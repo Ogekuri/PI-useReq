@@ -30,7 +30,7 @@ function assertReleaseWorkflowYamlSyntax(): void {
   assert.equal(workflow.name, "Release (npm)");
   assert.ok(workflow.on.push.tags.length > 0);
   assert.ok(workflow.jobs["check-branch"]);
-  assert.ok(workflow.jobs["build-release"]);
+  assert.ok(workflow.jobs["release"]);
 }
 
 /**
@@ -111,7 +111,9 @@ test(
     assert.ok(
       workflow.includes("if: needs.check-branch.outputs.is_master == 'true'"),
     );
-    assert.ok(workflow.includes("build-release:"));
+    assert.ok(workflow.includes("release:"));
+    assert.ok(workflow.includes("needs: check-branch"));
+    assert.equal(workflow.includes("build-release:"), false);
   },
 );
 
@@ -123,10 +125,13 @@ test(
     assert.match(workflow, /NODE_VERSION:\s+'24\.15\.0'/);
     assert.ok(workflow.includes("uses: actions/setup-node@v5"));
     assert.ok(workflow.includes("registry-url: 'https://registry.npmjs.org'"));
-    assert.ok(workflow.includes("run: npm ci"));
-    assert.ok(workflow.includes("run: npm pkg delete private"));
+    assert.ok(workflow.includes("Resolve pre-built release artifact"));
+    assert.ok(workflow.includes('artifact="dist/pi-usereq-${version}.tgz"'));
+    assert.ok(workflow.includes('git cat-file -e "${GITHUB_SHA}:${artifact}"'));
     assert.ok(
-      workflow.includes("run: npm publish --provenance --access public"),
+      workflow.includes(
+        'npm publish "${{ steps.prebuilt.outputs.artifact_path }}" --provenance --access public',
+      ),
     );
     assert.ok(workflow.includes("id-token: write"));
     assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN/u);
@@ -137,6 +142,9 @@ test(
       ),
     );
     assert.ok(workflow.includes("uses: softprops/action-gh-release@v3"));
+    assert.ok(workflow.includes("files: dist/*.tgz"));
+    assert.ok(workflow.includes("fail_on_unmatched_files: true"));
+    assert.doesNotMatch(workflow, /files:\s*src\/\*\*\/\*/u);
     assert.ok(workflow.includes("draft: false"));
     assert.ok(workflow.includes("prerelease: false"));
     assert.ok(
@@ -318,20 +326,78 @@ test(
 );
 
 /**
- * @brief Asserts npm publish is gated on the full test suite.
- * @details Loads `package.json` plus the release workflow, asserts the `prepublishOnly` script executes `npm test` so `npm publish` runs the suite before packing, and asserts the workflow keeps publishing with provenance without any `--ignore-scripts` escape that would bypass the gate. Runtime is O(n) in combined file size. Side effects are limited to filesystem reads.
+ * @brief Asserts source-directory publishes retain the prepublishOnly test gate.
+ * @details Loads `package.json` plus the release workflow, asserts the `prepublishOnly` script executes `npm test` for source-directory `npm publish` runs, and asserts the release workflow publishes the pre-built tarball directly with provenance while never relying on `--ignore-scripts`. Runtime is O(n) in combined file size. Side effects are limited to filesystem reads.
  * @return {void} No return value.
  * @satisfies TST-161, CTN-029
  */
 test(
-  "package manifest gates npm publish on the full test suite",
+  "package manifest declares prepublishOnly while release workflow publishes the pre-built tarball",
   () => {
     const manifest = readNpmComplianceManifest();
     const workflow = readReleaseWorkflow();
 
     assert.equal(manifest.scripts?.prepublishOnly, "npm test");
-    assert.ok(workflow.includes("npm publish --provenance --access public"));
+    assert.ok(
+      workflow.includes(
+        'npm publish "${{ steps.prebuilt.outputs.artifact_path }}" --provenance --access public',
+      ),
+    );
     assert.doesNotMatch(workflow, /--ignore-scripts/u);
+  },
+);
+
+/**
+ * @brief Asserts the release workflow consumes only pre-built artifacts without build steps.
+ * @details Loads `.github/workflows/release-npm.yml`, verifies the pre-built artifact resolution and direct tarball publication, and rejects every build or build-preparatory command (`npm ci`, `npm test`, `npm run build`, `tsc`, `scripts/build.sh`, `scripts/pre-release-check.sh`) so the automation never rebuilds release artifacts. Runtime is O(n) in workflow size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies TST-195, TST-197, REQ-499, REQ-602, REQ-603
+ */
+test(
+  "release workflow publishes pre-built artifacts without build or pre-release verification scripts",
+  () => {
+    const workflow = readReleaseWorkflow();
+
+    assert.ok(workflow.includes("Resolve pre-built release artifact"));
+    assert.ok(workflow.includes('artifact="dist/pi-usereq-${version}.tgz"'));
+    assert.ok(workflow.includes('git cat-file -e "${GITHUB_SHA}:${artifact}"'));
+    assert.ok(
+      workflow.includes(
+        'npm publish "${{ steps.prebuilt.outputs.artifact_path }}" --provenance --access public',
+      ),
+    );
+
+    for (const forbiddenCommand of [
+      "npm ci",
+      "npm test",
+      "npm run build",
+      "tsc --noEmit",
+      "scripts/build.sh",
+      "scripts/pre-release-check.sh",
+    ]) {
+      assert.equal(
+        workflow.includes(forbiddenCommand),
+        false,
+        `release workflow must not run ${forbiddenCommand}`,
+      );
+    }
+  },
+);
+
+/**
+ * @brief Asserts the GitHub Release uploads pre-built dist tarballs as assets.
+ * @details Loads `.github/workflows/release-npm.yml` and verifies the release action attaches `dist/*.tgz` pre-built artifacts with unmatched-file failure enabled, replacing the previous source-tree glob. Runtime is O(n) in workflow size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies TST-196, REQ-500
+ */
+test(
+  "release workflow attaches pre-built dist tarballs to the GitHub release",
+  () => {
+    const workflow = readReleaseWorkflow();
+
+    assert.ok(workflow.includes("files: dist/*.tgz"));
+    assert.ok(workflow.includes("fail_on_unmatched_files: true"));
+    assert.doesNotMatch(workflow, /files:\s*src\/\*\*\/\*/u);
   },
 );
 
