@@ -594,6 +594,64 @@ test("develop-channel upgrade from an npm-managed installation removes it and in
 });
 
 /**
+ * @brief Verifies that a source-switch upgrade keeps the deployed launcher and completion summary aligned with the target installation.
+ * @details Materializes a temporary pi agent directory carrying a git-managed installation with a deployed agent-bin launcher symlink, plus a spawn double that deletes that git installation on `pi remove` and writes the npm-managed target package root on `pi install`. Arrange sets `PI_CODING_AGENT_DIR` and both package manifests; Act runs the default-channel source switch without an injected version resolver; Assert verifies the launcher symlink now resolves to the freshly installed npm launcher and the completion summary reports the target version instead of the deleted installation. Deterministic: temporary filesystem roots plus spawn and stdout doubles; no network or child processes.
+ * @satisfies REQ-484, REQ-504, REQ-617, TST-199
+ */
+test("source-switch upgrade re-points the deployed launcher and reports the target installation version", async () => {
+  const agentDir = fs.mkdtempSync(path.join(tmpdir(), "pi-usereq-switch-agent-"));
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const writePackageRoot = (root: string, version: string): void => {
+    fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
+    fs.writeFileSync(path.join(root, "scripts", "pi-usereq.js"), "#!/usr/bin/env node\n", "utf8");
+    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "pi-usereq", version }), "utf8");
+  };
+  try {
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    const gitRoot = path.join(agentDir, "git", "github.com", "Ogekuri", "PI-useReq");
+    writePackageRoot(gitRoot, "1.0.0");
+    const binDir = path.join(agentDir, "bin");
+    fs.mkdirSync(binDir, { recursive: true });
+    const launcherLinkPath = path.join(binDir, "pi-usereq");
+    fs.symlinkSync(path.join(gitRoot, "scripts", "pi-usereq.js"), launcherLinkPath, "file");
+    const npmRoot = path.join(agentDir, "npm", "node_modules", "pi-usereq");
+    const calls: string[][] = [];
+    const spawn: PackageManagerSpawn = (_file, args) => {
+      calls.push([...args]);
+      if (args[0] === "remove") {
+        fs.rmSync(gitRoot, { recursive: true, force: true });
+      } else if (args[0] === "install") {
+        writePackageRoot(npmRoot, "2.0.0");
+      }
+      return { status: 0 };
+    };
+    const sink = createStdoutSink();
+    const exitCode = await runPackageManagerUpgradeCommand(
+      { installedVersion: "1.0.0", channel: "npm" },
+      {
+        spawn,
+        stdout: sink.stdout,
+        resolveInstalledSource: () => ({ kind: "git", source: PACKAGE_MANAGER_GIT_SOURCE }),
+      },
+    );
+    assert.equal(exitCode, 0);
+    assert.deepEqual(calls, [["remove", PACKAGE_MANAGER_GIT_SOURCE], ["install", PACKAGE_MANAGER_NPM_SOURCE]]);
+    assert.equal(
+      fs.realpathSync(launcherLinkPath),
+      fs.realpathSync(path.join(npmRoot, "scripts", "pi-usereq.js")),
+    );
+    assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+  } finally {
+    if (previousAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    }
+    fs.rmSync(agentDir, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies that a failing removal aborts the source switch before installation.
  * @details Injects a failing removal child and asserts the run returns that exit code after exactly one removal spawn without installation or summary output. Deterministic: spawn and resolver doubles; no network or child processes.
  * @satisfies REQ-615, REQ-616, TST-201
