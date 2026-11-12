@@ -1,7 +1,16 @@
 # Changelog
 
-## [0.108.2](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.2) - 2026-11-12
+## [0.108.3](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.3) - 2026-11-12
 ### 🐛  Bug Fixes
+- repair launcher and version reporting after source switch [useReq] *(package-manager)*
+  re-point the agent-bin pi-usereq launcher onto the freshly installed
+  channel target root after a successful pi remove/pi install source
+  switch, so the management CLI cannot remain a dangling symlink
+  resolve the post-switch completion version from the target installation
+  manifest instead of the deleted runtime installation that owned the
+  running process, removing the false unchanged-version warning
+  add a reproducer covering launcher repair and target-root version
+  reporting, and update WORKFLOW.md plus regenerated REFERENCES.md
 - make postinstall bootstrap dependency-free for git installs [useReq] *(package)*
   Add scripts/install-static-checkers.js plain-Node wrapper that defers bundled
   checker installation when node_modules/tsx is absent, so npm git-dependency
@@ -1417,7 +1426,7 @@
 - \[0.106.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.106.0
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
-- \[0.108.2\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.2
+- \[0.108.3\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.3
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1525,4 +1534,4 @@
 [0.106.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
-[0.108.2]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.2
+[0.108.3]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.3
