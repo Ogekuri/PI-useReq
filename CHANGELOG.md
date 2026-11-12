@@ -1,7 +1,15 @@
 # Changelog
 
-## [0.108.3](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.3) - 2026-11-12
+## [0.108.4](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.4) - 2026-11-12
 ### 🐛  Bug Fixes
+- publish prebuilt tarball via explicit local path [useReq] *(release-npm)*
+  npm parses a bare 'dist/pi-usereq-<version>.tgz' argument as a hosted-git
+  GitHub shorthand, so publication ran 'git ls-remote
+  ssh://git@github.com/dist/pi-usereq-<version>.tgz.git' and failed with
+  exit code 128.
+  emit artifact_path with an explicit './' local-file prefix that npm
+  resolves as a file tarball instead of a hosted git repository
+  document the shorthand hazard at the artifact-resolution and publish steps; add a regression test pinning the local-file publication path
 - repair launcher and version reporting after source switch [useReq] *(package-manager)*
   re-point the agent-bin pi-usereq launcher onto the freshly installed
   channel target root after a successful pi remove/pi install source
@@ -1426,7 +1434,7 @@
 - \[0.106.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.106.0
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
-- \[0.108.3\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.3
+- \[0.108.4\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.4
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1534,4 +1542,4 @@
 [0.106.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
-[0.108.3]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.3
+[0.108.4]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.4
