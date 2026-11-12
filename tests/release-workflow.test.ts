@@ -201,6 +201,7 @@ test(
         "scripts/pi-usereq.js",
         "scripts/pi-usereq.sh",
         "scripts/install-static-checkers.ts",
+        "scripts/install-static-checkers.js",
       ],
       "npm files allowlist must exclude maintainer-only scripts and the updater version record",
     );

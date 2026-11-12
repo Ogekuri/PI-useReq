@@ -34,7 +34,8 @@
     "!src/resources/pi-prompts-version.txt",
     "scripts/pi-usereq.js",
     "scripts/pi-usereq.sh",
-    "scripts/install-static-checkers.ts"
+    "scripts/install-static-checkers.ts",
+    "scripts/install-static-checkers.js"
   ],
   "engines": {
     "node": ">=24.0.0"
@@ -50,7 +51,7 @@
     "debug:ext:command": "node --import tsx ./scripts/debug-extension.ts command",
     "debug:ext:tool": "node --import tsx ./scripts/debug-extension.ts tool",
     "debug:ext:sdk": "node --import tsx ./scripts/debug-extension.ts sdk-smoke",
-    "postinstall": "node --import tsx ./scripts/install-static-checkers.ts"
+    "postinstall": "node ./scripts/install-static-checkers.js"
   },
   "pi": {
     "extensions": [
@@ -78,11 +79,10 @@
     "yaml": "^2.9.0"
   },
   "allowScripts": {
-    "esbuild@0.27.7": true,
-    "koffi@2.15.6": true,
-    "protobufjs@7.5.4": true,
+    "esbuild@0.27.2": true,
+    "protobufjs@7.6.6": true,
+    "@google/genai@2.21.0": true,
     "esbuild": true,
-    "koffi": true,
     "protobufjs": true,
     "@google/genai": true
   }
