@@ -2,8 +2,8 @@
 ##
 # @file scripts/build.sh
 # @brief Generates the pi-usereq release distribution artifact into dist/ from a clean previous-build state.
-# @details Resolves the repository root from this script's own location and runs the release packaging stages in fixed order: toolchain validation (`git`, `npm`, and Node major `>= 24`), pre-run repository inventory capture, previous-build artifact cleanup (every root-level `dist/*.tgz` tarball of every present version plus the emptied `dist/` directory), dependency preparation (`npm ci` only when `node_modules` is absent), the strict `node_modules/.bin/tsc --noEmit` compilation gate, npm tarball packing through `npm pack --pack-destination dist`, artifact verification plus one artifact summary, and post-build repository cleanup that removes every temporary or intermediate repository entry created by the run while preserving `node_modules/`, every pre-existing entry, and the verified release tarball. The script stops at the first failing stage, exits non-zero on failure, and never presents a failed build as successful. Cleanup runs through `EXIT`, `INT`, and `TERM` traps so successful, failed, and signal-induced exits all leave the repository free of intermediate artifacts while preserving the first failing stage exit code. Runtime is dominated by `npm ci`, the TypeScript compiler, and `npm pack`. Side effects include previous-build artifact deletion, dependency installation, npm lifecycle scripts, child process spawning, `dist/` tarball replacement, and deletion of run-created intermediate repository entries.
-# @satisfies DES-035, DES-036, REQ-564, REQ-565, REQ-566, REQ-567, REQ-568, REQ-569, REQ-570, REQ-571, REQ-597, REQ-598, REQ-599, REQ-600, REQ-601
+# @details Resolves the repository root from this script's own location and runs the release packaging stages in fixed order: toolchain validation (`git`, `npm`, and Node major `>= 24`), pre-run repository inventory capture, previous-build artifact cleanup (every root-level `dist/*.tgz` tarball of every present version plus the emptied `dist/` directory) followed by removal verification that aborts when any tarball survived, dependency preparation (`npm ci` only when `node_modules` is absent), the strict `node_modules/.bin/tsc --noEmit` compilation gate, npm tarball packing through `npm pack --pack-destination dist`, artifact verification plus one artifact summary, and post-build repository cleanup that removes every temporary or intermediate repository entry created by the run while preserving `node_modules/`, every pre-existing entry, and the verified release tarball. The script stops at the first failing stage, exits non-zero on failure, and never presents a failed build as successful. Cleanup runs through `EXIT`, `INT`, and `TERM` traps so successful, failed, and signal-induced exits all leave the repository free of intermediate artifacts while preserving the first failing stage exit code. Runtime is dominated by `npm ci`, the TypeScript compiler, and `npm pack`. Side effects include previous-build artifact deletion, dependency installation, npm lifecycle scripts, child process spawning, `dist/` tarball replacement, and deletion of run-created intermediate repository entries.
+# @satisfies DES-035, DES-036, REQ-564, REQ-565, REQ-566, REQ-567, REQ-568, REQ-569, REQ-570, REQ-571, REQ-597, REQ-598, REQ-599, REQ-600, REQ-601, REQ-606, REQ-607, REQ-608
 ##
 
 set -Eeuo pipefail
@@ -64,7 +64,8 @@ Usage: scripts/build.sh
 Generates the pi-usereq release distribution artifact from a clean state:
   1. Toolchain validation: git, npm, node (major >= 24)
   2. Previous-build cleanup: removes every dist/*.tgz tarball of every
-     present version and removes dist/ itself only when emptied
+     present version, removes dist/ itself only when emptied, and verifies
+     that no tarball survived the removal
   3. Dependency preparation: npm ci (only when node_modules is absent)
   4. Strict compilation gate: node_modules/.bin/tsc --noEmit
   5. Release packaging: npm pack --pack-destination dist
@@ -161,7 +162,7 @@ check_build_tools() {
 # @brief Removes every previous-build release tarball regardless of version.
 # @details Deletes every root-level `dist/*.tgz` file — the generated outputs of all previous builds across every version number — printing one removal line per removed tarball, so every other `dist/` entry, including non-tarball and user-owned files, is preserved. Skips with one notice when the `dist/` directory is absent or holds no tarball. Runtime is O(n) in tarball count. Side effects include deletion of previous-build tarballs.
 # @return {void} No return value.
-# @satisfies REQ-568, REQ-597
+# @satisfies REQ-568, REQ-597, REQ-606, REQ-608
 ##
 clean_previous_dist_tarballs() {
   if [[ ! -d "${DIST_DIR}" ]]; then
@@ -199,13 +200,37 @@ clean_previous_dist_directory() {
 
 ##
 # @brief Removes every previous-build artifact from the release destination.
-# @details Composes the version-independent tarball removal and the emptied-directory removal into one stage so the build starts from a clean release destination while preserving every non-tarball `dist/` entry. Runtime is O(n) in tarball and remaining-entry count. Side effects include previous-build artifact deletion.
+# @details Composes the version-independent tarball removal, the emptied-directory removal, and the post-removal absence verification into one stage so the build starts from a verified-clean release destination while preserving every non-tarball `dist/` entry. Runtime is O(n) in tarball and remaining-entry count. Side effects include previous-build artifact deletion.
 # @return {void} No return value.
-# @satisfies REQ-568, REQ-597, REQ-598
+# @satisfies REQ-568, REQ-597, REQ-598, REQ-606, REQ-607, REQ-608
 ##
 clean_previous_build_artifacts() {
   clean_previous_dist_tarballs
   clean_previous_dist_directory
+  verify_previous_dist_tarballs_removed
+}
+
+##
+# @brief Verifies that no previous-build tarball survived the cleanup.
+# @details Rescans every root-level `dist/*.tgz` file after the previous-build cleanup and aborts through `die(...)` when at least one tarball is still present, so a removal failure can never be presented as a clean build bootstrap. Reports the surviving tarball paths on stderr and prints one verification line on success. Runtime is O(n) in tarball count. Side effects are limited to filesystem reads.
+# @return {void} No return value on success.
+# @retval {never} Exits `1` through `die(...)` when a tarball survives.
+# @satisfies REQ-606, REQ-607, REQ-608
+##
+verify_previous_dist_tarballs_removed() {
+  if [[ ! -d "${DIST_DIR}" ]]; then
+    printf 'build: verified absence of previous-build artifacts\n'
+    return 0
+  fi
+  local tarball remaining=0
+  while IFS= read -r -d '' tarball; do
+    remaining=1
+    printf 'build: FAIL: previous-build artifact still present: %s\n' "${tarball}" >&2
+  done < <(find "${DIST_DIR}" -maxdepth 1 -type f -name '*.tgz' -print0)
+  if [[ "${remaining}" -eq 1 ]]; then
+    die "previous-build artifact removal verification failed"
+  fi
+  printf 'build: verified absence of previous-build artifacts\n'
 }
 
 ##
@@ -369,7 +394,7 @@ trap 'exit 143' TERM
 # @details Accepts exactly `-h` and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, captures the pre-run repository inventory plus the pre-build `dist/` existence state, dispatches the seven stages in order, and lets the final artifact summary report success. The `EXIT` trap removes run-created intermediate artifacts on every exit path. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus run-created artifact removal at exit.
 # @param[in] arguments {string...} Raw command-line arguments passed to the script.
 # @return {void} No return value on success; exits non-zero on any failure.
-# @satisfies REQ-564, REQ-565, REQ-566, REQ-567, REQ-568, REQ-569, REQ-570, REQ-571, REQ-597, REQ-598, REQ-599, REQ-600, REQ-601
+# @satisfies REQ-564, REQ-565, REQ-566, REQ-567, REQ-568, REQ-569, REQ-570, REQ-571, REQ-597, REQ-598, REQ-599, REQ-600, REQ-601, REQ-607
 ##
 main() {
   while [[ $# -gt 0 ]]; do

@@ -2,8 +2,8 @@
 ##
 # @file scripts/pre-release-check.sh
 # @brief Executes the official pi-usereq pre-release verification gate.
-# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), clean dependency install (`npm ci`), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), the full test suite (`npm test`), release-artifact generation through `scripts/build.sh`, and release-artifact validation. The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Supports `--skip-install` to reuse the existing `node_modules` tree and `--help` for usage; rejects unknown options with exit code `2`. Artifact validation verifies the generated `dist/pi-usereq-<version>.tgz` tarball for existence, non-zero size, and the required `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries. After the stages finish, the gate removes every repository entry its stages created — build outputs and intermediate files included, `dist/` entries excluded — by diffing the pre-run and post-run `git status --porcelain --untracked-files=normal --ignored` inventories and by removing run-generated `dist/*.tgz` tarballs only on failure or signal exits through an inode-precise pre-build snapshot, keeping `node_modules`, every `dist/` entry, and every pre-existing or tracked-status entry untouched. Cleanup runs on success, failure, and signal-induced exits while preserving the first failing stage exit code. Runtime is dominated by `npm ci`, `npm test`, and `npm pack`. Side effects include `node_modules` replacement, npm lifecycle scripts, child process spawning, and deletion of run-created repository entries.
-# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574
+# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), bootstrap previous-release artifact cleanup (every root-level `dist/*.tgz` tarball of every present version, using the same selection and deletion semantics as `scripts/build.sh`) plus immediate removal verification, clean dependency install (`npm ci`), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), the full test suite (`npm test`), release-artifact generation through `scripts/build.sh`, and release-artifact validation. The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Supports `--skip-install` to reuse the existing `node_modules` tree and `--help` for usage; rejects unknown options with exit code `2`. Artifact validation verifies the generated `dist/pi-usereq-<version>.tgz` tarball for existence, non-zero size, and the required `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries. After the stages finish, the gate removes every repository entry its stages created — build outputs and intermediate files included, `dist/` entries excluded — by diffing the pre-run and post-run `git status --porcelain --untracked-files=normal --ignored` inventories and by removing run-generated `dist/*.tgz` tarballs only on failure or signal exits through an inode-precise pre-build snapshot, keeping `node_modules`, non-tarball `dist/` entries, and every pre-existing or tracked-status entry untouched. Cleanup runs on success, failure, and signal-induced exits while preserving the first failing stage exit code. Runtime is dominated by `npm ci`, `npm test`, and `npm pack`. Side effects include previous-release artifact deletion, `node_modules` replacement, npm lifecycle scripts, child process spawning, and deletion of run-created repository entries.
+# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606, REQ-608
 ##
 
 set -euo pipefail
@@ -101,8 +101,65 @@ capture_dist_tarball_snapshot() {
 }
 
 ##
+# @brief Removes every pre-existing release tarball regardless of version.
+# @details Deletes every root-level `dist/*.tgz` file — the release artifacts of every previous build across every version number — reusing the `scripts/build.sh` `find`-plus-`rm -f` selection semantics and printing one removal line per removed tarball, so every non-tarball `dist/` entry is preserved. Runs at gate bootstrap before any dependency, compilation, test, or packaging stage so the gate always validates freshly generated artifacts. Skips with one notice when the `dist/` directory is absent or holds no tarball. Runtime is O(n) in tarball count. Side effects include deletion of pre-existing release tarballs.
+# @return {void} No return value.
+# @satisfies REQ-604, REQ-606, REQ-608
+##
+clean_previous_dist_tarballs() {
+  if [[ ! -d "${PRC_DIST_DIR}" ]]; then
+    printf 'pre-release-check: no dist directory present; skipping previous-release tarball removal\n'
+    return 0
+  fi
+  local tarball removed=0
+  while IFS= read -r -d '' tarball; do
+    rm -f -- "${tarball}"
+    removed=1
+    printf 'pre-release-check: removed previous-release artifact: %s\n' "${tarball}"
+  done < <(find "${PRC_DIST_DIR}" -maxdepth 1 -type f -name '*.tgz' -print0)
+  if [[ "${removed}" -eq 0 ]]; then
+    printf 'pre-release-check: no previous-release tarball present\n'
+  fi
+}
+
+##
+# @brief Verifies that no pre-existing release tarball survived the bootstrap removal.
+# @details Rescans every root-level `dist/*.tgz` file after `clean_previous_dist_tarballs(...)` and aborts through `die(...)` when at least one tarball is still present, so a removal failure can never be presented as a clean gate bootstrap. Prints the surviving tarball paths on stderr and one verification line on success. Runtime is O(n) in tarball count. Side effects are limited to filesystem reads.
+# @return {void} No return value on success.
+# @retval {never} Exits `1` through `die(...)` when a tarball survives.
+# @satisfies REQ-605, REQ-606
+##
+verify_previous_dist_tarballs_removed() {
+  if [[ ! -d "${PRC_DIST_DIR}" ]]; then
+    printf 'pre-release-check: verified absence of previous-release tarballs\n'
+    return 0
+  fi
+  local tarball remaining=0
+  while IFS= read -r -d '' tarball; do
+    remaining=1
+    printf 'pre-release-check: FAIL: previous-release artifact still present: %s\n' "${tarball}" >&2
+  done < <(find "${PRC_DIST_DIR}" -maxdepth 1 -type f -name '*.tgz' -print0)
+  if [[ "${remaining}" -eq 1 ]]; then
+    die "previous-release artifact removal verification failed"
+  fi
+  printf 'pre-release-check: verified absence of previous-release tarballs\n'
+}
+
+##
+# @brief Removes every pre-existing release artifact and verifies the removal.
+# @details Composes the version-independent tarball removal and the post-removal absence verification into one bootstrap stage so the gate never validates a stale `dist/` release artifact while preserving every non-tarball `dist/` entry. Runtime is O(n) in tarball count. Side effects include pre-existing release tarball deletion.
+# @return {void} No return value on success.
+# @retval {never} Exits `1` through `die(...)` when a tarball survives.
+# @satisfies REQ-604, REQ-605, REQ-606, REQ-608
+##
+clean_previous_release_artifacts() {
+  clean_previous_dist_tarballs
+  verify_previous_dist_tarballs_removed
+}
+
+##
 # @brief Removes the `dist/` tarballs generated by the artifact stage after a non-successful gate.
-# @details Retains every `dist/` entry when the gate exit code is `0`. Otherwise compares every root-level `dist/*.tgz` file against the pre-build `path|inode|size` snapshot and removes only tarballs that are new or were recreated by this run, so pre-existing untouched tarballs survive. Removes the `dist/` directory itself only when this run created it and it is empty after tarball removal. Runtime is O(n) in tarball count. Side effects include deletion of run-generated tarballs on failure, optional directory removal, and temporary-file removal.
+# @details Retains every `dist/` entry when the gate exit code is `0`. Otherwise compares every root-level `dist/*.tgz` file against the pre-build `path|inode|size` snapshot and removes only tarballs created or recreated by the artifact stage after the bootstrap removal, so the `dist/` destination never keeps a run-generated tarball on failure. Removes the `dist/` directory itself only when this run created it and it is empty after tarball removal. Runtime is O(n) in tarball count. Side effects include deletion of run-generated tarballs on failure, optional directory removal, and temporary-file removal.
 # @param[in] gate_exit_code {number} Exit code observed by the `EXIT` trap; `0` retains generated tarballs.
 # @return {void} No return value; always returns `0` so the `EXIT` trap re-exits with the preserved gate exit code.
 # @satisfies REQ-574
@@ -198,11 +255,13 @@ Usage: scripts/pre-release-check.sh [--skip-install]
 
 Runs the official pre-release verification gate from the repository root:
   1. Environment preflight: git, node (major >= 24), npm availability
-  2. Clean dependency install: npm ci (skipped by --skip-install)
-  3. Strict type-check: node_modules/.bin/tsc --noEmit
-  4. Full test suite: npm test
-  5. Release artifact generation: scripts/build.sh (npm pack into dist/)
-  6. Release artifact validation: dist/pi-usereq-<version>.tgz structure
+  2. Previous-release cleanup: removes every dist/*.tgz tarball and verifies
+     that no tarball survived the removal
+  3. Clean dependency install: npm ci (skipped by --skip-install)
+  4. Strict type-check: node_modules/.bin/tsc --noEmit
+  5. Full test suite: npm test
+  6. Release artifact generation: scripts/build.sh (npm pack into dist/)
+  7. Release artifact validation: dist/pi-usereq-<version>.tgz structure
 
 Options:
   --skip-install  Reuse the existing node_modules tree instead of npm ci
@@ -211,7 +270,7 @@ Options:
 Exits 0 only when every stage succeeds; exits non-zero on the first failure.
 
 Removes repository entries created by this run (build outputs, intermediate
-files) before exiting; node_modules, dist/ release artifacts, and
+files) before exiting; node_modules, non-tarball dist/ entries, and
 pre-existing entries are kept. Generated dist/ tarballs are removed only on
 failure or signal exits.
 USAGE
@@ -351,10 +410,10 @@ run_test_suite() {
 
 ##
 # @brief Parses gate options and executes every stage in the documented order.
-# @details Accepts exactly `--skip-install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, captures the pre-run repository inventory snapshot plus the pre-build `dist/` tarball identity snapshot, dispatches the six stages in order, prints the final success summary, and lets the exit trap remove repository entries created by the stages before the process returns the gate exit code. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus run-created artifact removal at exit.
+# @details Accepts exactly `--skip-install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, captures the pre-run repository inventory snapshot, dispatches the seven stages in order, captures the pre-build `dist/` tarball identity snapshot immediately before packaging, prints the final success summary, and lets the exit trap remove repository entries created by the stages before the process returns the gate exit code. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus run-created artifact removal at exit.
 # @param[in] arguments {string...} Raw command-line arguments passed to the script.
 # @return {void} No return value on success; exits non-zero on any failure.
-# @satisfies REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574
+# @satisfies REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606, REQ-608
 ##
 main() {
   while [[ $# -gt 0 ]]; do
@@ -376,17 +435,18 @@ main() {
   done
   cd "${REPO_ROOT}"
   capture_pre_run_inventory
-  printf 'pi-usereq pre-release check\nrepository root: %s\nartifact cleanup: enabled (removes entries created by this run; keeps node_modules and dist/)\n' "${REPO_ROOT}"
-  run_stage 'stage 1/6: environment preflight (git, node >=24, npm)' check_environment
-  run_stage 'stage 2/6: clean dependency install (npm ci)' install_dependencies
-  run_stage 'stage 3/6: strict type-check (tsc --noEmit)' run_type_check
-  run_stage 'stage 4/6: full test suite (npm test)' run_test_suite
+  printf 'pi-usereq pre-release check\nrepository root: %s\nartifact cleanup: enabled (removes entries created by this run; keeps node_modules and non-tarball dist/ entries)\n' "${REPO_ROOT}"
+  run_stage 'stage 1/7: environment preflight (git, node >=24, npm)' check_environment
+  run_stage 'stage 2/7: previous-release artifact cleanup (dist/*.tgz) and removal verification' clean_previous_release_artifacts
+  run_stage 'stage 3/7: clean dependency install (npm ci)' install_dependencies
+  run_stage 'stage 4/7: strict type-check (tsc --noEmit)' run_type_check
+  run_stage 'stage 5/7: full test suite (npm test)' run_test_suite
   if [[ -d "${PRC_DIST_DIR}" ]]; then
     PRC_DIST_EXISTED=1
   fi
   capture_dist_tarball_snapshot
-  run_stage 'stage 5/6: release artifact generation (scripts/build.sh)' run_release_build
-  run_stage 'stage 6/6: release artifact validation (dist/pi-usereq-<version>.tgz)' validate_release_artifacts
+  run_stage 'stage 6/7: release artifact generation (scripts/build.sh)' run_release_build
+  run_stage 'stage 7/7: release artifact validation (dist/pi-usereq-<version>.tgz)' validate_release_artifacts
   printf '\npre-release check: all stages passed.\n'
 }
 
