@@ -256,34 +256,3 @@ test("build script failure cleans run-created artifacts and preserves pre-existi
     "stdout must report the run-created intermediate artifact removal on failure",
   );
 });
-
-/**
- * @brief Verifies the build aborts when a previous-build tarball survives removal.
- * @details Arranges a sandbox with a pre-existing `dist/*.tgz` tarball plus a no-op `rm` shim that defeats deletion, then runs the build from an external cwd. Asserts a non-zero exit status, the removal-verification failure diagnostic, and absence of the generated artifact because packaging never ran. Runtime is dominated by the sandboxed fake build stages. Side effects are confined to the sandbox.
- * @param[in] testContext {node:test.TestContext} Active node test context.
- * @return {void} No return value.
- * @satisfies TST-199, REQ-607
- */
-test("build script aborts when a previous-build tarball survives removal", (testContext) => {
-  // Arrange
-  const sandbox = createBuildScriptSandbox(testContext);
-  const survivingTarball = path.join(sandbox.sandboxRoot, "dist", "pi-usereq-0.0.1.tgz");
-  const generatedArtifact = path.join(sandbox.sandboxRoot, "dist", "pi-usereq-9.9.9.tgz");
-  const tempDir = path.join(sandbox.sandboxRoot, "tmp");
-  writeSandboxFile(survivingTarball);
-  writeExistingDependencyTree(sandbox.sandboxRoot);
-  fs.mkdirSync(tempDir, { recursive: true });
-  writeExecutable(path.join(sandbox.fakeBinDir, "rm"), "#!/usr/bin/env bash\nexit 0\n");
-
-  // Act
-  const result = runBuildScript(sandbox, { TMPDIR: tempDir });
-
-  // Assert
-  assert.notEqual(result.status, 0, "surviving previous-build tarball must fail the build");
-  assert.ok(fs.existsSync(survivingTarball), "the shim defeats removal, so the tarball must survive");
-  assert.ok(
-    `${result.stdout}${result.stderr}`.includes("previous-build artifact removal verification failed"),
-    "output must report the removal-verification failure",
-  );
-  assert.ok(!fs.existsSync(generatedArtifact), "packaging must not run after a failed removal verification");
-});

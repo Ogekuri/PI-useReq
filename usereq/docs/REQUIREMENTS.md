@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.140"
+version: "0.0.139"
 date: "2026-11-12"
 author: "OpenAI Codex"
 scope:
@@ -606,7 +606,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-489**: MUST resolve the npmjs latest version from the manifest `dist-tags.latest` field, falling back to the highest semver-ordered manifest `versions` entry, and MUST NOT resolve any version when the manifest exposes neither.
 
 - **REQ-490**: MUST execute analysis commands using installation-owned TypeScript implementations and declared dependencies independently of the external req application and its source checkout.
-- **REQ-491**: MUST make `scripts/pre-release-check.sh` execute in order: environment preflight, previous-release `dist/` cleanup plus removal verification, `npm ci`, strict `tsc --noEmit`, `npm test`, and release-artifact generation plus validation via `scripts/build.sh`.
+- **REQ-491**: MUST make `scripts/pre-release-check.sh` execute, in order, environment preflight with the Node 24 engine gate, clean dependency install via `npm ci`, strict `tsc --noEmit`, full `npm test`, and release-artifact generation plus validation via `scripts/build.sh`.
 - **REQ-492**: MUST make `scripts/pre-release-check.sh` stop at the first failing stage, print one status banner per stage, exit `0` only after every stage succeeds, and exit non-zero otherwise.
 - **REQ-493**: MUST make `scripts/pre-release-check.sh` support `--skip-install` reusing the existing `node_modules` tree, print usage for `--help`, and reject unknown options with non-zero exit.
 - **REQ-494**: MUST make `scripts/pre-release-check.sh` resolve the repository root from its own script location and execute every stage from that root regardless of the caller working directory.
@@ -677,7 +677,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-571**: MUST make `scripts/build.sh` stop at the first failing stage and exit non-zero without presenting a failed build as successful.
 - **REQ-572**: MUST make `scripts/pre-release-check.sh` validate the generated tarball for existence, non-zero size, and required package entries before cleanup.
 - **REQ-573**: MUST make tarball validation require `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries inside the archive.
-- **REQ-574**: MUST make `scripts/pre-release-check.sh` retain the `dist/` tarballs its build stage generated when all stages succeed, remove them on failure and signal exits, and preserve every pre-existing non-tarball `dist/` entry.
+- **REQ-574**: MUST make `scripts/pre-release-check.sh` retain the `dist/` tarballs its build stage generated when all stages succeed, remove them on failure and signal exits, and preserve every pre-existing `dist/` entry.
 - **REQ-597**: MUST make `scripts/build.sh` execute the previous-build `dist/` cleanup before dependency preparation, compilation, and packaging.
 - **REQ-598**: MUST make the `scripts/build.sh` previous-build cleanup remove the `dist/` directory itself only when it is empty after tarball removal.
 - **REQ-599**: MUST make `scripts/build.sh` remove every repository entry created by its own build run before process exit, leaving the repository free of intermediate build artifacts.
@@ -685,11 +685,6 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-601**: MUST make the `scripts/build.sh` post-build cleanup execute on successful, failed, and signal-induced exits while preserving the first failing stage exit code.
 - **REQ-602**: MUST limit `.github/workflows/release-npm.yml` to tag checkout, Node.js setup, release-artifact verification, changelog generation, npm publication, and GitHub Release asset upload, excluding `scripts/build.sh` and `scripts/pre-release-check.sh`.
 - **REQ-603**: MUST verify the `dist/pi-usereq-<version>.tgz` artifact exists non-empty before npm publication or GitHub Release creation.
-- **REQ-604**: MUST make `scripts/pre-release-check.sh` remove every root-level `dist/*.tgz` release tarball of every present version at bootstrap before dependency install, compilation, testing, and packaging.
-- **REQ-605**: MUST make `scripts/pre-release-check.sh` verify immediately after the bootstrap removal that no root-level `dist/*.tgz` tarball remains, and abort non-zero when one survives.
-- **REQ-606**: MUST make the bootstrap removal and its post-removal verification use the same `dist/*.tgz` selection and deletion semantics in `scripts/pre-release-check.sh` and `scripts/build.sh`.
-- **REQ-607**: MUST make `scripts/build.sh` verify immediately after its previous-build cleanup that no root-level `dist/*.tgz` tarball remains, and abort non-zero when one survives.
-- **REQ-608**: MUST make both bootstrap removals preserve every non-tarball `dist/` entry.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -884,8 +879,6 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-195**: MUST verify `.github/workflows/release-npm.yml` authenticates npm publication through OIDC without `NODE_AUTH_TOKEN`, publishes the `dist/pi-usereq-<version>.tgz`, and creates the GitHub Release.
 - **TST-196**: MUST verify `.github/workflows/release-npm.yml` attaches every `dist/*.tgz` artifact to the GitHub Release.
 - **TST-197**: MUST verify `.github/workflows/release-npm.yml` never runs `npm ci`, `npm test`, `npm run build`, `tsc`, `scripts/build.sh`, or `scripts/pre-release-check.sh`.
-- **TST-198**: MUST verify `scripts/pre-release-check.sh` removes pre-existing versioned `dist/*.tgz` artifacts before any stage, preserves non-tarball `dist/` entries, and aborts non-zero when a pre-existing tarball survives removal.
-- **TST-199**: MUST verify `scripts/build.sh` aborts non-zero when a previous-build `dist/*.tgz` tarball survives its bootstrap removal verification.
 
 ## 5. Observed Component Model
 
@@ -902,8 +895,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
-- `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, removes every previous-build `dist/*.tgz` tarball plus the emptied `dist/` directory, verifies the removal left no tarball behind, prepares the dependency tree, runs the strict compilation gate, packs the npm distribution tarball into `dist/`, verifies plus summarizes the produced artifact, and removes every temporary or intermediate repository entry created by the run.
-- `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, previous-release `dist/` tarball removal plus removal verification, clean dependency install, strict type-check, the full test suite, and release-artifact generation plus validation through `scripts/build.sh` from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, non-tarball `dist/` entries, and every pre-existing entry; generated `dist/` tarballs are removed only on failure or signal exits.
+- `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, removes every previous-build `dist/*.tgz` tarball plus the emptied `dist/` directory, prepares the dependency tree, runs the strict compilation gate, packs the npm distribution tarball into `dist/`, verifies plus summarizes the produced artifact, and removes every temporary or intermediate repository entry created by the run.
+- `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release-artifact generation plus validation through `scripts/build.sh` from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, every `dist/` entry, and every pre-existing entry; generated `dist/` tarballs are removed only on failure or signal exits.
 
 ### 5.2 Libraries and Runtime Dependencies
 - `@earendil-works/pi-coding-agent` (>=1.5.2) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
@@ -999,8 +992,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `tests/project-source-tabs.test.ts` preserves focused Go-source tab assertions for project commands; standalone tab assertions remain in `tests/cli-command-option-parity.test.ts`.
 - `tests/runtime-independence.test.ts` executes eight analysis commands with a Git-only PATH and unusable legacy interpreter overrides, and rejects legacy fixture configuration or virtualenv artifacts.
 - `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, `dist/` artifact publication, absence of build or pre-release verification steps, GitHub release asset directives in `.github/workflows/release-npm.yml`, plus npm manifest compliance for license, discoverability, engines, and lockfile version identity.
-- `tests/build-script.test.ts` covers `scripts/build.sh` syntax, previous-build `dist/` cleanup across versioned tarballs, `node_modules/` and non-tarball `dist/` preservation, removal-verification abort behavior, plus run-created intermediate artifact removal on successful and failed exits.
-- `tests/pre-release-check.test.ts` covers `scripts/pre-release-check.sh` bootstrap previous-release `dist/*.tgz` removal, post-removal absence verification, non-tarball `dist/` preservation, and generated-artifact retention on success.
+- `tests/build-script.test.ts` covers `scripts/build.sh` syntax, previous-build `dist/` cleanup across versioned tarballs, `node_modules/` and non-tarball `dist/` preservation, plus run-created intermediate artifact removal on successful and failed exits.
 - Test business logic focuses on repository-owned output contracts, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
 
 ## 8. Evidence Matrix
@@ -1152,23 +1144,18 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-561 | `src/core/config-cli-schema.ts` :: `projectScopePayload` :: drops non-schema keys before each write. |
 | REQ-562 | `src/core/config-cli-schema.ts` :: `buildSchemaDefaults` :: derives defaults from `getDefaultConfig(...)` and enum domains from exported inventories. |
 | REQ-563 | `src/core/config-cli.ts` :: `runSetCommand` and `runUnsetCommand` :: return without stdout writes on success. |
-| REQ-491 | `scripts/pre-release-check.sh` :: `main(...)` stage sequence :: environment preflight, previous-release `dist/` cleanup plus removal verification, `npm ci`, `tsc --noEmit`, `npm test`, then `scripts/build.sh` artifact generation and validation. |
+| REQ-491 | `scripts/pre-release-check.sh` :: `main(...)` stage sequence :: environment preflight, `npm ci`, `tsc --noEmit`, `npm test`, then `scripts/build.sh` artifact generation and validation. |
 | REQ-564 | `scripts/build.sh` :: `REPO_ROOT` resolution :: derives the repository root from the script location and `cd`s into it before staging. |
 | REQ-565 | `scripts/build.sh` :: `check_build_tools(...)` :: probes `git`, `npm`, and Node major `>= 24` before packaging. |
 | REQ-566 | `scripts/build.sh` :: `ensure_dependencies(...)` :: runs `npm ci` only when `node_modules` is absent. |
 | REQ-567 | `scripts/build.sh` :: `run_compile_gate(...)` :: executes `node_modules/.bin/tsc --noEmit` before packaging. |
-| REQ-568 | `scripts/build.sh` :: `clean_previous_build_artifacts(...)` :: deletes every root-level `dist/*.tgz` file of every present version while preserving other `dist/` entries.
-| REQ-604 | `scripts/pre-release-check.sh` :: `clean_previous_dist_tarballs(...)` :: deletes every root-level `dist/*.tgz` tarball at bootstrap before any gate stage.
-| REQ-605 | `scripts/pre-release-check.sh` :: `verify_previous_dist_tarballs_removed(...)` :: rescans `dist/` after removal and aborts through `die(...)` when a tarball survives.
-| REQ-606 | `scripts/pre-release-check.sh` :: `clean_previous_dist_tarballs(...)` and `scripts/build.sh` :: `clean_previous_dist_tarballs(...)` :: apply the same root-level `*.tgz` `find` selection and `rm -f` deletion plus post-removal absence verification.
-| REQ-607 | `scripts/build.sh` :: `verify_previous_dist_tarballs_removed(...)` :: rescans `dist/` after previous-build cleanup and aborts through `die(...)` when a tarball survives.
-| REQ-608 | `scripts/pre-release-check.sh` :: `clean_previous_dist_tarballs(...)` and `scripts/build.sh` :: `clean_previous_dist_tarballs(...)` :: delete only `*.tgz` files so non-tarball `dist/` entries stay intact. |
+| REQ-568 | `scripts/build.sh` :: `clean_previous_build_artifacts(...)` :: deletes every root-level `dist/*.tgz` file of every present version while preserving other `dist/` entries. |
 | REQ-569 | `scripts/build.sh` :: `pack_release_tarball(...)` :: invokes `npm pack --pack-destination dist`. |
 | REQ-570 | `scripts/build.sh` :: `verify_built_artifact(...)` :: verifies the expected tarball exists non-empty and prints the artifact summary. |
 | REQ-571 | `scripts/build.sh` :: `run_build_stage(...)` :: stops at the first failing stage with a non-zero exit. |
 | REQ-572 | `scripts/pre-release-check.sh` :: `validate_release_artifacts(...)` :: verifies generated-tarball existence, size, and required entries before cleanup. |
 | REQ-573 | `scripts/pre-release-check.sh` :: `validate_release_artifacts(...)` :: requires `package/package.json`, `package/LICENSE`, `package/README.md`, `package/src/index.ts`, and `package/scripts/pi-usereq.js` inside the archive. |
-| REQ-574 | `scripts/pre-release-check.sh` :: `cleanup_dist_artifacts(...)` :: removes run-generated `dist/*.tgz` only on failure and signal exits via the EXIT trap; successful gates retain them, and pre-existing non-tarball `dist/` entries stay intact. |
+| REQ-574 | `scripts/pre-release-check.sh` :: `cleanup_dist_artifacts(...)` :: removes run-generated `dist/*.tgz` only on failure and signal exits via the EXIT trap; successful gates retain them. |
 | REQ-597 | `scripts/build.sh` :: `main(...)` stage order :: previous-build cleanup runs before dependency preparation, compilation, and packaging. |
 | REQ-598 | `scripts/build.sh` :: `clean_previous_dist_directory(...)` :: removes `dist/` only when empty after tarball removal. |
 | REQ-599 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: removes every repository entry created by the run. |
@@ -1239,8 +1226,6 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-195 | `tests/release-workflow.test.ts` :: workflow-content assertions cover OIDC publication of the resolved artifact and GitHub Release creation. |
 | TST-196 | `tests/release-workflow.test.ts` :: workflow-content assertions cover `files: dist/*.tgz` release assets. |
 | TST-197 | `tests/release-workflow.test.ts` :: workflow-content assertions reject `npm ci`, `npm test`, `npm run build`, `tsc`, `scripts/build.sh`, and `scripts/pre-release-check.sh`. |
-| TST-198 | `tests/pre-release-check.test.ts` :: sandboxed gate runs assert bootstrap tarball removal, non-tarball preservation, generated-artifact retention, and non-zero abort when removal is defeated. |
-| TST-199 | `tests/build-script.test.ts` :: `build script aborts when a previous-build tarball survives removal` asserts the non-zero removal-verification abort. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.
