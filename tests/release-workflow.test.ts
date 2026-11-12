@@ -423,3 +423,27 @@ test(
     assert.doesNotMatch(workflow, /ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION/u);
   },
 );
+
+/**
+ * @brief Asserts the npm publication target is passed as an explicit local tarball path.
+ * @details Loads `.github/workflows/release-npm.yml` and verifies the resolved artifact path emitted for `npm publish` carries an explicit local-file prefix (`./` or an absolute path), because npm's package-argument parser resolves a bare `dir/file.tgz` token as a hosted-git GitHub shorthand and then fails publication with `git ls-remote ssh://git@github.com/dir/file.tgz.git`. The test also rejects any publish invocation that names `dist/` directly so the publication step must consume the prefixed artifact output. Runtime is O(n) in workflow size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies TST-195, REQ-140, REQ-499
+ */
+test(
+  "release workflow publishes the pre-built tarball through an explicit local path",
+  () => {
+    const workflow = readReleaseWorkflow();
+
+    assert.ok(
+      workflow.includes('echo "artifact_path=./${artifact}" >> "$GITHUB_OUTPUT"'),
+      "artifact_path must emit an explicit local-file prefix so npm never parses it as a hosted-git shorthand",
+    );
+    assert.ok(
+      workflow.includes(
+        'npm publish "${{ steps.prebuilt.outputs.artifact_path }}" --provenance --access public',
+      ),
+    );
+    assert.doesNotMatch(workflow, /npm publish[^\n]*dist\//u);
+  },
+);

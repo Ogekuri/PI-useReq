@@ -71,14 +71,19 @@ jobs:
             exit 1
           fi
           git cat-file -e "${GITHUB_SHA}:${artifact}"
-          echo "artifact_path=${artifact}" >> "$GITHUB_OUTPUT"
+          # npm resolves a bare `dir/file.tgz` argument as a hosted-git GitHub
+          # shorthand (`git ls-remote ssh://git@github.com/dir/file.tgz.git`),
+          # so the publication target MUST carry an explicit local-file prefix.
+          echo "artifact_path=./${artifact}" >> "$GITHUB_OUTPUT"
           echo "artifact_name=$(basename "${artifact}")" >> "$GITHUB_OUTPUT"
           echo "Pre-built release artifact: ${artifact}"
 
       # OIDC trusted publishing: the workflow-level `id-token: write` permission plus
       # the configured registry-url let npm authenticate without any NPM_TOKEN secret.
       # Publication runs only when the tagged commit is contained in origin/master.
-      # The pre-built tarball is published directly, so no build or package script runs.
+      # The pre-built tarball is published directly from its `./dist/...` local-file
+      # path, so no build or package script runs and npm never falls back to a
+      # hosted-git GitHub shorthand.
       - name: Publish pre-built package to npm
         if: needs.check-branch.outputs.is_master == 'true'
         run: npm publish "${{ steps.prebuilt.outputs.artifact_path }}" --provenance --access public
