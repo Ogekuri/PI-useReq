@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.108.1](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.1) - 2026-11-12
+### 🐛  Bug Fixes
+- make postinstall bootstrap dependency-free for git installs [useReq] *(package)*
+  Add scripts/install-static-checkers.js plain-Node wrapper that defers bundled
+  checker installation when node_modules/tsx is absent, so npm git-dependency
+  preparation clones never abort with ERR_MODULE_NOT_FOUND: Cannot find package
+  'tsx'. The wrapper delegates to scripts/install-static-checkers.ts whenever the
+  dependency tree exists, preserving the best-effort exit-code-0 installer and
+  allow-scripts approval behavior (DES-017, REQ-339).
+  Point the postinstall script at the wrapper, ship it in the npm files allowlist,
+  and align the allowScripts version pins with the resolved dependency versions
+  (esbuild 0.27.2, protobufjs 7.6.6, @google/genai 2.21.0).
+  Add a reproducer suite covering the dependency-free clone path and update the
+  files allowlist assertion (PRJ-009, REQ-482, REQ-484, CTN-020).
+
+### 🚜  Changes
+- clean dist before build and fail on stale tarballs [useReq] *(build)*
+  Update REQ-568 to cover symbolic-link tarball entries and add REQ-607/REQ-608
+  requiring the previous-build cleanup verification to abort with a non-zero
+  exit code before dependency preparation, compilation, and packaging while
+  naming the surviving dist/*.tgz path.
+  scripts/build.sh: match regular files and symlinks in the previous-build
+  tarball removal, add verify_previous_dist_clean(...) invoked at the end of
+  clean_previous_build_artifacts(...), and refresh usage plus Doxygen docs.
+
 ## [0.108.0](https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0) - 2026-11-12
 ### ⛰️  Features
 - Update prompts.
@@ -1390,6 +1415,7 @@
 - \[0.106.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.106.0
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
+- \[0.108.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.1
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1497,3 +1523,4 @@
 [0.106.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.105.0..v0.106.0
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
+[0.108.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.108.1
