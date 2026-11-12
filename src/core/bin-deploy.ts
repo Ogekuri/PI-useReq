@@ -107,13 +107,38 @@ export function resolvePiUsereqLauncherTarget(installationPath?: string): string
 }
 
 /**
- * @brief Tests whether the executing installation resides inside the pi package installation tree.
- * @details Resolves the pi agent directory using the same `PI_CODING_AGENT_DIR` plus `<user-home>/.pi/agent` contract as the pi CLI host, then applies the repository-ancestry containment rule against `<agent-dir>/npm/node_modules`, the local npm prefix install root the pi package manager uses for npm sources. Source checkouts, global npm installs, and offline harnesses fail the containment test so activation-side launcher deployment stays scoped to real pi-package installations. Runtime is O(p) in path length. No external state is mutated.
+ * @brief Tests whether one resolved installation path belongs to a project-scope pi package tree.
+ * @details Scans the resolved path segments for the pi project configuration directory `.pi` immediately preceding either `git` or `npm/node_modules`, the managed roots the pi package manager uses for project-scope installs. Runtime is O(s) in segment count. Pure; no side effects.
+ * @param[in] resolvedPath {string} Absolute installation path.
+ * @return {boolean} `true` when the path resides inside a project-scope pi package tree.
+ * @note Complexity: O(s) in segment count. Pure; no side effects.
+ * @satisfies REQ-619
+ */
+function isProjectPiPackageInstallationPath(resolvedPath: string): boolean {
+  const segments = resolvedPath.split(path.sep);
+  for (let index = 1; index < segments.length; index += 1) {
+    if (segments[index] === "git" && segments[index - 1] === ".pi") {
+      return true;
+    }
+    if (
+      segments[index] === "node_modules" &&
+      segments[index - 1] === "npm" &&
+      segments[index - 2] === ".pi"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @brief Tests whether the executing installation resides inside a pi package installation tree.
+ * @details Resolves the pi agent directory using the same `PI_CODING_AGENT_DIR` plus `<user-home>/.pi/agent` contract as the pi CLI host, then applies the repository-ancestry containment rule against the npm and git managed roots `<agent-dir>/npm/node_modules` and `<agent-dir>/git` so installations from both documented package sources are recognized, and additionally detects project-scope `.pi/git` plus `.pi/npm/node_modules` trees. Source checkouts, global npm installs, and offline harnesses fail the containment test so activation-side launcher deployment stays scoped to real pi-package installations. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] installationPath {string} Candidate installation root. Defaults to the runtime installation path.
  * @param[in] homeDirImpl {() => string} User-home resolver. Defaults to `node:os` `homedir`.
- * @return {boolean} `true` when the installation path is inside the pi package npm install tree.
+ * @return {boolean} `true` when the installation path is inside a pi-managed npm or git install tree.
  * @note Complexity: O(p) in path length.
- * @satisfies REQ-504
+ * @satisfies REQ-504, REQ-619, DES-038
  */
 export function isPiPackageInstallation(
   installationPath: string = getInstallationPath(),
@@ -124,7 +149,12 @@ export function isPiPackageInstallation(
   const agentDir = agentDirEnv
     ? expandLeadingTilde(agentDirEnv, homeDir)
     : path.join(homeDir, ".pi", "agent");
-  return isSameOrAncestorPath(path.join(agentDir, "npm", "node_modules"), path.resolve(installationPath));
+  const resolved = path.resolve(installationPath);
+  return (
+    isSameOrAncestorPath(path.join(agentDir, "npm", "node_modules"), resolved) ||
+    isSameOrAncestorPath(path.join(agentDir, "git"), resolved) ||
+    isProjectPiPackageInstallationPath(resolved)
+  );
 }
 
 /**

@@ -1,23 +1,38 @@
 /**
  * @file
  * @brief Implements pi-usereq package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`).
- * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI package update matching the pi update forms (`pi update npm:pi-usereq` on the default `--upgrade` channel and `pi update git:github.com/Ogekuri/PI-useReq` on the develop channel) so an already-installed managed package advances beyond its saved dependency range, forced full re-download plus reinstallation through the documented pi CLI update force form (`pi update <source> --force`) for `--upgrade --force`, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Upgrade completion summaries resolve the updated version from re-read installation-owned package metadata and warn when a non-forced child leaves it unchanged. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
+ * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI package update matching the pi update forms (`pi update npm:pi-usereq` on the default `--upgrade` channel and `pi update git:github.com/Ogekuri/PI-useReq` on the develop channel) so an already-installed managed package advances beyond its saved dependency range, forced full re-download plus reinstallation through the documented pi CLI update force form (`pi update <source> --force`) for `--upgrade --force`, source-aware reconciliation that identifies the installed npm-managed or git-managed package and runs `pi remove <identified-source>` plus `pi install <target-source>` when the channel target differs from the installed source, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Upgrade completion summaries resolve the updated version from re-read installation-owned package metadata and warn when a non-forced child leaves it unchanged. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
  */
 
+import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { removeDeployedPiUsereqLauncher, removeUserBinPiUsereqLauncher } from "./bin-deploy.js";
-import { getInstallationPackageMetadata, refreshInstallationPackageMetadata } from "./path-context.js";
+import {
+  getInstallationPackageMetadata,
+  getInstallationPath,
+  isSameOrAncestorPath,
+  refreshInstallationPackageMetadata,
+} from "./path-context.js";
 
 /** npm package name probed and mutated by every management command. */
 export const PACKAGE_MANAGER_PACKAGE_NAME = "pi-usereq";
+
+/** pi package source token of the npm-managed installation. */
+export const PACKAGE_MANAGER_NPM_SOURCE = `npm:${PACKAGE_MANAGER_PACKAGE_NAME}`;
+
+/** pi agent directory environment override consumed by the pi CLI host for its user config root. */
+const PI_CODING_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
 
 /** npm registry origin without trailing slash. */
 export const PACKAGE_MANAGER_REGISTRY_BASE_URL = "https://registry.npmjs.org";
 
 /** GitHub repository owner/name probed by the version report and installed from by the develop upgrade channel. */
 export const PACKAGE_MANAGER_GITHUB_REPOSITORY = "Ogekuri/PI-useReq";
+
+/** pi package source token of the git-managed installation. */
+export const PACKAGE_MANAGER_GIT_SOURCE = `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`;
 
 /** Default GitHub releases API URL resolving the latest published release of the distribution repository. */
 export const PACKAGE_MANAGER_GITHUB_RELEASES_API_URL =
@@ -77,6 +92,16 @@ export type PackageManagerCommandName =
 
 /** Install source selected for the `--upgrade` command. */
 export type PackageManagerUpgradeChannel = "npm" | "develop";
+
+/**
+ * Identified package source of the executing installation.
+ * - `kind`: pi package source family; `unknown` when the installation is not pi-managed.
+ * - `source`: pi package source token consumed by `pi remove`; absent for `unknown`.
+ */
+export interface PackageManagerInstalledPackage {
+  kind: "npm" | "git" | "unknown";
+  source?: string;
+}
 
 /** Management topic tokens accepted as the operand of the two-token `--help <topic>` argv shape. */
 export type PackageManagerHelpTopic =
@@ -192,6 +217,8 @@ export interface PackageManagerCommandDeps {
   githubCheck?: PackageManagerGitHubProbeDeps;
   /** Post-upgrade installed-version resolver invoked after a successful upgrade child. Default: fresh installation-owned package metadata read. */
   resolveUpgradedVersion?: () => string;
+  /** Installed package source resolver invoked before any upgrade child. Default: `resolveInstalledPackageManagerSource` over the runtime installation path. */
+  resolveInstalledSource?: () => PackageManagerInstalledPackage;
   /** Launcher-link remover invoked by `--uninstall` before the uninstall child. Default: `removeDeployedPiUsereqLauncher`. */
   removeLauncher?: () => boolean;
   /** User-home bin launcher-link remover invoked before `removeLauncher`. Default: `removeUserBinPiUsereqLauncher`. */
@@ -634,6 +661,142 @@ export function resolvePackageManagerInstalledVersion(): string {
 }
 
 /**
+ * @brief Resolves the pi agent directory backing the managed package install roots.
+ * @details Honors the pi `PI_CODING_AGENT_DIR` environment override with leading-tilde expansion and falls back to `<user-home>/.pi/agent`, mirroring the pi CLI package-manager install-root contract used for npm and git sources. Runtime is O(p) in path length. Pure; no side effects.
+ * @param[in] homeDirImpl {() => string} User-home resolver. Defaults to `node:os` `homedir`.
+ * @return {string} Absolute pi agent directory path.
+ * @note Complexity: O(p) in path length. Pure; no side effects.
+ */
+function resolvePiAgentDir(homeDirImpl: () => string = homedir): string {
+  const homeDir = homeDirImpl();
+  const agentDirEnv = process.env[PI_CODING_AGENT_DIR_ENV];
+  if (agentDirEnv === undefined || agentDirEnv.trim() === "") {
+    return path.join(homeDir, ".pi", "agent");
+  }
+  const trimmed = agentDirEnv.trim();
+  const expanded = trimmed === "~"
+    ? homeDir
+    : trimmed.startsWith("~/") || trimmed.startsWith(`~${path.sep}`)
+      ? path.join(homeDir, trimmed.slice(2))
+      : trimmed;
+  return path.resolve(expanded);
+}
+
+/**
+ * @brief Identifies the package source of the executing pi-usereq installation.
+ * @details Classifies the runtime installation path against the pi-managed user-scope install roots: `<agent-dir>/npm/node_modules/pi-usereq` resolves to the npm source token, `<agent-dir>/git` resolves to a git source token derived as `git:<host>/<owner>/<repository>` from the path relative to `<agent-dir>/git`, and every other location reports `unknown` so source checkouts, global npm installs, and project-scope installs never trigger a package removal. Runtime is O(p) in path length. Pure; no side effects.
+ * @param[in] installationPath {string} Candidate installation root. Defaults to the runtime installation path.
+ * @param[in] homeDirImpl {() => string} User-home resolver. Defaults to `node:os` `homedir`.
+ * @return {PackageManagerInstalledPackage} Identified npm-managed, git-managed, or unknown source facts.
+ * @note Complexity: O(p) in path length. Pure; no side effects.
+ * @satisfies REQ-609, REQ-610, REQ-611, REQ-612
+ */
+export function resolveInstalledPackageManagerSource(
+  installationPath: string = getInstallationPath(),
+  homeDirImpl: () => string = homedir,
+): PackageManagerInstalledPackage {
+  const resolved = path.resolve(installationPath);
+  const agentDir = resolvePiAgentDir(homeDirImpl);
+  const npmRoot = path.join(agentDir, "npm", "node_modules", PACKAGE_MANAGER_PACKAGE_NAME);
+  if (isSameOrAncestorPath(npmRoot, resolved)) {
+    return { kind: "npm", source: PACKAGE_MANAGER_NPM_SOURCE };
+  }
+  const gitRoot = path.join(agentDir, "git");
+  if (isSameOrAncestorPath(gitRoot, resolved)) {
+    const segments = path
+      .relative(gitRoot, resolved)
+      .split(path.sep)
+      .filter((segment) => segment.length > 0);
+    const source = segments.length >= 3
+      ? `git:${segments[0]}/${segments[1]}/${segments[2]}`
+      : PACKAGE_MANAGER_GIT_SOURCE;
+    return { kind: "git", source };
+  }
+  return { kind: "unknown" };
+}
+
+/**
+ * @brief Builds the pi CLI package-removal command for one identified source.
+ * @details Emits `pi remove <source>` because the documented pi CLI package command removes a package together with its settings entry. Runtime is O(1). Pure; no side effects.
+ * @param[in] source {string} Identified pi package source token.
+ * @return {readonly string[]} Package-removal command vector.
+ * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-614
+ */
+export function buildPackageManagerRemoveCommand(source: string): readonly string[] {
+  return ["pi", "remove", source];
+}
+
+/**
+ * @brief Builds the pi CLI package-installation command for one target source.
+ * @details Emits `pi install <source>` so a channel switch installs the newly selected source after the previous package was removed. Runtime is O(1). Pure; no side effects.
+ * @param[in] source {string} Target pi package source token.
+ * @return {readonly string[]} Package-installation command vector.
+ * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-617
+ */
+export function buildPackageManagerInstallCommand(source: string): readonly string[] {
+  return ["pi", "install", source];
+}
+
+/**
+ * @brief Resolves the pi package source targeted by one `--upgrade` channel.
+ * @details Maps the default channel onto the npm-managed source `npm:pi-usereq` and the develop channel onto the git-managed source `git:github.com/Ogekuri/PI-useReq`. Runtime is O(1). Pure; no side effects.
+ * @param[in] channel {PackageManagerUpgradeChannel} Selected upgrade channel.
+ * @return {string} Target pi package source token.
+ * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-613
+ */
+export function resolvePackageManagerUpgradeSource(channel: PackageManagerUpgradeChannel): string {
+  return channel === "develop" ? PACKAGE_MANAGER_GIT_SOURCE : PACKAGE_MANAGER_NPM_SOURCE;
+}
+
+/**
+ * @brief Tests whether one upgrade run must remove the installed package before installing the target source.
+ * @details Requires a resolvable installed source whose kind differs from the channel target kind, so equal sources keep the documented update process and `unknown` installations never trigger a removal. Runtime is O(1). Pure; no side effects.
+ * @param[in] installed {PackageManagerInstalledPackage} Identified installed package source.
+ * @param[in] channel {PackageManagerUpgradeChannel} Selected upgrade channel.
+ * @return {boolean} `true` when the installed package must be removed before installation.
+ * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-614, REQ-615
+ */
+export function requiresPackageManagerSourceSwitch(
+  installed: PackageManagerInstalledPackage,
+  channel: PackageManagerUpgradeChannel,
+): boolean {
+  const targetKind = channel === "develop" ? "git" : "npm";
+  return installed.kind !== "unknown" && installed.kind !== targetKind;
+}
+
+/**
+ * @brief Removes the identified installed package and installs the target source.
+ * @details Runs `pi remove <identified-source>` first and returns its non-zero exit code without running the installation child, otherwise runs `pi install <target-source>` and returns its exit code so a channel switch leaves exactly one configured package source. Runtime is dominated by up to two child-process executions. Side effects include package removal, package installation, and inherited child stdio.
+ * @param[in] installed {PackageManagerInstalledPackage} Identified installed package source.
+ * @param[in] targetSource {string} Target pi package source token.
+ * @param[in] deps {PackageManagerCommandDeps} Optional spawner and logger overrides.
+ * @return {number} Removal or installation child exit code; `0` on success.
+ * @note Complexity: dominated by up to two child-process executions.
+ * @satisfies REQ-614, REQ-616, REQ-617
+ */
+function switchPackageManagerSource(
+  installed: PackageManagerInstalledPackage,
+  targetSource: string,
+  deps: PackageManagerCommandDeps,
+): number {
+  if (installed.source === undefined) {
+    return 0;
+  }
+  const removed = runPackageManagerChildCommand(
+    buildPackageManagerRemoveCommand(installed.source),
+    deps,
+  );
+  if (removed !== 0) {
+    return removed;
+  }
+  return runPackageManagerChildCommand(buildPackageManagerInstallCommand(targetSource), deps);
+}
+
+/**
  * @brief Runs one package-manager command as a child process with inherited stdio.
  * @details Spawns `command[0]` with the remaining tokens, inheriting stdio so npm and pi output streams through unchanged; Windows spawns run through a shell so `npm.cmd` and `pi.cmd` resolve via `PATHEXT`. The child runs with an explicit neutral working directory (the user home), never the caller's cwd, because management installs are routinely invoked from inside a source checkout of the same package being replaced. Spawn failures print the error plus the exact manual command hint on stderr and map to exit code `1`; otherwise the child exit code propagates (`null` status maps to `1`).
  * @param[in] command {readonly string[]} Executable plus argument vector.
@@ -761,13 +924,13 @@ function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["s
 }
 
 /**
- * @brief Handles `--upgrade`: channel selection, force mode, pi-CLI package reinstall, then stdout summary.
- * @details Develop channel (`--dev`/`--develop`): skips the registry comparison and the already-latest skip path entirely, always spawning `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; forced develop runs (`--force`) instead spawn `PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq --force`), the documented pi CLI force-reinstall update form that forces full package download and reinstallation. Default npm channel: forced runs skip the pre-upgrade probe and the already-latest skip path entirely and spawn `PACKAGE_FORCED_UPGRADE_COMMAND` (`pi update npm:pi-usereq --force`); otherwise one forced npmjs package-manifest probe bypassing every cache, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. Every non-zero child exit code propagates without printing any summary; every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` from re-read installation-owned package metadata and warns when a non-forced run leaves the installed version unchanged.
+ * @brief Handles `--upgrade`: installed-source identification, optional source-switch removal plus installation, force mode, pi-CLI package reinstall, then stdout summary.
+ * @details Identifies the installed package source before any child process. When the identified source resolves to a different kind than the channel target source, the handler skips the registry gate and runs `pi remove <identified-source>` followed by `pi install <target-source>`, propagating a non-zero removal or installation exit code without printing a summary. Otherwise develop channel (`--dev`/`--develop`) runs `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; forced develop runs (`--force`) run `PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq --force`), the documented pi CLI force-reinstall update form. Default npm channel forced runs skip the pre-upgrade probe and the already-latest skip path entirely and run `PACKAGE_FORCED_UPGRADE_COMMAND` (`pi update npm:pi-usereq --force`); otherwise one forced npmjs package-manifest probe bypassing every cache, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. Every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` from re-read installation-owned package metadata and warns when a non-forced run leaves the installed version unchanged.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version, channel, and force mode.
- * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout overrides.
- * @return {Promise<number>} `0` when the non-forced installed version is already the latest available; otherwise the upgrade exit code when non-zero, else `0` after a successful reinstall.
- * @note Complexity: zero to one HTTP round-trips plus at most one child process execution.
- * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, REQ-526, REQ-527, REQ-528, REQ-531, DES-026
+ * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout/source-resolver overrides.
+ * @return {Promise<number>} `0` when the non-forced same-source installed version is already the latest available or after a successful source switch; otherwise the propagated child exit code.
+ * @note Complexity: zero to one HTTP round-trips plus at most two child process executions.
+ * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, REQ-526, REQ-527, REQ-528, REQ-531, REQ-613, REQ-614, REQ-615, REQ-616, REQ-617, REQ-618, DES-026, DES-037
  */
 export async function runPackageManagerUpgradeCommand(
   options: PackageManagerCommandOptions,
@@ -775,7 +938,21 @@ export async function runPackageManagerUpgradeCommand(
 ): Promise<number> {
   const stdout = deps.stdout ?? defaultPackageManagerStdout;
   const force = options.force === true;
-  if ((options.channel ?? "npm") === "develop") {
+  const channel = options.channel ?? "npm";
+  const installed = (deps.resolveInstalledSource ?? resolveInstalledPackageManagerSource)();
+  if (requiresPackageManagerSourceSwitch(installed, channel)) {
+    const switched = switchPackageManagerSource(
+      installed,
+      resolvePackageManagerUpgradeSource(channel),
+      deps,
+    );
+    if (switched !== 0) {
+      return switched;
+    }
+    reportPackageManagerUpgradeCompletion(options, deps);
+    return 0;
+  }
+  if (channel === "develop") {
     const upgraded = runPackageManagerChildCommand(
       force ? PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND : PACKAGE_DEVELOP_UPGRADE_COMMAND,
       deps,

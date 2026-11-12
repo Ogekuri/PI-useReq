@@ -119,13 +119,31 @@ test("launcher deployment helper resolves the pi agent bin directory contract", 
 test("launcher deployment gates on pi package installation layout", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-pkg-home-"));
   const packageInstall = path.join(home, ".pi", "agent", "npm", "node_modules", "pi-usereq");
-  const scriptsDir = path.join(packageInstall, "scripts");
-  fs.mkdirSync(scriptsDir, { recursive: true });
-  fs.writeFileSync(path.join(scriptsDir, "pi-usereq.js"), "#!/usr/bin/env node\n", "utf8");
+  const gitInstall = path.join(home, ".pi", "agent", "git", "github.com", "Ogekuri", "PI-useReq");
+  for (const installRoot of [packageInstall, gitInstall]) {
+    const scriptsDir = path.join(installRoot, "scripts");
+    fs.mkdirSync(scriptsDir, { recursive: true });
+    fs.writeFileSync(path.join(scriptsDir, "pi-usereq.js"), "#!/usr/bin/env node\n", "utf8");
+  }
   const previous = process.env.PI_CODING_AGENT_DIR;
   try {
     delete process.env.PI_CODING_AGENT_DIR;
     assert.equal(isPiPackageInstallation(packageInstall, () => home), true);
+    assert.equal(isPiPackageInstallation(gitInstall, () => home), true);
+    assert.equal(
+      isPiPackageInstallation(
+        path.join(home, "project", ".pi", "git", "github.com", "Ogekuri", "PI-useReq"),
+        () => home,
+      ),
+      true,
+    );
+    assert.equal(
+      isPiPackageInstallation(
+        path.join(home, "project", ".pi", "npm", "node_modules", "pi-usereq"),
+        () => home,
+      ),
+      true,
+    );
     assert.equal(isPiPackageInstallation(home, () => home), false);
     process.env.PI_CODING_AGENT_DIR = path.join(home, "custom-agent");
     assert.equal(isPiPackageInstallation(home, () => home), false);
@@ -134,6 +152,11 @@ test("launcher deployment gates on pi package installation layout", () => {
       agentBinDir: path.join(home, "custom-agent", "bin"),
     };
     assert.deepEqual(deployPiUsereqLauncher(gatedOptions), { deployed: true, outcome: "created" });
+    const gitOptions: PiUsereqLauncherDeployOptions = {
+      installationPath: gitInstall,
+      agentBinDir: path.join(home, "git-agent-bin"),
+    };
+    assert.deepEqual(deployPiUsereqLauncher(gitOptions), { deployed: true, outcome: "created" });
   } finally {
     if (previous === undefined) {
       delete process.env.PI_CODING_AGENT_DIR;

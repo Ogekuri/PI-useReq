@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
@@ -10,6 +10,8 @@ import {
   PACKAGE_FORCED_UPGRADE_COMMAND,
   PACKAGE_MANAGER_GITHUB_RELEASES_API_URL,
   PACKAGE_MANAGER_GITHUB_REPOSITORY,
+  PACKAGE_MANAGER_GIT_SOURCE,
+  PACKAGE_MANAGER_NPM_SOURCE,
   PACKAGE_MANAGER_REGISTRY_BASE_URL,
   PACKAGE_UNINSTALL_COMMAND,
   PACKAGE_UPGRADE_COMMAND,
@@ -21,8 +23,10 @@ import {
   probeLatestGitHubRelease,
   probeLatestRegistryVersion,
   resolveHighestPackageManagerVersion,
+  resolveInstalledPackageManagerSource,
   resolvePackageManagerInstalledVersion,
   resolvePackageManagerManifestLatest,
+  resolvePackageManagerUpgradeSource,
   runPackageManagerManagementCommand,
   runPackageManagerUninstallCommand,
   runPackageManagerUpgradeCommand,
@@ -493,6 +497,159 @@ test("develop-channel upgrade propagates child failure without printing a summar
   assert.equal(exitCode, 2);
   assert.equal(calls.length, 1);
   assert.deepEqual(sink.chunks, []);
+});
+
+/**
+ * @brief Verifies installed-source identification across managed and unmanaged installation trees.
+ * @details Materializes no real installation because classification is path-based; asserts the npm-managed tree, the git-managed tree with its derived source token, and an unmanaged checkout. Deterministic: pure path checks with a temporary home directory, no child processes or network.
+ * @satisfies REQ-609, REQ-610, REQ-611, REQ-612, TST-198
+ */
+test("installed-source identification classifies npm, git, and unknown installation trees", () => {
+  const home = fs.mkdtempSync(path.join(tmpdir(), "pi-usereq-source-home-"));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  try {
+    delete process.env.PI_CODING_AGENT_DIR;
+    const agentDir = path.join(home, ".pi", "agent");
+    assert.deepEqual(
+      resolveInstalledPackageManagerSource(
+        path.join(agentDir, "npm", "node_modules", "pi-usereq", "src"),
+        () => home,
+      ),
+      { kind: "npm", source: PACKAGE_MANAGER_NPM_SOURCE },
+    );
+    assert.deepEqual(
+      resolveInstalledPackageManagerSource(
+        path.join(agentDir, "git", "github.com", "Ogekuri", "PI-useReq", "src"),
+        () => home,
+      ),
+      { kind: "git", source: PACKAGE_MANAGER_GIT_SOURCE },
+    );
+    assert.deepEqual(
+      resolveInstalledPackageManagerSource(path.join(home, "checkout", "src"), () => home),
+      { kind: "unknown" },
+    );
+    assert.equal(resolvePackageManagerUpgradeSource("npm"), PACKAGE_MANAGER_NPM_SOURCE);
+    assert.equal(resolvePackageManagerUpgradeSource("develop"), PACKAGE_MANAGER_GIT_SOURCE);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies the default-channel source switch from one git-managed installation.
+ * @details Injects a git-managed installed source and a newer npmjs latest version so the run must skip the registry gate, remove the git package, then install the npm source before printing the completion summary. Deterministic: spawn, fetch, stdout, and resolver doubles; no network or child processes.
+ * @satisfies REQ-614, REQ-616, REQ-617, REQ-618, TST-199
+ */
+test("default-channel upgrade from a git-managed installation removes it and installs the npm source", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const registry = createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } });
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "npm" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      resolveInstalledSource: () => ({ kind: "git", source: PACKAGE_MANAGER_GIT_SOURCE }),
+      registryCheck: { fetchImpl: registry.fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.deepEqual(registry.urls, []);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].file, "pi");
+  assert.deepEqual(calls[0].args, ["remove", PACKAGE_MANAGER_GIT_SOURCE]);
+  assert.deepEqual(calls[1].args, ["install", PACKAGE_MANAGER_NPM_SOURCE]);
+  assert.equal(calls[0].options.cwd, homedir());
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+});
+
+/**
+ * @brief Verifies the develop-channel source switch from one npm-managed installation.
+ * @details Injects an npm-managed installed source so the run must remove `npm:pi-usereq` and install the git target source without any registry probe. Deterministic: spawn, stdout, and resolver doubles; no network or child processes.
+ * @satisfies REQ-613, REQ-614, REQ-617, TST-200
+ */
+test("develop-channel upgrade from an npm-managed installation removes it and installs the git source", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "develop" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      resolveInstalledSource: () => ({ kind: "npm", source: PACKAGE_MANAGER_NPM_SOURCE }),
+      resolveUpgradedVersion: () => "2.0.0",
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].args, ["remove", PACKAGE_MANAGER_NPM_SOURCE]);
+  assert.deepEqual(calls[1].args, ["install", PACKAGE_MANAGER_GIT_SOURCE]);
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+});
+
+/**
+ * @brief Verifies that a failing removal aborts the source switch before installation.
+ * @details Injects a failing removal child and asserts the run returns that exit code after exactly one removal spawn without installation or summary output. Deterministic: spawn and resolver doubles; no network or child processes.
+ * @satisfies REQ-615, REQ-616, TST-201
+ */
+test("failing package removal aborts the upgrade before installing the target source", async () => {
+  const { calls, spawn } = createSpawnDouble({ status: 5 });
+  const sink = createStdoutSink();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "npm", force: true },
+    {
+      spawn,
+      stdout: sink.stdout,
+      resolveInstalledSource: () => ({ kind: "git", source: PACKAGE_MANAGER_GIT_SOURCE }),
+    },
+  );
+  assert.equal(exitCode, 5);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args, ["remove", PACKAGE_MANAGER_GIT_SOURCE]);
+  assert.deepEqual(sink.chunks, []);
+});
+
+/**
+ * @brief Verifies that matching and unknown installed sources keep the documented update commands.
+ * @details Runs a forced same-source upgrade and an unknown-source upgrade, asserting the force update command and the registry-gated update command without any removal spawn. Deterministic: spawn, fetch, and resolver doubles; no network or child processes.
+ * @satisfies REQ-615, REQ-527, REQ-528, TST-202
+ */
+test("same-source and unknown-source upgrades keep the documented pi update commands", async () => {
+  const sameSource = createSpawnDouble();
+  const sameSink = createStdoutSink();
+  const sameExit = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "npm", force: true },
+    {
+      spawn: sameSource.spawn,
+      stdout: sameSink.stdout,
+      resolveInstalledSource: () => ({ kind: "npm", source: PACKAGE_MANAGER_NPM_SOURCE }),
+      resolveUpgradedVersion: () => "2.0.0",
+    },
+  );
+  assert.equal(sameExit, 0);
+  assert.equal(sameSource.calls.length, 1);
+  assert.deepEqual(sameSource.calls[0].args, [...PACKAGE_FORCED_UPGRADE_COMMAND.slice(1)]);
+  const unknown = createSpawnDouble();
+  const unknownSink = createStdoutSink();
+  const unknownExit = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "npm" },
+    {
+      spawn: unknown.spawn,
+      stdout: unknownSink.stdout,
+      resolveInstalledSource: () => ({ kind: "unknown" }),
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
+    },
+  );
+  assert.equal(unknownExit, 0);
+  assert.equal(unknown.calls.length, 1);
+  assert.deepEqual(unknown.calls[0].args, [...PACKAGE_UPGRADE_COMMAND.slice(1)]);
 });
 
 /**
