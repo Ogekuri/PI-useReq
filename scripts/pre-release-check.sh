@@ -2,8 +2,8 @@
 ##
 # @file scripts/pre-release-check.sh
 # @brief Executes the official pi-usereq pre-release verification gate.
-# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), clean dependency install (`npm ci`), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), the full test suite (`npm test`), release-artifact generation through `scripts/build.sh`, and release-artifact validation. The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Supports `--skip-install` to reuse the existing `node_modules` tree and `--help` for usage; rejects unknown options with exit code `2`. Artifact validation verifies the generated `dist/pi-usereq-<version>.tgz` tarball for existence, non-zero size, and the required `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries. After the stages finish, the gate removes every repository entry its stages created — build outputs and intermediate files included, `dist/` entries excluded — by diffing the pre-run and post-run `git status --porcelain --untracked-files=normal --ignored` inventories and by removing run-generated `dist/*.tgz` tarballs only on failure or signal exits through an inode-precise pre-build snapshot, keeping `node_modules`, every `dist/` entry, and every pre-existing or tracked-status entry untouched. Cleanup runs on success, failure, and signal-induced exits while preserving the first failing stage exit code. Runtime is dominated by `npm ci`, `npm test`, and `npm pack`. Side effects include `node_modules` replacement, npm lifecycle scripts, child process spawning, and deletion of run-created repository entries.
-# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574
+# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), clean dependency install (`npm ci`), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), the full test suite (`npm test`), release packaging into one `TMPDIR` temporary build directory through `npm pack --pack-destination <temporary-directory>`, and validation of that temporary tarball. The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Supports `--skip-install` to reuse the existing `node_modules` tree and `--help` for usage; rejects unknown options with exit code `2`. Artifact validation verifies the temporary `pi-usereq-<version>.tgz` tarball for existence, non-zero size, and the required `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries. The gate performs no operation on `dist/` and never creates, reads, verifies, or deletes any `dist/` entry, so its behavior is independent from `dist/` content. After the stages finish, the gate removes every repository entry its stages created — build outputs and intermediate files included, `dist/` entries excluded — by diffing the pre-run and post-run `git status --porcelain --untracked-files=normal --ignored` inventories and deletes the temporary build directory with its generated tarball on every exit path, keeping `node_modules`, every `dist/` entry, and every pre-existing or tracked-status entry untouched. Cleanup runs on success, failure, and signal-induced exits while preserving the first failing stage exit code. Runtime is dominated by `npm ci`, `npm test`, and `npm pack`. Side effects include `node_modules` replacement, npm lifecycle scripts, child process spawning, temporary build directory creation and removal, and deletion of run-created repository entries.
+# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606
 ##
 
 set -euo pipefail
@@ -35,28 +35,10 @@ PRC_PRE_INVENTORY_FILE=""
 PRC_INVENTORY_READY=0
 
 ##
-# @brief Holds the canonical release artifact destination directory.
-# @details Anchored at `<repo-root>/dist`, the destination validated and cleaned by the artifact stages.
+# @brief Holds the absolute path of the temporary release build directory.
+# @details Created under `TMPDIR` before the packaging stage and removed on every exit path, so the gate generates and validates the release tarball outside the repository and never touches `dist/`.
 ##
-PRC_DIST_DIR="${REPO_ROOT}/dist"
-
-##
-# @brief Holds the guard flag arming run-generated `dist/` tarball removal.
-# @details Stays `0` until the pre-build `dist/` tarball snapshot succeeds, so failures before the artifact stage never touch pre-existing tarballs.
-##
-PRC_BUILD_ARMED=0
-
-##
-# @brief Holds whether `dist/` existed when the artifact stage started.
-# @details Recorded before invoking `scripts/build.sh` so cleanup removes the `dist/` directory itself only when this run created it.
-##
-PRC_DIST_EXISTED=0
-
-##
-# @brief Holds the pre-build `dist/` tarball identity snapshot file.
-# @details Written by `capture_dist_tarball_snapshot(...)` with one `path|inode|size` line per pre-existing tarball and consumed by `cleanup_dist_artifacts(...)` so only tarballs recreated or created by this run are removed.
-##
-PRC_DIST_SNAPSHOT_FILE=""
+PRC_TEMP_BUILD_DIR=""
 
 ##
 # @brief Captures one sorted repository artifact inventory snapshot.
@@ -81,67 +63,29 @@ capture_pre_run_inventory() {
 }
 
 ##
-# @brief Captures the pre-build `dist/` tarball identity snapshot.
-# @details Writes one `path|inode|size` line per existing root-level `dist/*.tgz` file into one temporary file and arms `PRC_BUILD_ARMED` so the `EXIT` trap may remove only tarballs created or recreated by the artifact stage. Runtime is O(n) in tarball count. Side effects include one temporary file creation.
-# @return {void} No return value; assigns `PRC_DIST_SNAPSHOT_FILE` and sets `PRC_BUILD_ARMED=1`.
-# @satisfies REQ-572, REQ-574
-##
-capture_dist_tarball_snapshot() {
-  PRC_DIST_SNAPSHOT_FILE="$(mktemp "${TMPDIR:-/tmp}/pi-usereq-pre-release-dist.XXXXXX")"
-  : > "${PRC_DIST_SNAPSHOT_FILE}"
-  if [[ -d "${PRC_DIST_DIR}" ]]; then
-    local tarball identity
-    while IFS= read -r -d '' tarball; do
-      if identity="$(stat -c '%i|%s' -- "${tarball}")"; then
-        printf '%s|%s\n' "${tarball}" "${identity}" >> "${PRC_DIST_SNAPSHOT_FILE}"
-      fi
-    done < <(find "${PRC_DIST_DIR}" -maxdepth 1 -type f -name '*.tgz' -print0)
-  fi
-  PRC_BUILD_ARMED=1
-}
-
-##
-# @brief Removes the `dist/` tarballs generated by the artifact stage after a non-successful gate.
-# @details Retains every `dist/` entry when the gate exit code is `0`. Otherwise compares every root-level `dist/*.tgz` file against the pre-build `path|inode|size` snapshot and removes only tarballs that are new or were recreated by this run, so pre-existing untouched tarballs survive. Removes the `dist/` directory itself only when this run created it and it is empty after tarball removal. Runtime is O(n) in tarball count. Side effects include deletion of run-generated tarballs on failure, optional directory removal, and temporary-file removal.
-# @param[in] gate_exit_code {number} Exit code observed by the `EXIT` trap; `0` retains generated tarballs.
+# @brief Removes the temporary release build directory and its generated tarball.
+# @details Deletes the `TMPDIR` temporary build directory created for the packaging stage when it exists, so the gate leaves no tarball, archive listing, or packaging residue outside the repository on successful, failed, and signal-induced exits. Runtime is O(n) in temporary-directory entry count. Side effects include recursive deletion of the temporary directory only.
 # @return {void} No return value; always returns `0` so the `EXIT` trap re-exits with the preserved gate exit code.
-# @satisfies REQ-574
+# @satisfies REQ-604, REQ-606
 ##
-cleanup_dist_artifacts() {
-  local gate_exit_code="${1:-1}"
-  if [[ -n "${PRC_DIST_SNAPSHOT_FILE}" ]]; then
-    if [[ "${gate_exit_code}" -ne 0 && "${PRC_BUILD_ARMED}" -eq 1 && -d "${PRC_DIST_DIR}" ]]; then
-      local tarball identity snapshot_line
-      while IFS= read -r -d '' tarball; do
-        if ! identity="$(stat -c '%i|%s' -- "${tarball}")"; then
-          continue
-        fi
-        snapshot_line="${tarball}|${identity}"
-        if ! grep -Fqx -- "${snapshot_line}" "${PRC_DIST_SNAPSHOT_FILE}"; then
-          rm -f -- "${tarball}"
-          printf 'pre-release-check: removed generated artifact: %s\n' "${tarball}"
-        fi
-      done < <(find "${PRC_DIST_DIR}" -maxdepth 1 -type f -name '*.tgz' -print0)
-      if [[ "${PRC_DIST_EXISTED}" -eq 0 ]]; then
-        rmdir -- "${PRC_DIST_DIR}" 2>/dev/null || :
-      fi
-    fi
-    rm -f -- "${PRC_DIST_SNAPSHOT_FILE}"
-    PRC_DIST_SNAPSHOT_FILE=""
+cleanup_temp_build_dir() {
+  if [[ -n "${PRC_TEMP_BUILD_DIR}" && -d "${PRC_TEMP_BUILD_DIR}" ]]; then
+    rm -rf -- "${PRC_TEMP_BUILD_DIR}"
+    printf 'pre-release-check: removed temporary build directory: %s\n' "${PRC_TEMP_BUILD_DIR}"
   fi
-  PRC_BUILD_ARMED=0
+  PRC_TEMP_BUILD_DIR=""
   return 0
 }
 
 ##
 # @brief Removes repository artifacts created by the gate stages.
-# @details Applies the `dist/` tarball policy of `cleanup_dist_artifacts(...)` first, then diffs the post-run `capture_repo_inventory(...)` output against the pre-run snapshot and removes with `rm -rf` every `??` or `!!` entry absent from the snapshot so build outputs and intermediate files created by `npm ci`, `tsc --noEmit`, `npm test`, or `scripts/build.sh` never survive the gate. Skips `node_modules` and `dist/` entries so the dependency tree stays reusable and release artifacts stay tracked, skips every pre-existing or tracked-status entry, and removes its temporary inventory files. Runtime is O(n) in artifact and inventory diff size. Side effects include deletion of run-created repository entries and temporary-file removal.
-# @param[in] gate_exit_code {number} Exit code observed by the `EXIT` trap forwarded to `cleanup_dist_artifacts(...)`.
+# @details Removes the temporary build directory first, then diffs the post-run `capture_repo_inventory(...)` output against the pre-run snapshot and removes with `rm -rf` every `??` or `!!` entry absent from the snapshot so build outputs and intermediate files created by `npm ci`, `tsc --noEmit`, or `npm test` never survive the gate. Skips `node_modules` and `dist/` entries so the dependency tree stays reusable and no `dist/` entry is ever touched, skips every pre-existing or tracked-status entry, and removes its temporary inventory files. Runtime is O(n) in artifact and inventory diff size. Side effects include deletion of run-created repository entries, temporary-directory removal, and temporary-file removal.
+# @param[in] gate_exit_code {number} Exit code observed by the `EXIT` trap.
 # @return {void} No return value; always returns `0` so the `EXIT` trap re-exits with the preserved gate exit code.
-# @satisfies REQ-496, REQ-497, REQ-498, REQ-574
+# @satisfies REQ-496, REQ-497, REQ-498, REQ-574, REQ-605, REQ-606
 ##
 cleanup_generated_artifacts() {
-  cleanup_dist_artifacts "${1:-1}"
+  cleanup_temp_build_dir
   if [[ "${PRC_INVENTORY_READY}" -ne 1 ]]; then
     return 0
   fi
@@ -201,8 +145,8 @@ Runs the official pre-release verification gate from the repository root:
   2. Clean dependency install: npm ci (skipped by --skip-install)
   3. Strict type-check: node_modules/.bin/tsc --noEmit
   4. Full test suite: npm test
-  5. Release artifact generation: scripts/build.sh (npm pack into dist/)
-  6. Release artifact validation: dist/pi-usereq-<version>.tgz structure
+  5. Release packaging: npm pack into one TMPDIR temporary build directory
+  6. Release artifact validation: temporary pi-usereq-<version>.tgz structure
 
 Options:
   --skip-install  Reuse the existing node_modules tree instead of npm ci
@@ -210,10 +154,11 @@ Options:
 
 Exits 0 only when every stage succeeds; exits non-zero on the first failure.
 
-Removes repository entries created by this run (build outputs, intermediate
-files) before exiting; node_modules, dist/ release artifacts, and
-pre-existing entries are kept. Generated dist/ tarballs are removed only on
-failure or signal exits.
+Performs no operation on dist/ and never creates, reads, verifies, or
+deletes any dist/ entry. Removes repository entries created by this run
+(build outputs, intermediate files) before exiting; node_modules and every
+dist/ and pre-existing entry are kept. The temporary build directory and
+its tarball are removed on every exit path.
 USAGE
 }
 
@@ -287,27 +232,27 @@ install_dependencies() {
 }
 
 ##
-# @brief Runs the release artifact generation stage.
-# @details Invokes the repository-owned `scripts/build.sh` packaging process, which validates the toolchain, prepares the dependency tree, runs the strict compilation gate, prunes stale generated `dist/*.tgz` tarballs, packs the npm distribution tarball into `dist/`, and verifies the produced artifact. Runtime is dominated by the delegated packaging stages. Side effects are those of `scripts/build.sh`.
+# @brief Runs the release packaging stage inside the temporary build directory.
+# @details Packs the npm distribution tarball through `npm pack --pack-destination <temporary-directory>` so the release artifact is generated outside the repository without consulting or touching `dist/`. Runtime is dominated by `npm pack`. Side effects include tarball writing inside the temporary build directory only.
 # @return {void} No return value on success.
 # @retval {never} Exits through `run_stage(...)` with `1` when packaging fails.
-# @satisfies REQ-491
+# @satisfies REQ-491, REQ-604, REQ-605
 ##
-run_release_build() {
-  "${REPO_ROOT}/scripts/build.sh"
+run_release_pack() {
+  npm pack --pack-destination "${PRC_TEMP_BUILD_DIR}"
 }
 
 ##
-# @brief Validates the release artifact generated by the build stage.
-# @details Resolves the package version from the repository manifest, verifies the expected `dist/pi-usereq-<version>.tgz` artifact exists and is non-empty, lists the archive, and requires the `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries inside the archive so a truncated or structurally invalid tarball fails the gate before cleanup. Runtime is dominated by one archive listing. Side effects are limited to filesystem reads.
+# @brief Validates the temporary release artifact generated by the packaging stage.
+# @details Resolves the package version from the repository manifest, verifies the expected `pi-usereq-<version>.tgz` artifact inside the temporary build directory exists and is non-empty, lists the archive, and requires the `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries inside the archive so a truncated or structurally invalid tarball fails the gate before cleanup. Never reads or verifies any `dist/` entry. Runtime is dominated by one archive listing. Side effects are limited to filesystem reads inside the temporary build directory.
 # @return {void} No return value on success.
 # @retval {never} Exits `1` through `die(...)` when the expected artifact is missing, empty, or structurally incomplete.
-# @satisfies REQ-491, REQ-572, REQ-573
+# @satisfies REQ-491, REQ-572, REQ-573, REQ-605
 ##
 validate_release_artifacts() {
   local version expected listing entry
   version="$(node -p 'require("./package.json").version')"
-  expected="dist/pi-usereq-${version}.tgz"
+  expected="${PRC_TEMP_BUILD_DIR}/pi-usereq-${version}.tgz"
   if [[ ! -f "${expected}" ]]; then
     die "expected release artifact missing after build: ${expected}"
   fi
@@ -351,10 +296,10 @@ run_test_suite() {
 
 ##
 # @brief Parses gate options and executes every stage in the documented order.
-# @details Accepts exactly `--skip-install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, captures the pre-run repository inventory snapshot plus the pre-build `dist/` tarball identity snapshot, dispatches the six stages in order, prints the final success summary, and lets the exit trap remove repository entries created by the stages before the process returns the gate exit code. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus run-created artifact removal at exit.
+# @details Accepts exactly `--skip-install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, captures the pre-run repository inventory snapshot, creates the `TMPDIR` temporary build directory, dispatches the six stages in order, prints the final success summary, and lets the exit trap remove the temporary build directory plus repository entries created by the stages before the process returns the gate exit code. Never creates, reads, verifies, or deletes any `dist/` entry. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus temporary-directory and run-created artifact removal at exit.
 # @param[in] arguments {string...} Raw command-line arguments passed to the script.
 # @return {void} No return value on success; exits non-zero on any failure.
-# @satisfies REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574
+# @satisfies REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606
 ##
 main() {
   while [[ $# -gt 0 ]]; do
@@ -376,17 +321,14 @@ main() {
   done
   cd "${REPO_ROOT}"
   capture_pre_run_inventory
-  printf 'pi-usereq pre-release check\nrepository root: %s\nartifact cleanup: enabled (removes entries created by this run; keeps node_modules and dist/)\n' "${REPO_ROOT}"
+  PRC_TEMP_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pi-usereq-pre-release-build.XXXXXX")"
+  printf 'pi-usereq pre-release check\nrepository root: %s\ntemporary build directory: %s\nartifact cleanup: enabled (removes entries created by this run; keeps node_modules and every dist/ entry)\n' "${REPO_ROOT}" "${PRC_TEMP_BUILD_DIR}"
   run_stage 'stage 1/6: environment preflight (git, node >=24, npm)' check_environment
   run_stage 'stage 2/6: clean dependency install (npm ci)' install_dependencies
   run_stage 'stage 3/6: strict type-check (tsc --noEmit)' run_type_check
   run_stage 'stage 4/6: full test suite (npm test)' run_test_suite
-  if [[ -d "${PRC_DIST_DIR}" ]]; then
-    PRC_DIST_EXISTED=1
-  fi
-  capture_dist_tarball_snapshot
-  run_stage 'stage 5/6: release artifact generation (scripts/build.sh)' run_release_build
-  run_stage 'stage 6/6: release artifact validation (dist/pi-usereq-<version>.tgz)' validate_release_artifacts
+  run_stage 'stage 5/6: release packaging (npm pack into the temporary build directory)' run_release_pack
+  run_stage 'stage 6/6: release artifact validation (temporary pi-usereq-<version>.tgz)' validate_release_artifacts
   printf '\npre-release check: all stages passed.\n'
 }
 
