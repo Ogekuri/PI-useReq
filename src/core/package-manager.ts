@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import {
   deployPiUsereqLauncher,
+  isPiPackageInstallation,
   removeDeployedPiUsereqLauncher,
   removeUserBinPiUsereqLauncher,
 } from "./bin-deploy.js";
@@ -228,6 +229,8 @@ export interface PackageManagerCommandDeps {
   removeLauncher?: () => boolean;
   /** User-home bin launcher-link remover invoked before `removeLauncher`. Default: `removeUserBinPiUsereqLauncher`. */
   removeUserBinLauncher?: () => boolean;
+  /** Agent-bin launcher repair invoked after every successful upgrade child so a completed upgrade never leaves the `pi-usereq` command dangling. Default: gated runtime-installation launcher deployment. */
+  repairLauncher?: () => void;
 }
 
 /** Default stderr-only diagnostic sink used when no logger is injected. */
@@ -712,6 +715,21 @@ export function resolvePackageManagerChannelInstallRoot(
 }
 
 /**
+ * @brief Repairs the deployed agent-bin `pi-usereq` launcher after one successful upgrade child.
+ * @details Repairs the launcher only for genuine pi-package installations so source checkouts, offline harnesses, and deterministic tests never touch the developer home, then re-deploys the `pi-usereq` symlink against the executing installation. A `pi update` child rewrites the managed dependency tree, so re-verifying the launcher after a successful child keeps the management CLI resolvable instead of leaving a dangling link that forces the user onto a stale foreign shim. Runtime is O(p) in path length plus bounded filesystem metadata calls. Side effects include conditional symlink creation or replacement inside the pi agent bin directory.
+ * @return {void} No return value.
+ * @note Complexity: O(p) in path length plus bounded filesystem metadata calls.
+ * @satisfies REQ-504, REQ-505, REQ-506, REQ-507
+ */
+function defaultRepairPackageManagerLauncher(): void {
+  const installationRoot = path.resolve(getInstallationPath(), "..");
+  if (!isPiPackageInstallation(installationRoot)) {
+    return;
+  }
+  deployPiUsereqLauncher({ installationPath: installationRoot });
+}
+
+/**
  * @brief Reads the version field of one installation-owned package manifest.
  * @details Parses `<packageRoot>/package.json` and accepts only a non-empty string `version` field so undeterminable manifests degrade to `undefined`. Runtime is O(n) in manifest size. Side effects are limited to one filesystem read.
  * @param[in] packageRoot {string} Absolute installation package root.
@@ -988,7 +1006,7 @@ function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["s
 
 /**
  * @brief Handles `--upgrade`: installed-source identification, optional source-switch removal plus installation, force mode, pi-CLI package reinstall, then stdout summary.
- * @details Identifies the installed package source before any child process. When the identified source resolves to a different kind than the channel target source, the handler skips the registry gate and runs `pi remove <identified-source>` followed by `pi install <target-source>`, propagating a non-zero removal or installation exit code without printing a summary; after a successful switch it re-deploys the agent-bin `pi-usereq` launcher onto the channel target installation root and resolves the completion `<updated>` version from that target root, because the removal child already deleted the installation that owned the running process. Otherwise develop channel (`--dev`/`--develop`) runs `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; forced develop runs (`--force`) run `PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq --force`), the documented pi CLI force-reinstall update form. Default npm channel forced runs skip the pre-upgrade probe and the already-latest skip path entirely and run `PACKAGE_FORCED_UPGRADE_COMMAND` (`pi update npm:pi-usereq --force`); otherwise one forced npmjs package-manifest probe bypassing every cache, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. Every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` from re-read installation-owned package metadata, or from the post-switch target installation root after a source switch as a defect corrective action ensuring the CLI launcher and reported version stay aligned with the newly installed package, and warns when a non-forced run leaves the installed version unchanged.
+ * @details Identifies the installed package source before any child process. When the identified source resolves to a different kind than the channel target source, the handler skips the registry gate and runs `pi remove <identified-source>` followed by `pi install <target-source>`, propagating a non-zero removal or installation exit code without printing a summary; after a successful switch it re-deploys the agent-bin `pi-usereq` launcher onto the channel target installation root and resolves the completion `<updated>` version from that target root, because the removal child already deleted the installation that owned the running process. Otherwise develop channel (`--dev`/`--develop`) runs `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; forced develop runs (`--force`) run `PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq --force`), the documented pi CLI force-reinstall update form. Default npm channel forced runs skip the pre-upgrade probe and the already-latest skip path entirely and run `PACKAGE_FORCED_UPGRADE_COMMAND` (`pi update npm:pi-usereq --force`); otherwise one forced npmjs package-manifest probe bypassing every cache, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. Every same-source successful child repairs the deployed agent-bin `pi-usereq` launcher against the executing installation before reporting completion, because a `pi update` child rewrites the managed dependency tree and a completed upgrade MUST NOT leave the management CLI dangling behind a stale foreign shim. Every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` from re-read installation-owned package metadata, or from the post-switch target installation root after a source switch as a defect corrective action ensuring the CLI launcher and reported version stay aligned with the newly installed package, and warns when a non-forced run leaves the installed version unchanged.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version, channel, and force mode.
  * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout/source-resolver overrides.
  * @return {Promise<number>} `0` when the non-forced same-source installed version is already the latest available or after a successful source switch; otherwise the propagated child exit code.
@@ -1025,6 +1043,7 @@ export async function runPackageManagerUpgradeCommand(
     if (upgraded !== 0) {
       return upgraded;
     }
+    (deps.repairLauncher ?? defaultRepairPackageManagerLauncher)();
     reportPackageManagerUpgradeCompletion(options, deps);
     return 0;
   }
@@ -1033,6 +1052,7 @@ export async function runPackageManagerUpgradeCommand(
     if (upgraded !== 0) {
       return upgraded;
     }
+    (deps.repairLauncher ?? defaultRepairPackageManagerLauncher)();
     reportPackageManagerUpgradeCompletion(options, deps);
     return 0;
   }
@@ -1050,6 +1070,7 @@ export async function runPackageManagerUpgradeCommand(
   if (upgraded !== 0) {
     return upgraded;
   }
+  (deps.repairLauncher ?? defaultRepairPackageManagerLauncher)();
   reportPackageManagerUpgradeCompletion(options, deps);
   return 0;
 }

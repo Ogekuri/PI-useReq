@@ -433,6 +433,94 @@ test("default-channel upgrade runs the pi update command and prints the metadata
   assert.deepEqual(logs, []);
 });
 
+/**
+ * @brief Verifies that a successful same-source upgrade repairs the deployed launcher before reporting completion.
+ * @details Reproduces the reported defect where a completed `pi update` left the `pi-usereq` command resolving to a dangling foreign shim because the deployed launcher was never re-verified on the same-source update path. Arrange injects spawn, fetch, stdout, version-resolver, and launcher-repair doubles with one shared event log; Act runs the default-channel upgrade; Assert verifies the repair runs exactly once after the update child and before the completion summary, and that no removal child runs.
+ * @satisfies REQ-504, REQ-507, TST-165
+ */
+test("same-source upgrade repairs the deployed launcher before reporting completion", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const events: string[] = [];
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "npm" },
+    {
+      spawn: (file, args, options) => {
+        events.push(`spawn:${args[0] ?? ""}`);
+        return spawn(file, args, options);
+      },
+      stdout: {
+        write: (data: string) => {
+          events.push("summary");
+          sink.stdout.write(data);
+        },
+      },
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
+      repairLauncher: () => {
+        events.push("repair");
+      },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args, [...PACKAGE_UPGRADE_COMMAND.slice(1)]);
+  assert.deepEqual(events, ["spawn:update", "repair", "summary"]);
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+});
+
+/**
+ * @brief Verifies that the develop-channel upgrade also repairs the deployed launcher.
+ * @details The develop channel runs the git update child without a registry probe; the deployed launcher MUST still be re-verified because the update rewrites the managed git installation. Arrange injects spawn, stdout, version-resolver, and launcher-repair doubles; Act runs the develop-channel upgrade; Assert verifies exactly one repair and the documented completion summary.
+ * @satisfies REQ-482, REQ-504, REQ-507, TST-166
+ */
+test("develop-channel upgrade repairs the deployed launcher before reporting completion", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  let repairs = 0;
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "develop" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      resolveUpgradedVersion: () => "2.0.0",
+      repairLauncher: () => {
+        repairs += 1;
+      },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args, [...PACKAGE_DEVELOP_UPGRADE_COMMAND.slice(1)]);
+  assert.equal(repairs, 1);
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+});
+
+/**
+ * @brief Verifies that a failed upgrade child never triggers launcher repair or a summary.
+ * @details Launcher repair is only meaningful after a successful update child; a failing child MUST propagate its exit code without touching the deployed launcher. Arrange injects a non-zero spawn double plus a recording repair double; Act runs the default-channel upgrade; Assert verifies the propagated exit code, the untouched launcher, and the empty stdout.
+ * @satisfies REQ-481, REQ-504, TST-165
+ */
+test("failed upgrade child leaves the deployed launcher untouched", async () => {
+  const { spawn } = createSpawnDouble({ status: 4 });
+  const sink = createStdoutSink();
+  let repairs = 0;
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "npm" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      registryCheck: { fetchImpl: createFetchJsonDouble({ "dist-tags": { latest: "2.0.0" } }).fetchImpl },
+      repairLauncher: () => {
+        repairs += 1;
+      },
+    },
+  );
+  assert.equal(exitCode, 4);
+  assert.equal(repairs, 0);
+  assert.deepEqual(sink.chunks, []);
+});
+
 test("default-channel upgrade proceeds when upgrade necessity is undeterminable", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();

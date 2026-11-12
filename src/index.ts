@@ -196,6 +196,10 @@ import {
 import { ReqError } from "./core/errors.js";
 import { deployPiUsereqLauncher, deployUserBinPiUsereqLauncher, isPiPackageInstallation } from "./core/bin-deploy.js";
 import {
+  claimPiUsereqExtensionActivation,
+  releasePiUsereqExtensionActivation,
+} from "./core/extension-instance-guard.js";
+import {
   PI_USEREQ_STATUS_HOOK_NAMES,
   createPiUsereqStatusController,
   disposePiUsereqStatusController,
@@ -5623,13 +5627,13 @@ function registerConfigCommands(
 }
 
 /**
- * @brief Registers the complete pi-usereq extension.
+ * @brief Activates the complete pi-usereq extension surface.
  * @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
  * @satisfies DES-002, DES-015, DES-030, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520
  */
-export default function piUsereqExtension(pi: ExtensionAPI): void {
+function activatePiUsereqExtension(pi: ExtensionAPI): void {
   if (isPiPackageInstallation()) {
     deployPiUsereqLauncher();
     deployUserBinPiUsereqLauncher();
@@ -5654,4 +5658,23 @@ export default function piUsereqExtension(pi: ExtensionAPI): void {
   registerConfigCommands(pi, statusController);
   registerPiNotifyShortcut(pi, statusController);
   registerExtensionStatusHooks(pi, statusController);
+}
+
+/**
+ * @brief Registers the complete pi-usereq extension at most once per installation in one pi host process.
+ * @details Claims activation ownership for the executing installation path before any launcher deployment, registration, persistence, or probe scheduling, so a duplicated installation of the same package from another pi-managed source cannot register the documented commands, agent tools, shortcuts, and lifecycle hooks a second time; pi keeps every loaded extension active and reports duplicated tool names as extension load errors, so skipping the duplicate keeps the effective registered inventory identical (pi already resolves precedence by load order) while removing the conflict diagnostics. Repeated activation of the same installation path stays allowed because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` and the extension must re-register on every rebind. Claim release on activation failure preserves the documented behavior where a partially initialized installation surfaces its failure while another installed copy can still activate. Runtime is O(1) plus the delegated activation cost. Side effects are limited to process-scoped activation state mutation plus the delegated activation side effects only for the owning installation.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @return {void} No return value.
+ * @satisfies DES-002, REQ-004, REQ-005, REQ-009, REQ-044
+ */
+export default function piUsereqExtension(pi: ExtensionAPI): void {
+  if (!claimPiUsereqExtensionActivation().claimed) {
+    return;
+  }
+  try {
+    activatePiUsereqExtension(pi);
+  } catch (error: unknown) {
+    releasePiUsereqExtensionActivation();
+    throw error;
+  }
 }
