@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.140"
+version: "0.0.141"
 date: "2026-11-12"
 author: "OpenAI Codex"
 scope:
@@ -671,7 +671,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-565**: MUST make `scripts/build.sh` verify `git`, `npm`, and Node major `>= 24` availability before any packaging stage.
 - **REQ-566**: MUST make `scripts/build.sh` run `npm ci` when `node_modules` is absent and reuse the existing dependency tree otherwise.
 - **REQ-567**: MUST make `scripts/build.sh` run the strict `node_modules/.bin/tsc --noEmit` compilation gate before packaging.
-- **REQ-568**: MUST make `scripts/build.sh` remove every root-level `dist/*.tgz` release tarball of every present version before packaging while preserving every other `dist/` entry.
+- **REQ-568**: MUST make `scripts/build.sh` remove every root-level `dist/*.tgz` release entry of every present version, including symbolic links, before packaging while preserving every other `dist/` entry.
 - **REQ-569**: MUST make `scripts/build.sh` generate the npm release tarball through `npm pack --pack-destination dist`.
 - **REQ-570**: MUST make `scripts/build.sh` verify the expected `dist/pi-usereq-<version>.tgz` artifact exists non-empty and print one artifact summary with name and size.
 - **REQ-571**: MUST make `scripts/build.sh` stop at the first failing stage and exit non-zero without presenting a failed build as successful.
@@ -688,6 +688,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-604**: MUST make `scripts/pre-release-check.sh` create one temporary build directory under `TMPDIR` and generate the release tarball there through `npm pack --pack-destination <temporary-directory>`.
 - **REQ-605**: MUST make `scripts/pre-release-check.sh` perform no `dist/` operation and MUST NOT create, read, verify, modify, or delete any `dist/` entry.
 - **REQ-606**: MUST remove the temporary build directory on successful, failed, and signal-induced exits while preserving the first failing stage exit code.
+- **REQ-607**: MUST make `scripts/build.sh` abort with a non-zero exit code before dependency preparation, compilation, and packaging when any `dist/*.tgz` entry survives the previous-build cleanup.
+- **REQ-608**: MUST name the surviving `dist/*.tgz` path inside the `scripts/build.sh` previous-build cleanup verification failure diagnostic.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -898,7 +900,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
-- `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, removes every previous-build `dist/*.tgz` tarball plus the emptied `dist/` directory, prepares the dependency tree, runs the strict compilation gate, packs the npm distribution tarball into `dist/`, verifies plus summarizes the produced artifact, and removes every temporary or intermediate repository entry created by the run.
+- `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, removes every previous-build `dist/*.tgz` entry plus the emptied `dist/` directory, verifies that no stale `dist/*.tgz` entry survived that cleanup before preparing the dependency tree, runs the strict compilation gate, packs the npm distribution tarball into `dist/`, verifies plus summarizes the produced artifact, and removes every temporary or intermediate repository entry created by the run.
 - `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release packaging plus validation inside one `TMPDIR` temporary build directory from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, every `dist/` entry, and every pre-existing entry; it performs no `dist/` operation, verifies no `dist/` content, and removes its temporary build directory on every exit path.
 
 ### 5.2 Libraries and Runtime Dependencies
@@ -1152,7 +1154,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-565 | `scripts/build.sh` :: `check_build_tools(...)` :: probes `git`, `npm`, and Node major `>= 24` before packaging. |
 | REQ-566 | `scripts/build.sh` :: `ensure_dependencies(...)` :: runs `npm ci` only when `node_modules` is absent. |
 | REQ-567 | `scripts/build.sh` :: `run_compile_gate(...)` :: executes `node_modules/.bin/tsc --noEmit` before packaging. |
-| REQ-568 | `scripts/build.sh` :: `clean_previous_build_artifacts(...)` :: deletes every root-level `dist/*.tgz` file of every present version while preserving other `dist/` entries. |
+| REQ-568 | `scripts/build.sh` :: `clean_previous_build_artifacts(...)` :: deletes every root-level `dist/*.tgz` entry, including symbolic links, of every present version while preserving other `dist/` entries. |
 | REQ-569 | `scripts/build.sh` :: `pack_release_tarball(...)` :: invokes `npm pack --pack-destination dist`. |
 | REQ-570 | `scripts/build.sh` :: `verify_built_artifact(...)` :: verifies the expected tarball exists non-empty and prints the artifact summary. |
 | REQ-571 | `scripts/build.sh` :: `run_build_stage(...)` :: stops at the first failing stage with a non-zero exit. |
@@ -1162,6 +1164,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-604 | `scripts/pre-release-check.sh` :: `main(...)` plus `run_release_pack(...)` :: creates one `TMPDIR` temporary build directory and runs `npm pack --pack-destination <temporary-directory>`. |
 | REQ-605 | `scripts/pre-release-check.sh` :: `cleanup_generated_artifacts(...)` :: skips every `dist` and `dist/*` entry during generic removal and never probes `dist/` content. |
 | REQ-606 | `scripts/pre-release-check.sh` :: `cleanup_temp_build_dir(...)` :: removes the temporary build directory on every exit path while the EXIT trap preserves the gate exit code. |
+| REQ-607 | `scripts/build.sh` :: `verify_previous_dist_clean(...)` :: aborts through `die(...)` with a non-zero exit code before dependency preparation, compilation, and packaging when any `dist/*.tgz` entry survives the previous-build cleanup. |
+| REQ-608 | `scripts/build.sh` :: `verify_previous_dist_clean(...)` :: includes the surviving `dist/*.tgz` path in the cleanup verification failure diagnostic. |
 | REQ-597 | `scripts/build.sh` :: `main(...)` stage order :: previous-build cleanup runs before dependency preparation, compilation, and packaging. |
 | REQ-598 | `scripts/build.sh` :: `clean_previous_dist_directory(...)` :: removes `dist/` only when empty after tarball removal. |
 | REQ-599 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: removes every repository entry created by the run. |
