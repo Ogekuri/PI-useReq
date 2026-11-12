@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.136"
-date: "2026-11-11"
+version: "0.0.137"
+date: "2026-11-12"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -36,7 +36,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, the distribution bin launcher, the release packaging build script, the release-artifact cleanup script, and the pre-release verification gate. `.github/workflows/` contains the npm release workflow in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, the distribution bin launcher, the release packaging build script, and the pre-release verification gate. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -122,7 +122,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-033**: MUST implement the shared tree renderer plus display-width table formatter used by `--print` and `--info` in `src/core/config-cli-render.ts`.
 - **DES-034**: MUST dispatch leading configuration CLI invocations from `src/cli.ts` `main(...)` before standard flag parsing.
 - **DES-035**: MUST implement the release packaging process in `scripts/build.sh` as a standalone bash process using `git`, `npm`, `node`, and core shell utilities only.
-- **DES-036**: MUST implement the release-artifact cleanup process in `scripts/clean.sh` as a standalone bash process using core shell utilities only.
+- **DES-036**: MUST implement the integrated previous-build artifact cleanup and post-build repository cleanup in `scripts/build.sh` using `git`, `npm`, `node`, and core shell utilities only.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -671,7 +671,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-565**: MUST make `scripts/build.sh` verify `git`, `npm`, and Node major `>= 24` availability before any packaging stage.
 - **REQ-566**: MUST make `scripts/build.sh` run `npm ci` when `node_modules` is absent and reuse the existing dependency tree otherwise.
 - **REQ-567**: MUST make `scripts/build.sh` run the strict `node_modules/.bin/tsc --noEmit` compilation gate before packaging.
-- **REQ-568**: MUST make `scripts/build.sh` remove stale generated `dist/*.tgz` tarballs before packaging while preserving every other `dist/` entry.
+- **REQ-568**: MUST make `scripts/build.sh` remove every root-level `dist/*.tgz` release tarball of every present version before packaging while preserving every other `dist/` entry.
 - **REQ-569**: MUST make `scripts/build.sh` generate the npm release tarball through `npm pack --pack-destination dist`.
 - **REQ-570**: MUST make `scripts/build.sh` verify the expected `dist/pi-usereq-<version>.tgz` artifact exists non-empty and print one artifact summary with name and size.
 - **REQ-571**: MUST make `scripts/build.sh` stop at the first failing stage and exit non-zero without presenting a failed build as successful.
@@ -680,12 +680,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-574**: MUST make `scripts/pre-release-check.sh` retain the `dist/` tarballs its build stage generated when all stages succeed, remove them on failure and signal exits, and preserve every pre-existing `dist/` entry.
 - **REQ-575**: MUST keep the `.gitignore` exclusion-first inverse strategy unchanged while declaring `!dist/` and `!dist/**/*` re-inclusion rules in the include section.
 - **REQ-576**: MUST declare no `.gitignore` exclusion rule targeting `dist/` paths so release artifacts under `dist/` remain tracked by Git.
-- **REQ-591**: MUST make `scripts/clean.sh` resolve the repository root from its own script location and execute every cleanup stage from that root regardless of the caller working directory.
-- **REQ-592**: MUST make `scripts/clean.sh` remove every root-level `dist/*.tgz` release tarball generated by `scripts/build.sh` while preserving every other `dist/` entry.
-- **REQ-593**: MUST make `scripts/clean.sh` remove the `dist/` directory itself only when the directory is empty after tarball removal.
-- **REQ-594**: MUST make `scripts/clean.sh` remove the `node_modules/` dependency tree only when `--node-modules` or `--all` is supplied and MUST preserve it otherwise.
-- **REQ-595**: MUST make `scripts/clean.sh` print usage for `-h` and `--help` and reject unknown options with the usage document on stderr plus exit code `2`.
-- **REQ-596**: MUST make `scripts/clean.sh` print one removal line per removed artifact and exit `0` after successful cleanup, including runs that find no artifact.
+- **REQ-597**: MUST make `scripts/build.sh` execute the previous-build `dist/` cleanup before dependency preparation, compilation, and packaging.
+- **REQ-598**: MUST make the `scripts/build.sh` previous-build cleanup remove the `dist/` directory itself only when it is empty after tarball removal.
+- **REQ-599**: MUST make `scripts/build.sh` remove every repository entry created by its own build run before process exit, leaving the repository free of intermediate build artifacts.
+- **REQ-600**: MUST make the `scripts/build.sh` post-build cleanup preserve `node_modules/`, every pre-existing repository entry, and the verified `dist/pi-usereq-<version>.tgz` artifact.
+- **REQ-601**: MUST make the `scripts/build.sh` post-build cleanup execute on successful, failed, and signal-induced exits while preserving the first failing stage exit code.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -876,8 +875,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-188**: MUST verify a completed worktree-backed run whose final assistant message exposes no text content block remains merge-eligible.
 - **TST-189**: MUST verify `.gitignore` re-includes `dist/` through `!dist/` and `!dist/**/*`, declares no exclusion rule targeting `dist/`, and `git check-ignore --no-index` reports `dist/` release artifacts as not ignored.
 - **TST-190**: MUST verify `scripts/pre-release-check.sh` passes `bash -n` and excludes `dist/` entries from generic artifact removal.
-- **TST-191**: MUST verify `scripts/clean.sh` passes `bash -n`, removes root-level `dist/*.tgz` tarballs plus the emptied `dist/` directory, and preserves non-tarball `dist/` entries plus `node_modules/` by default.
-- **TST-192**: MUST verify `scripts/clean.sh --node-modules` plus `--all` remove the `node_modules/` tree, unknown options exit `2` with usage on stderr, and artifact-free runs exit `0`.
+- **TST-193**: MUST verify `scripts/clean.sh` is absent and `scripts/build.sh` passes `bash -n`, removes every versioned `dist/*.tgz` tarball plus the emptied `dist/` directory, and preserves non-tarball `dist/` entries.
+- **TST-194**: MUST verify `scripts/build.sh` removes run-created temporary and intermediate repository entries on successful and failed exits while preserving `node_modules/`, pre-existing entries, and the verified release tarball.
 
 ## 5. Observed Component Model
 
@@ -894,8 +893,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
-- `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, prepares the dependency tree, runs the strict compilation gate, prunes stale generated `dist/` tarballs, packs the npm distribution tarball into `dist/`, and verifies plus summarizes the produced artifact.
-- `scripts/clean.sh` provides the release-artifact cleanup process that removes the root-level `dist/*.tgz` tarballs generated by `scripts/build.sh`, removes the `dist/` directory itself only when emptied, and removes the `node_modules/` dependency tree only under the explicit `--node-modules` or `--all` opt-in.
+- `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, removes every previous-build `dist/*.tgz` tarball plus the emptied `dist/` directory, prepares the dependency tree, runs the strict compilation gate, packs the npm distribution tarball into `dist/`, verifies plus summarizes the produced artifact, and removes every temporary or intermediate repository entry created by the run.
 - `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release-artifact generation plus validation through `scripts/build.sh` from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, every `dist/` entry, and every pre-existing entry; generated `dist/` tarballs are removed only on failure or signal exits.
 
 ### 5.2 Libraries and Runtime Dependencies
@@ -965,7 +963,6 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── req/docs/
 ├── scripts/
 │   ├── build.sh
-│   ├── clean.sh
 │   ├── debug-extension.ts
 │   ├── pi-prompts-update.sh
 │   ├── pi-usereq-debug.sh
@@ -993,7 +990,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `tests/project-source-tabs.test.ts` preserves focused Go-source tab assertions for project commands; standalone tab assertions remain in `tests/cli-command-option-parity.test.ts`.
 - `tests/runtime-independence.test.ts` executes eight analysis commands with a Git-only PATH and unusable legacy interpreter overrides, and rejects legacy fixture configuration or virtualenv artifacts.
 - `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, npm publication steps, GitHub release creation directives in `.github/workflows/release-npm.yml`, plus npm manifest compliance for license, discoverability, engines, lockfile version identity, and the `prepublishOnly` test gate.
-- `tests/clean-script.test.ts` covers `scripts/clean.sh` syntax, default release-artifact cleanup with `dist/` preservation rules, opt-in `node_modules/` removal, unknown-option rejection, and artifact-free success.
+- `tests/build-script.test.ts` covers `scripts/build.sh` syntax, previous-build `dist/` cleanup across versioned tarballs, `node_modules/` and non-tarball `dist/` preservation, plus run-created intermediate artifact removal on successful and failed exits.
 - Test business logic focuses on repository-owned output contracts, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
 
 ## 8. Evidence Matrix
@@ -1041,7 +1038,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-033 | `src/core/config-cli-render.ts` :: `renderConfigTree` and `formatConfigTable` :: provide the single tree renderer plus display-width table formatter shared by `--print` and `--info`. |
 | DES-034 | `src/cli.ts` :: `main(...)` :: dispatches leading configuration CLI invocations through `isConfigCliInvocation(...)` and `runConfigCli(...)` before standard flag parsing. |
 | DES-035 | `scripts/build.sh` :: stage sequence :: standalone bash release packaging process using `git`, `npm`, `node`, and core shell utilities only. |
-| DES-036 | `scripts/clean.sh` :: stage sequence :: standalone bash release-artifact cleanup process using core shell utilities only. |
+| DES-036 | `scripts/build.sh` :: previous-build cleanup plus post-build repository cleanup stages :: integrated standalone bash cleanup process using `git`, `npm`, `node`, and core shell utilities only. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -1150,7 +1147,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-565 | `scripts/build.sh` :: `check_build_tools(...)` :: probes `git`, `npm`, and Node major `>= 24` before packaging. |
 | REQ-566 | `scripts/build.sh` :: `ensure_dependencies(...)` :: runs `npm ci` only when `node_modules` is absent. |
 | REQ-567 | `scripts/build.sh` :: `run_compile_gate(...)` :: executes `node_modules/.bin/tsc --noEmit` before packaging. |
-| REQ-568 | `scripts/build.sh` :: `prune_stale_dist_tarballs(...)` :: deletes only root-level `dist/*.tgz` files. |
+| REQ-568 | `scripts/build.sh` :: `clean_previous_build_artifacts(...)` :: deletes every root-level `dist/*.tgz` file of every present version while preserving other `dist/` entries. |
 | REQ-569 | `scripts/build.sh` :: `pack_release_tarball(...)` :: invokes `npm pack --pack-destination dist`. |
 | REQ-570 | `scripts/build.sh` :: `verify_built_artifact(...)` :: verifies the expected tarball exists non-empty and prints the artifact summary. |
 | REQ-571 | `scripts/build.sh` :: `run_build_stage(...)` :: stops at the first failing stage with a non-zero exit. |
@@ -1159,12 +1156,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-574 | `scripts/pre-release-check.sh` :: `cleanup_dist_artifacts(...)` :: removes run-generated `dist/*.tgz` only on failure and signal exits via the EXIT trap; successful gates retain them. |
 | REQ-575 | `.gitignore` :: include section :: keeps exclusion-first inverse rules and adds `!dist/` plus `!dist/**/*` re-inclusions. |
 | REQ-576 | `.gitignore` :: exclude section :: declares no rule targeting `dist/` paths; `git check-ignore --no-index` reports `dist/` tarballs as not ignored (TST-189). |
-| REQ-591 | `scripts/clean.sh` :: `REPO_ROOT` resolution and `cd` in `main(...)` :: derives the repository root from the script location before staging. |
-| REQ-592 | `scripts/clean.sh` :: `clean_dist_tarballs(...)` :: deletes only root-level `dist/*.tgz` files and preserves every other `dist/` entry. |
-| REQ-593 | `scripts/clean.sh` :: `clean_dist_directory(...)` :: removes `dist/` itself only when empty after tarball removal. |
-| REQ-594 | `scripts/clean.sh` :: `CLEAN_NODE_MODULES` option parsing plus `clean_node_modules(...)` :: removes `node_modules/` only under `--node-modules` or `--all`. |
-| REQ-595 | `scripts/clean.sh` :: `usage(...)` plus the `main(...)` option parser :: `-h|--help` prints usage and unknown options exit `2` with usage on stderr. |
-| REQ-596 | `scripts/clean.sh` :: removal-line printing inside the cleanup stages plus the `main(...)` success path :: one line per removed artifact and exit `0`, including no-artifact runs. |
+| REQ-597 | `scripts/build.sh` :: `main(...)` stage order :: previous-build cleanup runs before dependency preparation, compilation, and packaging. |
+| REQ-598 | `scripts/build.sh` :: `clean_previous_dist_directory(...)` :: removes `dist/` only when empty after tarball removal. |
+| REQ-599 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: removes every repository entry created by the run. |
+| REQ-600 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: skips `node_modules/`, pre-existing entries, and the verified artifact. |
+| REQ-601 | `scripts/build.sh` :: `EXIT` plus `INT`/`TERM` traps :: cleanup runs on success, failure, and signals while preserving the exit code. |
 | REQ-584 | `src/index.ts` :: `handleExtensionStatusEvent` :: records the inspected status marker in the `workflow_closure` debug payload and the deferred terminal state. |
 | REQ-585 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandStatusMarker`; `src/index.ts` :: `handleExtensionStatusEvent` :: merges and deletes the worktree only for `ok` markers. |
 | REQ-586 | `src/index.ts` :: `handleExtensionStatusEvent` :: marker-blocked branches skip `finalizeMatchedPromptSuccess` and retain the worktree. |
@@ -1221,8 +1217,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-188 | `tests/extension-registration.test.ts` :: existing worktree closure fixtures with empty assistant content remain merge-eligible. |
 | TST-189 | `tests/gitignore-dist.test.ts` :: `.gitignore` include re-inclusions, absent `dist/` exclusion rule, and `git check-ignore --no-index` results. |
 | TST-190 | `tests/gitignore-dist.test.ts` :: `scripts/pre-release-check.sh` passes `bash -n` and declares the `dist/` cleanup exclusion. |
-| TST-191 | `tests/clean-script.test.ts` :: bash syntax check plus sandboxed default-run coverage for tarball removal, emptied-`dist/` removal, and non-tarball plus `node_modules/` preservation. |
-| TST-192 | `tests/clean-script.test.ts` :: sandboxed `--node-modules` and `--all` runs, unknown-option exit `2` with usage on stderr, and artifact-free exit `0`. |
+| TST-193 | `tests/build-script.test.ts` :: syntax check plus absent `scripts/clean.sh`, sandboxed previous-build cleanup across versioned tarballs, and non-tarball `dist/` preservation. |
+| TST-194 | `tests/build-script.test.ts` :: sandboxed success and failure runs asserting intermediate artifact removal, `node_modules/` and pre-existing entry preservation, and verified artifact retention. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.
