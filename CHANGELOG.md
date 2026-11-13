@@ -1,11 +1,32 @@
 # Changelog
 
-## [0.109.2](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.2) - 2026-11-13
+## [0.109.3](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.3) - 2026-11-13
 ### 🐛  Bug Fixes
 - remove private manifest flag blocking npm publication [useReq] *(release)*
   Remove the package.json private field that made npm publish fail with EPRIVATE before provenance and public access were applied.; Add a release-workflow regression test asserting the manifest omits the private field.; Requirements: DES-025, REQ-140, TST-159.
 - guard duplicate activation and repair launcher after upgrade [useReq] *(extension)*
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
+
+### 🚜  Changes
+- render status request arrow as ➔ [useReq] *(status-bar)*
+  REQ-632/TST-206 now require '<request>➔<state>' in the status field value.; Join request and state with PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR.; Refresh REQUIREMENTS, WORKFLOW, and REFERENCES for the new arrow token.; Update status-bar assertions in the extension registration suite.
+- prefix branch value with the ⎇ glyph [useReq] *(status-bar)*
+  REQ-121/TST-095 now require the status-bar branch value to carry the '⎇ ' prefix.; Render the branch field as 'branch:⎇ <branch>' via PI_USEREQ_STATUS_BRANCH_PREFIX.; Refresh REQUIREMENTS, WORKFLOW (prefix-free resolution plus prefixed rendering), and REFERENCES.; Update status-bar branch assertions in extension-registration and debug harness tests.
+- add done orchestration state and request-token status [useReq] *(workflow)*
+  Persist the active slash-command request token in orchestration runtime state.; Render <request>►<state> in the status bar and keep idle request-less.; Add the done terminal state; successful non-reset runs end in done.; Restrict idle to bootstrap/reload and /req-reset, and allow done -> running.; Reject warning/error restarts until /req-reset; update requirements, workflow, references, and tests.
+- homogenize Next Workflow generation guidance [useReq] *(prompts)*
+  Add one homogeneous Next Workflow rule block to 14 bundled prompts.; Require a next step only when mandatory; forbid optional ones.; Enforce ~~~text fenced command blocks carrying the command prompt text.; Align analyze.md with the mandatory-only rule while keeping 4 commands.; Add REQ-624..REQ-628 and requirements evidence rows.
+- write no-source placeholders for references and workflow [useReq] *(req-references)*
+  Add git-inventory source detection plus declared no-source placeholder payloads in src/core/source-presence.ts.
+  req-references now writes the EMPTY_REFERENCES system directive instead of failing reference extraction, and req-workflow writes the EMPTY_WORKFLOW directive instead of dispatching the agentic workflow.
+  Update REQUIREMENTS.md (REQ-620..REQ-623, DES-039, TST-204..TST-205), WORKFLOW.md call traces, REFERENCES.md, and extension registration tests.
+
+### 🎯  Cover Requirements
+- add status-marker closure coverage [useReq] *(tests)*
+  Add seven extension-registration tests covering STATUS: OK merge, STATUS: ERROR retention, markerless warning, text-less merge eligibility, dual-marker precedence, multi-run candidate overwrite, and final-message-only inspection.; Align the fake status-bar helper with blinking warning rendering (REQ-590).; Replace nonexistent Doxygen REQ-577..REQ-583 references with REQ-584..REQ-590 and refresh REFERENCES.md.
+
+### ◀️  Revert
+- Roll back branch to 5fdad9a0 (5fdad9a009d5fc7007003e76c4959feabaad0de6).
 
 ## [0.109.0](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0) - 2026-11-12
 ### 🐛  Bug Fixes
@@ -1442,7 +1463,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.2\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.2
+- \[0.109.3\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.3
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1551,4 +1572,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.2]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.2
+[0.109.3]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.3
