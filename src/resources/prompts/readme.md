@@ -34,6 +34,7 @@ In scope: static analysis of user-visible behavior from %%SRC_PATHS%% and relate
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
 - **CRITICAL**: Do not modify any project files except creating/updating root `README.md`.
 - **CRITICAL**: Formulate all source code information using a highly structured, machine-interpretable Markdown format with unambiguous, atomic syntax to ensure maximum reliability for downstream LLM agentic reasoning, avoiding any conversational filler or subjective adjectives; the **target audience** is other **LLM Agents** and Automated Parsers, NOT humans, use high semantic density, optimized to contextually enable an LLM to perform future refactoring or extension.
+- **CRITICAL**: Produce all final response text, including `## **Summary**`, every fixed report schema section, and the final status line, in the language used in the [User's Request](#users-request); this rule applies only to the final response and never to repository artifact content, which MUST remain in English.
 
 ## Behavior
 - Write root `README.md` in English.
@@ -148,7 +149,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Preserve the existing README structure and formatting whenever possible while applying the scoped updates.
 3. %%COMMIT%%
 4. Present results
-   - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. PRINT first a ## **Summary** section containing a synthetic summary (at most 1010 UTF-8 characters) of the entire final output, then the verbose report using the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**. Final line MUST be exactly: STATUS: OK or STATUS: ERROR.
+   - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. PRINT first a ## **Summary** section containing a synthetic summary (at most 1010 UTF-8 characters) of the entire final output, then the verbose report using the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**.
+   - Emit a next-step command under `## **Next Workflow**` ONLY when the completed workflow outcome mandates that next-step, and print no next-step when the outcome requires none; never add optional or elective next-step commands. When emitted, print exactly one `~~~text` fenced block whose first line is the exact slash command and whose remaining lines are the prompt text to pass to that command when the command expects input text; print no prose inside or outside that block.
+   - Emit exactly one terminal status line as the final line of the response, after `## **Next Workflow**`: `STATUS: OK` when the workflow completed successfully, or `STATUS: ERROR` when it failed, was blocked, or ended without change; print no content after it.
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%

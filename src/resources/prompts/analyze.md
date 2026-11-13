@@ -36,6 +36,7 @@ In scope: read-only analysis of the above documents plus source under %%SRC_PATH
 **CRITICAL**: Git Read-Only Restriction
    - Only read-only access to the git repository is allowed. You may inspect files, history, diffs, status, and other repository metadata, but you MUST NOT execute any command or action that modifies the repository state, the index, refs, history, branches, tags, remotes, or the .git directory. Any repository write or state-changing action is forbidden.
    - Allowed git commands in this workflow (read-only only): `git status`, `git diff`, `git ls-files`, `grep`, `git rev-parse`, `git branch --show-current`. Do NOT run any other git commands.
+- **CRITICAL**: Produce all final response text, including `## **Summary**`, every fixed report schema section, and the final status line, in the language used in the [User's Request](#users-request); this rule applies only to the final response and never to repository artifact content, which MUST remain in English.
 
 ## Behavior
 - Only analyze the code and present the results; make no changes.
@@ -139,8 +140,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Print only the applicable follow-up block under `## **Next Workflow**`; do not print any follow-up text when no trigger is identified.
    - Do NOT execute the generated follow-up prompt and do NOT apply any fix or repository modification in this workflow; this workflow remains read-only.
 3. Present results
-   - PRINT, in the response, the final analysis report for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. PRINT first a ## **Summary** section containing a synthetic summary (at most 1010 UTF-8 characters) of the entire final output, then the verbose report using the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**. Final line MUST be exactly: STATUS: OK or STATUS: ERROR.
-   - Include each Step 2 generated command block under `## **Next Workflow**` ONLY when its trigger was identified; omit follow-up content entirely in all other cases.
+   - PRINT, in the response, the final analysis report for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. PRINT first a ## **Summary** section containing a synthetic summary (at most 1010 UTF-8 characters) of the entire final output, then the verbose report using the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**.
+   - Emit a next-step command under `## **Next Workflow**` ONLY when the completed workflow outcome mandates that next-step, and print no next-step when the outcome requires none; never add optional or elective next-step commands. When emitted, print exactly one `~~~text` fenced block whose first line is the exact slash command and whose remaining lines are the prompt text to pass to that command when the command expects input text; print no prose inside or outside that block.
+   - Emit exactly one terminal status line as the final line of the response, after `## **Next Workflow**`: `STATUS: OK` when the workflow completed successfully, or `STATUS: ERROR` when it failed, was blocked, or ended without change; print no content after it.
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%
