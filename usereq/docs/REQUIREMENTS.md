@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.149"
+version: "0.0.150"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -547,9 +547,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-442**: MUST keep replayed notifications on the UI-notification channel without session messages or session switching, and MUST NOT replay already-delivered notifications.
 - **REQ-443**: MUST resolve `%%OUTPUT%%` from the concatenated `type === "text"` blocks of the last assistant message inside the `agent_end` payload, skipping `thinking` and tool-call content blocks.
 - **REQ-444**: MUST resolve `%%OUTPUT%%` to the empty string for agent runs whose last assistant message exposes no `text` content blocks.
-- **REQ-447**: MUST dispatch prompt-end notification effects for every completed or failed non-agentic `req-references` and `req-reset` run using the existing command-notify, sound, and Pushover gates.
-- **REQ-448**: MUST resolve `%%OUTPUT%%` for `req-references` notification effects from per-operation outcome lines covering the terminal outcome, references update, commit creation, and repository cleanliness.
-- **REQ-449**: MUST resolve `%%OUTPUT%%` for `req-reset` notification effects from outcome lines covering base-path restoration plus removed generated worktrees and branches.
+- **REQ-447**: MUST NOT dispatch command-notify, sound, or Pushover prompt-end effects for completed or failed non-agentic `req-references` and `req-reset` runs.
 - **REQ-450**: MUST fall back the Pushover `message` body to the `%%RESULT%%` outcome token whenever the fully substituted Pushover text template resolves to empty.
 - **REQ-445**: MUST head-truncate the substituted Pushover `message` body with a fixed truncation marker whenever it exceeds the 1024-character Pushover Message API limit.
 - **REQ-446**: MUST document the `%%OUTPUT%%` token in the `Pushover text` menu row description.
@@ -884,7 +882,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-129**: MUST verify `resolveCheckerExecutable` substitutes `%%INSTALLATION_PATH%%` with the runtime installation path inside static-check `Command` `cmd` fields.
 - **TST-130**: MUST verify `scripts/install-static-checkers.ts` best-effort approves pending npm install scripts and always returns exit code `0`.
 - **TST-155**: MUST verify `%%OUTPUT%%` resolves from concatenated text blocks of the last assistant message while skipping thinking plus tool-call content blocks.
-- **TST-156**: MUST verify `%%OUTPUT%%` resolves from process output for non-agentic `req-references` plus `req-reset` notifications and stays empty for agent runs without text blocks.
+- **TST-156**: MUST verify completed or failed `req-references` plus `req-reset` runs dispatch no command-notify, sound, or Pushover prompt-end effects.
 - **TST-157**: MUST verify the Pushover `message` body is head-truncated with a fixed marker when the substituted template exceeds 1024 characters.
 - **TST-158**: MUST verify configuration loading upgrades every superseded legacy `notify-pushover-text` default (`%%RESULT%%\n%%ARGS%%` and `%%OUTPUT%%`) to `%%RESULT%%\n%%OUTPUT%%` while delivering distinct user-configured templates unchanged.
 - **TST-159**: MUST verify `package.json` `version` is semver-valid and identical to both root-package `version` fields of `package-lock.json`.

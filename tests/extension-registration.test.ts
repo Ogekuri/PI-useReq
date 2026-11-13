@@ -3604,20 +3604,20 @@ test("req-references appends a durable command-report entry that survives sessio
 });
 
 /**
- * @brief Verifies `req-references` notification effects resolve `%%OUTPUT%%` to the complete execution report.
- * @details Enables Pushover delivery with the documented `%%OUTPUT%%` text template, runs `req-references` twice against a temporary fixture repository, captures the second completed run's Pushover request, and asserts the substituted `message` body equals the full durable execution report — the `pi-usereq req-references: execution report` header followed by the terminal-outcome, references-update, guarded-commit, and repository-cleanliness lines. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation and intercepted HTTPS dispatch.
- * @return {Promise<void>} Promise resolved after Pushover body assertions complete.
- * @throws {AssertionError} Throws when the pushed `message` omits the report header or any per-operation outcome line.
- * @satisfies TST-156, REQ-448
+ * @brief Verifies non-agentic commands dispatch no command-notify, sound, or Pushover effects.
+ * @details Enables command-notify, the completed and failed sound events, and Pushover delivery with both credentials, then runs `req-references`, `req-reset`, and one failing `req-references` against a temporary fixture repository. Asserts that neither the intercepted shell-spawn transport nor the intercepted HTTPS transport is invoked, proving completed and failed non-agentic runs never reach the command-notify, sound, or Pushover gates. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation.
+ * @return {Promise<void>} Promise resolved after the no-dispatch assertions complete.
+ * @throws {AssertionError} Throws when a non-agentic run dispatches a shell notification command or a Pushover request.
+ * @satisfies TST-156, REQ-447
  */
-test("req-references pushes the complete execution report through %%OUTPUT%% notification effects", async () => {
+test("non-agentic req-references and req-reset runs dispatch no notification effects", async () => {
   const fixture = initFixtureRepo({ fixtures: [] });
   const projectBase = fixture.projectBase;
-  const referencesPath = path.join(projectBase, fixture.config["docs-dir"], "REFERENCES.md");
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(projectBase);
   const recordedBodies: string[] = [];
+  const recordedCommands: string[] = [];
   setPiNotifyHttpsRequestForTests(((url: URL, options: Record<string, unknown>, callback?: (response: any) => void) => {
     void url;
     void options;
@@ -3640,6 +3640,18 @@ test("req-references pushes the complete execution report through %%OUTPUT%% not
     };
     return fakeRequest as unknown as ReturnType<typeof import("node:https").request>;
   }) as typeof import("node:https").request);
+  setPiNotifySpawnForTests(((command: string, args?: readonly string[] | undefined, _options?: Record<string, unknown>) => {
+    recordedCommands.push([command, ...(args ?? [])].join(" "));
+    const fakeChild = {
+      once(_eventName: string, _handler: (...handlerArgs: unknown[]) => void) {
+        return fakeChild;
+      },
+      unref() {
+        return undefined;
+      },
+    };
+    return fakeChild as unknown as ReturnType<typeof import("node:child_process").spawn>;
+  }) as typeof import("node:child_process").spawn);
 
   try {
     fs.writeFileSync(path.join(projectBase, "src", "report-source.ts"), "export const REPORT_SOURCE = 1;\n", "utf8");
@@ -3653,6 +3665,13 @@ test("req-references pushes the complete execution report through %%OUTPUT%% not
     });
     assert.equal(fixtureCommit.status, 0, fixtureCommit.stderr);
     writeProjectConfigOverrides(projectBase, {
+      "notify-enabled": true,
+      "notify-on-completed": true,
+      "notify-on-failed": true,
+      "notify-sound": "high",
+      "notify-sound-on-completed": true,
+      "notify-sound-on-failed": true,
+      PI_NOTIFY_CMD: 'notify-send "%%PROMT%%" "%%RESULT%%"',
       "notify-pushover-enabled": true,
       "notify-pushover-on-completed": true,
       "notify-pushover-user-key": "gzfjjvp1xxmhibqwzh9m7i1zwvf83j",
@@ -3662,20 +3681,17 @@ test("req-references pushes the complete execution report through %%OUTPUT%% not
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     await pi.commands.get("req-references")!.handler("", ctx);
-    recordedBodies.length = 0;
-    await pi.commands.get("req-references")!.handler("", ctx);
+    await pi.commands.get("req-reset")!.handler("", ctx);
+    fs.writeFileSync(path.join(projectBase, "DIRTY.txt"), "dirty\n", "utf8");
+    await assert.rejects(
+      pi.commands.get("req-references")!.handler("", ctx),
+      /ERROR: Git status unclear!/,
+    );
 
-    assert.equal(recordedBodies.length, 1);
-    const pushoverParams = new URLSearchParams(recordedBodies[0] ?? "");
-    assert.equal(pushoverParams.get("message"), [
-      "successed",
-      "pi-usereq req-references: execution report",
-      "outcome: success",
-      `references file ${referencesPath}: already matched the generated content`,
-      "git commit: skipped (references content matched HEAD)",
-      "repository: clean after run",
-    ].join("\n"));
+    assert.deepEqual(recordedCommands, []);
+    assert.deepEqual(recordedBodies, []);
   } finally {
+    setPiNotifySpawnForTests(undefined);
     setPiNotifyHttpsRequestForTests(undefined);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

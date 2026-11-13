@@ -65,9 +65,6 @@ import {
   normalizePiNotifyTemplateValue,
   parsePiNotifyControlSequenceText,
   runPiNotifyEffects,
-  runPiNotifyEffectsForOutcome,
-  type PiNotifyEventRequest,
-  type PiNotifyOutcome,
   type PiNotifyPushoverPriority,
   type PiNotifySoundLevel,
 } from "./core/pi-notify.js";
@@ -126,7 +123,6 @@ import {
 } from "./core/req-references-command.js";
 import {
   REQ_RESET_COMMAND_DESCRIPTION,
-  buildReqResetCommandOutcomeLines,
   executeReqResetCommandExecution,
   prepareReqResetCommandExecution,
   type ReqResetCommandExecutionResult,
@@ -190,7 +186,6 @@ import {
 import { ensureBundledResourcesAccessible, readBundledPromptDescription } from "./core/resources.js";
 import {
   appendCommandReportEntry,
-  buildCommandReportEntryText,
   buildCommandReportErrorEntryData,
   buildReqReferencesCommandReportEntryData,
   registerCommandReportEntryRenderer,
@@ -1271,32 +1266,6 @@ function notifyContextSafely(
     }
     throw error;
   }
-}
-
-/**
- * @brief Dispatches prompt-end notification effects for one non-agentic command outcome.
- * @details Builds the effective notification configuration subset with the active runtime sound level and forwards the explicit completed or failed outcome plus the command-produced process output into `runPiNotifyEffectsForOutcome(...)`, so `req-references` and `req-reset` completions feed the same command-notify, sound, and Pushover gates as `agent_end` runs. Runtime is O(1) plus delegated effect cost. Side effects include optional child-process spawning and outbound HTTPS requests.
- * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the active runtime sound level.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @param[in] outcome {PiNotifyOutcome} Explicit terminal command outcome.
- * @param[in] request {PiNotifyEventRequest} Prompt-end request metadata carrying the command process output.
- * @return {void} No return value.
- * @satisfies REQ-447, REQ-448, REQ-449
- */
-function dispatchNonAgenticCommandNotifyEffects(
-  statusController: PiUsereqStatusController,
-  config: UseReqConfig,
-  outcome: PiNotifyOutcome,
-  request: PiNotifyEventRequest,
-): void {
-  runPiNotifyEffectsForOutcome(
-    {
-      ...config,
-      "notify-sound": getPiUsereqRuntimeSoundLevel(statusController),
-    },
-    outcome,
-    request,
-  );
 }
 
 /**
@@ -3646,11 +3615,11 @@ function resolveReqResetPromptRequest(
 
 /**
  * @brief Registers the specialized `req-reset` slash command.
- * @details Registers the non-agentic prompt-recovery command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, force-removes matching generated worktrees plus branches, clears recoverable prompt state when restoration succeeds, notifies pi without starting an LLM session or creating a worktree, and dispatches prompt-end notification effects carrying the command process output as `%%OUTPUT%%`. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, user notifications, and optional prompt-end notify, sound, and Pushover dispatch.
+ * @details Registers the non-agentic prompt-recovery command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, force-removes matching generated worktrees plus branches, clears recoverable prompt state when restoration succeeds, notifies pi without starting an LLM session or creating a worktree, and dispatches no command-notify, sound, or Pushover prompt-end effect. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313, REQ-441, REQ-447, REQ-449
+ * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313, REQ-447, REQ-441
  */
 function registerReqResetCommand(
   pi: ExtensionAPI,
@@ -3659,7 +3628,6 @@ function registerReqResetCommand(
   pi.registerCommand("req-reset", {
     description: REQ_RESET_COMMAND_DESCRIPTION,
     handler: async (args, ctx) => {
-      const commandStartMs = Date.now();
       const promptRequest = resolveReqResetPromptRequest(statusController);
       const resetModelSelection = promptRequest?.originalModel
         ?? resolveCurrentModelSelection((ctx as unknown as PromptModelSelectionContextSurface).model);
@@ -3694,13 +3662,6 @@ function registerReqResetCommand(
         const message = error instanceof Error ? error.message : String(error);
         setPiUsereqWorkflowState(statusController, "error", resetContext);
         notifyContextSafely(resetContext, message, "error");
-        dispatchNonAgenticCommandNotifyEffects(statusController, config, "failed", {
-          promptName: "req-reset",
-          promptArgs: args,
-          basePath: projectBase,
-          completionTimeMs: Math.max(0, Date.now() - commandStartMs),
-          agentOutput: message,
-        });
         throw error;
       }
 
@@ -3716,13 +3677,6 @@ function registerReqResetCommand(
       if (executionResult.errorMessage) {
         setPiUsereqWorkflowState(statusController, "error", resetContext);
         notifyContextSafely(resetContext, executionResult.errorMessage, "error");
-        dispatchNonAgenticCommandNotifyEffects(statusController, config, "failed", {
-          promptName: "req-reset",
-          promptArgs: args,
-          basePath: projectBase,
-          completionTimeMs: Math.max(0, Date.now() - commandStartMs),
-          agentOutput: buildReqResetCommandOutcomeLines(executionResult).join("\n"),
-        });
         throw new ReqError(executionResult.errorMessage, 1);
       }
 
@@ -3731,13 +3685,6 @@ function registerReqResetCommand(
         ? `SUCCESS: req-reset restored base-path and removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es).`
         : `SUCCESS: req-reset removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es) and restored idle state.`;
       notifyContextSafely(resetContext, successMessage, "info");
-      dispatchNonAgenticCommandNotifyEffects(statusController, config, "completed", {
-        promptName: "req-reset",
-        promptArgs: args,
-        basePath: projectBase,
-        completionTimeMs: Math.max(0, Date.now() - commandStartMs),
-        agentOutput: buildReqResetCommandOutcomeLines(executionResult).join("\n"),
-      });
       notifyContextRetentionReminder(statusController, resetContext);
     },
   });
@@ -3745,11 +3692,11 @@ function registerReqResetCommand(
 
 /**
  * @brief Registers the specialized `req-references` slash command.
- * @details Registers the non-agentic references-maintenance command that rejects non-startable invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, records request `references`, transitions workflow state through `checking|running|done`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, appends one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes so the report renders in the transcript and survives session restore, emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, dispatches prompt-end notification effects carrying the complete execution-report text (header plus per-operation outcome lines) as `%%OUTPUT%%` for completed and failed runs, all without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, session-entry persistence, user notifications, and optional prompt-end notify, sound, and Pushover dispatch.
+ * @details Registers the non-agentic references-maintenance command that rejects non-startable invocations by transitioning workflow state to `error` before direct execution, otherwise reuses slash-command-owned git validation, records request `references`, transitions workflow state through `checking|running|done`, regenerates `REFERENCES.md` directly from configured source directories, stages only the generated file, creates the fixed-message git commit, verifies repository cleanliness, appends one durable `pi-usereq.command-report` session entry recording the executed operations with their outcomes so the report renders in the transcript and survives session restore, emits execution notifications that conform to the operations actually performed — one stating whether the references file was updated or already matched the generated content and one stating whether the fixed-message commit was created or skipped — regardless of the update and commit outcomes, and dispatches no command-notify, sound, or Pushover prompt-end effect for completed or failed runs, all without starting an LLM session or creating a worktree. Runtime is dominated by git subprocess execution plus source-summary generation. Side effects include command registration, status-controller mutation, filesystem writes, git index/history mutation, session-entry persistence, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-436, REQ-437, REQ-438, REQ-441, REQ-447, REQ-448
+ * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-436, REQ-437, REQ-438, REQ-441, REQ-447
  */
 function registerReqReferencesCommand(
   pi: ExtensionAPI,
@@ -3758,7 +3705,6 @@ function registerReqReferencesCommand(
   pi.registerCommand("req-references", {
     description: REQ_REFERENCES_COMMAND_DESCRIPTION,
     handler: async (args, ctx) => {
-      const commandStartMs = Date.now();
       if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
         rejectNonIdleReqCommand(statusController, ctx);
       }
@@ -3802,13 +3748,6 @@ function registerReqReferencesCommand(
             : `SUCCESS: req-references completed with a clean repository (${executionResult.referencesChanged ? "references updated" : "references unchanged"}; ${executionResult.commitCreated ? "commit created" : "commit skipped"}).`,
           "info",
         );
-        dispatchNonAgenticCommandNotifyEffects(statusController, config, "completed", {
-          promptName: "req-references",
-          promptArgs: args,
-          basePath: projectBase,
-          completionTimeMs: Math.max(0, Date.now() - commandStartMs),
-          agentOutput: buildCommandReportEntryText(buildReqReferencesCommandReportEntryData(executionResult)),
-        });
         notifyContextRetentionReminder(statusController, ctx);
       } catch (error) {
         statusController.state.pendingPromptRequest = undefined;
@@ -3817,13 +3756,6 @@ function registerReqReferencesCommand(
         const message = error instanceof Error ? error.message : String(error);
         appendCommandReportEntry(pi, buildCommandReportErrorEntryData("req-references", message));
         notifyContextSafely(ctx, message, "error");
-        dispatchNonAgenticCommandNotifyEffects(statusController, config, "failed", {
-          promptName: "req-references",
-          promptArgs: args,
-          basePath: projectBase,
-          completionTimeMs: Math.max(0, Date.now() - commandStartMs),
-          agentOutput: buildCommandReportEntryText(buildCommandReportErrorEntryData("req-references", message)),
-        });
         throw error;
       }
     },

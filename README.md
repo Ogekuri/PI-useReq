@@ -355,7 +355,7 @@ The interactive configuration menu exposes every user-facing setting; changes ar
 - **Git worktree** / **Worktree prefix** — enable/disable prompt-command worktree isolation and set the name prefix (default `PI-useReq-`).
 - **Language static code checkers** — per-language `enable`/`disable` flags and the global `Command`-module checker definitions (view/remove/reset with confirmation).
 - **Enable tools** — the subset of configurable startup tools activated for the project: the `files-*` and project tools plus the embedded pi tools (`read`, `bash`, `edit`, `write` enabled by default; `find`, `grep`, `ls` configurable and disabled by default).
-- **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed).
+- **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed). Non-agentic `/req-references` and `/req-reset` runs never dispatch command-notify, sound, or Pushover effects.
 - **Debug** — local debug logging: global enablement, prompt-content logging (`Enable debug prompts` plus `Log path for prompts`), log file, log-on-status filter, status-change/workflow-event toggles, enabled tools/prompts, and `Enable debug commands for tools`.
 - **Show local/global configuration** — write the exact config file contents into the editor.
 - **Reset defaults** — restore the default configuration with a confirmation preview.
@@ -372,8 +372,8 @@ The extension plays a bundled sound effect when a prompt ends (completed, interr
 
 #### Notifications
 
-- **Command notify** — a configurable desktop-notification command (`PI_NOTIFY_CMD`) run when the selected prompt-end events occur.
-- **Pushover** — optional Pushover push notifications (`notify-pushover-*`): user key, API token, priority, title, and text template; disabled until both credentials are set.
+- **Command notify** — a configurable desktop-notification command (`PI_NOTIFY_CMD`) run when the selected prompt-end events occur for agentic `/req-*` prompt runs.
+- **Pushover** — optional Pushover push notifications (`notify-pushover-*`): user key, API token, priority, title, and text template; disabled until both credentials are set. Only agentic `/req-*` prompt runs dispatch Pushover messages.
 
 #### Status Bar
 
