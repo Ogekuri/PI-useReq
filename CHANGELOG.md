@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.4](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.4) - 2026-11-13
+## [0.109.5](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.5) - 2026-11-13
 ### ⛰️  Features
 - Update prompts.
 
@@ -11,6 +11,12 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: install the develop release tag and report pi-managed versions [useReq] *(package-manager)*
+  Requirements: REQ-482/REQ-641 mandate the tag-pinned develop 'pi install' reconciliation child; REQ-527/REQ-646 drop extension force-reinstall claims; REQ-487/REQ-647/REQ-648 add pi-managed-first installed-version resolution; TST-211..TST-213 added.; Source: run the tag-pinned install child for same-source develop upgrades, remove PACKAGE_FORCED_UPGRADE_COMMAND and the develop update command builder, gate only the default-channel already-latest probe on --force, and resolve 'Current Installed' plus the completion summary from the pi-managed git then npm roots.; Tests: cover the unpinned develop-channel reconciliation path and pi-managed-first installed-version resolution.
+- make npm ci toolchain provisioning opt-in via --install [useReq] *(pre-release-check)*
+  Run one npm ci provisioning pass only when --install is supplied, before the pre-run inventory snapshot and stage 1, and drop npm ci from the numbered stage sequence (REQ-491, REQ-493, REQ-495, REQ-642, REQ-643).; Keep the default run free of provisioning so the gate reuses the existing node_modules tree and the snapshot diff baseline never sees provisioning churn (REQ-642, REQ-643).; Replace the --skip-install option and its usage text, update the tsc remediation hint, and add the opt-in ordering regression coverage (TST-210).
+- pin develop-channel upgrades to the latest GitHub release tag [useReq] *(package-manager)*
+  Resolve the develop-channel <tag> from the GitHub latest-release probe and abort with exit code 1 before any child when the probe fails (REQ-482, REQ-639, REQ-640).; Install and update the ref-pinned git:github.com/Ogekuri/PI-useReq@<tag> source, including the forced --force variant (REQ-527, REQ-613, REQ-641).; Add regression coverage for the tag-pinned install and the probe-failure abort, and update develop-channel assertions (TST-166, TST-176, TST-200, TST-208, TST-209).
 - render status request arrow as ➔ [useReq] *(status-bar)*
   REQ-632/TST-206 now require '<request>➔<state>' in the status field value.; Join request and state with PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR.; Refresh REQUIREMENTS, WORKFLOW, and REFERENCES for the new arrow token.; Update status-bar assertions in the extension registration suite.
 - prefix branch value with the ⎇ glyph [useReq] *(status-bar)*
@@ -1466,7 +1472,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.4\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.4
+- \[0.109.5\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.5
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1575,4 +1581,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.4]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.4
+[0.109.5]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.5
