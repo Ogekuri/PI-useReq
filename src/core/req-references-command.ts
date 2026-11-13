@@ -10,6 +10,7 @@ import path from "node:path";
 import type { UseReqConfig } from "./config.js";
 import { ReqError } from "./errors.js";
 import { validatePromptGitState } from "./prompt-command-runtime.js";
+import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./source-presence.js";
 import { runReferences } from "./tool-runner.js";
 
 /**
@@ -201,12 +202,12 @@ export function prepareReqReferencesCommandExecution(
 
 /**
  * @brief Executes the specialized `req-references` direct-write workflow and reports per-operation outcome facts.
- * @details Snapshots the pre-run `REFERENCES.md` content, regenerates the document through the same source-summary path used by the `references` tool, compares the regenerated content against the pre-run snapshot, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out, and returns whether the references content changed and whether the commit was created or skipped so callers can emit outcome-conformant notifications. Runtime is dominated by summary generation plus two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
+ * @details Snapshots the pre-run `REFERENCES.md` content, inspects the configured `src-dir` git file inventory, then either regenerates the document through the same source-summary path used by the `references` tool or writes the documented no-source placeholder payload when no supported source file exists, compares the produced content against the pre-run snapshot, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out, and returns whether the references content changed and whether the commit was created or skipped so callers can emit outcome-conformant notifications. Runtime is dominated by source-inventory probing plus summary generation and two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
  * @param[in] plan {ReqReferencesCommandPlan} Prepared direct-write execution plan.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {ReqReferencesCommandExecutionResult} Per-operation outcome facts including `referencesChanged` and `commitCreated`.
- * @throws {ReqError} Throws when reference generation, post-run content readback, staging, guarded commit creation, or cleanliness verification fails.
- * @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358, REQ-436
+ * @throws {ReqError} Throws when source-inventory probing, reference generation, placeholder writing, post-run content readback, staging, guarded commit creation, or cleanliness verification fails.
+ * @satisfies REQ-300, REQ-301, REQ-302, REQ-303, REQ-357, REQ-358, REQ-436, REQ-620
  */
 export function executeReqReferencesCommandExecution(
   plan: ReqReferencesCommandPlan,
@@ -218,7 +219,11 @@ export function executeReqReferencesCommandExecution(
   } catch {
     previousReferencesContent = undefined;
   }
-  runReferences(plan.basePath, config);
+  if (hasAnalyzableSourceFiles(plan.basePath, config)) {
+    runReferences(plan.basePath, config);
+  } else {
+    writeNoSourcePlaceholderDocument(plan.basePath, config, "REFERENCES.md");
+  }
   let regeneratedReferencesContent: string | undefined;
   try {
     regeneratedReferencesContent = fs.readFileSync(plan.referencesPath, "utf8");

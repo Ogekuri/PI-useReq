@@ -114,6 +114,7 @@ import {
   reapplyPromptCommandSessionSelection,
   resolvePromptCommandMergeGate,
   restorePromptCommandExecution,
+  validatePromptGitState,
   type PromptCommandExecutionPlan,
   type PromptCommandModelSelection,
   type PromptCommandModelSelectionSurface,
@@ -167,6 +168,7 @@ import {
   type PromptErrorReplayFacts,
 } from "./core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "./core/prompt-command-catalog.js";
+import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./core/source-presence.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import {
   clearPersistedPromptCommandRuntimeState,
@@ -3829,11 +3831,11 @@ function registerReqReferencesCommand(
 
 /**
  * @brief Registers bundled prompt-backed commands with the extension.
- * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact command invocation summary plus the delivered prompt content into the debug prompt log path as separate `-request` and `-prompt` files when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-debug file creation, user-message delivery during execution, and optional debug-log writes.
+ * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-`idle` workflow state by transitioning the shared workflow state to `error` before command-side preflight, otherwise transitions the shared workflow state through `checking`, `error`, and `running`, inspects the configured `src-dir` git file inventory for `req-workflow` and writes the no-source `WORKFLOW.md` placeholder when no supported source file exists, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact command invocation summary plus the delivered prompt content into the debug prompt log path as separate `-request` and `-prompt` files when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-debug file creation, user-message delivery during execution, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428, REQ-621, REQ-622, REQ-623
  */
 function registerPromptCommands(
   pi: ExtensionAPI,
@@ -3870,6 +3872,31 @@ function registerPromptCommands(
         );
         const originalThinkingLevel = resolveCurrentThinkingLevel(pi, ctx);
         try {
+          if (promptName === "workflow") {
+            validatePromptGitState(projectBase, config);
+            if (!hasAnalyzableSourceFiles(projectBase, config)) {
+              const workflowDocumentPath = writeNoSourcePlaceholderDocument(
+                projectBase,
+                config,
+                "WORKFLOW.md",
+              );
+              transitionPromptWorkflowState(
+                statusController,
+                ctx,
+                projectBase,
+                config,
+                promptName,
+                "idle",
+              );
+              notifyContextSafely(
+                ctx,
+                `req-workflow: no analyzable source file detected in the configured source directories; wrote the no-source placeholder ${formatRuntimePathForDisplay(workflowDocumentPath)}.`,
+                "info",
+              );
+              notifyContextRetentionReminder(statusController, ctx);
+              return;
+            }
+          }
           executionPlan = preparePromptCommandExecution(
             promptName,
             args,

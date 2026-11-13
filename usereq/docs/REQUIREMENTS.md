@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.142"
-date: "2026-11-12"
+version: "0.0.143"
+date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -125,6 +125,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-036**: MUST implement the integrated previous-build artifact cleanup and post-build repository cleanup in `scripts/build.sh` using `git`, `npm`, `node`, and core shell utilities only.
 - **DES-037**: MUST implement installed-source identification plus source-switch removal and installation in `src/core/package-manager.ts` outside `src/cli.ts` dispatch logic.
 - **DES-038**: MUST implement npm-managed, git-managed, and project-scope `.pi` installation-tree detection in `src/core/bin-deploy.ts` `isPiPackageInstallation`.
+- **DES-039**: MUST implement git-file-inventory source detection plus no-source placeholder rendering for `req-references` and `req-workflow` in one dedicated `src/core/` module outside `src/index.ts` business logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -703,6 +704,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-617**: MUST run `pi install <target-source>` after a successful source-switch removal and report completion through the documented upgrade summary.
 - **REQ-618**: MUST skip the already-latest registry gate for every `--upgrade` run that requires a source switch.
 - **REQ-619**: MUST identify npm-managed, git-managed, and project-scope `.pi` pi package installation trees for launcher deployment gating.
+- **REQ-620**: MUST make `req-references` inspect the configured `src-dir` git file inventory for supported source files before reference extraction, and MUST write the no-source `REFERENCES.md` placeholder when none exist.
+- **REQ-621**: MUST make `req-workflow` inspect the configured `src-dir` git file inventory for supported source files before prompt dispatch, and MUST write the no-source `WORKFLOW.md` placeholder when none exist.
+- **REQ-622**: MUST write the placeholder payload declared by `NO_SOURCE_REFERENCES_PLACEHOLDER` or `NO_SOURCE_WORKFLOW_PLACEHOLDER` in `src/core/source-presence.ts` verbatim.
+- **REQ-623**: MUST make `req-workflow` no-source completion transition workflow state to `idle` and dispatch no prompt message and no worktree.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -903,6 +908,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-201**: MUST verify a non-zero removal child aborts `--upgrade` with that exit code and spawns no installation child.
 - **TST-202**: MUST verify same-source and unknown-source `--upgrade` runs keep the documented `pi update` and `pi update --force` commands without package removal.
 - **TST-203**: MUST verify launcher deployment gating accepts git-managed and project-scope `.pi` pi package installation trees.
+- **TST-204**: MUST verify `req-references` writes the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` content into `REFERENCES.md`, commits only that file, and performs no source extraction when the git inventory holds no supported source file.
+- **TST-205**: MUST verify `req-workflow` writes the exact `NO_SOURCE_WORKFLOW_PLACEHOLDER` content into `WORKFLOW.md`, dispatches no prompt message, creates no worktree, and returns workflow state `idle` when no supported source file exists.
 
 ## 5. Observed Component Model
 
@@ -916,6 +923,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, installation-owned bundled-resource resolution, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
 - `src/core/config-cli-schema.ts`, `src/core/config-cli-render.ts`, and `src/core/config-cli.ts` provide the additive configuration CLI schema, deterministic tree plus table rendering, and CLI dispatch over the existing local and global scopes.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
+- `src/core/source-presence.ts` detects analyzable source presence from the configured `src-dir` git file inventory and writes the documented no-source placeholder payloads for `REFERENCES.md` and `WORKFLOW.md`.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
@@ -967,6 +975,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   │   ├── pi-usereq-tools.ts
 │   │   ├── prompts.ts
 │   │   ├── req-references-command.ts
+│   │   ├── source-presence.ts
 │   │   ├── resources.ts
 │   │   ├── source-analyzer.ts
 │   │   ├── static-check.ts
@@ -1067,6 +1076,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-036 | `scripts/build.sh` :: previous-build cleanup plus post-build repository cleanup stages :: integrated standalone bash cleanup process using `git`, `npm`, `node`, and core shell utilities only. |
 | DES-037 | `src/core/package-manager.ts` :: `resolveInstalledPackageManagerSource(...)` and `switchPackageManagerSource(...)` :: identify the installed source and reconcile a channel switch inside the package-manager module. |
 | DES-038 | `src/core/bin-deploy.ts` :: `isPiPackageInstallation(...)` and `isProjectPiPackageInstallationPath(...)` :: detect npm-managed, git-managed, and project-scope `.pi` installation trees. |
+| DES-039 | `src/core/source-presence.ts` :: `hasAnalyzableSourceFiles(...)` and `writeNoSourcePlaceholderDocument(...)` :: git-inventory detection plus no-source placeholder rendering reused by `req-references` and `req-workflow`. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -1198,6 +1208,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-617 | `src/core/package-manager.ts` :: `switchPackageManagerSource(...)` :: runs `pi install <target-source>` and reports completion after successful removal. |
 | REQ-618 | `src/core/package-manager.ts` :: `runPackageManagerUpgradeCommand(...)` :: reconciles the source switch before the registry probe and already-latest gate. |
 | REQ-619 | `src/core/bin-deploy.ts` :: `isPiPackageInstallation(...)` and `isProjectPiPackageInstallationPath(...)` :: accept npm-managed, git-managed, and project-scope `.pi` installation trees. |
+| REQ-620 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution(...)` :: writes `REFERENCES.md` through the no-source placeholder path when `hasAnalyzableSourceFiles(...)` reports an empty source inventory. |
+| REQ-621 | `src/index.ts` :: `registerPromptCommands(...)` :: inspects the source inventory for `workflow` before `preparePromptCommandExecution(...)` and writes the `WORKFLOW.md` placeholder. |
+| REQ-622 | `src/core/source-presence.ts` :: `NO_SOURCE_REFERENCES_PLACEHOLDER`, `NO_SOURCE_WORKFLOW_PLACEHOLDER`, and `writeNoSourcePlaceholderDocument(...)` :: write the declared payload verbatim. |
+| REQ-623 | `src/index.ts` :: `registerPromptCommands(...)` :: transitions workflow state to `idle` and returns before worktree creation and prompt delivery for the no-source `workflow` path. |
 | REQ-597 | `scripts/build.sh` :: `main(...)` stage order :: previous-build cleanup runs before dependency preparation, compilation, and packaging. |
 | REQ-598 | `scripts/build.sh` :: `clean_previous_dist_directory(...)` :: removes `dist/` only when empty after tarball removal. |
 | REQ-599 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: removes every repository entry created by the run. |
@@ -1274,6 +1288,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-201 | `tests/package-manager.test.ts` :: removal-failure coverage asserts abort with the removal exit code and no installation child. |
 | TST-202 | `tests/package-manager.test.ts` :: same-source and unknown-source upgrade coverage asserts the documented `pi update` and `pi update --force` commands without removal. |
 | TST-203 | `tests/bin-deploy.test.ts` :: launcher gating coverage asserts git-managed and project-scope `.pi` installation trees deploy the launcher. |
+| TST-204 | `tests/extension-registration.test.ts` :: `req-references writes the no-source REFERENCES.md placeholder without source extraction` asserts exact placeholder content, single-file commit, and no prompt dispatch. |
+| TST-205 | `tests/extension-registration.test.ts` :: `req-workflow writes the no-source WORKFLOW.md placeholder without dispatching a prompt` asserts exact placeholder content, zero prompt messages, zero worktrees, and workflow state `idle`. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

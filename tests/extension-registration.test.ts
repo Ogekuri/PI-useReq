@@ -10,6 +10,10 @@ import {
   REQ_REFERENCES_COMMIT_MESSAGE,
 } from "../src/core/req-references-command.js";
 import {
+  NO_SOURCE_REFERENCES_PLACEHOLDER,
+  NO_SOURCE_WORKFLOW_PLACEHOLDER,
+} from "../src/core/source-presence.js";
+import {
   REQ_RESET_COMMAND_DESCRIPTION,
 } from "../src/core/req-reset-command.js";
 import {
@@ -3727,6 +3731,16 @@ test("req-references surfaces git-validation and reference-generation failures w
   }
 
   const sourceFailure = initFixtureRepo({ fixtures: [] });
+  fs.writeFileSync(path.join(sourceFailure.projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
+  const failingReferencesPath = path.join(sourceFailure.projectBase, DEFAULT_DOCS_DIR, "REFERENCES.md");
+  fs.rmSync(failingReferencesPath, { force: true });
+  fs.mkdirSync(failingReferencesPath, { recursive: true });
+  spawnSync("git", ["add", "-A"], { cwd: sourceFailure.projectBase, encoding: "utf8" });
+  const failingReferencesCommit = spawnSync("git", ["commit", "-m", "prepare failing references target"], {
+    cwd: sourceFailure.projectBase,
+    encoding: "utf8",
+  });
+  assert.equal(failingReferencesCommit.status, 0, failingReferencesCommit.stderr);
   try {
     const worktreeParentPath = path.dirname(sourceFailure.projectBase);
     const initialEntries = new Set(fs.readdirSync(worktreeParentPath));
@@ -3745,7 +3759,7 @@ test("req-references surfaces git-validation and reference-generation failures w
     await pi.emit("session_start", { reason: "startup" }, ctx);
     await assert.rejects(
       pi.commands.get("req-references")!.handler("", ctx),
-      /no source files found in configured directories/,
+      /EISDIR|illegal operation on a directory/i,
     );
 
     const createdWorktreeEntries = fs.readdirSync(worktreeParentPath)
@@ -3753,7 +3767,7 @@ test("req-references surfaces git-validation and reference-generation failures w
       .filter((entry) => /^PI-useReq-/.test(entry));
     assert.equal(pi.sentUserMessages.length, 0);
     assert.deepEqual(createdWorktreeEntries, []);
-    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /no source files found in configured directories/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /EISDIR|illegal operation on a directory/i.test(entry.message)));
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
@@ -3772,11 +3786,106 @@ test("req-references surfaces git-validation and reference-generation failures w
         cwd: sourceFailure.projectBase,
         encoding: "utf8",
       }).stdout.trim(),
-      "init",
+      "prepare failing references target",
     );
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(sourceFailure.projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-references` writes the documented no-source placeholder without source extraction.
+ * @details Runs the dedicated command against a documentation-only fixture repository whose configured source directory holds no supported source file, then confirms the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` payload is written, only `REFERENCES.md` is committed with the fixed message, no LLM message is dispatched, no worktree is created, and workflow state returns to `idle`. Runtime is dominated by temporary git execution plus one placeholder write. Side effects are limited to temporary repository mutation and command-handler notifications.
+ * @return {Promise<void>} Promise resolved after no-source assertions complete.
+ * @throws {AssertionError} Throws when the placeholder content diverges, extra paths are committed, or prompt/worktree orchestration runs.
+ * @satisfies TST-204
+ */
+test("req-references writes the no-source REFERENCES.md placeholder without source extraction", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const referencesPath = path.join(projectBase, DEFAULT_DOCS_DIR, "REFERENCES.md");
+    const worktreeParentPath = path.dirname(projectBase);
+    const initialEntries = new Set(fs.readdirSync(worktreeParentPath));
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-references")!.handler("", ctx);
+
+    assert.equal(fs.readFileSync(referencesPath, "utf8"), NO_SOURCE_REFERENCES_PLACEHOLDER);
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.deepEqual(
+      fs.readdirSync(worktreeParentPath)
+        .filter((entry) => !initialEntries.has(entry))
+        .filter((entry) => /^PI-useReq-/.test(entry)),
+      [],
+    );
+    assert.equal(
+      spawnSync("git", ["log", "-1", "--pretty=%s"], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).stdout.trim(),
+      REQ_REFERENCES_COMMIT_MESSAGE,
+    );
+    assert.deepEqual(
+      spawnSync("git", ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).stdout.trim().split(/\r?\n/).filter((line) => line !== ""),
+      [`${DEFAULT_DOCS_DIR}/REFERENCES.md`],
+    );
+    assert.equal(
+      spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
+      "",
+    );
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>idle<\/warning>/);
+    assert.ok(ctx.__state.notifications.some((entry: { message: string }) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-workflow` writes the documented no-source placeholder without an agentic run.
+ * @details Runs the bundled prompt-backed `req-workflow` command against a documentation-only fixture repository whose configured source directory holds no supported source file, then confirms the exact `NO_SOURCE_WORKFLOW_PLACEHOLDER` payload is written, no LLM message is dispatched, no worktree is created, the no-source notification is emitted, and workflow state returns to `idle` while leaving the placeholder as an uncommitted change. Runtime is dominated by temporary git execution plus one placeholder write. Side effects are limited to temporary repository mutation and command-handler notifications.
+ * @return {Promise<void>} Promise resolved after no-source assertions complete.
+ * @throws {AssertionError} Throws when the placeholder content diverges, an LLM prompt is dispatched, a worktree is created, or workflow state does not return to `idle`.
+ * @satisfies TST-205
+ */
+test("req-workflow writes the no-source WORKFLOW.md placeholder without dispatching a prompt", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const workflowPath = path.join(projectBase, DEFAULT_DOCS_DIR, "WORKFLOW.md");
+    const worktreeParentPath = path.dirname(projectBase);
+    const initialEntries = new Set(fs.readdirSync(worktreeParentPath));
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    await pi.commands.get("req-workflow")!.handler("", ctx);
+
+    assert.equal(fs.readFileSync(workflowPath, "utf8"), NO_SOURCE_WORKFLOW_PLACEHOLDER);
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.deepEqual(
+      fs.readdirSync(worktreeParentPath)
+        .filter((entry) => !initialEntries.has(entry))
+        .filter((entry) => /^PI-useReq-/.test(entry)),
+      [],
+    );
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>idle<\/warning>/);
+    assert.ok(ctx.__state.notifications.some((entry: { message: string }) => /no analyzable source file detected/.test(entry.message)));
+    const statusLines = spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" })
+      .stdout.trim().split(/\r?\n/);
+    assert.ok(statusLines.some((line) => line.endsWith(`${DEFAULT_DOCS_DIR}/WORKFLOW.md`)));
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
