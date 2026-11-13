@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.143"
+version: "0.0.144"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -708,6 +708,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-621**: MUST make `req-workflow` inspect the configured `src-dir` git file inventory for supported source files before prompt dispatch, and MUST write the no-source `WORKFLOW.md` placeholder when none exist.
 - **REQ-622**: MUST write the placeholder payload declared by `NO_SOURCE_REFERENCES_PLACEHOLDER` or `NO_SOURCE_WORKFLOW_PLACEHOLDER` in `src/core/source-presence.ts` verbatim.
 - **REQ-623**: MUST make `req-workflow` no-source completion transition workflow state to `idle` and dispatch no prompt message and no worktree.
+- **REQ-624**: MUST include one homogeneous `## **Next Workflow**` generation instruction in every bundled prompt file under `src/resources/prompts`.
+- **REQ-625**: MUST require a `## **Next Workflow**` next step only when the follow-up action is mandatory and MUST NOT emit optional or speculative next steps.
+- **REQ-626**: MUST omit the `## **Next Workflow**` payload entirely whenever the completed workflow works without a next step.
+- **REQ-627**: MUST emit every `## **Next Workflow**` command as one `~~~text` fenced block whose first line is the exact command and whose remaining lines are the prompt text passed to that command.
+- **REQ-628**: MUST restrict the `analyze.md` `## **Next Workflow**` payload to exactly one of `/req-fix`, `/req-change`, `/req-cover`, or `/req-refactor` without free text outside the fenced command block.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1212,6 +1217,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-621 | `src/index.ts` :: `registerPromptCommands(...)` :: inspects the source inventory for `workflow` before `preparePromptCommandExecution(...)` and writes the `WORKFLOW.md` placeholder. |
 | REQ-622 | `src/core/source-presence.ts` :: `NO_SOURCE_REFERENCES_PLACEHOLDER`, `NO_SOURCE_WORKFLOW_PLACEHOLDER`, and `writeNoSourcePlaceholderDocument(...)` :: write the declared payload verbatim. |
 | REQ-623 | `src/index.ts` :: `registerPromptCommands(...)` :: transitions workflow state to `idle` and returns before worktree creation and prompt delivery for the no-source `workflow` path. |
+| REQ-624 | `src/resources/prompts/` :: bundled prompt files :: each file carries one homogeneous `## **Next Workflow**` generation instruction in its Present results step. |
+| REQ-625 | `src/resources/prompts/` :: Present results steps :: every prompt requires a next step only when mandatory and forbids optional or speculative next steps. |
+| REQ-626 | `src/resources/prompts/` :: Present results steps :: every prompt omits the `## **Next Workflow**` payload when the completed workflow works without a next step. |
+| REQ-627 | `src/resources/prompts/` :: Present results steps :: every emitted next-step command is one `~~~text` fenced block carrying the exact command plus its prompt text. |
+| REQ-628 | `src/resources/prompts/analyze.md` :: Step 2 branch classification and block formatting :: restricts the payload to `/req-fix`, `/req-change`, `/req-cover`, or `/req-refactor` with no free text outside the fenced block. |
 | REQ-597 | `scripts/build.sh` :: `main(...)` stage order :: previous-build cleanup runs before dependency preparation, compilation, and packaging. |
 | REQ-598 | `scripts/build.sh` :: `clean_previous_dist_directory(...)` :: removes `dist/` only when empty after tarball removal. |
 | REQ-599 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: removes every repository entry created by the run. |

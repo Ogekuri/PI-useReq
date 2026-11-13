@@ -191,6 +191,9 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 6. %%COMMIT%%
 7. Present results
    - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. PRINT first a ## **Summary** section containing a synthetic summary (at most 1010 UTF-8 characters) of the entire final output, then the verbose report using the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**. Final line MUST be exactly: STATUS: OK or STATUS: ERROR.
+   - Populate `## **Next Workflow**` only when the follow-up action is mandatory for correctness or completion; never add optional or speculative next steps, because any next step is optional when the program already works without it.
+   - When a mandatory next step exists, emit exactly one `~~~text` fenced block whose first line is the exact slash command of that next step and whose remaining lines are the actionable prompt text to pass with the command, adding no prose inside or outside the block.
+   - Omit the `## **Next Workflow**` payload entirely when no mandatory next step exists.
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%
