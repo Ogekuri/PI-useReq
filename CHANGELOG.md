@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.109.1](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.1) - 2026-11-13
+### 🐛  Bug Fixes
+- remove private manifest flag blocking npm publication [useReq] *(release)*
+  Remove the package.json private field that made npm publish fail with EPRIVATE before provenance and public access were applied.; Add a release-workflow regression test asserting the manifest omits the private field.; Requirements: DES-025, REQ-140, TST-159.
+- guard duplicate activation and repair launcher after upgrade [useReq] *(extension)*
+  skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
+
 ## [0.109.0](https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0) - 2026-11-12
 ### 🐛  Bug Fixes
 - publish prebuilt tarball via explicit local path [useReq] *(release-npm)*
@@ -1435,6 +1442,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
+- \[0.109.1\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.1
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1543,3 +1551,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
+[0.109.1]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.1
