@@ -2,8 +2,8 @@
 ##
 # @file scripts/pre-release-check.sh
 # @brief Executes the official pi-usereq pre-release verification gate.
-# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), clean dependency install (`npm ci`), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), the full test suite (`npm test`), release packaging into one `TMPDIR` temporary build directory through `npm pack --pack-destination <temporary-directory>`, and validation of that temporary tarball. The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Supports `--skip-install` to reuse the existing `node_modules` tree and `--help` for usage; rejects unknown options with exit code `2`. Artifact validation verifies the temporary `pi-usereq-<version>.tgz` tarball for existence, non-zero size, and the required `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries. The gate performs no operation on `dist/` and never creates, reads, verifies, or deletes any `dist/` entry, so its behavior is independent from `dist/` content. After the stages finish, the gate removes every repository entry its stages created — build outputs and intermediate files included, `dist/` entries excluded — by diffing the pre-run and post-run `git status --porcelain --untracked-files=normal --ignored` inventories and deletes the temporary build directory with its generated tarball on every exit path, keeping `node_modules`, every `dist/` entry, and every pre-existing or tracked-status entry untouched. Cleanup runs on success, failure, and signal-induced exits while preserving the first failing stage exit code. Runtime is dominated by `npm ci`, `npm test`, and `npm pack`. Side effects include `node_modules` replacement, npm lifecycle scripts, child process spawning, temporary build directory creation and removal, and deletion of run-created repository entries.
-# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606
+# @details Resolves the repository root from this script's own location and runs the mandatory pre-release stages in fixed order: environment preflight (`git`, `node`, `npm` presence plus the Node.js major-version `>= 24` engine gate), strict TypeScript type-check (`node_modules/.bin/tsc --noEmit`), the full test suite (`npm test`), release packaging into one `TMPDIR` temporary build directory through `npm pack --pack-destination <temporary-directory>`, and validation of that temporary tarball. The gate stops at the first failing stage, prints one status banner per stage, exits `0` only after every stage succeeds, and exits non-zero otherwise. Toolchain provisioning is opt-in: `--install` runs one `npm ci` pass before stage 1 and before the pre-run inventory snapshot, while the default reuses the existing `node_modules` tree, so provisioning never alters the snapshot diff baseline; `--help` prints usage and unknown options exit with code `2`. Artifact validation verifies the temporary `pi-usereq-<version>.tgz` tarball for existence, non-zero size, and the required `package.json`, `LICENSE`, `README.md`, `src/index.ts`, and `scripts/pi-usereq.js` entries. The gate performs no operation on `dist/` and never creates, reads, verifies, or deletes any `dist/` entry, so its behavior is independent from `dist/` content. After the stages finish, the gate removes every repository entry its stages created — build outputs and intermediate files included, `dist/` entries excluded — by diffing the pre-run and post-run `git status --porcelain --untracked-files=normal --ignored` inventories and deletes the temporary build directory with its generated tarball on every exit path, keeping `node_modules`, every `dist/` entry, and every pre-existing or tracked-status entry untouched. Cleanup runs on success, failure, and signal-induced exits while preserving the first failing stage exit code. Runtime is dominated by `npm test`, `npm pack`, and the optional `npm ci`. Side effects include optional `node_modules` replacement, npm lifecycle scripts, child process spawning, temporary build directory creation and removal, and deletion of run-created repository entries.
+# @satisfies DES-029, REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606, REQ-642, REQ-643
 ##
 
 set -euo pipefail
@@ -17,10 +17,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 ##
-# @brief Holds the `--skip-install` selection state.
-# @details Defaults to `0`; the argument parser sets `1` when `--skip-install` is supplied so the install stage reuses the existing `node_modules` tree instead of running `npm ci`.
+# @brief Holds the `--install` opt-in toolchain-provisioning state.
+# @details Defaults to `0`, so the gate reuses the existing `node_modules` tree and never runs `npm ci`; the argument parser sets `1` when `--install` is supplied, arming the provisioning pass that runs before the pre-run inventory snapshot and stage 1.
+# @satisfies REQ-642, REQ-643
 ##
-SKIP_INSTALL=0
+INSTALL_TOOLCHAIN=0
 
 ##
 # Holds the absolute path of the pre-run repository inventory snapshot file.
@@ -138,22 +139,24 @@ trap 'exit 143' TERM
 ##
 usage() {
   cat <<'USAGE'
-Usage: scripts/pre-release-check.sh [--skip-install]
+Usage: scripts/pre-release-check.sh [--install]
 
 Runs the official pre-release verification gate from the repository root:
   1. Environment preflight: git, node (major >= 24), npm availability
-  2. Clean dependency install: npm ci (skipped by --skip-install)
-  3. Strict type-check: node_modules/.bin/tsc --noEmit
-  4. Full test suite: npm test
-  5. Release packaging: npm pack into one TMPDIR temporary build directory
-  6. Release artifact validation: temporary pi-usereq-<version>.tgz structure
+  2. Strict type-check: node_modules/.bin/tsc --noEmit
+  3. Full test suite: npm test
+  4. Release packaging: npm pack into one TMPDIR temporary build directory
+  5. Release artifact validation: temporary pi-usereq-<version>.tgz structure
 
 Options:
-  --skip-install  Reuse the existing node_modules tree instead of npm ci
+  --install       Provision the toolchain with npm ci before stage 1
+                  (disabled by default: the existing node_modules tree is reused)
   -h, --help      Print this usage and exit 0
 
 Exits 0 only when every stage succeeds; exits non-zero on the first failure.
 
+Toolchain provisioning runs before the pre-run git status --porcelain
+--ignored snapshot, so npm ci never alters the snapshot diff baseline.
 Performs no operation on dist/ and never creates, reads, verifies, or
 deletes any dist/ entry. Removes repository entries created by this run
 (build outputs, intermediate files) before exiting; node_modules and every
@@ -217,15 +220,15 @@ check_environment() {
 }
 
 ##
-# @brief Installs deterministic release dependencies through `npm ci`.
-# @details Runs `npm ci` from the repository root so the gate verifies against the lockfile-exact dependency tree used by the official release workflow. Honors `--skip-install` by printing a reuse notice and keeping the existing `node_modules` tree. Runtime is dominated by `npm ci`. Side effects include `node_modules` replacement and npm lifecycle scripts.
+# @brief Provisions the toolchain through `npm ci` when `--install` was supplied.
+# @details Honors the opt-in contract: without `--install` it prints one reuse notice and keeps the existing `node_modules` tree, never invoking `npm`; with `--install` it runs one `npm ci` pass from the repository root. Because the caller invokes it before the pre-run inventory snapshot and stage 1, the provisioning churn never appears in the snapshot diff baseline. Runtime is dominated by `npm ci`. Side effects are limited to `node_modules` replacement and npm lifecycle scripts.
 # @return {void} No return value on success.
 # @retval {never} Exits through `run_stage(...)` with `1` when `npm ci` fails.
-# @satisfies REQ-491, REQ-493
+# @satisfies REQ-491, REQ-642, REQ-643
 ##
-install_dependencies() {
-  if [[ "${SKIP_INSTALL}" -eq 1 ]]; then
-    printf 'skipping npm ci (--skip-install): reusing existing node_modules tree\n'
+provision_toolchain() {
+  if [[ "${INSTALL_TOOLCHAIN}" -ne 1 ]]; then
+    printf 'toolchain provisioning disabled (default): reusing existing node_modules tree; pass --install to run npm ci\n'
     return 0
   fi
   npm ci
@@ -270,7 +273,7 @@ validate_release_artifacts() {
 
 ##
 # @brief Runs the strict TypeScript type-check stage.
-# @details Executes the repository-owned `node_modules/.bin/tsc` binary with `--noEmit`, honoring the documented strict `noEmit` program contract, and fails with a remediation hint when the binary is absent so `--skip-install` misuse is self-explanatory. Runtime is dominated by the TypeScript compiler. Side effects are limited to filesystem reads.
+# @details Executes the repository-owned `node_modules/.bin/tsc` binary with `--noEmit`, honoring the documented strict `noEmit` program contract, and fails with a remediation hint when the binary is absent so missing toolchain provisioning is self-explanatory. Runtime is dominated by the TypeScript compiler. Side effects are limited to filesystem reads.
 # @return {void} No return value on success.
 # @retval {never} Exits `1` when the compiler is missing or reports diagnostics.
 # @satisfies REQ-491, CTN-006
@@ -278,7 +281,7 @@ validate_release_artifacts() {
 run_type_check() {
   local tsc_bin="${REPO_ROOT}/node_modules/.bin/tsc"
   if [[ ! -x "${tsc_bin}" ]]; then
-    die "tsc not executable at ${tsc_bin}; run without --skip-install so npm ci installs devDependencies"
+    die "tsc not executable at ${tsc_bin}; run with --install so npm ci installs devDependencies"
   fi
   "${tsc_bin}" --noEmit
 }
@@ -296,16 +299,16 @@ run_test_suite() {
 
 ##
 # @brief Parses gate options and executes every stage in the documented order.
-# @details Accepts exactly `--skip-install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, captures the pre-run repository inventory snapshot, creates the `TMPDIR` temporary build directory, dispatches the six stages in order, prints the final success summary, and lets the exit trap remove the temporary build directory plus repository entries created by the stages before the process returns the gate exit code. Never creates, reads, verifies, or deletes any `dist/` entry. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus temporary-directory and run-created artifact removal at exit.
+# @details Accepts exactly `--install`, `-h`, and `--help`; rejects every other option with the usage document on stderr and exit code `2`; changes the working directory to the resolved repository root, runs the optional `--install` provisioning pass before the pre-run repository inventory snapshot and before stage 1, creates the `TMPDIR` temporary build directory, dispatches the five stages in order, prints the final success summary, and lets the exit trap remove the temporary build directory plus repository entries created by the stages before the process returns the gate exit code. Provisioning precedes the snapshot, so `npm ci` cannot alter the snapshot diff baseline. Never creates, reads, verifies, or deletes any `dist/` entry. Runtime is the aggregate of all stages. Side effects are those of the dispatched stages plus temporary-directory and run-created artifact removal at exit.
 # @param[in] arguments {string...} Raw command-line arguments passed to the script.
 # @return {void} No return value on success; exits non-zero on any failure.
-# @satisfies REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606
+# @satisfies REQ-491, REQ-492, REQ-493, REQ-494, REQ-495, REQ-496, REQ-497, REQ-498, REQ-572, REQ-573, REQ-574, REQ-604, REQ-605, REQ-606, REQ-642, REQ-643
 ##
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --skip-install)
-        SKIP_INSTALL=1
+      --install)
+        INSTALL_TOOLCHAIN=1
         ;;
       -h|--help)
         usage
@@ -320,15 +323,22 @@ main() {
     shift
   done
   cd "${REPO_ROOT}"
+  printf 'pi-usereq pre-release check\nrepository root: %s\n' "${REPO_ROOT}"
+  run_stage 'toolchain provisioning (npm ci only with --install)' provision_toolchain
   capture_pre_run_inventory
   PRC_TEMP_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pi-usereq-pre-release-build.XXXXXX")"
-  printf 'pi-usereq pre-release check\nrepository root: %s\ntemporary build directory: %s\nartifact cleanup: enabled (removes entries created by this run; keeps node_modules and every dist/ entry)\n' "${REPO_ROOT}" "${PRC_TEMP_BUILD_DIR}"
-  run_stage 'stage 1/6: environment preflight (git, node >=24, npm)' check_environment
-  run_stage 'stage 2/6: clean dependency install (npm ci)' install_dependencies
-  run_stage 'stage 3/6: strict type-check (tsc --noEmit)' run_type_check
-  run_stage 'stage 4/6: full test suite (npm test)' run_test_suite
-  run_stage 'stage 5/6: release packaging (npm pack into the temporary build directory)' run_release_pack
-  run_stage 'stage 6/6: release artifact validation (temporary pi-usereq-<version>.tgz)' validate_release_artifacts
+  local provisioning_label
+  if [[ "${INSTALL_TOOLCHAIN}" -eq 1 ]]; then
+    provisioning_label='npm ci (--install)'
+  else
+    provisioning_label='disabled (default, reusing node_modules)'
+  fi
+  printf 'temporary build directory: %s\ntoolchain provisioning: %s\nartifact cleanup: enabled (removes entries created by this run; keeps node_modules and every dist/ entry)\n' "${PRC_TEMP_BUILD_DIR}" "${provisioning_label}"
+  run_stage 'stage 1/5: environment preflight (git, node >=24, npm)' check_environment
+  run_stage 'stage 2/5: strict type-check (tsc --noEmit)' run_type_check
+  run_stage 'stage 3/5: full test suite (npm test)' run_test_suite
+  run_stage 'stage 4/5: release packaging (npm pack into the temporary build directory)' run_release_pack
+  run_stage 'stage 5/5: release artifact validation (temporary pi-usereq-<version>.tgz)' validate_release_artifacts
   printf '\npre-release check: all stages passed.\n'
 }
 

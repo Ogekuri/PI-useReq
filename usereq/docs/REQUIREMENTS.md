@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.147"
+version: "0.0.148"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -612,11 +612,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-489**: MUST resolve the npmjs latest version from the manifest `dist-tags.latest` field, falling back to the highest semver-ordered manifest `versions` entry, and MUST NOT resolve any version when the manifest exposes neither.
 
 - **REQ-490**: MUST execute analysis commands using installation-owned TypeScript implementations and declared dependencies independently of the external req application and its source checkout.
-- **REQ-491**: MUST make `scripts/pre-release-check.sh` execute, in order, environment preflight with the Node 24 engine gate, clean dependency install via `npm ci`, strict `tsc --noEmit`, full `npm test`, and temporary-directory release packaging plus validation.
+- **REQ-491**: MUST make `scripts/pre-release-check.sh` execute, in order, environment preflight with the Node 24 engine gate, strict `tsc --noEmit`, full `npm test`, and temporary-directory release packaging plus validation.
 - **REQ-492**: MUST make `scripts/pre-release-check.sh` stop at the first failing stage, print one status banner per stage, exit `0` only after every stage succeeds, and exit non-zero otherwise.
-- **REQ-493**: MUST make `scripts/pre-release-check.sh` support `--skip-install` reusing the existing `node_modules` tree, print usage for `--help`, and reject unknown options with non-zero exit.
+- **REQ-493**: MUST make `scripts/pre-release-check.sh` accept `--install`, print usage for `--help`, and reject unknown options with non-zero exit.
 - **REQ-494**: MUST make `scripts/pre-release-check.sh` resolve the repository root from its own script location and execute every stage from that root regardless of the caller working directory.
-- **REQ-495**: MUST make `scripts/pre-release-check.sh` capture the repository `git status --porcelain --ignored` inventory before executing any stage.
+- **REQ-495**: MUST make `scripts/pre-release-check.sh` capture the repository `git status --porcelain --ignored` inventory after optional toolchain provisioning and before executing any stage.
+- **REQ-642**: MUST run `npm ci` provisioning only when `--install` is supplied, defaulting to no provisioning so the gate reuses the existing `node_modules` tree.
+- **REQ-643**: MUST run `--install` provisioning before the pre-run inventory snapshot and the first stage, so provisioning never alters the snapshot diff baseline.
 - **REQ-496**: MUST make `scripts/pre-release-check.sh` remove every untracked or ignored repository entry created by its stages, including build outputs and intermediate files, while never touching any `dist/` entry, before process exit.
 - **REQ-497**: MUST make the `scripts/pre-release-check.sh` artifact cleanup execute on successful, failed, and signal-induced exits and preserve the first failing stage exit code.
 - **REQ-498**: MUST restrict `scripts/pre-release-check.sh` artifact removal to `??` or `!!` entries absent from the pre-run inventory, always skipping `node_modules` and `dist/` entries.
@@ -910,6 +912,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-187**: MUST verify a completed worktree-backed run whose final assistant text contains neither marker performs no merge or worktree deletion and parks blinking `warning`.
 - **TST-188**: MUST verify a completed worktree-backed run whose final assistant message exposes no text content block remains merge-eligible.
 - **TST-190**: MUST verify `scripts/pre-release-check.sh` passes `bash -n` and excludes `dist/` entries from generic artifact removal.
+- **TST-210**: MUST verify `scripts/pre-release-check.sh` provisions `npm ci` only under `--install` and orders provisioning before the inventory snapshot and stage 1.
 - **TST-193**: MUST verify `scripts/clean.sh` is absent and `scripts/build.sh` passes `bash -n`, removes every versioned `dist/*.tgz` tarball plus the emptied `dist/` directory, and preserves non-tarball `dist/` entries.
 - **TST-194**: MUST verify `scripts/build.sh` removes run-created temporary and intermediate repository entries on successful and failed exits while preserving `node_modules/`, pre-existing entries, and the verified release tarball.
 - **TST-195**: MUST verify `.github/workflows/release-npm.yml` authenticates npm publication through OIDC without `NODE_AUTH_TOKEN`, publishes the `dist/pi-usereq-<version>.tgz`, and creates the GitHub Release.
@@ -1207,7 +1210,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-561 | `src/core/config-cli-schema.ts` :: `projectScopePayload` :: drops non-schema keys before each write. |
 | REQ-562 | `src/core/config-cli-schema.ts` :: `buildSchemaDefaults` :: derives defaults from `getDefaultConfig(...)` and enum domains from exported inventories. |
 | REQ-563 | `src/core/config-cli.ts` :: `runSetCommand` and `runUnsetCommand` :: return without stdout writes on success. |
-| REQ-491 | `scripts/pre-release-check.sh` :: `main(...)` stage sequence :: environment preflight, `npm ci`, `tsc --noEmit`, `npm test`, then temporary-directory packaging and validation. |
+| REQ-491 | `scripts/pre-release-check.sh` :: `main(...)` stage sequence :: environment preflight, `tsc --noEmit`, `npm test`, then temporary-directory packaging and validation. |
+| REQ-642 | `scripts/pre-release-check.sh` :: `provision_toolchain(...)` :: runs `npm ci` only when `--install` selected the opt-in provisioning mode; otherwise prints the reuse notice. |
+| REQ-643 | `scripts/pre-release-check.sh` :: `main(...)` :: invokes `provision_toolchain(...)` before `capture_pre_run_inventory(...)` and before stage 1. |
 | REQ-564 | `scripts/build.sh` :: `REPO_ROOT` resolution :: derives the repository root from the script location and `cd`s into it before staging. |
 | REQ-565 | `scripts/build.sh` :: `check_build_tools(...)` :: probes `git`, `npm`, and Node major `>= 24` before packaging. |
 | REQ-566 | `scripts/build.sh` :: `ensure_dependencies(...)` :: runs `npm ci` only when `node_modules` is absent. |
@@ -1307,6 +1312,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-187 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus blinking workflow `warning` when neither marker is present. |
 | TST-188 | `tests/extension-registration.test.ts` :: existing worktree closure fixtures with empty assistant content remain merge-eligible. |
 | TST-190 | `tests/gitignore-dist.test.ts` :: `scripts/pre-release-check.sh` passes `bash -n` and declares the `dist/` cleanup exclusion. |
+| TST-210 | `tests/gitignore-dist.test.ts` :: `pre-release gate provisions npm ci only under --install before the inventory snapshot` asserts the default-off state, the `--install` selection arm, and provisioning-before-snapshot ordering. |
 | TST-193 | `tests/build-script.test.ts` :: syntax check plus absent `scripts/clean.sh`, sandboxed previous-build cleanup across versioned tarballs, and non-tarball `dist/` preservation. |
 | TST-194 | `tests/build-script.test.ts` :: sandboxed success and failure runs asserting intermediate artifact removal, `node_modules/` and pre-existing entry preservation, and verified artifact retention. |
 | TST-195 | `tests/release-workflow.test.ts` :: workflow-content assertions cover OIDC publication of the resolved artifact and GitHub Release creation. |
