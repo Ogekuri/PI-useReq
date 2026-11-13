@@ -467,23 +467,23 @@ function formatFakeThemeBackgroundFromForeground(color: string, text: string): s
 
 /**
  * @brief Resolves the expected fake branch payload for status assertions.
- * @details Reads `git branch --show-current` from the supplied base path and falls back to `unknown` when the path is outside a repository or HEAD has no branch name. Runtime is dominated by git execution. Side effects include subprocess creation.
+ * @details Reads `git branch --show-current` from the supplied base path, falls back to `unknown` when the path is outside a repository or HEAD has no branch name, and prepends the documented `⎇ ` display prefix so assertions match the rendered `branch` field value. Runtime is dominated by git execution. Side effects include subprocess creation.
  * @param[in] basePath {string | undefined} Base path represented by the fake context.
- * @return {string} Expected branch name or `unknown` when unavailable.
+ * @return {string} Expected `⎇ `-prefixed branch value or `⎇ unknown` when unavailable.
  */
 function buildExpectedFakeBranchValue(basePath: string | undefined): string {
   if (!basePath || !fs.existsSync(basePath)) {
-    return "unknown";
+    return "⎇ unknown";
   }
   const result = spawnSync("git", ["branch", "--show-current"], {
     cwd: basePath,
     encoding: "utf8",
   });
   if (result.error || result.status !== 0) {
-    return "unknown";
+    return "⎇ unknown";
   }
   const branchName = result.stdout.trim();
-  return branchName === "" ? "unknown" : branchName;
+  return `⎇ ${branchName === "" ? "unknown" : branchName}`;
 }
 
 /**
@@ -4397,10 +4397,10 @@ test("req-reset re-anchors the live session when the reserved base session was n
     assert.ok(uiState.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)));
     assert.ok(!uiState.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
     const finalStatusText = uiState.statuses.get("pi-usereq") ?? "";
-    assert.doesNotMatch(finalStatusText, /branch:unknown/);
+    assert.doesNotMatch(finalStatusText, /branch:⎇ unknown/);
     assert.match(
       finalStatusText,
-      new RegExp(`branch:<\\/accent><warning>${mainBranchName}<\\/warning>`),
+      new RegExp(`branch:<\\/accent><warning>⎇ ${mainBranchName}<\\/warning>`),
     );
   } finally {
     process.chdir(previousCwd);
@@ -4920,7 +4920,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     };
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
-    const originalBranchName = buildExpectedFakeBranchValue(projectBase);
+    const originalBranchName = buildExpectedFakeBranchValue(projectBase).replace(/^⎇ /, "");
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
     const promptText = String(pi.sentUserMessages[0]?.content ?? "");
     const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
@@ -4939,7 +4939,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(ctx.cwd, executionBasePath);
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change►running<\/warning>/.test(status)));
-    assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", worktreeName)}`)));
+    assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", `⎇ ${worktreeName}`)}`)));
 
     await pi.emit("before_agent_start", {}, ctx);
     assert.equal(process.cwd(), executionBasePath);
@@ -4975,10 +4975,10 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     );
     assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
     assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change►merging<\/warning>/.test(status)));
-    assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", originalBranchName)}`)));
+    assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", `⎇ ${originalBranchName}`)}`)));
     const finalStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
     assert.match(finalStatus, /<accent>status:<\/accent><warning>change►done<\/warning>/);
-    assert.ok(finalStatus.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", originalBranchName)}`));
+    assert.ok(finalStatus.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", `⎇ ${originalBranchName}`)}`));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });

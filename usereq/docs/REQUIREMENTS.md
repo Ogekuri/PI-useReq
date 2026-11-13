@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.144"
+version: "0.0.145"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -222,7 +222,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
 - **REQ-120**: MUST render single-line status fields in this order: `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, `sound`, deriving `<extension>` and `<version>` from runtime extension package metadata.
-- **REQ-121**: MUST render `branch` immediately after `status` with separator ` • ` and the active git branch name.
+- **REQ-121**: MUST render `branch` immediately after `status` with separator ` • ` and the active git branch name prefixed with `⎇ `.
 - **REQ-283**: MUST resolve `branch` from the current `context-path` git HEAD during every status-bar rebuild so worktree switches and base-path restoration update immediately.
 - **REQ-284**: MUST render `context` immediately after `branch` with separator ` • ` and one fixed-width gauge icon.
 - **REQ-122**: MUST map `context` usage to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands.
@@ -757,7 +757,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with the same non-error theme token used by `status`.
 - **TST-096**: MUST verify context usage `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75-<90` render `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` with the same non-error theme token used by `status`.
 - **TST-036**: MUST verify context usage `>=90-<100` renders non-blinking error `▕█▏`, and `>=100` renders blinking error `▕█▏` or non-blinking error `▕█▏` when blink control is unavailable.
-- **TST-095**: MUST verify status-bar `branch` resolves from current `context-path` git HEAD and refreshes across worktree switches plus base-path restoration.
+- **TST-095**: MUST verify status-bar `branch` renders the active branch prefixed with `⎇ `, resolves from current `context-path` git HEAD, and refreshes across worktree switches plus base-path restoration.
 - **TST-043**: MUST verify configuration menus reuse the active CLI settings-list theme semantics for labels, values, descriptions, cursor, and hints.
 - **TST-009**: MUST verify `package.json` declares ESM packaging, the single pi extension entry, and the standard `test`, `test:watch`, and `cli` scripts.
 - **TST-010**: MUST verify `tsconfig.json` declares `NodeNext`, `strict`, `noEmit`, and includes both `src/**/*.ts` and `tests/**/*.ts`.

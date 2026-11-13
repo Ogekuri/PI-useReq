@@ -391,8 +391,15 @@ function createStatusThemeAdapter(theme: RawStatusTheme): StatusThemeAdapter {
 }
 
 /**
+ * @brief Prefixes the rendered status-bar `branch` field value.
+ * @details Prepends the documented `⎇` symbol plus one trailing space to the active git branch name so the field renders as `branch:⎇ <branch>` while the field label and theme token split stay unchanged. Access complexity is O(1). No external state is mutated.
+ * @satisfies REQ-121
+ */
+const PI_USEREQ_STATUS_BRANCH_PREFIX = "⎇ ";
+
+/**
  * @brief Resolves the active git branch value rendered in the status bar.
- * @details Reads the current branch from the active context working directory on every status render so worktree switches and restored base-session renders expose the latest branch immediately. Runtime is dominated by git execution when the working directory belongs to a repository. Side effects include subprocess creation.
+ * @details Reads the current branch from the active context working directory on every status render so worktree switches and restored base-session renders expose the latest branch immediately. The returned token stays prefix-free because the documented `⎇ ` display prefix is applied by `buildPiUsereqStatusText(...)`. Runtime is dominated by git execution when the working directory belongs to a repository. Side effects include subprocess creation.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {string} Active branch name or `unknown` when unavailable.
  * @satisfies REQ-121, REQ-283
@@ -671,7 +678,7 @@ function formatExtensionIdentityStatusField(
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders the runtime extension identity prefix before status, then renders status, branch, context, elapsed, and sound fields with dim bullet separators, workflow-state highlighting, the documented icon-based context gauge, and the active runtime sound level instead of the persisted boot value. Runtime is O(1). No external state is mutated.
+ * @details Renders the runtime extension identity prefix before status, then renders status, branch, context, elapsed, and sound fields with dim bullet separators, workflow-state highlighting, the `⎇ `-prefixed branch value, the documented icon-based context gauge, and the active runtime sound level instead of the persisted boot value. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
@@ -696,7 +703,7 @@ function buildPiUsereqStatusText(
       "status",
       formatWorkflowStateValue(theme, state.workflowState, state.workflowRequest),
     ),
-    formatStatusField(theme, "branch", branchName),
+    formatStatusField(theme, "branch", `${PI_USEREQ_STATUS_BRANCH_PREFIX}${branchName}`),
     formatRenderedStatusField(
       theme,
       "context",
