@@ -5,7 +5,6 @@ import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 import {
-  PACKAGE_FORCED_UPGRADE_COMMAND,
   PACKAGE_MANAGER_GITHUB_RELEASES_API_URL,
   PACKAGE_MANAGER_GITHUB_REPOSITORY,
   PACKAGE_MANAGER_GIT_SOURCE,
@@ -14,7 +13,7 @@ import {
   PACKAGE_UNINSTALL_COMMAND,
   PACKAGE_UPGRADE_COMMAND,
   buildPackageManagerDevelopSource,
-  buildPackageManagerDevelopUpdateCommand,
+  buildPackageManagerInstallCommand,
   comparePackageManagerVersionOrder,
   isNewerPackageManagerVersion,
   parsePackageManagerCommand,
@@ -27,6 +26,7 @@ import {
   resolvePackageManagerInstalledVersion,
   resolvePackageManagerManifestLatest,
   resolvePackageManagerUpgradeSource,
+  resolvePiManagedPackageManagerVersion,
   runPackageManagerManagementCommand,
   runPackageManagerUninstallCommand,
   runPackageManagerUpgradeCommand,
@@ -224,23 +224,31 @@ test("dotted numeric version comparison admits only strictly newer candidates", 
   assert.equal(isNewerPackageManagerVersion("not-a-version", "1.0.0"), false);
 });
 
-test("non-forced upgrade commands match the documented pi update forms", () => {
+test("channel reconciliation commands match the documented pi CLI forms", () => {
   assert.deepEqual(PACKAGE_UPGRADE_COMMAND, ["pi", "update", "npm:pi-usereq"]);
-  assert.deepEqual(buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG), [
-    "pi",
-    "update",
-    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}@${DEVELOP_RELEASE_TAG}`,
-  ]);
+  assert.deepEqual(
+    buildPackageManagerInstallCommand(buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG)),
+    [
+      "pi",
+      "install",
+      `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}@${DEVELOP_RELEASE_TAG}`,
+    ],
+  );
 });
 
-test("forced upgrade commands match the documented pi update force-reinstall forms", () => {
-  assert.deepEqual(PACKAGE_FORCED_UPGRADE_COMMAND, ["pi", "update", "npm:pi-usereq", "--force"]);
-  assert.deepEqual(buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG, true), [
-    "pi",
-    "update",
-    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}@${DEVELOP_RELEASE_TAG}`,
-    "--force",
-  ]);
+/**
+ * @brief Verifies that no extension reconciliation command claims pi CLI force semantics.
+ * @details Forced extension runs only skip the default-channel already-latest gate; the pi CLI `--force` option affects the self-update path only, so no reconciliation child command may carry that token. Deterministic: pure value assertions.
+ * @satisfies REQ-527, REQ-646, TST-176
+ */
+test("extension reconciliation commands never carry a pi CLI force token", () => {
+  const commands = [
+    PACKAGE_UPGRADE_COMMAND,
+    buildPackageManagerInstallCommand(buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG)),
+  ];
+  for (const command of commands) {
+    assert.equal(command.includes("--force"), false);
+  }
 });
 
 test("registry probe resolves the documented npmjs package manifest endpoint", async () => {
@@ -349,11 +357,29 @@ test("GitHub probe maps failures and malformed tags to deterministic errors", as
   assert.match(rejected.status === "error" ? rejected.message : "", /rate limited/);
 });
 
-test("installed version resolves from the installation-owned package manifest", () => {
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
-  ) as { version: string };
-  assert.equal(resolvePackageManagerInstalledVersion(), manifest.version);
+/**
+ * @brief Verifies the executing-manifest fallback of installed-version resolution.
+ * @details Points `PI_CODING_AGENT_DIR` at an empty temporary agent directory so no pi-managed installation root exists, then asserts the resolver reports the executing installation manifest version. Deterministic: temporary filesystem root plus `process.cwd()` manifest read; no network or child processes.
+ * @satisfies REQ-487, REQ-647, TST-212
+ */
+test("installed version falls back to the executing installation manifest", () => {
+  const home = fs.mkdtempSync(path.join(tmpdir(), "pi-usereq-empty-home-"));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  try {
+    process.env.PI_CODING_AGENT_DIR = home;
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { version: string };
+    assert.equal(resolvePiManagedPackageManagerVersion(), undefined);
+    assert.equal(resolvePackageManagerInstalledVersion(), manifest.version);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("version command prints the manifest latest even when it is not newer than installed", async () => {
@@ -502,7 +528,7 @@ test("develop-channel upgrade repairs the deployed launcher before reporting com
   assert.equal(calls.length, 1);
   assert.deepEqual(
     calls[0].args,
-    [...buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG).slice(1)],
+    [...buildPackageManagerInstallCommand(buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG)).slice(1)],
   );
   assert.equal(repairs, 1);
   assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
@@ -566,7 +592,7 @@ test("default-channel upgrade propagates child failure without printing a summar
   assert.deepEqual(sink.chunks, []);
 });
 
-test("develop-channel upgrade runs the git pi update command and prints the metadata-resolved summary", async () => {
+test("develop-channel upgrade runs the tag-pinned install child and prints the metadata-resolved summary", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();
   const exitCode = await runPackageManagerUpgradeCommand(
@@ -585,7 +611,7 @@ test("develop-channel upgrade runs the git pi update command and prints the meta
   assert.equal(calls[0].file, "pi");
   assert.deepEqual(
     calls[0].args,
-    [...buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG).slice(1)],
+    [...buildPackageManagerInstallCommand(buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG)).slice(1)],
   );
   assert.equal(calls[0].options.cwd, homedir());
   assert.equal(calls[0].options.stdio, "inherit");
@@ -848,11 +874,11 @@ test("failing package removal aborts the upgrade before installing the target so
 });
 
 /**
- * @brief Verifies that matching and unknown installed sources keep the documented update commands.
- * @details Runs a forced same-source upgrade and an unknown-source upgrade, asserting the force update command and the registry-gated update command without any removal spawn. Deterministic: spawn, fetch, and resolver doubles; no network or child processes.
- * @satisfies REQ-615, REQ-527, REQ-528, TST-202
+ * @brief Verifies that matching and unknown installed sources keep the documented reconciliation commands.
+ * @details Runs a forced same-source default-channel upgrade and an unknown-source default-channel upgrade, asserting the documented npm `pi update` command without any removal spawn and without a pi CLI `--force` token. Deterministic: spawn, fetch, and resolver doubles; no network or child processes.
+ * @satisfies REQ-527, REQ-528, REQ-646, TST-202
  */
-test("same-source and unknown-source upgrades keep the documented pi update commands", async () => {
+test("same-source and unknown-source upgrades keep the documented reconciliation commands", async () => {
   const sameSource = createSpawnDouble();
   const sameSink = createStdoutSink();
   const sameExit = await runPackageManagerUpgradeCommand(
@@ -866,7 +892,7 @@ test("same-source and unknown-source upgrades keep the documented pi update comm
   );
   assert.equal(sameExit, 0);
   assert.equal(sameSource.calls.length, 1);
-  assert.deepEqual(sameSource.calls[0].args, [...PACKAGE_FORCED_UPGRADE_COMMAND.slice(1)]);
+  assert.deepEqual(sameSource.calls[0].args, [...PACKAGE_UPGRADE_COMMAND.slice(1)]);
   const unknown = createSpawnDouble();
   const unknownSink = createStdoutSink();
   const unknownExit = await runPackageManagerUpgradeCommand(
@@ -912,10 +938,10 @@ test("non-forced upgrade warns on stderr when the re-read installed version stay
 
 /**
  * @brief Verifies that a forced default-channel run skips the already-latest gate.
- * @details Uses an installed version equal to the registry latest so the non-forced path would print the already-latest skip line, then asserts the forced run spawns exactly the documented `pi update npm:pi-usereq --force` child with inherited stdio from the user home and prints the completion summary instead. Deterministic: spawn and fetch doubles, no network or child processes. Arrange prepares equal installed and latest versions; Act runs the forced upgrade; Assert compares the recorded child invocation plus stdout against the documented force contract.
- * @satisfies REQ-526, REQ-527
+ * @details Uses an installed version equal to the registry latest so the non-forced path would print the already-latest skip line, then asserts the forced run spawns exactly the documented `pi update npm:pi-usereq` child without a pi CLI `--force` token and prints the completion summary instead. Deterministic: spawn and fetch doubles, no network or child processes. Arrange prepares equal installed and latest versions; Act runs the forced upgrade; Assert compares the recorded child invocation plus stdout against the documented forced contract.
+ * @satisfies REQ-526, REQ-527, REQ-646
  */
-test("forced default-channel upgrade skips the already-latest gate and runs the pi update force command", async () => {
+test("forced default-channel upgrade skips the already-latest gate and runs the documented update command", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();
   const { logs, logger } = createLoggerDouble();
@@ -931,8 +957,8 @@ test("forced default-channel upgrade skips the already-latest gate and runs the 
   );
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].file, PACKAGE_FORCED_UPGRADE_COMMAND[0]);
-  assert.deepEqual(calls[0].args, [...PACKAGE_FORCED_UPGRADE_COMMAND.slice(1)]);
+  assert.equal(calls[0].file, PACKAGE_UPGRADE_COMMAND[0]);
+  assert.deepEqual(calls[0].args, [...PACKAGE_UPGRADE_COMMAND.slice(1)]);
   assert.equal(calls[0].options.cwd, homedir());
   assert.equal(calls[0].options.stdio, "inherit");
   assert.equal(calls[0].options.shell, process.platform === "win32");
@@ -950,11 +976,11 @@ test("forced default-channel upgrade propagates child failure without printing a
   );
   assert.equal(exitCode, 4);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args, [...PACKAGE_FORCED_UPGRADE_COMMAND.slice(1)]);
+  assert.deepEqual(calls[0].args, [...PACKAGE_UPGRADE_COMMAND.slice(1)]);
   assert.deepEqual(sink.chunks, []);
 });
 
-test("forced develop-channel upgrade runs the git pi update force command and prints the summary", async () => {
+test("forced develop-channel upgrade runs the tag-pinned install child and prints the summary", async () => {
   const { calls, spawn } = createSpawnDouble();
   const sink = createStdoutSink();
   const exitCode = await runPackageManagerUpgradeCommand(
@@ -973,12 +999,119 @@ test("forced develop-channel upgrade runs the git pi update force command and pr
   assert.equal(calls[0].file, "pi");
   assert.deepEqual(
     calls[0].args,
-    [...buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG, true).slice(1)],
+    [...buildPackageManagerInstallCommand(buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG)).slice(1)],
   );
   assert.equal(calls[0].options.cwd, homedir());
   assert.equal(calls[0].options.stdio, "inherit");
   assert.equal(calls[0].options.shell, process.platform === "win32");
   assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+});
+
+/**
+ * @brief Verifies the unpinned develop-channel reconciliation path.
+ * @details Reproduces the defect where `pi update <pinned-source>` resolves package identity only and then updates the configured unpinned entry, following the upstream branch and reporting an unchanged installation. The develop channel MUST instead run one tag-pinned `pi install` child whose install rewrites the same-identity settings entry and resets the checkout to the tag commit. Arrange injects spawn, GitHub probe, stdout, version-resolver, and launcher-repair doubles while the installed source resolves to the unpinned git source; Act runs the develop-channel upgrade; Assert verifies one tag-pinned install child, no update child, no `--force` token, and the completion summary.
+ * @satisfies REQ-482, REQ-641, REQ-644, REQ-645, TST-211
+ */
+test("develop-channel upgrade installs the pinned tag instead of updating the unpinned entry", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "0.109.1", channel: "develop" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      resolveInstalledSource: () => ({ kind: "git", source: PACKAGE_MANAGER_GIT_SOURCE }),
+      githubCheck: {
+        fetchImpl: createFetchJsonDouble({ tag_name: DEVELOP_RELEASE_TAG }).fetchImpl,
+      },
+      resolveUpgradedVersion: () => "1.6.0",
+      repairLauncher: () => {},
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].file, "pi");
+  assert.deepEqual(calls[0].args, [
+    "install",
+    buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG),
+  ]);
+  assert.equal(calls[0].args.includes("update"), false);
+  assert.equal(calls[0].args.includes("--force"), false);
+  assert.equal(calls[0].options.stdio, "inherit");
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 0.109.1 -> 1.6.0\n"]);
+});
+
+/**
+ * @brief Verifies pi-managed-first installed-version resolution for a source checkout.
+ * @details Points `PI_CODING_AGENT_DIR` at a temporary agent directory carrying a pi-managed git clone and npm installation, then asserts the resolver prefers the git root, falls back to the npm root when the git root is absent, and reports the pi-managed version instead of the executing checkout manifest. Deterministic: temporary filesystem roots; no network or child processes.
+ * @satisfies REQ-487, REQ-647, REQ-648, TST-212, TST-213
+ */
+test("installed version prefers the pi-managed installation for a source checkout", () => {
+  const agentDir = fs.mkdtempSync(path.join(tmpdir(), "pi-usereq-managed-home-"));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  const writeManifest = (root: string, version: string): void => {
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ name: "pi-usereq", version }), "utf8");
+  };
+  try {
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    const gitRoot = path.join(agentDir, "git", "github.com", "Ogekuri", "PI-useReq");
+    writeManifest(gitRoot, "0.109.1");
+    assert.equal(resolvePiManagedPackageManagerVersion(), "0.109.1");
+    assert.equal(resolvePackageManagerInstalledVersion(), "0.109.1");
+    const npmRoot = path.join(agentDir, "npm", "node_modules", "pi-usereq");
+    writeManifest(npmRoot, "0.110.0");
+    assert.equal(resolvePiManagedPackageManagerVersion(), "0.109.1");
+    fs.rmSync(gitRoot, { recursive: true, force: true });
+    assert.equal(resolvePiManagedPackageManagerVersion(), "0.110.0");
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+    fs.rmSync(agentDir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies that the develop-channel completion summary reports the pi-managed installation version.
+ * @details Reproduces the defect where a source-checkout invocation reported `upgrade completed: <starting> -> <starting>` because `<updated>` came from the executing checkout image. Arrange points `PI_CODING_AGENT_DIR` at a temporary agent directory whose pi-managed git clone carries the updated version, then runs the develop reconciliation with an injected spawn double; Assert verifies the summary reports the pi-managed version.
+ * @satisfies REQ-484, REQ-487, REQ-648, TST-212
+ */
+test("upgrade completion summary reports the pi-managed installation version", async () => {
+  const agentDir = fs.mkdtempSync(path.join(tmpdir(), "pi-usereq-update-home-"));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  try {
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    const gitRoot = path.join(agentDir, "git", "github.com", "Ogekuri", "PI-useReq");
+    fs.mkdirSync(gitRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(gitRoot, "package.json"),
+      JSON.stringify({ name: "pi-usereq", version: "0.109.4" }),
+      "utf8",
+    );
+    const { calls, spawn } = createSpawnDouble();
+    const sink = createStdoutSink();
+    const exitCode = await runPackageManagerUpgradeCommand(
+      { installedVersion: "0.109.1", channel: "develop" },
+      {
+        spawn,
+        stdout: sink.stdout,
+        githubCheck: { fetchImpl: createFetchJsonDouble({ tag_name: "v0.109.4" }).fetchImpl },
+      },
+    );
+    assert.equal(exitCode, 0);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 0.109.1 -> 0.109.4\n"]);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+    fs.rmSync(agentDir, { recursive: true, force: true });
+  }
 });
 
 test("uninstall command runs the documented uninstall child command", () => {
