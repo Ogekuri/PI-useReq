@@ -1,7 +1,18 @@
 # Changelog
 
-## [0.109.5](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.5) - 2026-11-13
+## [0.109.6](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.6) - 2026-11-13
 ### ⛰️  Features
+- add /req-continue chain continuation with Next-Workflow capture [useReq] *(next-workflow)*
+  Add src/core/next-workflow.ts: parse the ## **Next Workflow** section of the
+  final agent output, capture pi-usereq commands plus the /req-continue
+  exception into one process-scoped array, render the numbered retention list
+  with first-20/last-10 input quotation, and resolve one-based ordinals.
+  Capture at terminal completed agent_end before the retention notification
+  and clear the array on startup|reload idle-reset bootstrap boundaries.
+  Register /req-continue: reject the idle new state, empty arrays, and invalid
+  ordinals without workflow-state transitions; delegate the selected entry
+  through its registered handler exactly like a manual user invocation.
+  Requirements DES-040, REQ-653..REQ-664, TST-215..TST-218 plus 10 new tests.
 - Update prompts.
 
 ### 🐛  Bug Fixes
@@ -11,6 +22,12 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- resolve new/continue agentic flow at bootstrap and gate context-file injection [useReq] *(prompt-commands)*
+- pad the status request arrow with surrounding spaces [useReq] *(status-bar)*
+  REQ-632/TST-206 now require '<request> ➔ <state>' in the status field value.; PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR now renders ' ➔ ' instead of '➔'.; Refresh REQUIREMENTS, WORKFLOW, and REFERENCES for the padded separator.; Update status-bar expectations in the extension registration suite.
+- BREAKING CHANGE: suppress command-notify, sound, and pushover for non-agentic commands [useReq] *(notifications)*
+  Rewrite REQ-447 so completed or failed /req-references and /req-reset runs never dispatch command-notify, sound, or Pushover prompt-end effects, and drop the superseded REQ-448/REQ-449 output-line requirements.
+  Remove the non-agentic notification dispatcher plus the req-reset outcome-line and command-report serializer helpers, update README notification documentation, and replace the report-pushing test with a no-dispatch test covering completed and failed non-agentic runs.
 - BREAKING CHANGE: install the develop release tag and report pi-managed versions [useReq] *(package-manager)*
   Requirements: REQ-482/REQ-641 mandate the tag-pinned develop 'pi install' reconciliation child; REQ-527/REQ-646 drop extension force-reinstall claims; REQ-487/REQ-647/REQ-648 add pi-managed-first installed-version resolution; TST-211..TST-213 added.; Source: run the tag-pinned install child for same-source develop upgrades, remove PACKAGE_FORCED_UPGRADE_COMMAND and the develop update command builder, gate only the default-channel already-latest probe on --force, and resolve 'Current Installed' plus the completion summary from the pi-managed git then npm roots.; Tests: cover the unpinned develop-channel reconciliation path and pi-managed-first installed-version resolution.
 - make npm ci toolchain provisioning opt-in via --install [useReq] *(pre-release-check)*
@@ -1472,7 +1489,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.5\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.5
+- \[0.109.6\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.6
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1581,4 +1598,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.5]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.5
+[0.109.6]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.6
