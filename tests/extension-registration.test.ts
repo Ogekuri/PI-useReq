@@ -550,11 +550,12 @@ function buildExpectedFakeExtensionIdentityStatusField(): string {
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
  * @details Reconstructs the runtime extension identity prefix, workflow-state highlighting through `buildExpectedFakeWorkflowStateValue(...)` so `error` and `warning` share the blinking error token, branch field, icon-based context gauge, consolidated elapsed field, and sound field emitted by the extension using deterministic fake theme markers. Runtime is O(1) plus optional git execution for branch discovery. No external state is mutated.
- * @param[in] options {{ workflowState?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered runtime extension prefix, `status`, `branch`, `context`, `elapsed`, and `sound` fields.
+ * @param[in] options {{ workflowState?: string; workflowRequest?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered runtime extension prefix, `status`, `branch`, `context`, `elapsed`, and `sound` fields.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
   workflowState?: string;
+  workflowRequest?: string;
   basePath?: string;
   docsDir?: string;
   testsDir?: string;
@@ -567,7 +568,10 @@ function buildExpectedFakeStatusText(options: {
   const buildField = (fieldName: string, value: string): string =>
     `${formatFakeThemeForeground("accent", `${fieldName}:`)}${formatFakeThemeForeground("warning", value)}`;
   const workflowStateText = options.workflowState ?? "idle";
-  const workflowStateValue = buildExpectedFakeWorkflowStateValue(workflowStateText);
+  const workflowStateValue = buildExpectedFakeWorkflowStateValue(
+    workflowStateText,
+    options.workflowRequest,
+  );
   const branchValue = buildExpectedFakeBranchValue(options.basePath);
   const contextBar = buildExpectedFakeContextBar({
     filledCells: options.contextFilledCells,
@@ -2338,7 +2342,7 @@ test("prompt debug logging captures failing and successful prompt orchestration 
   assert.ok(successLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "worktree_delete" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "merging"));
-  assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "idle"));
+  assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "done"));
   setRuntimeDebugEnabled("disable");
 });
 
@@ -3495,12 +3499,13 @@ test("req-references updates REFERENCES.md with a direct commit workflow and no 
       "",
     );
     assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
-    assert.ok(recordedStatuses.every((status) => !/<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>references►running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.every((status) => !/<accent>status:<\/accent><warning>references►merging<\/warning>/.test(status)));
     assert.equal(
       finalStatus,
       buildExpectedFakeStatusText({
-        workflowState: "idle",
+        workflowState: "done",
+        workflowRequest: "references",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: "docs/custom",
         testsDir: "tests",
@@ -3710,6 +3715,7 @@ test("req-references surfaces git-validation and reference-generation failures w
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "references",
         basePath: buildExpectedFakeBasePath(gitFailure.projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -3768,11 +3774,12 @@ test("req-references surfaces git-validation and reference-generation failures w
     assert.equal(pi.sentUserMessages.length, 0);
     assert.deepEqual(createdWorktreeEntries, []);
     assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /EISDIR|illegal operation on a directory/i.test(entry.message)));
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>references►running<\/warning>/.test(status)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "references",
         basePath: buildExpectedFakeBasePath(sourceFailure.projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -3841,7 +3848,7 @@ test("req-references writes the no-source REFERENCES.md placeholder without sour
       spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
       "",
     );
-    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>idle<\/warning>/);
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>references►done<\/warning>/);
     assert.ok(ctx.__state.notifications.some((entry: { message: string }) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
@@ -3878,7 +3885,7 @@ test("req-workflow writes the no-source WORKFLOW.md placeholder without dispatch
         .filter((entry) => /^PI-useReq-/.test(entry)),
       [],
     );
-    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>idle<\/warning>/);
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>workflow►done<\/warning>/);
     assert.ok(ctx.__state.notifications.some((entry: { message: string }) => /no analyzable source file detected/.test(entry.message)));
     const statusLines = spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" })
       .stdout.trim().split(/\r?\n/);
@@ -3926,7 +3933,7 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
     assert.equal(fs.existsSync(executionBasePath), true);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>status:<\/accent><warning>running<\/warning>/,
+      /<accent>status:<\/accent><warning>change►running<\/warning>/,
     );
 
     fs.appendFileSync(
@@ -3964,6 +3971,7 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "idle",
+        workflowRequest: "reset",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4008,7 +4016,7 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
 
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>status:<\/accent><warning>running<\/warning>/,
+      /<accent>status:<\/accent><warning>change►running<\/warning>/,
     );
 
     ctx.switchSession = async (_sessionPath: string) => ({ cancelled: true });
@@ -4036,6 +4044,7 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "reset",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4123,6 +4132,7 @@ test("req-reset switches the main worktree off generated branches before removin
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "idle",
+        workflowRequest: "reset",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4189,6 +4199,7 @@ test("req-reset removes generated worktrees when invoked from inside a leftover 
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "idle",
+        workflowRequest: "reset",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4455,6 +4466,7 @@ test("prompt commands capture checking before handoff and running at prompt inje
       checkingStatus,
       buildExpectedFakeStatusText({
         workflowState: "checking",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4467,6 +4479,7 @@ test("prompt commands capture checking before handoff and running at prompt inje
       handoffStatus,
       buildExpectedFakeStatusText({
         workflowState: "checking",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4479,6 +4492,7 @@ test("prompt commands capture checking before handoff and running at prompt inje
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "running",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4522,6 +4536,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "running",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4544,6 +4559,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4566,6 +4582,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4582,7 +4599,8 @@ test("req commands except req-reset reject non-idle workflow state and transitio
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
-        workflowState: "idle",
+        workflowState: "done",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4632,6 +4650,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "running",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4654,6 +4673,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4691,7 +4711,8 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
-        workflowState: "idle",
+        workflowState: "done",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4699,6 +4720,116 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
         contextFilledCells: 0,
         et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
       }),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies request-token status rendering and the `done` terminal default across consecutive orchestrations.
+ * @details Starts from the request-less bootstrap `idle` state, runs one completed non-worktree orchestration, asserts the rendered `<request>►<state>` value for the running and `done` states, then starts a second orchestration directly from `done` and asserts the `done` -> `running` transition renders the new request token. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and in-memory status capture.
+ * @return {Promise<void>} Promise resolved after status-value assertions complete.
+ * @throws {AssertionError} Throws when the status value omits the request token, stays `idle` after completion, or blocks a `done` -> `running` start.
+ * @satisfies REQ-627, REQ-630, REQ-632, REQ-633, REQ-634, REQ-638, TST-206
+ */
+test("workflow status renders request tokens and the done terminal default", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
+    );
+
+    await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "running",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      }),
+    );
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+      }),
+    );
+
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "running",
+        workflowRequest: "change",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+      }),
+    );
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "change",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+      }),
+    );
+
+    await pi.emit("session_start", { reason: "new" }, ctx);
+    assert.equal(
+      ctx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "change",
+        basePath: buildExpectedFakeBasePath(projectBase),
+        docsDir: DEFAULT_DOCS_DIR,
+        testsDir: "tests",
+        srcDir: ["src"],
+        contextFilledCells: 0,
+        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+      }),
+    );
+    await pi.emit("session_start", { reason: "reload" }, ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
     );
   } finally {
     process.chdir(previousCwd);
@@ -4726,6 +4857,7 @@ test("prompt commands abort when git validation fails", async () => {
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "analyze",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4806,7 +4938,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     );
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(ctx.cwd, executionBasePath);
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change►running<\/warning>/.test(status)));
     assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", worktreeName)}`)));
 
     await pi.emit("before_agent_start", {}, ctx);
@@ -4842,10 +4974,10 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
       0,
     );
     assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change►merging<\/warning>/.test(status)));
     assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", originalBranchName)}`)));
     const finalStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
-    assert.match(finalStatus, /<accent>status:<\/accent><warning>idle<\/warning>/);
+    assert.match(finalStatus, /<accent>status:<\/accent><warning>change►done<\/warning>/);
     assert.ok(finalStatus.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", originalBranchName)}`));
   } finally {
     process.chdir(previousCwd);
@@ -5127,9 +5259,9 @@ test("worktree-backed finalization transitions through merging, error, and idle 
       }).status,
       0,
     );
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>merging<\/warning>/.test(status)));
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><error>\u001b\[5merror\u001b\[25m<\/error>/.test(status)));
-    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><warning>idle<\/warning>/);
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change►merging<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><error>\u001b\[5mchange►error\u001b\[25m<\/error>/.test(status)));
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><error>\u001b\[5mchange►error\u001b\[25m<\/error>/);
     assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /Fast-forward merge failed/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
@@ -5206,6 +5338,7 @@ test("worktree-backed prompt failures keep the worktree session, retain worktree
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -6504,6 +6637,7 @@ test("replacement-session prompt delivery persists running before async sendUser
       handoffStatus,
       buildExpectedFakeStatusText({
         workflowState: "checking",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -6516,6 +6650,7 @@ test("replacement-session prompt delivery persists running before async sendUser
       firstCtx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "running",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -8192,6 +8327,8 @@ test("prompt-end pushover renders unbounded minute durations for long uninterrup
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
         basePath: buildExpectedFakeBasePath(cwd),
         contextFilledCells: 0,
         et: "⏱︎ --:-- ⚑ 360:00 ⌛︎360:00",
@@ -8212,6 +8349,8 @@ test("prompt-end pushover renders unbounded minute durations for long uninterrup
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(cwd),
         contextFilledCells: 0,
         et: "⏱︎ --:-- ⚑ 1440:00 ⌛︎1800:00",
@@ -8340,6 +8479,8 @@ test("agent_end pushover reports the aborted run's own duration and preserves co
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        workflowState: "error",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(cwd),
         contextFilledCells: 0,
         et: "⏱︎ --:-- ⚑ 2:00 ⌛︎2:00",
@@ -8633,6 +8774,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     }, ctx);
     assert.equal(recordedRequests.length, 0);
 
+    await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
     nowMs = 20_000;
     await pi.commands.get("req-create")!.handler("Create docs", ctx);
@@ -8679,6 +8821,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
     assert.equal(abortedParams.get("title"), `change @ ${buildExpectedNotifyBasePath(cwd)} [0:02]`);
     assert.equal(abortedParams.get("message"), `${buildExpectedNotifyResult("aborted")} | Adjust docs`);
 
+    await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedRequests.length = 0;
     nowMs = 40_000;
     await pi.commands.get("req-write")!.handler("Write docs", ctx);
@@ -8902,6 +9045,7 @@ test("command notify routes through PI_NOTIFY_CMD placeholders and per-event tog
     );
     assert.match(recordedCommands[0] ?? "", new RegExp(buildExpectedNotifyResult("aborted")));
 
+    await pi.emit("session_start", { reason: "startup" }, ctx);
     recordedCommands.length = 0;
     nowMs = 30_000;
     await pi.commands.get("req-write")!.handler("Write docs", ctx);
@@ -9196,12 +9340,16 @@ test("configuration menu can add guided static-check entries for explicit suppor
  * @brief Renders the expected fake workflow-state value token.
  * @details Maps `error` and `warning` to the blinking `error` theme token shared by REQ-223 and REQ-590 and renders every other state with the standard non-error `warning` value token. Runtime is O(1). No external state is mutated.
  * @param[in] workflowState {string} Workflow state rendered inside the `status` field.
+ * @param[in] workflowRequest {string | undefined} Active orchestration request token without the `req-` prefix.
  * @return {string} Encoded fake workflow-state value.
  */
-function buildExpectedFakeWorkflowStateValue(workflowState: string): string {
+function buildExpectedFakeWorkflowStateValue(workflowState: string, workflowRequest?: string): string {
+  const valueText = workflowRequest !== undefined
+    ? `${workflowRequest}►${workflowState}`
+    : workflowState;
   return workflowState === "error" || workflowState === "warning"
-    ? formatFakeThemeForeground("error", `\u001b[5m${workflowState}\u001b[25m`)
-    : formatFakeThemeForeground("warning", workflowState);
+    ? formatFakeThemeForeground("error", `\u001b[5m${valueText}\u001b[25m`)
+    : formatFakeThemeForeground("warning", valueText);
 }
 
 /**
@@ -9305,10 +9453,11 @@ async function startStatusMarkerClosureRun(worktreeFileName: string): Promise<St
  * @brief Builds the expected encoded `status` fragment of one rendered workflow state.
  * @details Reuses the fake theme encoder so assertions target the rendered `status:` field without reconstructing unrelated branch, context, elapsed, or sound fields. Runtime is O(1). No external state is mutated.
  * @param[in] workflowState {string} Workflow state expected in the rendered status bar.
+ * @param[in] workflowRequest {string | undefined} Active orchestration request token without the `req-` prefix.
  * @return {string} Encoded `status:` fragment.
  */
-function buildExpectedFakeStatusFieldFragment(workflowState: string): string {
-  return `${formatFakeThemeForeground("accent", "status:")}${buildExpectedFakeWorkflowStateValue(workflowState)}`;
+function buildExpectedFakeStatusFieldFragment(workflowState: string, workflowRequest?: string): string {
+  return `${formatFakeThemeForeground("accent", "status:")}${buildExpectedFakeWorkflowStateValue(workflowState, workflowRequest)}`;
 }
 
 /**
@@ -9341,7 +9490,7 @@ test("status-marker closure merges and deletes the worktree plus branch for a ST
       0,
     );
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("idle"))),
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
       "expected a rendered idle workflow state after STATUS: OK closure",
     );
     assert.equal(
@@ -9382,8 +9531,12 @@ test("status-marker closure retains the worktree and parks error for a STATUS: E
       0,
     );
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error"))),
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
       "expected a rendered blinking error workflow state after STATUS: ERROR closure",
+    );
+    await assert.rejects(
+      run.pi.commands.get("req-analyze")!.handler("Inspect src", run.commandCtx),
+      /expected idle or done/,
     );
     assert.ok(
       run.eventCtx.__state.notifications.some(
@@ -9427,8 +9580,12 @@ test("status-marker closure retains the worktree and parks blinking warning when
       0,
     );
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning"))),
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning", "change"))),
       "expected a rendered blinking warning workflow state when no marker is present",
+    );
+    await assert.rejects(
+      run.pi.commands.get("req-analyze")!.handler("Inspect src", run.commandCtx),
+      /expected idle or done/,
     );
     assert.ok(
       run.eventCtx.__state.notifications.some(
@@ -9473,7 +9630,7 @@ test("status-marker closure stays merge-eligible when the final assistant messag
       0,
     );
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("idle"))),
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
       "expected a rendered idle workflow state for a text-less terminal message",
     );
   } finally {
@@ -9506,7 +9663,7 @@ test("status-marker closure resolves dual-marker output to the last occurring ma
     assert.equal(fs.existsSync(run.executionBasePath), true);
     assert.equal(fs.existsSync(path.join(run.projectBase, "src", "status-dual.ts")), false);
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error"))),
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
       "expected the later STATUS: ERROR occurrence to select the error gate",
     );
   } finally {
@@ -9534,7 +9691,7 @@ test("status-marker closure lets the last agent_end run overwrite the recorded m
 
     assert.equal(fs.existsSync(errorAfterOk.executionBasePath), true);
     assert.ok(
-      errorAfterOk.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning"))),
+      errorAfterOk.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning", "change"))),
       "expected the later markerless run to replace the earlier STATUS: OK candidate",
     );
   } finally {
@@ -9555,7 +9712,7 @@ test("status-marker closure lets the last agent_end run overwrite the recorded m
     assert.ok(fs.existsSync(path.join(okAfterError.projectBase, "src", "status-overwrite-ok.ts")));
     assert.equal(fs.existsSync(okAfterError.executionBasePath), false);
     assert.ok(
-      okAfterError.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("idle"))),
+      okAfterError.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
       "expected the later STATUS: OK run to replace the earlier STATUS: ERROR candidate",
     );
   } finally {
@@ -9582,7 +9739,7 @@ test("status-marker closure inspects only the final assistant message of the ter
     assert.equal(fs.existsSync(run.executionBasePath), true);
     assert.equal(fs.existsSync(path.join(run.projectBase, "src", "status-earlier-message.ts")), false);
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning"))),
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning", "change"))),
       "expected an earlier-message STATUS: OK marker to remain uninspected",
     );
   } finally {
