@@ -52,11 +52,14 @@ import {
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
   condenseNextWorkflowInputText,
+  formatNextWorkflowFullList,
   formatNextWorkflowList,
   getNextWorkflowCommands,
+  NEXT_WORKFLOW_EMPTY_LIST_TEXT,
   parseNextWorkflowCommandEntries,
   registerNextWorkflowCommandHandler,
   REQ_CONTINUE_COMMAND_DESCRIPTION,
+  REQ_CONTINUE_LIST_COMMAND_DESCRIPTION,
   resetNextWorkflowStateForTests,
   resolveNextWorkflowEntryIndex,
 } from "../src/core/next-workflow.js";
@@ -1082,6 +1085,26 @@ test("req-reset registers outside the bundled prompt inventory and keeps its ded
   assert.equal(
     pi.commands.get("req-reset")?.description,
     REQ_RESET_COMMAND_DESCRIPTION,
+  );
+});
+
+/**
+ * @brief Verifies `req-continue-list` registration is independent from bundled prompt inventory.
+ * @details Confirms `continue-list` is absent from `PROMPT_COMMAND_NAMES` while extension activation still registers `req-continue-list` with the fixed dedicated description. Runtime is O(1). Side effects are limited to extension registration.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when `continue-list` remains in the bundled prompt inventory or the command description diverges.
+ * @satisfies TST-222
+ */
+test("req-continue-list registers outside the bundled prompt inventory and keeps its dedicated description", () => {
+  const bundledPromptNames = PROMPT_COMMAND_NAMES as readonly string[];
+  assert.equal(bundledPromptNames.includes("continue-list"), false);
+
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  assert.equal(
+    pi.commands.get("req-continue-list")?.description,
+    REQ_CONTINUE_LIST_COMMAND_DESCRIPTION,
   );
 });
 
@@ -10011,6 +10034,112 @@ test("req-continue delegates the selected first or ordinal entry through the reg
       /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
     );
     assert.equal(pi.sentUserMessages.length, 0);
+  } finally {
+    resetNextWorkflowStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-continue-list` prints the complete captured Next-Workflow list without notifications or state transitions from every workflow state.
+ * @details Activates the extension on a no-source fixture, asserts the empty-array editor payload equals the documented placeholder with no new notifications and the `idle` state preserved, captures two entries whose long input text exceeds the condensed-quotation limit, asserts the editor payload renders every entry in capture order with the full untruncated input text while the captured array stays unchanged, reaches `done` through the no-source `req-workflow` placeholder path and prints again from the `done` state without new notifications or state change, parks the workflow state in `error` through a dirty `req-references` validation and prints again from the `error` state without new notifications, state change, or array mutation. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation, fake editor-text mutation, and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after print and state-preservation assertions complete.
+ * @throws {AssertionError} Throws when the printed list truncates, collapses, or reorders captured input text, emits a new notification, mutates the workflow state, or mutates the captured Next-Workflow array.
+ * @satisfies REQ-672, REQ-673, REQ-674, REQ-675, REQ-676, TST-223, TST-224
+ */
+test("req-continue-list prints the full captured list from every workflow state without notifications or state changes", async () => {
+  resetNextWorkflowStateForTests();
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const notificationsAfterStartup = ctx.__state.notifications.length;
+
+    const listCommand = pi.commands.get("req-continue-list");
+    assert.ok(listCommand, "missing req-continue-list registration");
+
+    // REQ-676: the empty array prints the documented placeholder through the editor only.
+    await listCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, NEXT_WORKFLOW_EMPTY_LIST_TEXT);
+    assert.equal(NEXT_WORKFLOW_EMPTY_LIST_TEXT, "No captured Next-Workflow commands.");
+    assert.equal(ctx.__state.notifications.length, notificationsAfterStartup);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
+    );
+
+    const fullInputText = "Fix the flaky retry path in the orchestrator loop and verify every regression suite stays green";
+    const captureOutput = [
+      "## **Next Workflow**",
+      "~~~text",
+      "/req-fix",
+      fullInputText,
+      "~~~",
+      "",
+      "~~~text",
+      "/req-check",
+      "~~~",
+    ].join("\n");
+    captureNextWorkflowCommands(captureOutput);
+    const expectedList = `1. /req-fix "${fullInputText}"\n2. /req-check`;
+
+    // REQ-672: full untruncated input text in capture order; the condensed retention
+    // quotation would render `Fix the flaky retry ... stays green` instead.
+    assert.notEqual(condenseNextWorkflowInputText(fullInputText), fullInputText);
+    await listCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, expectedList);
+    assert.equal(ctx.__state.notifications.length, notificationsAfterStartup);
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-fix", "req-check"],
+    );
+
+    // REQ-675: runnable from the `done` terminal state without transitions; the no-source
+    // capture boundary is re-established so the printed list stays independent from it.
+    await pi.commands.get("req-workflow")!.handler("", ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+    captureNextWorkflowCommands(captureOutput);
+    const notificationsBeforeDonePrint = ctx.__state.notifications.length;
+    await listCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, expectedList);
+    assert.equal(ctx.__state.notifications.length, notificationsBeforeDonePrint);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-fix", "req-check"],
+    );
+
+    // REQ-675: runnable from the `error` state without transitions; the captured array
+    // survives the failing `req-references` git validation unchanged (REQ-674).
+    fs.writeFileSync(path.join(projectBase, "dirty.txt"), "dirty\n");
+    await assert.rejects(
+      pi.commands.get("req-references")!.handler("", ctx),
+      /Git status unclear/,
+    );
+    const notificationsAfterError = ctx.__state.notifications.length;
+    assert.ok(notificationsAfterError > notificationsBeforeDonePrint);
+    await listCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, expectedList);
+    assert.equal(ctx.__state.notifications.length, notificationsAfterError);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>\u001b\[5mreferences ➔ error\u001b\[25m<\/error>/,
+    );
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-fix", "req-check"],
+    );
   } finally {
     resetNextWorkflowStateForTests();
     process.chdir(previousCwd);

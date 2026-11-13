@@ -4,9 +4,11 @@ import {
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
   condenseNextWorkflowInputText,
+  formatNextWorkflowFullList,
   formatNextWorkflowList,
   getNextWorkflowCommands,
   NEXT_WORKFLOW_COMMAND_NAMES,
+  NEXT_WORKFLOW_EMPTY_LIST_TEXT,
   parseNextWorkflowCommandEntries,
   registerNextWorkflowCommandHandler,
   REQ_CONTINUE_COMMAND_DESCRIPTION,
@@ -121,6 +123,29 @@ test("next-workflow list rendering prints one numbered command per line", () => 
   ]);
   assert.equal(rendered, "1. /req-fix \"Fix the flaky retry ...rator loop\"\n2. /req-check");
   assert.equal(formatNextWorkflowList([]), "");
+});
+
+/**
+ * @brief Verifies the full-list rendering contract backing `/req-continue-list`.
+ * @details Asserts the list numbers entries from one in capture order, renders commands without input text as bare slash commands, renders input text verbatim in double quotes without condensation truncation or whitespace collapsing including embedded newlines, and returns the documented empty-list placeholder for an empty entry array. Runtime is O(n) in entry length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when the full list truncates, collapses, or reorders captured input text or breaks the empty-array placeholder contract.
+ * @satisfies REQ-672, REQ-676, TST-223
+ */
+test("next-workflow full list rendering prints complete input text for req-continue-list", () => {
+  const longInputText = "Fix the flaky retry path in the orchestrator loop and verify every regression suite stays green";
+  assert.notEqual(condenseNextWorkflowInputText(longInputText), longInputText);
+  const rendered = formatNextWorkflowFullList([
+    { command: "req-fix", inputText: longInputText },
+    { command: "req-check", inputText: "" },
+    { command: "req-new", inputText: "first line\nsecond line" },
+  ]);
+  assert.equal(
+    rendered,
+    `1. /req-fix "${longInputText}"\n2. /req-check\n3. /req-new "first line\nsecond line"`,
+  );
+  assert.equal(formatNextWorkflowFullList([]), NEXT_WORKFLOW_EMPTY_LIST_TEXT);
+  assert.equal(NEXT_WORKFLOW_EMPTY_LIST_TEXT, "No captured Next-Workflow commands.");
 });
 
 /**

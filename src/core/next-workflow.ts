@@ -1,8 +1,8 @@
 /**
  * @file
- * @brief Implements Next-Workflow command capture, process-scoped storage, list rendering, and `/req-continue` selection helpers.
+ * @brief Implements Next-Workflow command capture, process-scoped storage, list rendering, `/req-continue` selection, and `/req-continue-list` printing helpers.
  * @details Parses the `## **Next Workflow**` section of the final agent output for `~~~text` fenced command blocks, captures pi-usereq slash commands plus input-text pairs into one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the numbered list appended after the final context-retention notification, resolves one-based ordinal selection, and stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation. Runtime is O(n) in inspected output length per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
- * @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663
+ * @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-672, REQ-676
  */
 
 import { ReqError } from "./errors.js";
@@ -50,6 +50,14 @@ const NEXT_WORKFLOW_COMMAND_SET: ReadonlySet<string> = new Set(NEXT_WORKFLOW_COM
  */
 export const REQ_CONTINUE_COMMAND_DESCRIPTION =
   "Continue the previous agentic workflow with a captured Next-Workflow command";
+
+/**
+ * @brief Stores the dedicated `/req-continue-list` slash-command description.
+ * @details Rendered verbatim by the extension command registration so `/req-continue-list` never depends on a bundled prompt Markdown heading. Access complexity is O(1).
+ * @satisfies REQ-671
+ */
+export const REQ_CONTINUE_LIST_COMMAND_DESCRIPTION =
+  "Print the full captured Next-Workflow command list";
 
 /**
  * @brief Describes one captured Next-Workflow command entry.
@@ -295,6 +303,36 @@ export function formatNextWorkflowList(entries: readonly NextWorkflowCommandEntr
       const commandText = `/${entry.command}`;
       const inputText = condenseNextWorkflowInputText(entry.inputText);
       return inputText === "" ? `${index + 1}. ${commandText}` : `${index + 1}. ${commandText} "${inputText}"`;
+    })
+    .join("\n");
+}
+
+/**
+ * @brief Stores the empty-list placeholder printed by `/req-continue-list` when no Next-Workflow entry is captured.
+ * @details Returned verbatim by `formatNextWorkflowFullList` so the `/req-continue-list` editor payload stays deterministic for empty arrays. Access complexity is O(1).
+ * @satisfies REQ-676
+ */
+export const NEXT_WORKFLOW_EMPTY_LIST_TEXT = "No captured Next-Workflow commands.";
+
+/**
+ * @brief Renders the complete numbered Next-Workflow entry list with full input text for `/req-continue-list`.
+ * @details Emits one numbered line per captured entry in capture order, formatting commands without input text as the bare slash command and commands with input text as the slash command plus one double-quoted input text rendered verbatim without truncation or whitespace collapsing, so the printed list exposes the exact argument text that `/req-continue` delegates to the selected command. Returns `NEXT_WORKFLOW_EMPTY_LIST_TEXT` when no entry is captured. Runtime is O(n) in aggregate entry length. No external state is mutated.
+ * @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
+ * @return {string} Newline-delimited numbered list with full input text, or `NEXT_WORKFLOW_EMPTY_LIST_TEXT` when no entry exists.
+ * @satisfies REQ-672, REQ-676
+ * @note Complexity: O(n) in aggregate entry length. Pure; no side effects.
+ * @see formatNextWorkflowList
+ */
+export function formatNextWorkflowFullList(entries: readonly NextWorkflowCommandEntry[]): string {
+  if (entries.length === 0) {
+    return NEXT_WORKFLOW_EMPTY_LIST_TEXT;
+  }
+  return entries
+    .map((entry, index) => {
+      const commandText = `/${entry.command}`;
+      return entry.inputText === ""
+        ? `${index + 1}. ${commandText}`
+        : `${index + 1}. ${commandText} "${entry.inputText}"`;
     })
     .join("\n");
 }
