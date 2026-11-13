@@ -216,6 +216,7 @@ import {
   isPiUsereqWorkflowStartable,
   isStaleExtensionContextError,
   renderPiUsereqStatus,
+  resynchronizePersistedTerminalWorkflowState,
   resolveModelContextWindowTokens,
   setPiUsereqRuntimeSoundLevel,
   setPiUsereqStatusConfig,
@@ -3647,7 +3648,7 @@ function resolveReqResetPromptRequest(
 
 /**
  * @brief Registers the specialized `req-reset` slash command.
- * @details Registers the non-agentic prompt-recovery command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, force-removes matching generated worktrees plus branches, clears recoverable prompt state when restoration succeeds, notifies pi without starting an LLM session or creating a worktree, and dispatches no command-notify, sound, or Pushover prompt-end effect. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and UI notifications.
+ * @details Registers the non-agentic prompt-recovery command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, force-removes matching generated worktrees plus branches, clears recoverable prompt state and the captured Next-Workflow array when restoration succeeds so the `idle` boundary matches the bootstrap boundary, notifies pi without starting an LLM session or creating a worktree, and dispatches no command-notify, sound, or Pushover prompt-end effect. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -3711,6 +3712,11 @@ function registerReqResetCommand(
       }
 
       setPiUsereqWorkflowState(statusController, "idle", resetContext);
+      // The `idle` terminal state is the /req-reset boundary (REQ-633) whose "new flow"
+      // semantics mean no previous agentic flow exists in context (REQ-660), so the
+      // captured Next-Workflow array of the recovered flow is dropped together with the
+      // workflow state exactly like the startup|reload bootstrap boundary already does.
+      clearNextWorkflowCommands();
       const successMessage = executionPlan.promptRequest !== undefined
         ? `SUCCESS: req-reset restored base-path and removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es).`
         : `SUCCESS: req-reset removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es) and restored idle state.`;
@@ -3800,7 +3806,7 @@ function registerReqReferencesCommand(
 
 /**
  * @brief Registers the specialized `req-continue` slash command.
- * @details Registers the dedicated chain-continuation command that requires an already-started agentic flow: non-startable workflow states are rejected through the shared busy-state rejection, the `idle` bootstrap state ("new" flow) and an empty Next-Workflow array terminate with a deterministic error without any operation and without transitioning the workflow state, a missing numeric ordinal selects the first captured entry, a numeric ordinal selects the one-based entry, and the selected pi-usereq command is executed through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every workflow-state transition, so `/req-continue` itself never terminates with the `continue` to `done` transition. Runtime is O(1) for registration; handler cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
+ * @details Registers the dedicated chain-continuation command that requires an already-started agentic flow: a stale idle replacement runtime first resynchronizes from the persisted terminal workflow state so the completed flow that exists in context is observed, non-startable workflow states are rejected through the shared busy-state rejection, the `idle` bootstrap state ("new" flow) and an empty Next-Workflow array terminate with a deterministic error without any operation and without transitioning the workflow state, a missing numeric ordinal selects the first captured entry, a numeric ordinal selects the one-based entry, and the selected pi-usereq command is executed through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every workflow-state transition, so `/req-continue` itself never terminates with the `continue` to `done` transition. Runtime is O(1) for registration; handler cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -3811,6 +3817,12 @@ function registerReqContinueCommand(
   statusController: PiUsereqStatusController,
 ): void {
   const continueCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+    // A replacement extension runtime bound by the closure's base-session restoration can
+    // stay parked on the bootstrap `idle` state when its `session_start` fired while the
+    // persisted state was still in flight; REQ-660 defines the rejection state as "no
+    // previous agentic flow exists in context", so resynchronize from the authoritative
+    // process-scoped terminal state before gating.
+    resynchronizePersistedTerminalWorkflowState(statusController, ctx);
     if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
       rejectNonIdleReqCommand(statusController, ctx);
     }
@@ -3850,7 +3862,7 @@ function registerReqContinueCommand(
 
 /**
  * @brief Registers bundled prompt-backed commands with the extension.
- * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler rejects non-startable workflow state by transitioning the shared workflow state to `error` before command-side preflight, resolves the agentic-flow kind (`new` for the `idle` bootstrap state, `continue` for any other startable state) before the `checking` transition, otherwise records the prompt name as the active request and transitions the shared workflow state through `checking`, `error`, `running`, and `done`, inspects the configured `src-dir` git file inventory for `req-workflow` and writes the no-source `WORKFLOW.md` placeholder plus `done` terminal state when no supported source file exists, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt with flow-gated context-file injection, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact command invocation summary plus the delivered prompt content into the debug prompt log path as separate `-request` and `-prompt` files when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-debug file creation, user-message delivery during execution, and optional debug-log writes.
+ * @details Creates one prompt-template-backed `req-<prompt>` command per bundled prompt name. Each handler resynchronizes a stale idle replacement runtime from the persisted terminal workflow state before gating, rejects non-startable workflow state by transitioning the shared workflow state to `error` before command-side preflight, resolves the agentic-flow kind (`new` for the `idle` bootstrap state, `continue` for any other startable state) before the `checking` transition, otherwise records the prompt name as the active request and transitions the shared workflow state through `checking`, `error`, `running`, and `done`, inspects the configured `src-dir` git file inventory for `req-workflow` and writes the no-source `WORKFLOW.md` placeholder plus `done` terminal state when no supported source file exists, runs dedicated prompt-command git and required-doc preflight checks, optionally prepares a dedicated worktree execution plan using the active session directory, persists the prompt metadata needed for switch-triggered rebinding, switches the active session to the verified execution cwd before prompt handoff, logs dedicated workflow-activation diagnostics, renders the prompt with flow-gated context-file injection, starts prompt delivery into the forked active session, records `running` immediately after delivery handoff begins, saves the exact command invocation summary plus the delivered prompt content into the debug prompt log path as separate `-request` and `-prompt` files when prompt debug logging is enabled, and then awaits the wrapped prompt-delivery promise whose stale post-restore rejections are suppressed. Runtime is O(p) for registration; handler cost depends on prompt preflight, worktree preparation, session switching, prompt rendering, prompt dispatch, and optional debug logging. Side effects include command registration, status-controller mutation, worktree creation, active-session replacement, optional worktree rollback, optional prompt-debug file creation, user-message delivery during execution, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
@@ -3862,6 +3874,11 @@ function registerPromptCommands(
 ): void {
   PROMPT_COMMAND_NAMES.forEach((promptName) => {
     const promptCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+        // A replacement extension runtime bound by a session replacement can stay parked on
+        // the bootstrap `idle` state after the initiating instance persisted its terminal
+        // transition; resynchronize so the startability gate and the REQ-649 agentic-flow
+        // kind observe the completed flow that already exists in context.
+        resynchronizePersistedTerminalWorkflowState(statusController, ctx);
         if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
           rejectNonIdleReqCommand(statusController, ctx, promptName);
         }

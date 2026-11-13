@@ -73,10 +73,12 @@ import {
   preparePromptCommandExecution,
   restorePromptCommandExecution,
   setPromptCommandPostCreateHookForTests,
+  type PromptCommandExecutionPlan,
 } from "../src/core/prompt-command-runtime.js";
 import {
   clearPersistedPromptCommandRuntimeState,
   readPersistedPromptCommandSessionContext,
+  writePersistedPromptCommandRuntimeState,
 } from "../src/core/prompt-command-state.js";
 import {
   comparePiUsereqStartupToolNames,
@@ -3945,6 +3947,17 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
 
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
 
+    // The recovered flow's captured follow-up commands must reach the reset boundary so
+    // the successful reset can drop them together with the workflow state.
+    captureNextWorkflowCommands([
+      "## **Next Workflow**",
+      "~~~text",
+      "/req-fix",
+      "Fix the flaky retry path in the orchestrator loop",
+      "~~~",
+    ].join("\n"));
+    assert.equal(getNextWorkflowCommands().length, 1);
+
     const sentMessageCountBeforeReset = pi.sentUserMessages.length;
     const promptText = String(pi.sentUserMessages[0]?.content ?? "");
     const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
@@ -3992,6 +4005,7 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
       1,
     );
     assert.match(fs.readFileSync(originalSessionFile, "utf8"), new RegExp(appendedEntryId));
+    assert.equal(getNextWorkflowCommands().length, 0);
     assert.ok(
       ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)),
     );
@@ -4901,6 +4915,7 @@ test("prompt commands abort when git validation fails", async () => {
 });
 
 test("prompt commands enforce the documented required-doc matrix", async () => {
+  clearPersistedPromptCommandRuntimeState();
   const { projectBase } = initFixtureRepo({
     fixtures: [],
     docs: {
@@ -5298,6 +5313,7 @@ test("worktree-backed finalization transitions through merging, error, and idle 
 });
 
 test("worktree-enabled prompt commands honor overridden worktree prefixes", async () => {
+  clearPersistedPromptCommandRuntimeState();
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
@@ -7369,6 +7385,7 @@ test("worktree-backed prompt commands abort before prompt dispatch when post-cre
 });
 
 test("prompt commands remain functional when custom tool registrations are removed from the runtime inventory", async () => {
+  clearPersistedPromptCommandRuntimeState();
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
@@ -10005,6 +10022,96 @@ test("completed prompt run captures next-workflow commands and renders the numbe
 
     await pi.commands.get("req-continue")!.handler("1", ctx);
     assert.deepEqual(fixSpyArgs, ["Fix the flaky retry path in the orchestrator loop"]);
+  } finally {
+    resetNextWorkflowStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-continue` recovers the persisted terminal workflow state on a replacement runtime bound before the terminal transition persisted.
+ * @details Reproduces the production pi `switchSession` rebind ordering that left a replacement extension runtime parked on the bootstrap `idle` state: one orchestrating runtime persists the in-flight `merging` prompt-command state whose execution session targets a different session file, a replacement runtime binds and receives `session_start` with reason `resume` while the persisted state is still non-terminal so both restore branches skip it, the orchestrating runtime then persists the terminal `done` transition plus the captured Next-Workflow array exactly like the initiating instance does after the base-session restoration, and the `/req-continue` dispatch on the replacement runtime must resynchronize the persisted terminal state, delegate the first captured entry through the registered handler with the captured input text, render the recovered `change ➔ done` status value, and keep the workflow state untouched by `req-continue` itself. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation and in-memory spy records.
+ * @return {Promise<void>} Promise resolved after recovery and delegation assertions complete.
+ * @throws {AssertionError} Throws when the replacement runtime rejects `/req-continue` with the idle diagnostic, delegates the wrong entry or input text, or mutates the workflow state on the `req-continue` path.
+ * @satisfies REQ-656, REQ-660, REQ-662, REQ-663, REQ-664, TST-218
+ */
+test("req-continue recovers the persisted terminal state on a replacement runtime bound before the terminal transition", async () => {
+  resetNextWorkflowStateForTests();
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    // Production restore-back ordering: the orchestrating instance is inside the closure
+    // (persisted in-flight `merging`) whose execution session targets a different session
+    // file than the restored base session the replacement runtime is about to bind.
+    const executionPlan: PromptCommandExecutionPlan = {
+      promptName: "change",
+      promptArgs: "",
+      gitPath: projectBase,
+      branchName: "work",
+      basePath: projectBase,
+      contextPath: projectBase,
+      parentPath: path.dirname(projectBase),
+      baseDir: path.basename(projectBase),
+      originalSessionFile: createFakeSessionFile(projectBase),
+      executionSessionFile: path.join(projectBase, "exec-session.jsonl"),
+      originalModel: undefined,
+      originalThinkingLevel: undefined,
+    };
+    writePersistedPromptCommandRuntimeState({
+      workflowState: "merging",
+      workflowRequest: "change",
+      pendingPromptRequest: undefined,
+      activePromptRequest: executionPlan,
+    });
+
+    // pi switchSession: teardownCurrent("resume") plus createRuntime(...) rebinds a fresh
+    // extension runtime and fires session_start reason "resume" BEFORE the initiating
+    // instance persists its terminal transition, so every restore branch skips here.
+    const replacementPi = createFakePi();
+    piUsereqExtension(replacementPi);
+    const replacementCtx = createFakeCtx(projectBase);
+    await replacementPi.emit("session_start", { reason: "resume" }, replacementCtx);
+    assert.match(
+      replacementCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
+    );
+
+    // The initiating instance completes the closure afterwards: terminal `done` plus the
+    // captured Next-Workflow array reach the process-scoped persistence exactly like the
+    // production `setPiUsereqWorkflowState` plus capture sequence after base-path restore.
+    writePersistedPromptCommandRuntimeState({
+      workflowState: "done",
+      workflowRequest: "change",
+      pendingPromptRequest: undefined,
+      activePromptRequest: undefined,
+    });
+    captureNextWorkflowCommands([
+      "## **Next Workflow**",
+      "~~~text",
+      "/req-fix",
+      "Fix the flaky retry path in the orchestrator loop",
+      "~~~",
+    ].join("\n"));
+
+    const fixSpyArgs: string[] = [];
+    registerNextWorkflowCommandHandler("req-fix", async (args) => {
+      fixSpyArgs.push(args);
+    });
+
+    // The replacement runtime owns the active session, so pi dispatches /req-continue to it.
+    await replacementPi.commands.get("req-continue")!.handler("1", replacementCtx);
+    assert.deepEqual(fixSpyArgs, ["Fix the flaky retry path in the orchestrator loop"]);
+    assert.match(
+      replacementCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>change ➔ done<\/warning>/,
+    );
+    assert.equal(replacementPi.sentUserMessages.length, 0);
   } finally {
     resetNextWorkflowStateForTests();
     process.chdir(previousCwd);
