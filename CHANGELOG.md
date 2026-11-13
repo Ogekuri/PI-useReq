@@ -1,7 +1,17 @@
 # Changelog
 
-## [0.109.6](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.6) - 2026-11-13
+## [0.109.7](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.7) - 2026-11-13
 ### ⛰️  Features
+- Add /req-continue-list printing full Next-Workflow list [useReq] *(next-workflow)*
+  Add the dedicated req-continue-list slash command that prints the complete
+  captured Next-Workflow entry list into the editor, rendering every command
+  with its full untruncated input text and a deterministic placeholder for an
+  empty array. The command performs only the printing operation: no UI
+  notifications, no workflow-state transitions, no prompt dispatch, session
+  switching, worktree operations, or array mutation, so it stays runnable from
+  every workflow state. Extend REQUIREMENTS.md with DES-041, REQ-671..676,
+  TST-222..224 plus evidence rows, update WORKFLOW.md call traces, regenerate
+  REFERENCES.md, and add renderer plus extension-behavior unit tests.
 - add /req-continue chain continuation with Next-Workflow capture [useReq] *(next-workflow)*
   Add src/core/next-workflow.ts: parse the ## **Next Workflow** section of the
   final agent output, capture pi-usereq commands plus the /req-continue
@@ -16,12 +26,38 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- recover persisted terminal workflow state after rebind [useReq] *(status)*
+  Add resynchronizePersistedTerminalWorkflowState to extension-status: a
+  replacement runtime bound by switchSession during closure receives
+  session_start while the persisted state is still non-terminal, so its
+  one-shot terminal restore is skipped and the controller stays idle
+  forever, making /req-continue reject a completed flow (REQ-660).
+  Adopt the persisted terminal state at req-continue and prompt-command
+  dispatch and on every non-session_start hook, keeping idle boundaries
+  (bootstrap, /req-reset, startup|reload) non-resurrectable.
+  Drop the captured Next-Workflow array on successful /req-reset so the
+  idle boundary matches the bootstrap boundary (REQ-633, REQ-656).
+  Add failing-first reproducer test, extend req-reset coverage, and
+  refresh WORKFLOW.md plus REFERENCES.md.
 - remove private manifest flag blocking npm publication [useReq] *(release)*
   Remove the package.json private field that made npm publish fail with EPRIVATE before provenance and public access were applied.; Add a release-workflow regression test asserting the manifest omits the private field.; Requirements: DES-025, REQ-140, TST-159.
 - guard duplicate activation and repair launcher after upgrade [useReq] *(extension)*
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- re-point pi CLI to retained worktree on merge failure [useReq] *(orchestration)*
+  REQ-665..668: on fast-forward merge failure redirect the active session,
+  process cwd, and context cwd back to the retained worktree, emit the
+  retention notification with the numbered Next-Workflow list before the
+  error output, terminate that output with the hardcoded uniform ERROR:
+  merge-failure message, and keep the captured array unchanged.
+  REQ-669: wipe the Next-Workflow array only immediately before dispatching
+  a new agentic flow, after every slash-command pre-check succeeded, so
+  failed pre-checks preserve the queued commands.
+  REQ-660/REQ-670: /req-continue now dispatches from the idle state whenever
+  the array holds commands and /req-reset preserves the array for recovery.
+  REQ-365/REQ-656: retention and preservation contracts updated; evidence
+  matrix, workflow model, references, and unit tests aligned (TST-083/218/219/220/221).
 - resolve new/continue agentic flow at bootstrap and gate context-file injection [useReq] *(prompt-commands)*
 - pad the status request arrow with surrounding spaces [useReq] *(status-bar)*
   REQ-632/TST-206 now require '<request> ➔ <state>' in the status field value.; PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR now renders ' ➔ ' instead of '➔'.; Refresh REQUIREMENTS, WORKFLOW, and REFERENCES for the padded separator.; Update status-bar expectations in the extension registration suite.
@@ -1489,7 +1525,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.6\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.6
+- \[0.109.7\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.7
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1598,4 +1634,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.6]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.6
+[0.109.7]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.7
