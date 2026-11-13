@@ -3086,7 +3086,7 @@ in combined text length. No external state is mutated.
 
 ### fn `function formatWorkflowStateValue(` (L625-637)
 - @brief Formats the rendered workflow-state value for the `status` field.
-- @details Uses the standard warning-colored value renderer for neutral states, emits a blinking `error`-colored value for `status:error`, and emits the identical blinking `error`-colored value for `status:warning` so orchestration warnings match the documented error styling. When an active orchestration request token exists, the value renders as `<request>➔<state>` joined by `PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR`; otherwise it renders the bare `<state>`, so the bootstrap `idle` state stays request-less while `done` renders through the non-error value convention. Runtime is O(n) in text length. No external state is mutated.
+- @details Uses the standard warning-colored value renderer for neutral states, emits a blinking `error`-colored value for `status:error`, and emits the identical blinking `error`-colored value for `status:warning` so orchestration warnings match the documented error styling. When an active orchestration request token exists, the value renders as `<request> ➔ <state>` joined by `PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR`, which carries one space before and after the arrow; otherwise it renders the bare `<state>`, so the bootstrap `idle` state stays request-less while `done` renders through the non-error value convention. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
 - @param[in] workflowState {PiUsereqWorkflowState} Current workflow state.
 - @param[in] workflowRequest {string | undefined} Active orchestration request token without the `req-` prefix.
@@ -3198,7 +3198,7 @@ mutates `controller.config`.
 
 ### fn `export function setPiUsereqWorkflowRequest(` (L921-932)
 - @brief Stores the active orchestration request token and refreshes the status bar.
-- @details Records the processed slash-command name without the `req-` prefix in the process-scoped runtime state before the orchestration enters `checking` or `running`, then re-renders the single-line footer so the `<request>➔<state>` status value becomes visible immediately. Runtime is O(1). Side effect: mutates workflow request state and may update `ctx.ui` status.
+- @details Records the processed slash-command name without the `req-` prefix in the process-scoped runtime state before the orchestration enters `checking` or `running`, then re-renders the single-line footer so the `<request> ➔ <state>` status value becomes visible immediately. Runtime is O(1). Side effect: mutates workflow request state and may update `ctx.ui` status.
 - @param[in] workflowRequest {string} Active request token without the `req-` prefix.
 - @param[in] ctx {ExtensionContext | undefined} Optional active extension context.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller.

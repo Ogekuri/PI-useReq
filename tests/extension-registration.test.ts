@@ -3499,8 +3499,8 @@ test("req-references updates REFERENCES.md with a direct commit workflow and no 
       "",
     );
     assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>references➔running<\/warning>/.test(status)));
-    assert.ok(recordedStatuses.every((status) => !/<accent>status:<\/accent><warning>references➔merging<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>references ➔ running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.every((status) => !/<accent>status:<\/accent><warning>references ➔ merging<\/warning>/.test(status)));
     assert.equal(
       finalStatus,
       buildExpectedFakeStatusText({
@@ -3790,7 +3790,7 @@ test("req-references surfaces git-validation and reference-generation failures w
     assert.equal(pi.sentUserMessages.length, 0);
     assert.deepEqual(createdWorktreeEntries, []);
     assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /EISDIR|illegal operation on a directory/i.test(entry.message)));
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>references➔running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>references ➔ running<\/warning>/.test(status)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
@@ -3864,7 +3864,7 @@ test("req-references writes the no-source REFERENCES.md placeholder without sour
       spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
       "",
     );
-    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>references➔done<\/warning>/);
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>references ➔ done<\/warning>/);
     assert.ok(ctx.__state.notifications.some((entry: { message: string }) => /SUCCESS: Updated .*REFERENCES\.md/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
@@ -3901,7 +3901,7 @@ test("req-workflow writes the no-source WORKFLOW.md placeholder without dispatch
         .filter((entry) => /^PI-useReq-/.test(entry)),
       [],
     );
-    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>workflow➔done<\/warning>/);
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<warning>workflow ➔ done<\/warning>/);
     assert.ok(ctx.__state.notifications.some((entry: { message: string }) => /no analyzable source file detected/.test(entry.message)));
     const statusLines = spawnSync("git", ["status", "--porcelain"], { cwd: projectBase, encoding: "utf8" })
       .stdout.trim().split(/\r?\n/);
@@ -3949,7 +3949,7 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
     assert.equal(fs.existsSync(executionBasePath), true);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>status:<\/accent><warning>change➔running<\/warning>/,
+      /<accent>status:<\/accent><warning>change ➔ running<\/warning>/,
     );
 
     fs.appendFileSync(
@@ -4032,7 +4032,7 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
 
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>status:<\/accent><warning>change➔running<\/warning>/,
+      /<accent>status:<\/accent><warning>change ➔ running<\/warning>/,
     );
 
     ctx.switchSession = async (_sessionPath: string) => ({ cancelled: true });
@@ -4745,7 +4745,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
 
 /**
  * @brief Verifies request-token status rendering and the `done` terminal default across consecutive orchestrations.
- * @details Starts from the request-less bootstrap `idle` state, runs one completed non-worktree orchestration, asserts the rendered `<request>➔<state>` value for the running and `done` states, then starts a second orchestration directly from `done` and asserts the `done` -> `running` transition renders the new request token. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and in-memory status capture.
+ * @details Starts from the request-less bootstrap `idle` state, runs one completed non-worktree orchestration, asserts the rendered `<request> ➔ <state>` value for the running and `done` states, then starts a second orchestration directly from `done` and asserts the `done` -> `running` transition renders the new request token. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and in-memory status capture.
  * @return {Promise<void>} Promise resolved after status-value assertions complete.
  * @throws {AssertionError} Throws when the status value omits the request token, stays `idle` after completion, or blocks a `done` -> `running` start.
  * @satisfies REQ-630, REQ-632, REQ-633, REQ-634, REQ-638, TST-206
@@ -4954,7 +4954,7 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
     );
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(ctx.cwd, executionBasePath);
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change➔running<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change ➔ running<\/warning>/.test(status)));
     assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", `⎇ ${worktreeName}`)}`)));
 
     await pi.emit("before_agent_start", {}, ctx);
@@ -4990,10 +4990,10 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
       0,
     );
     assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change➔merging<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change ➔ merging<\/warning>/.test(status)));
     assert.ok(recordedStatuses.some((status) => status.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", `⎇ ${originalBranchName}`)}`)));
     const finalStatus = ctx.__state.statuses.get("pi-usereq") ?? "";
-    assert.match(finalStatus, /<accent>status:<\/accent><warning>change➔done<\/warning>/);
+    assert.match(finalStatus, /<accent>status:<\/accent><warning>change ➔ done<\/warning>/);
     assert.ok(finalStatus.includes(`${formatFakeThemeForeground("accent", "branch:")}${formatFakeThemeForeground("warning", `⎇ ${originalBranchName}`)}`));
   } finally {
     process.chdir(previousCwd);
@@ -5275,9 +5275,9 @@ test("worktree-backed finalization transitions through merging, error, and idle 
       }).status,
       0,
     );
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change➔merging<\/warning>/.test(status)));
-    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><error>\u001b\[5mchange➔error\u001b\[25m<\/error>/.test(status)));
-    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><error>\u001b\[5mchange➔error\u001b\[25m<\/error>/);
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><warning>change ➔ merging<\/warning>/.test(status)));
+    assert.ok(recordedStatuses.some((status) => /<accent>status:<\/accent><error>\u001b\[5mchange ➔ error\u001b\[25m<\/error>/.test(status)));
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><error>\u001b\[5mchange ➔ error\u001b\[25m<\/error>/);
     assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /Fast-forward merge failed/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
@@ -9361,7 +9361,7 @@ test("configuration menu can add guided static-check entries for explicit suppor
  */
 function buildExpectedFakeWorkflowStateValue(workflowState: string, workflowRequest?: string): string {
   const valueText = workflowRequest !== undefined
-    ? `${workflowRequest}➔${workflowState}`
+    ? `${workflowRequest} ➔ ${workflowState}`
     : workflowState;
   return workflowState === "error" || workflowState === "warning"
     ? formatFakeThemeForeground("error", `\u001b[5m${valueText}\u001b[25m`)

@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.150"
+version: "0.0.151"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -719,7 +719,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-629**: MUST restore the persisted terminal workflow state and active request during `session_start` reasons `new`, `resume`, and `fork` when no `idle` reset boundary applies.
 - **REQ-630**: MUST keep the workflow state and the active orchestration request in process-scoped runtime state variables for every orchestration.
 - **REQ-631**: MUST record the processed slash-command name without the `req-` prefix as the active workflow request before entering `checking` or `running`.
-- **REQ-632**: MUST render the `status` field value as `<request>➔<state>` whenever an active workflow request exists and as `<state>` otherwise.
+- **REQ-632**: MUST render the `status` field value as `<request> ➔ <state>`, with one space before and after the arrow, whenever an active workflow request exists, and as `<state>` otherwise.
 - **REQ-633**: MUST treat `idle` as the bootstrap, extension-start, and `/req-reset` terminal state and MUST NOT set it on completed, warned, or failed orchestration termination.
 - **REQ-634**: MUST transition successful non-reset orchestration termination to `done` by default.
 - **REQ-635**: MUST allow a new orchestration only when workflow state is `idle` or `done` and MUST transition `done` to `running` when that orchestration reaches agent execution.
@@ -929,7 +929,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-203**: MUST verify launcher deployment gating accepts git-managed and project-scope `.pi` pi package installation trees.
 - **TST-204**: MUST verify `req-references` writes the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` content into `REFERENCES.md`, commits only that file, and performs no source extraction when the git inventory holds no supported source file.
 - **TST-205**: MUST verify `req-workflow` writes the exact `NO_SOURCE_WORKFLOW_PLACEHOLDER` content into `WORKFLOW.md`, dispatches no prompt message, creates no worktree, and returns workflow state `done` when no supported source file exists.
-- **TST-206**: MUST verify the `status` field renders `<request>➔<state>` during and after orchestration, renders `idle` without request after `startup|reload` or `/req-reset`, and renders `done` as the default terminal state.
+- **TST-206**: MUST verify the `status` field renders `<request> ➔ <state>` with one space before and after the arrow during and after orchestration, renders `idle` without request after `startup|reload` or `/req-reset`, and renders `done` as the default terminal state.
 - **TST-207**: MUST verify a new orchestration starts from `done`, an orchestration in `warning|error` is rejected, and terminal outcomes match the documented per-command domains.
 - **TST-208**: MUST verify develop-channel `--upgrade` aborts with exit code `1` and no child process when the GitHub latest-release probe fails.
 - **TST-209**: MUST verify develop-channel `--upgrade` from an npm-managed installation installs the probed release-tag source instead of the repository default-branch source.
@@ -1119,7 +1119,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-629 | `src/core/extension-status.ts` :: `updateExtensionStatus` session-start restore branch :: restores the persisted terminal workflow state plus active request for `new|resume|fork`. |
 | REQ-630 | `src/core/extension-status.ts` :: `PiUsereqStatusState.workflowState` plus `workflowRequest` :: process-scoped runtime orchestration state variables. |
 | REQ-631 | `src/index.ts` :: `registerPromptCommands`, `registerReqReferencesCommand`, plus `registerReqResetCommand` :: record the active request token before `checking` or `running`. |
-| REQ-632 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `<request>➔<state>` with the documented fallback. |
+| REQ-632 | `src/core/extension-status.ts` :: `PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR` plus `formatWorkflowStateValue` :: renders `<request> ➔ <state>` with the documented fallback. |
 | REQ-633 | `src/core/extension-status.ts` :: `shouldResetWorkflowStateOnSessionStart` plus `updateExtensionStatus` :: resets to `idle` only on `startup|reload`; `src/index.ts` :: `registerReqResetCommand` :: ends successful reset in `idle`. |
 | REQ-634 | `src/index.ts` :: `finalizeMatchedPromptSuccess`, `registerReqReferencesCommand`, plus `registerPromptCommands` :: successful termination sets `done`. |
 | REQ-635 | `src/index.ts` :: `registerPromptCommands` plus `registerReqReferencesCommand` :: startability gate accepts `idle|done`. |
@@ -1339,7 +1339,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-203 | `tests/bin-deploy.test.ts` :: launcher gating coverage asserts git-managed and project-scope `.pi` installation trees deploy the launcher. |
 | TST-204 | `tests/extension-registration.test.ts` :: `req-references writes the no-source REFERENCES.md placeholder without source extraction` asserts exact placeholder content, single-file commit, and no prompt dispatch. |
 | TST-205 | `tests/extension-registration.test.ts` :: `req-workflow writes the no-source WORKFLOW.md placeholder without dispatching a prompt` asserts exact placeholder content, zero prompt messages, zero worktrees, and workflow state `done`.
-| TST-206 | `tests/extension-registration.test.ts` :: status-rendering coverage asserts the `<request>➔<state>` status value, the request-less `idle` bootstrap value, and the `done` terminal value. |
+| TST-206 | `tests/extension-registration.test.ts` :: status-rendering coverage asserts the `<request> ➔ <state>` status value, the request-less `idle` bootstrap value, and the `done` terminal value. |
 | TST-207 | `tests/extension-registration.test.ts` :: orchestration-gate coverage asserts `done` -> `running` startability, `warning|error` rejection, and the documented per-command terminal domains. |
 | TST-208 | `tests/package-manager.test.ts` :: `develop-channel upgrade aborts before spawning when the GitHub release probe fails` asserts exit code `1`, one stderr diagnostic, and zero child processes. |
 | TST-209 | `tests/package-manager.test.ts` :: `develop-channel upgrade from an npm-managed installation installs the probed release tag` asserts the pinned install source differs from the default-branch source. |
