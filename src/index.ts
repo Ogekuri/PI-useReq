@@ -130,6 +130,17 @@ import {
   type ReqResetCommandPlan,
 } from "./core/req-reset-command.js";
 import {
+  REQ_CONTINUE_COMMAND_DESCRIPTION,
+  captureNextWorkflowCommands,
+  clearNextWorkflowCommands,
+  formatNextWorkflowList,
+  getNextWorkflowCommands,
+  registerNextWorkflowCommandHandler,
+  resolveNextWorkflowCommandHandler,
+  resolveNextWorkflowEntryIndex,
+  type NextWorkflowCommandHandler,
+} from "./core/next-workflow.js";
+import {
   DEBUG_PROMPT_NAMES,
   DEBUG_WORKFLOW_STATES,
   DEFAULT_DEBUG_LOG_FILE,
@@ -211,6 +222,7 @@ import {
   setPiUsereqWorkflowRequest,
   setPiUsereqWorkflowState,
   shouldPreservePromptCommandStateOnShutdown,
+  shouldResetWorkflowStateOnSessionStart,
   updateExtensionStatus,
   type PiUsereqPromptRequest,
   type PiUsereqStatusController,
@@ -1271,11 +1283,11 @@ function notifyContextSafely(
 
 /**
  * @brief Emits the final context-retention reminder info notification for a successfully completed `/req-*` orchestration.
- * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(1). Side effect is user notification delivery only when the supplied context is still active.
+ * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot, then appends the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow so the follow-up commands print one per line after the retention line. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(n) in captured entry length. Side effect is user notification delivery only when the supplied context is still active.
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @return {void} No return value.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658
  */
 function notifyContextRetentionReminder(
   statusController: PiUsereqStatusController,
@@ -1285,9 +1297,11 @@ function notifyContextRetentionReminder(
   const percentText = typeof percent === "number" && Number.isFinite(percent)
     ? ` Current context usage: ${Math.round(percent)}%.`
     : "";
+  const retentionMessage = `Context retained.${percentText} Start a new session with a clean context (/new) before the next /req-* command.`;
+  const nextWorkflowList = formatNextWorkflowList(getNextWorkflowCommands());
   notifyContextSafely(
     ctx,
-    `Context retained.${percentText} Start a new session with a clean context (/new) before the next /req-* command.`,
+    nextWorkflowList === "" ? retentionMessage : `${retentionMessage}\n${nextWorkflowList}`,
     "info",
   );
 }
@@ -1564,7 +1578,7 @@ function buildAgentEndOutputText(event: unknown): string {
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440, REQ-443, REQ-444, REQ-461, REQ-462, REQ-463, REQ-464, REQ-465
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440, REQ-443, REQ-444, REQ-461, REQ-462, REQ-463, REQ-464, REQ-465, REQ-653, REQ-654, REQ-655
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -1592,6 +1606,12 @@ async function handleExtensionStatusEvent(
     prewarmContextFileMeasurements(startupCwd, config);
     applyConfiguredPiUsereqTools(pi, config);
     setPiUsereqStatusConfig(statusController, config);
+    if (shouldResetWorkflowStateOnSessionStart(event)) {
+      // The captured Next-Workflow array belongs to the completed agentic flow of one
+      // process lifetime: the idle-reset bootstrap boundaries drop it together with the
+      // workflow state so stale follow-up commands never survive an extension reload.
+      clearNextWorkflowCommands();
+    }
     const missingCheckers = checkDefaultCheckersAvailability(config);
     if (missingCheckers.length > 0) {
       ctx.ui.notify(
@@ -1743,6 +1763,17 @@ async function handleExtensionStatusEvent(
         event as { messages: AgentEndEvent["messages"] },
       );
       const statusMarker = resolvePromptCommandMergeGate(agentEndOutputText);
+      if (
+        outcome === "completed"
+        && (completionPromptRequest.worktreeDir === undefined || statusMarker === "ok")
+      ) {
+        // Stage A (REQ-653/REQ-654/REQ-655): capture the Next-Workflow commands from the
+        // terminal output of every completed agentic run before the final retention
+        // notification renders them; worktree-backed completed runs additionally require
+        // the merge-eligible `STATUS: OK` marker so retained-worktree failures never feed
+        // the array.
+        captureNextWorkflowCommands(agentEndOutputText);
+      }
       const closureFailureMessage = outcome !== "completed"
         && completionPromptRequest.worktreeDir !== undefined
         ? `ERROR: Prompt closure retained worktree ${completionPromptRequest.worktreeDir} after ${outcome} outcome.`
@@ -3620,15 +3651,13 @@ function resolveReqResetPromptRequest(
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313, REQ-447, REQ-441
+ * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313, REQ-447, REQ-441, REQ-663
  */
 function registerReqResetCommand(
   pi: ExtensionAPI,
   statusController: PiUsereqStatusController,
 ): void {
-  pi.registerCommand("req-reset", {
-    description: REQ_RESET_COMMAND_DESCRIPTION,
-    handler: async (args, ctx) => {
+  const resetCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
       const promptRequest = resolveReqResetPromptRequest(statusController);
       const resetModelSelection = promptRequest?.originalModel
         ?? resolveCurrentModelSelection((ctx as unknown as PromptModelSelectionContextSurface).model);
@@ -3687,8 +3716,12 @@ function registerReqResetCommand(
         : `SUCCESS: req-reset removed ${executionResult.removedWorktreeDirs.length} worktree(s) plus ${executionResult.removedBranchNames.length} branch(es) and restored idle state.`;
       notifyContextSafely(resetContext, successMessage, "info");
       notifyContextRetentionReminder(statusController, resetContext);
-    },
+  };
+  pi.registerCommand("req-reset", {
+    description: REQ_RESET_COMMAND_DESCRIPTION,
+    handler: resetCommandHandler,
   });
+  registerNextWorkflowCommandHandler("req-reset", resetCommandHandler);
 }
 
 /**
@@ -3697,15 +3730,13 @@ function registerReqResetCommand(
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-436, REQ-437, REQ-438, REQ-441, REQ-447
+ * @satisfies REQ-200, REQ-221, REQ-224, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-436, REQ-437, REQ-438, REQ-441, REQ-447, REQ-663
  */
 function registerReqReferencesCommand(
   pi: ExtensionAPI,
   statusController: PiUsereqStatusController,
 ): void {
-  pi.registerCommand("req-references", {
-    description: REQ_REFERENCES_COMMAND_DESCRIPTION,
-    handler: async (args, ctx) => {
+  const referencesCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
       if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
         rejectNonIdleReqCommand(statusController, ctx);
       }
@@ -3759,8 +3790,62 @@ function registerReqReferencesCommand(
         notifyContextSafely(ctx, message, "error");
         throw error;
       }
-    },
+  };
+  pi.registerCommand("req-references", {
+    description: REQ_REFERENCES_COMMAND_DESCRIPTION,
+    handler: referencesCommandHandler,
   });
+  registerNextWorkflowCommandHandler("req-references", referencesCommandHandler);
+}
+
+/**
+ * @brief Registers the specialized `req-continue` slash command.
+ * @details Registers the dedicated chain-continuation command that requires an already-started agentic flow: non-startable workflow states are rejected through the shared busy-state rejection, the `idle` bootstrap state ("new" flow) and an empty Next-Workflow array terminate with a deterministic error without any operation and without transitioning the workflow state, a missing numeric ordinal selects the first captured entry, a numeric ordinal selects the one-based entry, and the selected pi-usereq command is executed through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every workflow-state transition, so `/req-continue` itself never terminates with the `continue` to `done` transition. Runtime is O(1) for registration; handler cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @return {void} No return value.
+ * @satisfies DES-040, REQ-656, REQ-659, REQ-660, REQ-661, REQ-662, REQ-663, REQ-664, REQ-224
+ */
+function registerReqContinueCommand(
+  pi: ExtensionAPI,
+  statusController: PiUsereqStatusController,
+): void {
+  const continueCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+    if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
+      rejectNonIdleReqCommand(statusController, ctx);
+    }
+    if (statusController.state.workflowState === "idle") {
+      // State "new": no previous agentic flow exists in context. Fail without any
+      // operation and without transitioning the workflow state so the user keeps a
+      // startable bootstrap state.
+      const message = "ERROR: /req-continue requires a previous agentic workflow in context; the workflow state is idle (new flow).";
+      notifyContextSafely(ctx, message, "error");
+      throw new ReqError(message, 1);
+    }
+    const entries = getNextWorkflowCommands();
+    if (entries.length === 0) {
+      const message = "ERROR: /req-continue found no captured Next-Workflow command from the previous agentic workflow.";
+      notifyContextSafely(ctx, message, "error");
+      throw new ReqError(message, 1);
+    }
+    const entry = entries[resolveNextWorkflowEntryIndex(args, entries.length)]!;
+    const delegatedHandler = resolveNextWorkflowCommandHandler(entry.command);
+    if (delegatedHandler === undefined) {
+      const message = `ERROR: /req-continue found no registered handler for the captured command /${entry.command}.`;
+      notifyContextSafely(ctx, message, "error");
+      throw new ReqError(message, 1);
+    }
+    // Delegate exactly like a manual user invocation: the selected pi-usereq command
+    // records its own active request, performs its own state transitions, and owns its
+    // own terminal outcome, so `/req-continue` itself never terminates with the
+    // `continue` to `done` transition.
+    await delegatedHandler(entry.inputText, ctx);
+  };
+  pi.registerCommand("req-continue", {
+    description: REQ_CONTINUE_COMMAND_DESCRIPTION,
+    handler: continueCommandHandler,
+  });
+  registerNextWorkflowCommandHandler("req-continue", continueCommandHandler);
 }
 
 /**
@@ -3769,16 +3854,14 @@ function registerReqReferencesCommand(
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428, REQ-621, REQ-622, REQ-623, REQ-649
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428, REQ-621, REQ-622, REQ-623, REQ-649, REQ-663
  */
 function registerPromptCommands(
   pi: ExtensionAPI,
   statusController: PiUsereqStatusController,
 ): void {
   PROMPT_COMMAND_NAMES.forEach((promptName) => {
-    pi.registerCommand(`req-${promptName}`, {
-      description: resolvePromptCommandDescription(promptName),
-      handler: async (args, ctx) => {
+    const promptCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
         if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
           rejectNonIdleReqCommand(statusController, ctx, promptName);
         }
@@ -3949,8 +4032,12 @@ function registerPromptCommands(
           notifyContextSafely(promptContext, message, "error");
           throw error;
         }
-      },
+  };
+    pi.registerCommand(`req-${promptName}`, {
+      description: resolvePromptCommandDescription(promptName),
+      handler: promptCommandHandler,
     });
+    registerNextWorkflowCommandHandler(`req-${promptName}`, promptCommandHandler);
   });
 }
 
@@ -5594,10 +5681,10 @@ function registerConfigCommands(
 
 /**
  * @brief Activates the complete pi-usereq extension surface.
- * @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset` and `req-references` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
+ * @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset`, `req-references`, and `req-continue` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, DES-015, DES-030, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520
+ * @satisfies DES-002, DES-015, DES-030, DES-040, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520, REQ-653, REQ-656, REQ-659, REQ-663
  */
 function activatePiUsereqExtension(pi: ExtensionAPI): void {
   if (isPiPackageInstallation()) {
@@ -5616,6 +5703,7 @@ function activatePiUsereqExtension(pi: ExtensionAPI): void {
   }
   registerReqResetCommand(pi, statusController);
   registerReqReferencesCommand(pi, statusController);
+  registerReqContinueCommand(pi, statusController);
   registerPromptCommands(pi, statusController);
   if (shouldRegisterDebugToolCommands(getProcessCwdSafe())) {
     registerDebugToolCommands(pi);

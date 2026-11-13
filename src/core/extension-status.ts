@@ -355,7 +355,7 @@ function shouldResetElapsedStateOnSessionStart(event: unknown): boolean {
  * @return {boolean} `true` when workflow state must reset to `idle`.
  * @satisfies REQ-009, REQ-221, REQ-633
  */
-function shouldResetWorkflowStateOnSessionStart(event: unknown): boolean {
+export function shouldResetWorkflowStateOnSessionStart(event: unknown): boolean {
   const reason = (event as { reason?: unknown }).reason;
   return reason === "startup" || reason === "reload";
 }

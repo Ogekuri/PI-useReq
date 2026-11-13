@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.152"
+version: "0.0.153"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -36,7 +36,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, the distribution bin launcher, the release packaging build script, and the pre-release verification gate. `.github/workflows/` contains the npm release workflow in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, Next-Workflow command capture with `/req-continue` chain continuation, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, the distribution bin launcher, the release packaging build script, and the pre-release verification gate. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -126,6 +126,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-037**: MUST implement installed-source identification plus source-switch removal and installation in `src/core/package-manager.ts` outside `src/cli.ts` dispatch logic.
 - **DES-038**: MUST implement npm-managed, git-managed, and project-scope `.pi` installation-tree detection in `src/core/bin-deploy.ts` `isPiPackageInstallation`.
 - **DES-039**: MUST implement git-file-inventory source detection plus no-source placeholder rendering for `req-references` and `req-workflow` in one dedicated `src/core/` module outside `src/index.ts` business logic.
+- **DES-040**: MUST implement Next-Workflow capture, process-scoped storage, numbered-list rendering, ordinal selection, and `/req-continue` handler dispatch in one dedicated `src/core/next-workflow.ts` module outside `src/index.ts` business logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -730,6 +731,18 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-637**: MUST persist and restore the active workflow request alongside the workflow state across extension rebinding.
 - **REQ-638**: MUST render `done` with the non-error warning-token status value convention.
 - **REQ-649**: MUST resolve at command bootstrap whether each bundled agentic `req-<prompt>` command runs a `new` chain-of-thought from workflow state `idle` or a `continue` flow from any other startable state.
+- **REQ-653**: MUST inspect the final agent output of every completed agentic prompt run before emitting the final context-retention notification and MUST parse its `## **Next Workflow**` section for `~~~text` fenced command blocks.
+- **REQ-654**: MUST capture each fenced block whose first line is a pi-usereq slash command into one process-scoped Next-Workflow array as command plus input-text pairs in section order.
+- **REQ-655**: MUST purge every non-pi-usereq orchestration command from the Next-Workflow array while keeping the `/req-continue` exception.
+- **REQ-656**: MUST preserve the Next-Workflow array across the terminal `done` transition, extension rebinds, and `/new` session starts so `/req-continue` consumes the last completed flow's commands.
+- **REQ-657**: MUST render the numbered Next-Workflow list after the "Context retained." retention line, printing one command per line.
+- **REQ-658**: MUST quote each listed input text as its first 20 characters, then `...`, then its last 10 characters, omitting the quotation when the command carries no input text.
+- **REQ-659**: MUST register `req-continue` as a dedicated extension command with description `Continue the previous agentic workflow with a captured Next-Workflow command` and MUST NOT depend on a bundled prompt Markdown file.
+- **REQ-660**: MUST reject `req-continue` with an error and perform no operation when workflow state is `idle`, meaning no previous agentic flow exists in context.
+- **REQ-661**: MUST reject `req-continue` with an error when the Next-Workflow array is empty or the requested ordinal is invalid, preserving the current workflow state.
+- **REQ-662**: MUST select the first Next-Workflow entry without a parameter and the one-based ordinal entry with a numeric parameter.
+- **REQ-663**: MUST execute the selected pi-usereq command through its registered handler with the captured input text, behaving exactly like a manual user invocation.
+- **REQ-664**: MUST let the delegated pi-usereq command own every workflow-state transition so `req-continue` itself never terminates with the `continue` to `done` transition.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -941,6 +954,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-211**: MUST verify develop-channel `--upgrade` spawns only the tag-pinned `pi install` child, never a `pi update` child, when the configured package entry is unpinned.
 - **TST-212**: MUST verify installed-version resolution returns the pi-managed installation version when the executing installation is a source checkout.
 - **TST-213**: MUST verify pi-managed-first installed-version resolution prefers the git installation root, then the npm installation root, then the executing manifest.
+- **TST-215**: MUST verify Next-Workflow capture parses `~~~text` fenced blocks from the `## **Next Workflow**` section, keeps pi-usereq commands plus `/req-continue`, purges other orchestration commands, and preserves section order.
+- **TST-216**: MUST verify the final context-retention notification renders the numbered Next-Workflow list after the retention line with the first-20/last-10 quotation and omits quotation for commands without input text.
+- **TST-217**: MUST verify `req-continue` registers outside the bundled prompt inventory and delegates the selected first or one-based ordinal entry through the registered handler with the captured input text.
+- **TST-218**: MUST verify `req-continue` rejects the `idle` state, an empty Next-Workflow array, and invalid ordinals with an error and no workflow-state transition.
 
 ## 5. Observed Component Model
 
@@ -952,6 +969,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/generate-markdown.ts`, `src/core/compress.ts`, and `src/core/find-constructs.ts` share analyzer and compressor logic to produce reusable Markdown outputs.
 - `src/core/static-check.ts` maps languages/extensions, parses Command-only enable specs, preserves debug `Dummy` handling, resolves inputs, and dispatches modular checker classes.
 - `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, installation-owned bundled-resource resolution, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
+- `src/core/next-workflow.ts` provides Next-Workflow command capture from the final agent output, process-scoped Next-Workflow array storage, numbered-list rendering, ordinal selection, and `/req-continue` handler dispatch helpers.
 - `src/core/config-cli-schema.ts`, `src/core/config-cli-render.ts`, and `src/core/config-cli.ts` provide the additive configuration CLI schema, deterministic tree plus table rendering, and CLI dispatch over the existing local and global scopes.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `src/core/source-presence.ts` detects analyzable source presence from the configured `src-dir` git file inventory and writes the documented no-source placeholder payloads for `REFERENCES.md` and `WORKFLOW.md`.
@@ -1003,6 +1021,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   │   ├── errors.ts
 │   │   ├── find-constructs.ts
 │   │   ├── generate-markdown.ts
+│   │   ├── next-workflow.ts
 │   │   ├── pi-usereq-tools.ts
 │   │   ├── prompts.ts
 │   │   ├── req-references-command.ts
@@ -1108,6 +1127,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-037 | `src/core/package-manager.ts` :: `resolveInstalledPackageManagerSource(...)` and `switchPackageManagerSource(...)` :: identify the installed source and reconcile a channel switch inside the package-manager module. |
 | DES-038 | `src/core/bin-deploy.ts` :: `isPiPackageInstallation(...)` and `isProjectPiPackageInstallationPath(...)` :: detect npm-managed, git-managed, and project-scope `.pi` installation trees. |
 | DES-039 | `src/core/source-presence.ts` :: `hasAnalyzableSourceFiles(...)` and `writeNoSourcePlaceholderDocument(...)` :: git-inventory detection plus no-source placeholder rendering reused by `req-references` and `req-workflow`. |
+| DES-040 | `src/core/next-workflow.ts` :: `parseNextWorkflowCommandEntries`, `captureNextWorkflowCommands`, `formatNextWorkflowList`, `resolveNextWorkflowEntryIndex`, and the handler registry :: one dedicated Next-Workflow module outside `src/index.ts` business logic. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -1286,6 +1306,18 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-588 | `src/index.ts` :: `handleExtensionStatusEvent` :: missing markers park workflow state `warning` with one warning notification. |
 | REQ-589 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandMergeGate` :: empty inspected text stays merge-eligible. |
 | REQ-590 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `warning` with the blinking `error` theme token. |
+| REQ-653 | `src/index.ts` :: `handleExtensionStatusEvent` capture block (L1770-1775) :: parses the terminal completed output through `captureNextWorkflowCommands(...)` before the retention notification; `src/core/next-workflow.ts` :: `parseNextWorkflowCommandEntries` (L167-199) :: last-section `~~~text` fenced-block parsing. |
+| REQ-654 | `src/core/next-workflow.ts` :: `appendNextWorkflowBlockEntry` (L112-136) plus `captureNextWorkflowCommands` (L205-216) :: command plus input-text pair capture into the process-scoped array in section order. |
+| REQ-655 | `src/core/next-workflow.ts` :: `appendNextWorkflowBlockEntry` purge branch (L126-129) plus `NEXT_WORKFLOW_COMMAND_NAMES` (L36-43) :: non-pi-usereq orchestration commands dropped while `req-continue` stays eligible. |
+| REQ-656 | `src/core/next-workflow.ts` :: `ProcessScopedNextWorkflowStore` (L78-84) plus `getNextWorkflowStore` (L95-103); `src/index.ts` :: `session_start` clear (L1609-1614) :: array preserved across `done`, rebinds, and `/new` while `startup|reload` resets it. |
+| REQ-657 | `src/index.ts` :: `notifyContextRetentionReminder` (L1292-1311) :: appends the numbered list after the retention line; `src/core/next-workflow.ts` :: `formatNextWorkflowList` (L292-300) :: one command per line. |
+| REQ-658 | `src/core/next-workflow.ts` :: `condenseNextWorkflowInputText` (L274-285) :: first 20 characters plus `...` plus last 10 characters, omitted without input text. |
+| REQ-659 | `src/index.ts` :: `registerReqContinueCommand` (L3801-3849) registers `req-continue` with `REQ_CONTINUE_COMMAND_DESCRIPTION`; `src/core/next-workflow.ts` :: `REQ_CONTINUE_COMMAND_DESCRIPTION` (L51-53) :: dedicated registration outside the bundled prompt inventory. |
+| REQ-660 | `src/index.ts` :: `registerReqContinueCommand` idle branch (L3817-3824) :: error plus no operation without workflow-state transition. |
+| REQ-661 | `src/index.ts` :: empty-array branch (L3825-3830); `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` throws (L312-333) :: deterministic errors preserving the current workflow state. |
+| REQ-662 | `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` (L312-333); `src/index.ts` :: entry selection (L3831) :: first entry without a parameter, one-based ordinal entry with a numeric parameter. |
+| REQ-663 | `src/index.ts` :: handler registrations (L3724, L3798, L3848, L4040) plus delegation (L3832-3842); `src/core/next-workflow.ts` :: `registerNextWorkflowCommandHandler` (L242-250) plus `resolveNextWorkflowCommandHandler` (L257-261) :: manual-invocation-equivalent dispatch. |
+| REQ-664 | `src/index.ts` :: `registerReqContinueCommand` delegation comment (L3838-3841) plus `await delegatedHandler(entry.inputText, ctx)` (L3842) :: delegated command owns every workflow-state transition. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1356,6 +1388,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-211 | `tests/package-manager.test.ts` :: unpinned develop-channel reconciliation coverage asserts one tag-pinned `pi install` child and no `pi update` child. |
 | TST-212 | `tests/package-manager.test.ts` :: source-checkout installed-version coverage asserts the pi-managed installation version instead of the executing manifest version. |
 | TST-213 | `tests/package-manager.test.ts` :: pi-managed-first resolution coverage asserts the git root, then npm root, then executing-manifest ordering. |
+| TST-215 | `tests/next-workflow.test.ts` :: parser, purge, section-selection, and capture-store tests (L35-99, L147-176) :: fenced-block parsing, `/req-continue` exception, orchestration-command purge, and section order. |
+| TST-216 | `tests/next-workflow.test.ts` :: condensation plus list-rendering tests (L101-132); `tests/extension-registration.test.ts` :: `completed prompt run captures next-workflow commands and renders the numbered retention list` (L9934-10012) :: numbered list after the retention line with the first-20/last-10 quotation. |
+| TST-217 | `tests/extension-registration.test.ts` :: `req-continue delegates the selected first or ordinal entry through the registered handler` (L9875-9933); `tests/next-workflow.test.ts` :: ordinal-selection and handler-registry tests (L133-145, L177-191) :: first and one-based ordinal delegation with the captured input text. |
+| TST-218 | `tests/extension-registration.test.ts` :: `req-continue registers as a dedicated command and rejects idle, empty arrays, and invalid ordinals` (L9785-9874) :: error rejections without workflow-state transitions. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

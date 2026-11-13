@@ -49,6 +49,18 @@ import {
 } from "../src/core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "../src/core/prompt-command-catalog.js";
 import {
+  captureNextWorkflowCommands,
+  clearNextWorkflowCommands,
+  condenseNextWorkflowInputText,
+  formatNextWorkflowList,
+  getNextWorkflowCommands,
+  parseNextWorkflowCommandEntries,
+  registerNextWorkflowCommandHandler,
+  REQ_CONTINUE_COMMAND_DESCRIPTION,
+  resetNextWorkflowStateForTests,
+  resolveNextWorkflowEntryIndex,
+} from "../src/core/next-workflow.js";
+import {
   setJsTiktokenModuleLoaderForTests,
 } from "../src/core/token-counter.js";
 import {
@@ -9760,5 +9772,242 @@ test("status-marker closure inspects only the final assistant message of the ter
     );
   } finally {
     run.cleanup();
+  }
+});
+
+/**
+ * @brief Verifies `req-continue` registers outside the bundled prompt inventory and rejects idle, empty-array, and invalid ordinals without state transitions.
+ * @details Activates the extension on a no-source fixture, asserts the dedicated registration description, rejects the `idle` "new"-flow invocation with a deterministic error plus no operation and no workflow-state transition, reaches `done` through the no-source `req-workflow` placeholder path, rejects an empty Next-Workflow array while preserving `done`, and rejects out-of-range and non-numeric ordinals while preserving `done`. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after rejection-path assertions complete.
+ * @throws {AssertionError} Throws when `req-continue` performs an operation on the `idle` state, mutates the workflow state on a validation error, or accepts an invalid ordinal.
+ * @satisfies REQ-659, REQ-660, REQ-661, REQ-662, TST-218
+ */
+test("req-continue registers as a dedicated command and rejects idle, empty arrays, and invalid ordinals", async () => {
+  resetNextWorkflowStateForTests();
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const continueCommand = pi.commands.get("req-continue");
+    assert.ok(continueCommand, "missing req-continue registration");
+    assert.equal(continueCommand?.description, REQ_CONTINUE_COMMAND_DESCRIPTION);
+    assert.ok(PROMPT_COMMAND_NAMES.every((promptName) => `req-${promptName}` !== "req-continue"));
+
+    await assert.rejects(
+      continueCommand!.handler("", ctx),
+      /requires a previous agentic workflow in context/,
+    );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
+    );
+    assert.equal(pi.sentUserMessages.length, 0);
+
+    captureNextWorkflowCommands([
+      "## **Next Workflow**",
+      "~~~text",
+      "/req-check",
+      "~~~",
+      "",
+      "~~~text",
+      "/req-fix",
+      "Fix the flaky retry path in the orchestrator loop",
+      "~~~",
+    ].join("\n"));
+    await pi.commands.get("req-workflow")!.handler("", ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+
+    clearNextWorkflowCommands();
+    await assert.rejects(
+      continueCommand!.handler("", ctx),
+      /found no captured Next-Workflow command/,
+    );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+
+    captureNextWorkflowCommands([
+      "## **Next Workflow**",
+      "~~~text",
+      "/req-check",
+      "~~~",
+      "",
+      "~~~text",
+      "/req-fix",
+      "Fix the flaky retry path in the orchestrator loop",
+      "~~~",
+    ].join("\n"));
+    await assert.rejects(
+      continueCommand!.handler("3", ctx),
+      /outside the captured Next-Workflow range 1\.\.2/,
+    );
+    await assert.rejects(
+      continueCommand!.handler("abc", ctx),
+      /optional numeric ordinal/,
+    );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+    assert.equal(pi.sentUserMessages.length, 0);
+  } finally {
+    resetNextWorkflowStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-continue` delegates the first and the one-based ordinal entry through the registered handler with the captured input text.
+ * @details Reaches `done` through the no-source `req-workflow` placeholder path, captures two Next-Workflow entries, replaces the `req-check` and `req-fix` registry handlers with recording spies, and asserts the parameter-less invocation dispatches the first entry, the ordinal invocation dispatches the second entry with the exact captured input text, and the shared workflow state stays untouched because the delegated command owns every transition. Runtime is dominated by temporary project setup plus spy dispatch. Side effects are limited to temporary filesystem mutation and in-memory spy records.
+ * @return {Promise<void>} Promise resolved after delegation assertions complete.
+ * @throws {AssertionError} Throws when selection order, forwarded arguments, or forwarded context deviate from a manual user invocation.
+ * @satisfies REQ-662, REQ-663, REQ-664, TST-217
+ */
+test("req-continue delegates the selected first or ordinal entry through the registered handler", async () => {
+  resetNextWorkflowStateForTests();
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    captureNextWorkflowCommands([
+      "## **Next Workflow**",
+      "~~~text",
+      "/req-check",
+      "~~~",
+      "",
+      "~~~text",
+      "/req-fix",
+      "Fix the flaky retry path in the orchestrator loop",
+      "~~~",
+    ].join("\n"));
+    await pi.commands.get("req-workflow")!.handler("", ctx);
+
+    const checkCalls: Array<{ args: string; ctx: unknown }> = [];
+    const fixCalls: Array<{ args: string; ctx: unknown }> = [];
+    registerNextWorkflowCommandHandler("req-check", async (args, delegatedCtx) => {
+      checkCalls.push({ args, ctx: delegatedCtx });
+    });
+    registerNextWorkflowCommandHandler("req-fix", async (args, delegatedCtx) => {
+      fixCalls.push({ args, ctx: delegatedCtx });
+    });
+
+    await pi.commands.get("req-continue")!.handler("", ctx);
+    assert.deepEqual(checkCalls.map((call) => call.args), [""]);
+    assert.equal(checkCalls[0]?.ctx, ctx);
+    assert.equal(fixCalls.length, 0);
+
+    await pi.commands.get("req-continue")!.handler("2", ctx);
+    assert.deepEqual(fixCalls.map((call) => call.args), ["Fix the flaky retry path in the orchestrator loop"]);
+    assert.equal(fixCalls[0]?.ctx, ctx);
+    assert.equal(checkCalls.length, 1);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+    assert.equal(pi.sentUserMessages.length, 0);
+  } finally {
+    resetNextWorkflowStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies a completed prompt run captures the Next-Workflow commands and renders the numbered list inside the final retention notification.
+ * @details Runs one no-worktree `req-change` orchestration until workflow state becomes `running`, emits `agent_end` whose final assistant text carries a `## **Next Workflow**` section with a purged `/new` block plus two pi-usereq command blocks, and asserts the terminal `done` state, the numbered list rendered one command per line after the `Context retained.` retention line with the first-20/last-10 quotation, and the subsequent `/req-continue` ordinal delegation carrying the exact captured input text. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after capture and retention assertions complete.
+ * @throws {AssertionError} Throws when the capture skips the terminal output, the retention notification omits or misrenders the list, or the ordinal delegation forwards the wrong input text.
+ * @satisfies REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, TST-216
+ */
+test("completed prompt run captures next-workflow commands and renders the numbered retention list", async () => {
+  resetNextWorkflowStateForTests();
+  const { projectBase } = initFixtureRepo();
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    await pi.commands.get("req-change")!.handler("Improve the retry handling path", ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>change ➔ running<\/warning>/,
+    );
+
+    const fixSpyArgs: string[] = [];
+    registerNextWorkflowCommandHandler("req-fix", async (args) => {
+      fixSpyArgs.push(args);
+    });
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{
+        role: "assistant",
+        stopReason: "stop",
+        content: [{
+          type: "text",
+          text: [
+            "## **Summary**",
+            "Retry handling improved.",
+            "",
+            "## **Next Workflow**",
+            "",
+            "~~~text",
+            "/req-fix",
+            "Fix the flaky retry path in the orchestrator loop",
+            "~~~",
+            "",
+            "~~~text",
+            "/req-check",
+            "~~~",
+            "",
+            "~~~text",
+            "/new",
+            "~~~",
+            "",
+            "STATUS: OK",
+          ].join("\n"),
+        }],
+      }],
+    }, ctx);
+
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>change ➔ done<\/warning>/,
+    );
+    const retentionNotifications = ctx.__state.notifications.filter(
+      (entry: { message: string; level: string }) => entry.level === "info"
+        && entry.message.startsWith("Context retained."),
+    );
+    assert.equal(retentionNotifications.length, 1);
+    assert.equal(
+      retentionNotifications[0]?.message,
+      [
+        "Context retained. Start a new session with a clean context (/new) before the next /req-* command.",
+        "1. /req-fix \"Fix the flaky retry ...rator loop\"",
+        "2. /req-check",
+      ].join("\n"),
+    );
+    assert.ok(!retentionNotifications[0]?.message.includes("3. /new"));
+
+    await pi.commands.get("req-continue")!.handler("1", ctx);
+    assert.deepEqual(fixSpyArgs, ["Fix the flaky retry path in the orchestrator loop"]);
+  } finally {
+    resetNextWorkflowStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
