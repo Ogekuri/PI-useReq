@@ -9,16 +9,17 @@ import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
 
 /**
  * @brief Represents the workflow-state domain persisted across session rebinding.
- * @details Mirrors the prompt-orchestration states used by the status controller, including the `warning` terminal state, so the process-scoped store can remain independent from module-local controller instances. The alias is compile-time only and introduces no runtime cost.
+ * @details Mirrors the prompt-orchestration states used by the status controller, including the `done` and `warning` terminal states, so the process-scoped store can remain independent from module-local controller instances. The alias is compile-time only and introduces no runtime cost.
  */
-export type PromptCommandRuntimeWorkflowState = "idle" | "checking" | "running" | "merging" | "warning" | "error";
+export type PromptCommandRuntimeWorkflowState = "idle" | "checking" | "running" | "merging" | "done" | "warning" | "error";
 
 /**
  * @brief Stores the prompt-command facts persisted across extension rebinding.
- * @details Tracks the current workflow state plus the pending or active execution plan keyed implicitly by the surviving pi host process. The interface is compile-time only and introduces no runtime cost.
+ * @details Tracks the current workflow state, the active orchestration request token, plus the pending or active execution plan keyed implicitly by the surviving pi host process. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PersistedPromptCommandRuntimeState {
   workflowState: PromptCommandRuntimeWorkflowState;
+  workflowRequest: string | undefined;
   pendingPromptRequest: PromptCommandExecutionPlan | undefined;
   activePromptRequest: PromptCommandExecutionPlan | undefined;
 }
@@ -68,6 +69,7 @@ function getPersistedPromptCommandRuntimeStateStore(): PersistedPromptCommandRun
   };
   globalState[PI_USEREQ_PROMPT_COMMAND_STATE_KEY] ??= {
     workflowState: "idle",
+    workflowRequest: undefined,
     pendingPromptRequest: undefined,
     activePromptRequest: undefined,
   };
@@ -98,13 +100,14 @@ function getPersistedPromptCommandSessionContextStore(): {
 
 /**
  * @brief Returns a snapshot of the persisted prompt-command runtime state.
- * @details Copies the process-scoped workflow state and request references into one detached object so callers can reason about the current persistence payload without mutating it accidentally. Runtime is O(1). No external state is mutated.
+ * @details Copies the process-scoped workflow state, active request token, and request references into one detached object so callers can reason about the current persistence payload without mutating it accidentally. Runtime is O(1). No external state is mutated.
  * @return {PersistedPromptCommandRuntimeState} Current persisted snapshot.
  */
 export function readPersistedPromptCommandRuntimeState(): PersistedPromptCommandRuntimeState {
   const store = getPersistedPromptCommandRuntimeStateStore();
   return {
     workflowState: store.workflowState,
+    workflowRequest: store.workflowRequest,
     pendingPromptRequest: store.pendingPromptRequest,
     activePromptRequest: store.activePromptRequest,
   };
@@ -112,7 +115,7 @@ export function readPersistedPromptCommandRuntimeState(): PersistedPromptCommand
 
 /**
  * @brief Replaces the persisted prompt-command runtime state.
- * @details Writes the supplied workflow state and execution-plan references into the process-scoped store so later extension instances can recover prompt orchestration after a session switch. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @details Writes the supplied workflow state, active request token, and execution-plan references into the process-scoped store so later extension instances can recover prompt orchestration after a session switch. Runtime is O(1). Side effect: mutates process-scoped state.
  * @param[in] state {PersistedPromptCommandRuntimeState} Replacement persisted state.
  * @return {void} No return value.
  */
@@ -121,18 +124,20 @@ export function writePersistedPromptCommandRuntimeState(
 ): void {
   const store = getPersistedPromptCommandRuntimeStateStore();
   store.workflowState = state.workflowState;
+  store.workflowRequest = state.workflowRequest;
   store.pendingPromptRequest = state.pendingPromptRequest;
   store.activePromptRequest = state.activePromptRequest;
 }
 
 /**
  * @brief Clears the persisted prompt-command runtime state.
- * @details Resets the process-scoped workflow state to `idle` and removes both request references so future extension instances do not inherit stale prompt orchestration. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @details Resets the process-scoped workflow state to `idle`, clears the active request token, and removes both request references so future extension instances do not inherit stale prompt orchestration. Runtime is O(1). Side effect: mutates process-scoped state.
  * @return {void} No return value.
  */
 export function clearPersistedPromptCommandRuntimeState(): void {
   writePersistedPromptCommandRuntimeState({
     workflowState: "idle",
+    workflowRequest: undefined,
     pendingPromptRequest: undefined,
     activePromptRequest: undefined,
   });
@@ -208,6 +213,29 @@ export function restorePersistedPromptCommandRuntimeStateForSession(
     return persistedState;
   }
   return undefined;
+}
+
+/**
+ * @brief Reads the persisted terminal workflow state plus active request token across extension rebinding.
+ * @details Returns the persisted workflow state and request token only when the state is one of the terminal `done`, `warning`, or `error` states, so `session_start` reasons that are not `idle` reset boundaries can keep the last orchestration outcome visible without reviving stale in-flight state. Runtime is O(1). No external state is mutated.
+ * @return {{ workflowState: PromptCommandRuntimeWorkflowState; workflowRequest: string | undefined } | undefined} Terminal persisted facts, or `undefined` when the persisted state is not terminal.
+ * @satisfies REQ-629, REQ-637
+ */
+export function readPersistedPromptCommandTerminalState():
+  | { workflowState: PromptCommandRuntimeWorkflowState; workflowRequest: string | undefined }
+  | undefined {
+  const persistedState = readPersistedPromptCommandRuntimeState();
+  if (
+    persistedState.workflowState !== "done"
+    && persistedState.workflowState !== "warning"
+    && persistedState.workflowState !== "error"
+  ) {
+    return undefined;
+  }
+  return {
+    workflowState: persistedState.workflowState,
+    workflowRequest: persistedState.workflowRequest,
+  };
 }
 
 /**

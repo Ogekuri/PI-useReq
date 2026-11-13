@@ -139,6 +139,7 @@ export const DEBUG_WORKFLOW_STATES = [
   "checking",
   "running",
   "merging",
+  "done",
   "warning",
   "error",
 ] as const;

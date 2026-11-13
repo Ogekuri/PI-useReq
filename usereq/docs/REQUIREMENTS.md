@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.143"
+version: "0.0.144"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -210,7 +210,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to their documented Command entries.
 - **REQ-252**: MUST default every other global `static-check.<language>.checkers` array to `[]`.
 - **REQ-316**: MUST default local `static-check.<language>.enabled` to `enable` when global `checkers` is non-empty, otherwise `disable`.
-- **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, reset workflow state to `idle` for `session_start` reasons `startup|new|reload`, and publish single-line `pi-usereq` status text.
+- **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, reset workflow state to `idle` and clear the active request for `session_start` reasons `startup|reload`, and publish single-line `pi-usereq` status text.
 - **REQ-109**: MUST omit `current-path`, `base`, `docs`, `src`, and `tests` path fields from the single-line status bar.
 - **REQ-111**: MUST omit prompt-delivery mode fields from the single-line status bar.
 - **REQ-112**: MUST render status-bar field names with the active theme `accent` token and non-error field values with the active theme `warning` token unless a field-specific requirement overrides the value token.
@@ -277,7 +277,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-197**: MUST summarize top-level `Notifications` as `notification:<state> • sound:<level> • pushover:<state>`.
 - **REQ-198**: MUST render `Notification events`, `Sound events`, and `Pushover events` as identical submenu lists with right-aligned `on|off` values for `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
 - **REQ-199**: MUST render `%%RESULT%%` as `successed`, `aborted`, or `failed` for completed, interrupted, and failed prompt-end outcomes.
-- **REQ-200**: MUST run slash-command-owned git validation immediately after the `idle` gate at the start of every `req-*` slash command except `req-reset` and abort before command execution on failure.
+- **REQ-200**: MUST run slash-command-owned git validation immediately after the workflow startability gate at the start of every `req-*` slash command except `req-reset` and abort before command execution on failure.
 - **REQ-201**: MUST require `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` before `analyze`, `change`, `check`, `cover`, `fix`, `flowchart`, `new`, `readme`, `recreate`, `refactor`, and `renumber`.
 - **REQ-202**: MUST require `REQUIREMENTS.md` before `implement`, and MUST skip required-doc prechecks for `create`, `references`, `workflow`, and `write`.
 - **REQ-203**: MUST abort a bundled prompt-backed `req-<prompt>` command before worktree creation and prompt dispatch when any prompt-required doc is missing, surfacing the missing canonical path plus remediation prompt command.
@@ -294,17 +294,17 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-291**: MUST detect staged or unstaged `base-path` changes before successful closure merge and execute `git stash`, merge, and `git stash pop` in that order when changes exist.
 - **REQ-292**: MUST complete successful stash-assisted closure without surfacing an error and MUST emit a warning that the restored `base-path` is not clean after merge.
 - **REQ-209**: MUST retain the worktree execution session, worktree, and branch, notify the pi CLI of closure failure, park workflow state in `error`, and leave the original base-path session unresumed when orchestrated session closure is interrupted, failed, aborted, or incomplete.
-- **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, `warning`, and `error`.
+- **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, `done`, `warning`, and `error`.
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
-- **REQ-224**: MUST reject every `req-*` slash command except `req-reset` before any operation when workflow state is not `idle`, surface the error to pi CLI, and transition workflow state to `error`.
-- **REQ-225**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `checking` after the `idle` gate and keep it there through required-doc checks, worktree preparation, and prompt handoff preparation.
+- **REQ-224**: MUST reject every `req-*` slash command except `req-reset` before any operation when workflow state is neither `idle` nor `done`, surface the error to pi CLI, and transition workflow state to `error`.
+- **REQ-225**: MUST make bundled prompt-backed `req-<prompt>` commands record their prompt name as the active workflow request, transition workflow state to `checking` after the workflow startability gate, and keep it there through preflight and prompt handoff preparation.
 - **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during bundled prompt-backed `req-<prompt>` preflight.
 - **REQ-227**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `running` only after required-doc checks, worktree preparation, worktree verification, and prompt-session handoff succeed.
-- **REQ-299**: MUST make `req-references`, after passing the shared `idle` gate, transition workflow state to `checking`, validate slash-command-owned git state, and transition directly to `running` without worktree creation, session switching, or LLM-session initialization.
+- **REQ-299**: MUST make `req-references`, after passing the workflow startability gate, transition workflow state to `checking`, validate slash-command-owned git state, and transition directly to `running` without worktree creation, session switching, or LLM-session initialization.
 - **REQ-300**: MUST make `req-references` execute the same reference-generation and overwrite logic as `references`, writing configured-source reference markdown to `<base-path>/<docs-dir>/REFERENCES.md`.
 - **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]` whenever the staged file differs from `HEAD`.
-- **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `idle` before the command handler returns.
+- **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `done` before the command handler returns.
 - **REQ-303**: MUST make failing `req-references` execution notify pi CLI, transition workflow state to `error`, and surface git or reference-generation failures without LLM-session initialization.
 - **REQ-304**: MUST register `req-reset` as a dedicated extension command with description `Reset req workflow state, restore base-path, and remove generated worktrees` and MUST NOT depend on a bundled prompt Markdown file.
 - **REQ-305**: MUST make `req-reset` execute without prompt dispatch, LLM-session initialization, or worktree creation.
@@ -318,7 +318,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-313**: MUST make failing `req-reset` surface restoration or cleanup failures, transition workflow state to `error`, and preserve already-completed cleanup effects.
 - **REQ-228**: MUST transition workflow state to `merging` immediately before merge and worktree/branch deletion begin during successful orchestrated session closure.
 - **REQ-229**: MUST transition workflow state to `error` and notify the pi CLI when base-path restoration, merge, or worktree/branch deletion verification fails during orchestrated session closure.
-- **REQ-230**: MUST transition workflow state to `idle` before the orchestrated session-closure handler returns for completed runs.
+- **REQ-230**: MUST transition workflow state to `done` before the orchestrated session-closure handler returns for successful completed runs.
 - **REQ-219**: MUST verify created worktree registration via `git worktree list`, branch presence via `git branch` list, and filesystem path existence before changing the prompt execution path or dispatching a prompt message.
 - **REQ-256**: MUST store `base-path`, `context-path`, `git-path`, `parent-path`, `base-dir`, `worktree-dir`, `worktree-path`, branch name, original session file, and execution session file inside prompt-orchestration runtime state.
 - **REQ-272**: MUST verify post-switch execution targets before agent start using replacement-session context when available, the persisted execution-session header cwd, and `process.cwd()`, and MUST NOT rely on stale pre-switch session-bound objects.
@@ -707,7 +707,17 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-620**: MUST make `req-references` inspect the configured `src-dir` git file inventory for supported source files before reference extraction, and MUST write the no-source `REFERENCES.md` placeholder when none exist.
 - **REQ-621**: MUST make `req-workflow` inspect the configured `src-dir` git file inventory for supported source files before prompt dispatch, and MUST write the no-source `WORKFLOW.md` placeholder when none exist.
 - **REQ-622**: MUST write the placeholder payload declared by `NO_SOURCE_REFERENCES_PLACEHOLDER` or `NO_SOURCE_WORKFLOW_PLACEHOLDER` in `src/core/source-presence.ts` verbatim.
-- **REQ-623**: MUST make `req-workflow` no-source completion transition workflow state to `idle` and dispatch no prompt message and no worktree.
+- **REQ-623**: MUST make `req-workflow` no-source completion transition workflow state to `done` and dispatch no prompt message and no worktree.
+- **REQ-629**: MUST restore the persisted terminal workflow state and active request during `session_start` reasons `new`, `resume`, and `fork` when no `idle` reset boundary applies.
+- **REQ-630**: MUST keep the workflow state and the active orchestration request in process-scoped runtime state variables for every orchestration.
+- **REQ-631**: MUST record the processed slash-command name without the `req-` prefix as the active workflow request before entering `checking` or `running`.
+- **REQ-632**: MUST render the `status` field value as `<request>►<state>` whenever an active workflow request exists and as `<state>` otherwise.
+- **REQ-633**: MUST treat `idle` as the bootstrap, extension-start, and `/req-reset` terminal state and MUST NOT set it on completed, warned, or failed orchestration termination.
+- **REQ-634**: MUST transition successful non-reset orchestration termination to `done` by default.
+- **REQ-635**: MUST allow a new orchestration only when workflow state is `idle` or `done` and MUST transition `done` to `running` when that orchestration reaches agent execution.
+- **REQ-636**: MUST terminate every non-`req-reset` orchestration only with `done`, `warning`, or `error` and every `req-reset` orchestration only with `idle`, `warning`, or `error`.
+- **REQ-637**: MUST persist and restore the active workflow request alongside the workflow state across extension rebinding.
+- **REQ-638**: MUST render `done` with the non-error warning-token status value convention.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -724,7 +734,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-108**: MUST verify guided static-check entry addition updates global checker lists and sets the targeted local enable flag to `enable`, and guided removal updates global checker lists.
 - **TST-112**: MUST verify `--enable-static-check` stores checker commands in global configuration and preserves local enablement according to the documented defaulting rules.
 - **TST-079**: MUST verify `files-static-check` and `static-check` execute zero checkers and expose empty configured-checker lists when the target language `enabled=disable`.
-- **TST-006**: MUST verify `session_start` activates configured startup tools, resets workflow state to `idle` for `startup|new|reload`, and updates the single-line `pi-usereq` status bar.
+- **TST-006**: MUST verify `session_start` activates configured startup tools, resets workflow state to `idle` for `startup|reload`, restores persisted terminal state for `new`, and updates the single-line `pi-usereq` status bar.
 - **TST-031**: MUST verify the status bar renders runtime `<extension>:v<version>` before `status`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
 - **TST-033**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, and `sound` plus the documented icon-based `context` gauge thresholds.
@@ -771,7 +781,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-100**: MUST verify `references` overwrites configured `docs-dir`/`REFERENCES.md`, returns only `success` in `content[0].text`, and restricts `details` to execution metadata.
 - **TST-101**: MUST verify `references` returns `error: <diagnostic>` plus failing execution metadata when source discovery, markdown generation, or `REFERENCES.md` writing fails.
 - **TST-102**: MUST verify `req-references` registers outside the bundled prompt inventory and retains description `Write a REFERENCES.md using the project's source code`.
-- **TST-103**: MUST verify successful `req-references` runs create no worktree or LLM message, overwrite configured `REFERENCES.md`, stage only that file, commit exact message, notify success, and restore workflow state `idle`.
+- **TST-103**: MUST verify successful `req-references` runs create no worktree or LLM message, overwrite configured `REFERENCES.md`, stage only that file, commit exact message, notify success, and restore workflow state `done`.
 - **TST-104**: MUST verify failing `req-references` runs transition workflow state to `error`, notify pi CLI, create no worktree or LLM message, and surface git or reference-generation failures.
 - **TST-105**: MUST verify extension activation registers `req-reset` outside the bundled prompt inventory with its dedicated fixed description.
 - **TST-106**: MUST verify successful `req-reset` accepts non-`idle` workflow state, preserves execution transcript, restores `base-path`, removes matching generated worktrees plus branches, and returns workflow state `idle` without LLM messages.
@@ -812,10 +822,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-061**: MUST verify `req-<prompt>` commands skip worktree creation when `AUTO_GIT_COMMIT=disable`, even if persisted `GIT_WORKTREE_ENABLED=enable`.
 - **TST-064**: MUST verify worktree-backed `req-<prompt>` commands confirm created worktree directory plus branch existence before prompt dispatch and abort without dispatch when verification fails.
 - **TST-067**: MUST verify `status:error` renders with blinking error styling and non-error `status` values follow the documented status-bar theme convention.
-- **TST-068**: MUST verify every `req-*` slash command except `req-reset` rejects non-`idle` workflow state before checks, worktree operations, or direct references execution, surfaces an error, and transitions workflow state to `error`.
+- **TST-068**: MUST verify every `req-*` slash command except `req-reset` rejects workflow state other than `idle` or `done` before checks, worktree operations, or direct references execution, surfaces an error, and transitions workflow state to `error`.
 - **TST-069**: MUST verify bundled prompt-backed `req-<prompt>` commands transition workflow state through `checking`, `error`, and `running` for documented preflight and prompt-handoff paths.
 - **TST-070**: MUST verify prompt-end handling ignores unrelated or non-success completions and performs cleanup only for the matched successful prompt.
-- **TST-071**: MUST verify matched successful cleanup transitions workflow state through `merging` to `idle` and transitions to `error` on merge or deletion failure.
+- **TST-071**: MUST verify matched successful cleanup transitions workflow state through `merging` to `done` and transitions to `error` on merge or deletion failure.
 - **TST-065**: MUST verify default startup-tool enablement matches the documented enabled and disabled tool matrix.
 - **TST-110**: MUST verify `Enable tools` toggles, enable-all, disable-all, and reset-defaults persist only in global configuration.
 - **TST-066**: MUST verify `req-<prompt>` commands keep working when extension custom-tool registrations are removed from the runtime inventory.
@@ -832,7 +842,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-120**: MUST verify `%%CONTEXT_FILES%%` sections use the file-name heading, the pre-substituted HTML file reference, and four-backtick `markdown` fences around raw content.
 - **TST-122**: MUST verify the command invocation summary renders `none` for `context files`, `static code checks`, and `enabled tools` when no items are enabled in each respective category.
 - **TST-131**: MUST verify the command invocation summary renders sections in the order `Command:`, `Configuration:`, then `User's Request:`, with one blank line between consecutive sections.
-- **TST-132**: MUST verify that when the running pi host does not expose `agent_settled`, matched-success worktree closure finalizes at `agent_end` and transitions through `merging` to `idle`.
+- **TST-132**: MUST verify that when the running pi host does not expose `agent_settled`, matched-success worktree closure finalizes at `agent_end` and transitions through `merging` to `done`.
 - **TST-133**: MUST verify `req-references` stages `REFERENCES.md` and reports success without creating a commit when the regenerated content matches `HEAD`, leaving the repository clean.
 - **TST-134**: MUST verify prompt-command preflight stores the captured model provider, model identifier, and thinking level inside the execution plan.
 - **TST-135**: MUST verify execution-session activation re-applies the captured model on the replacement session before agent start when the restored model differs.
@@ -892,7 +902,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-182**: MUST verify `--get`, `--set`, and `--unset` JSON semantics, index bounds, reset rules, and no mutation on rejected operations.
 - **TST-183**: MUST verify `--print-raw` byte preservation plus global-config bootstrapping without overwriting an existing file.
 - **TST-184**: MUST verify `--info Global` renders `Global`-level detail prefixes `│   `, non-last leaf `│   │   `, last leaf `│       `, and last `Local` leaf eight spaces.
-- **TST-185**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: OK` merges, deletes the worktree plus branch, and returns workflow state `idle`.
+- **TST-185**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: OK` merges, deletes the worktree plus branch, and returns workflow state `done`.
 - **TST-186**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: ERROR` performs no merge or worktree deletion and parks workflow state `error`.
 - **TST-187**: MUST verify a completed worktree-backed run whose final assistant text contains neither marker performs no merge or worktree deletion and parks blinking `warning`.
 - **TST-188**: MUST verify a completed worktree-backed run whose final assistant message exposes no text content block remains merge-eligible.
@@ -909,7 +919,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-202**: MUST verify same-source and unknown-source `--upgrade` runs keep the documented `pi update` and `pi update --force` commands without package removal.
 - **TST-203**: MUST verify launcher deployment gating accepts git-managed and project-scope `.pi` pi package installation trees.
 - **TST-204**: MUST verify `req-references` writes the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` content into `REFERENCES.md`, commits only that file, and performs no source extraction when the git inventory holds no supported source file.
-- **TST-205**: MUST verify `req-workflow` writes the exact `NO_SOURCE_WORKFLOW_PLACEHOLDER` content into `WORKFLOW.md`, dispatches no prompt message, creates no worktree, and returns workflow state `idle` when no supported source file exists.
+- **TST-205**: MUST verify `req-workflow` writes the exact `NO_SOURCE_WORKFLOW_PLACEHOLDER` content into `WORKFLOW.md`, dispatches no prompt message, creates no worktree, and returns workflow state `done` when no supported source file exists.
+- **TST-206**: MUST verify the `status` field renders `<request>►<state>` during and after orchestration, renders `idle` without request after `startup|reload` or `/req-reset`, and renders `done` as the default terminal state.
+- **TST-207**: MUST verify a new orchestration starts from `done`, an orchestration in `warning|error` is rejected, and terminal outcomes match the documented per-command domains.
 
 ## 5. Observed Component Model
 
@@ -1089,7 +1101,17 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-299 | `src/index.ts` :: `registerReqReferencesCommand` :: transitions `checking` then `running`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` reuses `validatePromptGitState(...)` without worktree or session switching. |
 | REQ-300 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution` calls `runReferences(...)`; `src/core/tool-runner.ts` :: `runReferences` overwrites configured `REFERENCES.md`. |
 | REQ-301 | `src/core/req-references-command.ts` :: `REQ_REFERENCES_COMMIT_MESSAGE`, `getGitAddTargetPath(...)`, and `executeReqReferencesCommandExecution(...)` :: stage only `REFERENCES.md` and create the fixed commit. |
-| REQ-302 | `src/index.ts` :: `registerReqReferencesCommand` :: restores workflow state `idle` and emits success notification after direct execution; `src/core/req-references-command.ts` :: `listResidualGitStatusLines(...)` verifies clean repository state. |
+| REQ-302 | `src/index.ts` :: `registerReqReferencesCommand` :: restores workflow state `done` and emits success notification after direct execution; `src/core/req-references-command.ts` :: `listResidualGitStatusLines(...)` verifies clean repository state. |
+| REQ-629 | `src/core/extension-status.ts` :: `updateExtensionStatus` session-start restore branch :: restores the persisted terminal workflow state plus active request for `new|resume|fork`. |
+| REQ-630 | `src/core/extension-status.ts` :: `PiUsereqStatusState.workflowState` plus `workflowRequest` :: process-scoped runtime orchestration state variables. |
+| REQ-631 | `src/index.ts` :: `registerPromptCommands`, `registerReqReferencesCommand`, plus `registerReqResetCommand` :: record the active request token before `checking` or `running`. |
+| REQ-632 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `<request>►<state>` with the documented fallback. |
+| REQ-633 | `src/core/extension-status.ts` :: `shouldResetWorkflowStateOnSessionStart` plus `updateExtensionStatus` :: resets to `idle` only on `startup|reload`; `src/index.ts` :: `registerReqResetCommand` :: ends successful reset in `idle`. |
+| REQ-634 | `src/index.ts` :: `finalizeMatchedPromptSuccess`, `registerReqReferencesCommand`, plus `registerPromptCommands` :: successful termination sets `done`. |
+| REQ-635 | `src/index.ts` :: `registerPromptCommands` plus `registerReqReferencesCommand` :: startability gate accepts `idle|done`. |
+| REQ-636 | `src/index.ts` :: terminal transition branches :: non-reset orchestration ends in `done|warning|error`; `req-reset` ends in `idle|warning|error`. |
+| REQ-637 | `src/core/prompt-command-state.ts` :: `PersistedPromptCommandRuntimeState.workflowRequest` :: persists and restores the active request with the workflow state. |
+| REQ-638 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `done` with the non-error warning-token value convention. |
 | REQ-303 | `src/index.ts` :: `registerReqReferencesCommand` :: transitions to `error` and notifies on failure; `src/core/req-references-command.ts` :: throws deterministic `ReqError` failures for generation, staging, commit, and cleanliness errors. |
 | REQ-357 | `src/core/req-references-command.ts` :: `runGuardedGitCommit` and `hasStagedChangesForPaths` :: skip `git commit` when the cached index holds no staged difference for the target paths. |
 | REQ-358 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution` :: invokes `runGuardedGitCommit(...)` before residual-status verification. |
@@ -1211,7 +1233,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-620 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution(...)` :: writes `REFERENCES.md` through the no-source placeholder path when `hasAnalyzableSourceFiles(...)` reports an empty source inventory. |
 | REQ-621 | `src/index.ts` :: `registerPromptCommands(...)` :: inspects the source inventory for `workflow` before `preparePromptCommandExecution(...)` and writes the `WORKFLOW.md` placeholder. |
 | REQ-622 | `src/core/source-presence.ts` :: `NO_SOURCE_REFERENCES_PLACEHOLDER`, `NO_SOURCE_WORKFLOW_PLACEHOLDER`, and `writeNoSourcePlaceholderDocument(...)` :: write the declared payload verbatim. |
-| REQ-623 | `src/index.ts` :: `registerPromptCommands(...)` :: transitions workflow state to `idle` and returns before worktree creation and prompt delivery for the no-source `workflow` path. |
+| REQ-623 | `src/index.ts` :: `registerPromptCommands(...)` :: transitions workflow state to `done` and returns before worktree creation and prompt delivery for the no-source `workflow` path. |
 | REQ-597 | `scripts/build.sh` :: `main(...)` stage order :: previous-build cleanup runs before dependency preparation, compilation, and packaging. |
 | REQ-598 | `scripts/build.sh` :: `clean_previous_dist_directory(...)` :: removes `dist/` only when empty after tarball removal. |
 | REQ-599 | `scripts/build.sh` :: `cleanup_build_artifacts(...)` :: removes every repository entry created by the run. |
@@ -1249,7 +1271,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-093 | `tests/extension-registration.test.ts` :: `replacement-session prompt delivery persists running before async sendUserMessage resolves` verifies async prompt-delivery completion does not delay merge-eligible `running` state. |
 | TST-094 | `tests/extension-registration.test.ts` :: `worktree-backed closure merges from base-path when end-of-session timing already moved the persisted context` verifies closure merges successfully without worktree-session reactivation. |
 | TST-102 | `tests/extension-registration.test.ts` :: `req-references registers outside the bundled prompt inventory and keeps its dedicated description` verifies dedicated registration independent from the bundled prompt inventory. |
-| TST-103 | `tests/extension-registration.test.ts` :: `req-references updates REFERENCES.md with a direct commit workflow and no LLM session` verifies overwrite, fixed commit message, clean repo, and idle restoration without worktree or prompt dispatch. |
+| TST-103 | `tests/extension-registration.test.ts` :: `req-references updates REFERENCES.md with a direct commit workflow and no LLM session` verifies overwrite, fixed commit message, clean repo, and `done` restoration without worktree or prompt dispatch. |
 | TST-104 | `tests/extension-registration.test.ts` :: `req-references surfaces git-validation and reference-generation failures without session handoff` verifies error reporting without worktree creation, prompt dispatch, or git-history mutation. |
 | TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
 | TST-009 | `package.json` :: `"type": "module"`, `"pi": { "extensions": ["./src/index.ts"] }`, and `"scripts"` entries for `test`, `test:watch`, and `cli`. |
@@ -1289,7 +1311,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-202 | `tests/package-manager.test.ts` :: same-source and unknown-source upgrade coverage asserts the documented `pi update` and `pi update --force` commands without removal. |
 | TST-203 | `tests/bin-deploy.test.ts` :: launcher gating coverage asserts git-managed and project-scope `.pi` installation trees deploy the launcher. |
 | TST-204 | `tests/extension-registration.test.ts` :: `req-references writes the no-source REFERENCES.md placeholder without source extraction` asserts exact placeholder content, single-file commit, and no prompt dispatch. |
-| TST-205 | `tests/extension-registration.test.ts` :: `req-workflow writes the no-source WORKFLOW.md placeholder without dispatching a prompt` asserts exact placeholder content, zero prompt messages, zero worktrees, and workflow state `idle`. |
+| TST-205 | `tests/extension-registration.test.ts` :: `req-workflow writes the no-source WORKFLOW.md placeholder without dispatching a prompt` asserts exact placeholder content, zero prompt messages, zero worktrees, and workflow state `done`.
+| TST-206 | `tests/extension-registration.test.ts` :: status-rendering coverage asserts the `<request>►<state>` status value, the request-less `idle` bootstrap value, and the `done` terminal value. |
+| TST-207 | `tests/extension-registration.test.ts` :: orchestration-gate coverage asserts `done` -> `running` startability, `warning|error` rejection, and the documented per-command terminal domains. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

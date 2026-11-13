@@ -17,6 +17,7 @@ import type { UseReqConfig } from "./config.js";
 import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
 import type { PromptCommandExecutionPlan, PromptCommandStatusMarker } from "./prompt-command-runtime.js";
 import {
+  readPersistedPromptCommandTerminalState,
   restorePersistedPromptCommandRuntimeStateForSession,
   writePersistedPromptCommandRuntimeState,
 } from "./prompt-command-state.js";
@@ -109,16 +110,17 @@ export type PiUsereqPromptRequest = PromptCommandExecutionPlan;
 
 /**
  * @brief Represents one prompt-orchestration workflow state displayed in the status bar.
- * @details Narrows workflow tracking to the documented `idle`, `checking`, `running`, `merging`, `warning`, and `error` states reused by prompt-command gating, prompt-end orchestration, and status rendering. Compile-time only and introduces no runtime cost.
+ * @details Narrows workflow tracking to the documented `idle`, `checking`, `running`, `merging`, `done`, `warning`, and `error` states reused by prompt-command gating, prompt-end orchestration, and status rendering. Compile-time only and introduces no runtime cost.
  */
-export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" | "warning" | "error";
+export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" | "done" | "warning" | "error";
 
 /**
  * @brief Stores the mutable runtime facts displayed by the status bar.
- * @details Persists the prompt-orchestration workflow state, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome plus inspected status marker recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
+ * @details Persists the prompt-orchestration workflow state, the active orchestration request token, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome plus inspected status marker recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqStatusState {
   workflowState: PiUsereqWorkflowState;
+  workflowRequest: string | undefined;
   contextUsage: ContextUsage | undefined;
   runStartTimeMs: number | undefined;
   activeRunBelongsToPrompt: boolean;
@@ -247,13 +249,14 @@ function clearPersistedActiveRunState(): void {
 
 /**
  * @brief Mirrors one controller prompt state into the process-scoped persistence store.
- * @details Persists the current workflow state plus the pending and active prompt execution plans so prompt orchestration can survive session replacement. Runtime is O(1). Side effect: mutates process-scoped prompt-command persistence state.
+ * @details Persists the current workflow state, the active orchestration request token, plus the pending and active prompt execution plans so prompt orchestration can survive session replacement. Runtime is O(1). Side effect: mutates process-scoped prompt-command persistence state.
  * @param[in] state {PiUsereqStatusState} Current controller state snapshot.
  * @return {void} No return value.
  */
 function persistPromptCommandState(state: PiUsereqStatusState): void {
   writePersistedPromptCommandRuntimeState({
     workflowState: state.workflowState,
+    workflowRequest: state.workflowRequest,
     pendingPromptRequest: state.pendingPromptRequest,
     activePromptRequest: state.activePromptRequest,
   });
@@ -273,7 +276,7 @@ export function shouldPreservePromptCommandStateOnShutdown(state: PiUsereqStatus
 
 /**
  * @brief Restores prompt-command persistence into one fresh controller when the active session matches.
- * @details Rehydrates workflow state plus pending or active prompt execution plans only when the current session file targets the persisted execution session created for prompt orchestration. Runtime is O(1). Side effect: mutates `state` when persisted prompt state is available.
+ * @details Rehydrates workflow state, the active request token, and pending or active prompt execution plans only when the current session file targets the persisted execution session created for prompt orchestration. Runtime is O(1). Side effect: mutates `state` when persisted prompt state is available.
  * @param[in,out] state {PiUsereqStatusState} Mutable controller state.
  * @param[in] sessionFile {string | undefined} Current active session file.
  * @return {void} No return value.
@@ -287,6 +290,7 @@ function restorePersistedPromptCommandState(
     return;
   }
   state.workflowState = persistedState.workflowState;
+  state.workflowRequest = persistedState.workflowRequest;
   state.pendingPromptRequest = persistedState.pendingPromptRequest;
   state.activePromptRequest = persistedState.activePromptRequest;
 }
@@ -346,14 +350,25 @@ function shouldResetElapsedStateOnSessionStart(event: unknown): boolean {
 
 /**
  * @brief Detects whether a `session_start` event must reset the workflow state to `idle`.
- * @details Treats `startup`, `new`, and `reload` as workflow-reset boundaries so prompt-orchestration state never leaks across boot, explicit session replacement, or extension reload. Runtime is O(1). No external state is mutated.
+ * @details Treats `startup` and `reload` as workflow-reset boundaries so prompt-orchestration state never leaks across boot or extension reload, while non-reset session-start reasons preserve the persisted terminal orchestration outcome. Runtime is O(1). No external state is mutated.
  * @param[in] event {unknown} Session-start payload.
  * @return {boolean} `true` when workflow state must reset to `idle`.
- * @satisfies REQ-009, REQ-221
+ * @satisfies REQ-009, REQ-221, REQ-633
  */
 function shouldResetWorkflowStateOnSessionStart(event: unknown): boolean {
   const reason = (event as { reason?: unknown }).reason;
-  return reason === "startup" || reason === "new" || reason === "reload";
+  return reason === "startup" || reason === "reload";
+}
+
+/**
+ * @brief Tests whether one workflow state admits a new orchestration.
+ * @details Accepts the request-less bootstrap `idle` state and the successful terminal `done` state, so a subsequent orchestration can transition `done` into `running` without an intervening reset while `warning` and `error` keep requiring an explicit `/req-reset`. Runtime is O(1). No external state is mutated.
+ * @param[in] workflowState {PiUsereqWorkflowState} Candidate workflow state.
+ * @return {boolean} `true` when a new orchestration may start from the supplied state.
+ * @satisfies REQ-635
+ */
+export function isPiUsereqWorkflowStartable(workflowState: PiUsereqWorkflowState): boolean {
+  return workflowState === "idle" || workflowState === "done";
 }
 
 /**
@@ -586,20 +601,25 @@ function formatRenderedStatusField(
 
 /**
  * @brief Formats the rendered workflow-state value for the `status` field.
- * @details Uses the standard warning-colored value renderer for neutral states, emits a blinking `error`-colored value for `status:error`, and emits the identical blinking `error`-colored value for `status:warning` so orchestration warnings match the documented error styling. Runtime is O(n) in text length. No external state is mutated.
+ * @details Uses the standard warning-colored value renderer for neutral states, emits a blinking `error`-colored value for `status:error`, and emits the identical blinking `error`-colored value for `status:warning` so orchestration warnings match the documented error styling. When an active orchestration request token exists, the value renders as `<request>►<state>`; otherwise it renders the bare `<state>`, so the bootstrap `idle` state stays request-less while `done` renders through the non-error value convention. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] workflowState {PiUsereqWorkflowState} Current workflow state.
+ * @param[in] workflowRequest {string | undefined} Active orchestration request token without the `req-` prefix.
  * @return {string} Rendered workflow-state value.
- * @satisfies REQ-112, REQ-223, REQ-590
+ * @satisfies REQ-112, REQ-223, REQ-590, REQ-632, REQ-633, REQ-638
  */
 function formatWorkflowStateValue(
   theme: StatusThemeAdapter,
   workflowState: PiUsereqWorkflowState,
+  workflowRequest: string | undefined,
 ): string {
+  const valueText = workflowRequest !== undefined
+    ? `${workflowRequest}►${workflowState}`
+    : workflowState;
   if (workflowState === "error" || workflowState === "warning") {
-    return theme.colorize("error", `\u001b[5m${workflowState}\u001b[25m`);
+    return theme.colorize("error", `\u001b[5m${valueText}\u001b[25m`);
   }
-  return theme.value(workflowState);
+  return theme.value(valueText);
 }
 
 /**
@@ -674,7 +694,7 @@ function buildPiUsereqStatusText(
     formatRenderedStatusField(
       theme,
       "status",
-      formatWorkflowStateValue(theme, state.workflowState),
+      formatWorkflowStateValue(theme, state.workflowState, state.workflowRequest),
     ),
     formatStatusField(theme, "branch", branchName),
     formatRenderedStatusField(
@@ -732,7 +752,7 @@ function syncPiUsereqStatusTicker(
 
 /**
  * @brief Creates an empty pi-usereq status controller.
- * @details Initializes the mutable status snapshot, including empty prompt-request tracking and an unset runtime sound level that later loads from persisted config during `session_start`, and starts with no config, no context, and no live ticker. Runtime is O(1). No external state is mutated.
+ * @details Initializes the mutable status snapshot, including empty prompt-request tracking, an undefined active orchestration request token for the request-less bootstrap `idle` state, and an unset runtime sound level that later loads from persisted config during `session_start`, and starts with no config, no context, and no live ticker. Runtime is O(1). No external state is mutated.
  * @return {PiUsereqStatusController} New status controller.
  * @satisfies DES-010
  */
@@ -742,6 +762,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
     latestContext: undefined,
     state: {
       workflowState: "idle",
+      workflowRequest: undefined,
       contextUsage: undefined,
       runStartTimeMs: undefined,
       activeRunBelongsToPrompt: false,
@@ -875,8 +896,30 @@ export function setPiUsereqWorkflowState(
 }
 
 /**
+ * @brief Stores the active orchestration request token and refreshes the status bar.
+ * @details Records the processed slash-command name without the `req-` prefix in the process-scoped runtime state before the orchestration enters `checking` or `running`, then re-renders the single-line footer so the `<request>►<state>` status value becomes visible immediately. Runtime is O(1). Side effect: mutates workflow request state and may update `ctx.ui` status.
+ * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
+ * @param[in] workflowRequest {string} Active request token without the `req-` prefix.
+ * @param[in] ctx {ExtensionContext | undefined} Optional active extension context.
+ * @return {void} No return value.
+ * @satisfies REQ-630, REQ-631, REQ-637
+ */
+export function setPiUsereqWorkflowRequest(
+  controller: PiUsereqStatusController,
+  workflowRequest: string,
+  ctx?: ExtensionContext,
+): void {
+  controller.state.workflowRequest = workflowRequest;
+  persistPromptCommandState(controller.state);
+  const renderContext = ctx ?? controller.latestContext;
+  if (renderContext) {
+    renderPiUsereqStatus(controller, renderContext);
+  }
+}
+
+/**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, resynchronizes that metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, resets workflow state to `idle` for documented session-start reasons, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, starts run timing, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight run record into the process-scoped store, captures each ended run's own duration on `agent_end` or `agent_settled` (recovering the run start and prompt association from the process-scoped record when the in-memory timer was cleared mid-run), accumulates successful runtime into `Σ` while keeping the ended-run duration separate from the completed counters, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, resets or restores persisted elapsed counters during `session_start`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes metadata on later lifecycle hooks so post-switch workflow transitions performed by the initiating command handler become visible to the replacement-session runtime, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, starts run timing, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight run record into the process-scoped store, captures each ended run's own duration on `agent_end` or `agent_settled` (recovering the run start and prompt association from the process-scoped record when the in-memory timer was cleared mid-run), accumulates successful runtime into `Σ` while keeping the ended-run duration separate from the completed counters, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown while resetting only in-flight states, tolerates stale post-replacement render contexts, synchronizes the live ticker, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(n) in `agent_end` message count and otherwise O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
@@ -907,6 +950,13 @@ export function updateExtensionStatus(
     const shouldResetWorkflowState = shouldResetWorkflowStateOnSessionStart(event);
     if (shouldResetWorkflowState) {
       controller.state.workflowState = "idle";
+      controller.state.workflowRequest = undefined;
+    } else {
+      const terminalState = readPersistedPromptCommandTerminalState();
+      if (terminalState !== undefined && controller.state.workflowState === "idle") {
+        controller.state.workflowState = terminalState.workflowState;
+        controller.state.workflowRequest = terminalState.workflowRequest;
+      }
     }
     controller.state.runStartTimeMs = undefined;
     controller.state.activeRunBelongsToPrompt = false;
@@ -995,7 +1045,14 @@ export function updateExtensionStatus(
       controller.state.activePromptRequest = undefined;
       controller.state.pendingFinalizationOutcome = undefined;
       controller.state.pendingFinalizationStatusMarker = undefined;
-      controller.state.workflowState = "idle";
+      if (
+        controller.state.workflowState === "checking"
+        || controller.state.workflowState === "running"
+        || controller.state.workflowState === "merging"
+      ) {
+        controller.state.workflowState = "idle";
+        controller.state.workflowRequest = undefined;
+      }
     }
   }
 
