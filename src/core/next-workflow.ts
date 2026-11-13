@@ -221,9 +221,9 @@ export function getNextWorkflowCommands(): NextWorkflowCommandEntry[] {
 
 /**
  * @brief Clears the captured Next-Workflow commands.
- * @details Resets the process-scoped array to empty so bootstrap workflow-state resets never leave stale follow-up commands reachable by `/req-continue`. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @details Resets the process-scoped array to empty. The wipe runs only at the idle-reset bootstrap boundaries (`startup|reload` `session_start`) and immediately before prompt dispatch of a `new` agentic flow after every slash-command pre-check has succeeded, so failed pre-checks preserve queued commands and `/req-reset` recovery never clears the array. Runtime is O(1). Side effect: mutates process-scoped state.
  * @return {void} No return value.
- * @satisfies REQ-656
+ * @satisfies REQ-656, REQ-669, REQ-670
  * @note Complexity: O(1).
  */
 export function clearNextWorkflowCommands(): void {

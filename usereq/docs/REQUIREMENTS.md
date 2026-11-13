@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.153"
+version: "0.0.154"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -473,7 +473,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-362**: MUST include in that final context-retention notification the recommendation to initialize a new session with a clean context before the next `/req-*` command.
 - **REQ-363**: MUST append the current context-usage percentage to the final context-retention notification when a normalized context-usage snapshot exists.
 - **REQ-364**: MUST deliver the final context-retention notification exclusively through the stale-context-safe UI-notification channel and MUST NOT send it as a session message or perform session switching at that point.
-- **REQ-365**: MUST NOT emit the final context-retention notification for interrupted, failed, aborted, or incomplete worktree-backed `/req-*` orchestrations that retain the execution session per REQ-209.
+- **REQ-365**: MUST NOT emit the final context-retention notification for interrupted, failed, aborted, or incomplete worktree-backed `/req-*` orchestrations that retain the execution session per REQ-209, excluding fast-forward merge-failure closures per REQ-666.
 - **REQ-366**: MUST capture the active model provider, model identifier, and thinking level into the prompt-command execution plan during command preflight.
 - **REQ-367**: MUST re-apply the captured model after the prompt execution-session switch succeeds and before agent start using the session-scoped model API.
 - **REQ-368**: MUST re-apply the captured model after successful `base-path` session restoration during orchestrated closure using the session-scoped model API.
@@ -734,15 +734,21 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-653**: MUST inspect the final agent output of every completed agentic prompt run before emitting the final context-retention notification and MUST parse its `## **Next Workflow**` section for `~~~text` fenced command blocks.
 - **REQ-654**: MUST capture each fenced block whose first line is a pi-usereq slash command into one process-scoped Next-Workflow array as command plus input-text pairs in section order.
 - **REQ-655**: MUST purge every non-pi-usereq orchestration command from the Next-Workflow array while keeping the `/req-continue` exception.
-- **REQ-656**: MUST preserve the Next-Workflow array across the terminal `done` transition, extension rebinds, and `/new` session starts so `/req-continue` consumes the last completed flow's commands.
+- **REQ-656**: MUST preserve the Next-Workflow array across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` recovery so `/req-continue` consumes the last completed flow's commands.
 - **REQ-657**: MUST render the numbered Next-Workflow list after the "Context retained." retention line, printing one command per line.
 - **REQ-658**: MUST quote each listed input text as its first 20 characters, then `...`, then its last 10 characters, omitting the quotation when the command carries no input text.
 - **REQ-659**: MUST register `req-continue` as a dedicated extension command with description `Continue the previous agentic workflow with a captured Next-Workflow command` and MUST NOT depend on a bundled prompt Markdown file.
-- **REQ-660**: MUST reject `req-continue` with an error and perform no operation when workflow state is `idle`, meaning no previous agentic flow exists in context.
+- **REQ-660**: MUST allow `req-continue` from any startable workflow state, including `idle`, whenever the Next-Workflow array holds at least one command.
 - **REQ-661**: MUST reject `req-continue` with an error when the Next-Workflow array is empty or the requested ordinal is invalid, preserving the current workflow state.
 - **REQ-662**: MUST select the first Next-Workflow entry without a parameter and the one-based ordinal entry with a numeric parameter.
 - **REQ-663**: MUST execute the selected pi-usereq command through its registered handler with the captured input text, behaving exactly like a manual user invocation.
 - **REQ-664**: MUST let the delegated pi-usereq command own every workflow-state transition so `req-continue` itself never terminates with the `continue` to `done` transition.
+- **REQ-665**: MUST re-point the pi CLI active session, process cwd, and context cwd to the retained worktree before terminating orchestration when the fast-forward merge fails during worktree-backed closure.
+- **REQ-666**: MUST emit the final context-retention notification with the numbered Next-Workflow list before the error output when the fast-forward merge fails during worktree-backed closure.
+- **REQ-667**: MUST surface one identical hardcoded message beginning with `ERROR: ` that warns the fast-forward merge failed and the worktree changes require a manual merge as the last merge-failure output line.
+- **REQ-668**: MUST retain the captured Next-Workflow array unchanged when the fast-forward merge fails during worktree-backed closure.
+- **REQ-669**: MUST clear the captured Next-Workflow array immediately before prompt dispatch of a `new` agentic flow, after every slash-command pre-check has succeeded.
+- **REQ-670**: MUST NOT clear the captured Next-Workflow array during `/req-reset` recovery.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -830,7 +836,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-080**: MUST verify each bundled prompt-backed `req-*` command description is loaded at runtime from the first bundled prompt Markdown `# ` heading with the prefix removed.
 - **TST-081**: MUST verify worktree-backed prompt execution verifies worktree registration and branch presence, switches active-session cwd, `ctx.cwd`, and `process.cwd()` to `worktree-path` before agent start, and restores them to `base-path` before session-closure handling returns.
 - **TST-082**: MUST verify worktree-backed successful runs enter `running` only after prompt handoff succeeds, merge with `--ff-only` from `base-path`, and delete the worktree only after deletion verification passes.
-- **TST-083**: MUST verify worktree merge failures notify the pi CLI, transition through `error`, retain the worktree checkout for manual recovery, and keep `base-path` active after session-closure handling.
+- **TST-083**: MUST verify worktree merge failures notify the pi CLI, transition through `error`, retain the worktree checkout for manual recovery, and re-point the pi CLI execution surfaces to the retained worktree.
 - **TST-089**: MUST verify orchestrated closure succeeds when pi lifecycle event contexts omit `switchSession()`, restoring the original `base-path` session, merging successful worktree changes, and deleting the worktree plus branch.
 - **TST-090**: MUST verify switch-triggered `session_shutdown` preserves the in-memory `checking|running` prompt state plus pending prompt request so the initiating runtime can still complete successful worktree closure.
 - **TST-091**: MUST verify a replacement-session runtime that starts before the initiating command handler finishes the post-switch `running` transition resynchronizes persisted prompt state before prompt closure and still merges plus deletes successful worktrees.
@@ -957,7 +963,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-215**: MUST verify Next-Workflow capture parses `~~~text` fenced blocks from the `## **Next Workflow**` section, keeps pi-usereq commands plus `/req-continue`, purges other orchestration commands, and preserves section order.
 - **TST-216**: MUST verify the final context-retention notification renders the numbered Next-Workflow list after the retention line with the first-20/last-10 quotation and omits quotation for commands without input text.
 - **TST-217**: MUST verify `req-continue` registers outside the bundled prompt inventory and delegates the selected first or one-based ordinal entry through the registered handler with the captured input text.
-- **TST-218**: MUST verify `req-continue` rejects the `idle` state, an empty Next-Workflow array, and invalid ordinals with an error and no workflow-state transition.
+- **TST-218**: MUST verify `req-continue` registers outside the bundled prompt inventory, executes from `idle` and `done` whenever the Next-Workflow array holds commands, and rejects empty arrays and invalid ordinals with an error and no workflow-state transition.
+- **TST-219**: MUST verify fast-forward merge-failure closure re-points the pi CLI to the retained worktree, emits the retention notification plus numbered list before the error, ends the error output with the hardcoded uniform `ERROR: ` message, and preserves the Next-Workflow array.
+- **TST-220**: MUST verify `/req-reset` preserves the captured Next-Workflow array so `/req-continue` stays executable from `idle` after recovery.
+- **TST-221**: MUST verify the Next-Workflow array is cleared immediately before prompt dispatch of a `new` agentic flow and preserved when slash-command pre-checks fail.
 
 ## 5. Observed Component Model
 
@@ -1309,15 +1318,21 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-653 | `src/index.ts` :: `handleExtensionStatusEvent` capture block (L1770-1775) :: parses the terminal completed output through `captureNextWorkflowCommands(...)` before the retention notification; `src/core/next-workflow.ts` :: `parseNextWorkflowCommandEntries` (L167-199) :: last-section `~~~text` fenced-block parsing. |
 | REQ-654 | `src/core/next-workflow.ts` :: `appendNextWorkflowBlockEntry` (L112-136) plus `captureNextWorkflowCommands` (L205-216) :: command plus input-text pair capture into the process-scoped array in section order. |
 | REQ-655 | `src/core/next-workflow.ts` :: `appendNextWorkflowBlockEntry` purge branch (L126-129) plus `NEXT_WORKFLOW_COMMAND_NAMES` (L36-43) :: non-pi-usereq orchestration commands dropped while `req-continue` stays eligible. |
-| REQ-656 | `src/core/next-workflow.ts` :: `ProcessScopedNextWorkflowStore` (L78-84) plus `getNextWorkflowStore` (L95-103); `src/index.ts` :: `session_start` clear (L1609-1614) :: array preserved across `done`, rebinds, and `/new` while `startup|reload` resets it. |
+| REQ-656 | `src/core/next-workflow.ts` :: `ProcessScopedNextWorkflowStore` (L78-84) plus `getNextWorkflowStore` (L95-103); `src/index.ts` :: `session_start` clear (L1624-1629) plus `promptCommandHandler` pre-dispatch wipe (L4003-4009) :: array preserved across terminal transitions, rebinds, `/new`, and `/req-reset` while `startup|reload` and the pre-dispatch `new`-flow wipe clear it. |
 | REQ-657 | `src/index.ts` :: `notifyContextRetentionReminder` (L1292-1311) :: appends the numbered list after the retention line; `src/core/next-workflow.ts` :: `formatNextWorkflowList` (L292-300) :: one command per line. |
 | REQ-658 | `src/core/next-workflow.ts` :: `condenseNextWorkflowInputText` (L274-285) :: first 20 characters plus `...` plus last 10 characters, omitted without input text. |
-| REQ-659 | `src/index.ts` :: `registerReqContinueCommand` (L3801-3849) registers `req-continue` with `REQ_CONTINUE_COMMAND_DESCRIPTION`; `src/core/next-workflow.ts` :: `REQ_CONTINUE_COMMAND_DESCRIPTION` (L51-53) :: dedicated registration outside the bundled prompt inventory. |
-| REQ-660 | `src/index.ts` :: `registerReqContinueCommand` idle branch (L3817-3824) :: error plus no operation without workflow-state transition. |
+| REQ-659 | `src/index.ts` :: `registerReqContinueCommand` (L3827-3863) registers `req-continue` with `REQ_CONTINUE_COMMAND_DESCRIPTION`; `src/core/next-workflow.ts` :: `REQ_CONTINUE_COMMAND_DESCRIPTION` (L51-53) :: dedicated registration outside the bundled prompt inventory. |
+| REQ-660 | `src/index.ts` :: `continueCommandHandler` startability gate plus empty-array check (L3837-3846) :: `idle` dispatches whenever the captured array holds commands. |
 | REQ-661 | `src/index.ts` :: empty-array branch (L3825-3830); `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` throws (L312-333) :: deterministic errors preserving the current workflow state. |
 | REQ-662 | `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` (L312-333); `src/index.ts` :: entry selection (L3831) :: first entry without a parameter, one-based ordinal entry with a numeric parameter. |
 | REQ-663 | `src/index.ts` :: handler registrations (L3724, L3798, L3848, L4040) plus delegation (L3832-3842); `src/core/next-workflow.ts` :: `registerNextWorkflowCommandHandler` (L242-250) plus `resolveNextWorkflowCommandHandler` (L257-261) :: manual-invocation-equivalent dispatch. |
-| REQ-664 | `src/index.ts` :: `registerReqContinueCommand` delegation comment (L3838-3841) plus `await delegatedHandler(entry.inputText, ctx)` (L3842) :: delegated command owns every workflow-state transition. |
+| REQ-664 | `src/index.ts` :: `registerReqContinueCommand` delegation comment (L3854-3857) plus `await delegatedHandler(entry.inputText, ctx)` (L3858) :: delegated command owns every workflow-state transition. |
+| REQ-665 | `src/core/prompt-command-runtime.ts` :: `redirectPromptCommandExecutionToRetainedWorktree` (L1938-1980) invoked by the `finalizePromptCommandExecution` merge-failure branch (L2103-2120) :: switches back to the retained execution session, aligns `process.cwd()`, and restores worktree path facts before termination. |
+| REQ-666 | `src/index.ts` :: `finalizeMatchedPromptSuccess` merge-failure branch (L1502-1519) :: retention notification precedes the error notification. |
+| REQ-667 | `src/core/prompt-command-runtime.ts` :: `PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE` (L1001-1007); `src/index.ts` :: error-message append (L1512-1518) :: identical hardcoded `ERROR:` last line for every orchestration. |
+| REQ-668 | `src/index.ts` :: merge-failure branch clears no Next-Workflow state (L1504-1520); `tests/extension-registration.test.ts` :: `worktree-backed finalization transitions through merging, error, and idle when merge fails` (L5260) :: captured array still holds two entries after the failed closure. |
+| REQ-669 | `src/index.ts` :: `promptCommandHandler` pre-dispatch wipe (L4005-4011) :: `clearNextWorkflowCommands()` only for the `new` flow after all pre-checks; `tests/extension-registration.test.ts` :: `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206). |
+| REQ-670 | `src/index.ts` :: `resetCommandHandler` idle transition preserves the array (L3728-3731); `tests/extension-registration.test.ts` :: `req-reset accepts non-idle workflow state, preserves transcript, and removes generated worktrees` (L3936) plus the wipe-placement test (L10206). |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1391,7 +1406,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-215 | `tests/next-workflow.test.ts` :: parser, purge, section-selection, and capture-store tests (L35-99, L147-176) :: fenced-block parsing, `/req-continue` exception, orchestration-command purge, and section order. |
 | TST-216 | `tests/next-workflow.test.ts` :: condensation plus list-rendering tests (L101-132); `tests/extension-registration.test.ts` :: `completed prompt run captures next-workflow commands and renders the numbered retention list` (L9934-10012) :: numbered list after the retention line with the first-20/last-10 quotation. |
 | TST-217 | `tests/extension-registration.test.ts` :: `req-continue delegates the selected first or ordinal entry through the registered handler` (L9875-9933); `tests/next-workflow.test.ts` :: ordinal-selection and handler-registry tests (L133-145, L177-191) :: first and one-based ordinal delegation with the captured input text. |
-| TST-218 | `tests/extension-registration.test.ts` :: `req-continue registers as a dedicated command and rejects idle, empty arrays, and invalid ordinals` (L9785-9874) :: error rejections without workflow-state transitions. |
+| TST-218 | `tests/extension-registration.test.ts` :: `req-continue registers as a dedicated command, runs from idle with captured commands, and rejects empty arrays and invalid ordinals` (L9855) :: idle delegation plus error rejections without workflow-state transitions. |
+| TST-219 | `tests/extension-registration.test.ts` :: `worktree-backed finalization transitions through merging, error, and idle when merge fails` (L5260) :: worktree re-point, retention-before-error ordering, hardcoded `ERROR:` last line, and preserved Next-Workflow array. |
+| TST-220 | `tests/extension-registration.test.ts` :: `req-reset accepts non-idle workflow state, preserves transcript, and removes generated worktrees` (L3936) plus `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206) :: array preserved across `/req-reset` recovery. |
+| TST-221 | `tests/extension-registration.test.ts` :: `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206) :: failed pre-checks preserve the array and the dispatch-time sample observes the post-wipe empty array. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

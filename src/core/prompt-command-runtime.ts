@@ -999,6 +999,14 @@ function listPromptTrackedBasePathChanges(basePath: string): string[] {
 }
 
 /**
+ * @brief Stores the hardcoded uniform fast-forward merge-failure error message.
+ * @details Every worktree-backed orchestration surfaces this exact message as the last line of its merge-failure closure output so the user-facing diagnostic stays uniform across orchestrations; the message warns that the fast-forward merge failed and that the retained worktree changes require a manual merge. Access complexity is O(1) per exported constant access.
+ * @satisfies REQ-667
+ */
+export const PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE =
+  "ERROR: Fast-forward merge failed. The worktree was retained. Merge the worktree changes manually to recover the executed work.";
+
+/**
  * @brief Executes the successful-closure merge sequence from restored `base-path`.
  * @details Detects tracked staged or unstaged `base-path` changes, wraps the existing fast-forward merge in `git stash` and `git stash pop` when required, preserves the direct merge path when no tracked changes exist, emits a warning-only result after successful local-change restoration, and writes one merge-finalization debug entry when enabled. Runtime is dominated by up to four git subprocesses plus O(n) status parsing. Side effects include stash-stack mutation, branch merge attempts, and optional debug-log writes.
  * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose branch should be merged.
@@ -1919,6 +1927,59 @@ export async function restorePromptCommandExecution(
 }
 
 /**
+ * @brief Re-points the pi CLI execution surfaces to the retained worktree after one fast-forward merge failure.
+ * @details Switches the active session back to the retained execution-session file, re-aligns `process.cwd()` to the execution context path, verifies the restored session target, best-effort realigns the context `cwd` mirror while tolerating the documented stale-extension-context error, and restores the runtime context-path plus worktree facts so the user keeps working inside the retained worktree that still holds the unmerged branch. Every failure degrades into the returned diagnostic without throwing so the original fast-forward merge error stays the surfaced closure diagnostic. Runtime is dominated by one optional session switch plus one optional cwd mutation. Side effects include active-session replacement, host-process cwd mutation, runtime-path state mutation, and optional context-mirror mutation.
+ * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose retained worktree receives the pi CLI execution surfaces.
+ * @param[in] ctx {PromptCommandSessionContext | undefined} Optional session-bound command context used for the worktree session switch.
+ * @return {Promise<{ redirected: boolean; errorMessage?: string; activeContext?: PromptCommandSessionContext }>} Redirect outcome facts plus the last valid active prompt-command context; never throws.
+ * @satisfies REQ-209, REQ-665
+ * @note Complexity: dominated by one optional session switch.
+ */
+export async function redirectPromptCommandExecutionToRetainedWorktree(
+  plan: PromptCommandExecutionPlan,
+  ctx?: PromptCommandSessionContext,
+): Promise<{
+  redirected: boolean;
+  errorMessage?: string;
+  activeContext?: PromptCommandSessionContext;
+}> {
+  if (!plan.worktreePath || !plan.executionSessionFile) {
+    return { redirected: false, activeContext: ctx };
+  }
+  try {
+    const activeContext = await switchPromptCommandSession(plan.executionSessionFile, ctx);
+    syncPromptCommandProcessCwd(plan.contextPath, "Merge-failure worktree redirect");
+    verifyPromptCommandSessionTarget(
+      plan.executionSessionFile,
+      plan.contextPath,
+      activeContext,
+      "Merge-failure worktree redirect",
+    );
+    if (activeContext !== undefined) {
+      try {
+        Reflect.set(activeContext, "cwd", plan.contextPath);
+      } catch (error) {
+        if (!isPromptCommandStaleContextError(error)) {
+          throw error;
+        }
+      }
+    }
+    setRuntimeContextPath(plan.contextPath);
+    setRuntimeWorktreePathState({
+      worktreeDir: plan.worktreeDir,
+      worktreePath: plan.worktreePath,
+    });
+    return { redirected: true, activeContext };
+  } catch (error) {
+    return {
+      redirected: false,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      activeContext: (getPromptCommandErrorContext(error) ?? ctx) as PromptCommandSessionContext | undefined,
+    };
+  }
+}
+
+/**
  * @brief Aborts one prepared prompt-command execution before pi CLI takes ownership.
  * @details Restores the original session-backed cwd and deletes any created worktree plus branch when command-side preflight, prompt rendering, or prompt handoff fails before agent completion. Restoration failures are returned as structured cleanup errors so the original preflight failure is not masked. Runtime is dominated by the optional session switch plus git subprocess execution. Side effects include active-session replacement, optional worktree deletion, and optional debug-log writes.
  * @param[in] plan {PromptCommandExecutionPlan} Prepared prompt execution plan.
@@ -1977,12 +2038,12 @@ export async function abortPromptCommandExecution(
 
 /**
  * @brief Finalizes one matched successful worktree-backed prompt execution.
- * @details Re-verifies persisted execution-session metadata plus worktree artifacts, copies any execution-session transcript records missing from the original session file, restores the original session-backed `base-path`, executes the stash-assisted fast-forward merge sequence from `base-path`, deletes the worktree after merge success, and preserves the restored base session across closure failures. Closure intentionally treats `base-path` restoration as authoritative even when pi CLI has already started end-of-session session replacement or other housekeeping that moved the live runtime away from `worktree-path`. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file appends, active-session replacement, branch merges, stash-stack mutation, worktree deletion, and optional debug-log writes.
+ * @details Re-verifies persisted execution-session metadata plus worktree artifacts, copies any execution-session transcript records missing from the original session file, restores the original session-backed `base-path`, executes the stash-assisted fast-forward merge sequence from `base-path`, deletes the worktree after merge success, re-points the pi CLI execution surfaces back to the retained worktree before returning when the fast-forward merge fails, and preserves the restored base session across closure failures. Closure intentionally treats `base-path` restoration as authoritative even when pi CLI has already started end-of-session session replacement or other housekeeping that moved the live runtime away from `worktree-path`. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file appends, active-session replacement, branch merges, stash-stack mutation, worktree deletion, and optional debug-log writes.
  * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan.
  * @param[in] ctx {PromptCommandSessionContext | undefined} Optional prompt-command context.
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
- * @return {Promise<{ mergeAttempted: boolean; mergeSucceeded: boolean; cleanupSucceeded: boolean; errorMessage?: string; warningMessage?: string; activeContext?: PromptCommandSessionContext }>} Finalization facts plus the last valid active prompt-command context.
- * @satisfies REQ-208, REQ-209, REQ-220, REQ-245, REQ-282, REQ-291, REQ-292
+ * @return {Promise<{ mergeAttempted: boolean; mergeSucceeded: boolean; cleanupSucceeded: boolean; errorMessage?: string; warningMessage?: string; redirectedToWorktree?: boolean; activeContext?: PromptCommandSessionContext }>} Finalization facts plus the last valid active prompt-command context.
+ * @satisfies REQ-208, REQ-209, REQ-220, REQ-245, REQ-282, REQ-291, REQ-292, REQ-665
  */
 export async function finalizePromptCommandExecution(
   plan: PromptCommandExecutionPlan,
@@ -1994,6 +2055,7 @@ export async function finalizePromptCommandExecution(
   cleanupSucceeded: boolean;
   errorMessage?: string;
   warningMessage?: string;
+  redirectedToWorktree?: boolean;
   activeContext?: PromptCommandSessionContext;
 }> {
   let activeContext = ctx;
@@ -2038,12 +2100,21 @@ export async function finalizePromptCommandExecution(
   }
   const mergeFinalization = finalizePromptCommandMerge(plan, debugOptions);
   if (!mergeFinalization.mergeSucceeded) {
+    let redirectedToWorktree = false;
+    if (mergeFinalization.mergeAttempted) {
+      // REQ-665: the worktree stays retained for manual recovery, so the pi CLI
+      // execution surfaces must return to it before orchestration termination.
+      const redirect = await redirectPromptCommandExecutionToRetainedWorktree(plan, activeContext);
+      redirectedToWorktree = redirect.redirected;
+      activeContext = redirect.activeContext ?? activeContext;
+    }
     return {
       mergeAttempted: mergeFinalization.mergeAttempted,
       mergeSucceeded: false,
       cleanupSucceeded: true,
       errorMessage: mergeFinalization.errorMessage,
       warningMessage: mergeFinalization.warningMessage,
+      redirectedToWorktree,
       activeContext,
     };
   }
