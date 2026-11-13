@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.151"
+version: "0.0.152"
 date: "2026-11-13"
 author: "OpenAI Codex"
 scope:
@@ -198,9 +198,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-334**: MUST NOT display rendered prompt content on screen when delivering bundled prompt-backed `req-<prompt>` commands and MUST deliver the full rendered content only to the LLM agent.
 - **REQ-335**: MUST display a command invocation summary on screen for every bundled prompt-backed `req-<prompt>` command containing the command name, passed arguments, and active configuration.
 - **REQ-336**: MUST render the command invocation summary with the command name without the `req-` prefix in uppercase and the user request arguments.
-- **REQ-337**: MUST include `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools` in the command invocation summary.
+- **REQ-337**: MUST include the resolved agentic flow, the context-injection status, `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools` in the command invocation summary.
 - **REQ-338**: MUST render `none` for the command invocation summary `context files`, `static code checks`, and `enabled tools` fields whenever their respective enabled-item list is empty.
 - **REQ-353**: MUST render the command invocation summary sections in the order `Command:`, `Configuration:` with its bullet list, then `User's Request:`, separated by one blank line between consecutive sections.
+- **REQ-650**: MUST render the resolved `new` or `continue` agentic flow as the first entry of the command invocation summary `Configuration:` bullet list.
+- **REQ-651**: MUST render a context-injection entry before the `context files` entry stating whether context-file injection was performed or skipped.
 - **REQ-008**: MUST provide a `Language static code checkers` submenu that adds, views, confirms-before-removes, and resets global Command checker entries, plus toggles local per-language enablement.
 - **REQ-160**: MUST hardcode `Command` as the only user-configurable static-check module and omit module-selection UI from static-check configuration menus.
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
@@ -439,10 +441,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-326**: MUST add a top-level `Context Files` row to the `pi-usereq` menu between `Unit tests directory` and `Auto git commit`.
 - **REQ-327**: MUST expose a `Context Files` submenu with separate enable toggles for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` in that order.
 - **REQ-328**: MUST persist `context-files-requirements`, `context-files-references`, and `context-files-workflow` as boolean flags in local configuration, each defaulting to enabled.
-- **REQ-329**: MUST replace the `%%CONTEXT_FILES%%` prompt token with one markdown section per enabled context file in the order `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md`.
+- **REQ-329**: MUST replace the `%%CONTEXT_FILES%%` prompt token with one markdown section per enabled context file in the order `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` only when the command resolves a `new` agentic flow.
 - **REQ-330**: MUST render each `%%CONTEXT_FILES%%` section as the file-name heading, an HTML `<file name="<docs-dir>/<filename>">` reference with `%%DOC_PATH%%` pre-substituted, and the raw file content inside four-backtick `markdown` fences.
 - **REQ-331**: MUST omit the `%%CONTEXT_FILES%%` section for any disabled flag or missing context file without surfacing an error.
 - **REQ-332**: MUST inject `%%CONTEXT_FILES%%` content verbatim after every other prompt replacement so literal `%%...%%` tokens inside context files are not substituted.
+- **REQ-652**: MUST replace the `%%CONTEXT_FILES%%` token with the empty string when the command resolves a `continue` agentic flow so no context-file content is injected.
 - **REQ-333**: MUST restore all three `Context Files` flags to enabled when the `Context Files` subtree `Reset defaults` is approved.
 - **REQ-339**: MUST run `scripts/install-static-checkers.ts` as a best-effort exit-code-0 `postinstall` installer that probes bundled npm checkers, attempts `npm install` on miss, prints platform guidance for native checkers, and never modifies git-tracked files.
 - **REQ-340**: MUST default the `TypeScript` static-check `Command` entry to `cmd: "eslint"` with empty `params`.
@@ -726,6 +729,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-636**: MUST terminate every non-`req-reset` orchestration only with `done`, `warning`, or `error` and every `req-reset` orchestration only with `idle`, `warning`, or `error`.
 - **REQ-637**: MUST persist and restore the active workflow request alongside the workflow state across extension rebinding.
 - **REQ-638**: MUST render `done` with the non-error warning-token status value convention.
+- **REQ-649**: MUST resolve at command bootstrap whether each bundled agentic `req-<prompt>` command runs a `new` chain-of-thought from workflow state `idle` or a `continue` flow from any other startable state.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -930,6 +934,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-204**: MUST verify `req-references` writes the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` content into `REFERENCES.md`, commits only that file, and performs no source extraction when the git inventory holds no supported source file.
 - **TST-205**: MUST verify `req-workflow` writes the exact `NO_SOURCE_WORKFLOW_PLACEHOLDER` content into `WORKFLOW.md`, dispatches no prompt message, creates no worktree, and returns workflow state `done` when no supported source file exists.
 - **TST-206**: MUST verify the `status` field renders `<request> ➔ <state>` with one space before and after the arrow during and after orchestration, renders `idle` without request after `startup|reload` or `/req-reset`, and renders `done` as the default terminal state.
+- **TST-214**: MUST verify the summary renders the resolved `new` or `continue` flow as the first `Configuration:` entry plus the context-injection entry before `context files`, and prompt rendering injects context files only for the `new` flow.
 - **TST-207**: MUST verify a new orchestration starts from `done`, an orchestration in `warning|error` is rejected, and terminal outcomes match the documented per-command domains.
 - **TST-208**: MUST verify develop-channel `--upgrade` aborts with exit code `1` and no child process when the GitHub latest-release probe fails.
 - **TST-209**: MUST verify develop-channel `--upgrade` from an npm-managed installation installs the probed release-tag source instead of the repository default-branch source.
@@ -1046,7 +1051,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ### 7.1 Covered Behaviors
 - `tests/extension-registration.test.ts` covers extension registration, config-menu persistence, startup-tool enablement, static-check menu mutation flows, bundled prompt-command worktree orchestration, and specialized `req-references` direct commit orchestration.
-- `tests/prompt-rendering.test.ts` covers installation-owned bundled-resource accessibility and placeholder replacement in rendered prompts.
+- `tests/prompt-rendering.test.ts` covers installation-owned bundled-resource accessibility, placeholder replacement in rendered prompts, and flow-gated `%%CONTEXT_FILES%%` injection.
 - `tests/attended-results.test.ts` owns the exact standalone and project output contracts, including token counts and static-check results, using committed archives without executing a reference application.
 - `tests/project-source-tabs.test.ts` preserves focused Go-source tab assertions for project commands; standalone tab assertions remain in `tests/cli-command-option-parity.test.ts`.
 - `tests/runtime-independence.test.ts` executes eight analysis commands with a Git-only PATH and unusable legacy interpreter overrides, and rejects legacy fixture configuration or virtualenv artifacts.
@@ -1126,6 +1131,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-636 | `src/index.ts` :: terminal transition branches :: non-reset orchestration ends in `done|warning|error`; `req-reset` ends in `idle|warning|error`. |
 | REQ-637 | `src/core/prompt-command-state.ts` :: `PersistedPromptCommandRuntimeState.workflowRequest` :: persists and restores the active request with the workflow state. |
 | REQ-638 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `done` with the non-error warning-token value convention. |
+| REQ-649 | `src/index.ts` :: `registerPromptCommands` handler :: resolves `resolvePromptCommandFlowKind(...)` from the workflow state observed before the `checking` transition. |
+| REQ-650 | `src/core/prompts.ts` :: `renderPromptCommandSummary` :: renders the resolved flow as the first `Configuration:` bullet entry. |
+| REQ-651 | `src/core/prompts.ts` :: `renderPromptCommandSummary` :: renders the context-injection entry before the `context files` entry. |
+| REQ-652 | `src/core/prompts.ts` :: `renderPrompt` :: replaces `%%CONTEXT_FILES%%` with the empty string when the resolved flow is `continue`. |
 | REQ-303 | `src/index.ts` :: `registerReqReferencesCommand` :: transitions to `error` and notifies on failure; `src/core/req-references-command.ts` :: throws deterministic `ReqError` failures for generation, staging, commit, and cleanliness errors. |
 | REQ-357 | `src/core/req-references-command.ts` :: `runGuardedGitCommit` and `hasStagedChangesForPaths` :: skip `git commit` when the cached index holds no staged difference for the target paths. |
 | REQ-358 | `src/core/req-references-command.ts` :: `executeReqReferencesCommandExecution` :: invokes `runGuardedGitCommit(...)` before residual-status verification. |
@@ -1340,6 +1349,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-204 | `tests/extension-registration.test.ts` :: `req-references writes the no-source REFERENCES.md placeholder without source extraction` asserts exact placeholder content, single-file commit, and no prompt dispatch. |
 | TST-205 | `tests/extension-registration.test.ts` :: `req-workflow writes the no-source WORKFLOW.md placeholder without dispatching a prompt` asserts exact placeholder content, zero prompt messages, zero worktrees, and workflow state `done`.
 | TST-206 | `tests/extension-registration.test.ts` :: status-rendering coverage asserts the `<request> ➔ <state>` status value, the request-less `idle` bootstrap value, and the `done` terminal value. |
+| TST-214 | `tests/prompt-command-summary.test.ts` and `tests/prompt-rendering.test.ts` :: flow coverage asserts the first `new|continue` `Configuration:` entry, the `performed|skipped` injection entry, and flow-gated `%%CONTEXT_FILES%%` prompt rendering. |
 | TST-207 | `tests/extension-registration.test.ts` :: orchestration-gate coverage asserts `done` -> `running` startability, `warning|error` rejection, and the documented per-command terminal domains. |
 | TST-208 | `tests/package-manager.test.ts` :: `develop-channel upgrade aborts before spawning when the GitHub release probe fails` asserts exit code `1`, one stderr diagnostic, and zero child processes. |
 | TST-209 | `tests/package-manager.test.ts` :: `develop-channel upgrade from an npm-managed installation installs the probed release tag` asserts the pinned install source differs from the default-branch source. |

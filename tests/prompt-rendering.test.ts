@@ -93,6 +93,22 @@ test("pi.dev-aware prompts require pi client source validation for ambiguous or 
   assert.match(rendered, /For bug fixes or problem resolution influenced by extension-to-pi-client interface implementations, validate the produced source code by analyzing `pi\.dev-src\/pi-mono`\./);
 });
 
+test("prompt rendering injects context files only for the new agentic flow", () => {
+  ensureBundledResourcesAccessible();
+  const projectBase = process.cwd();
+  const config = getDefaultConfig(projectBase);
+  const renderedNew = renderPrompt("write", "Build a CLI parser", projectBase, config, undefined, "new");
+  assert.match(renderedNew, /### REQUIREMENTS\.md/);
+  assert.match(renderedNew, /### REFERENCES\.md/);
+  assert.match(renderedNew, /### WORKFLOW\.md/);
+  assert.match(renderedNew, /<file name="usereq\/docs\/REQUIREMENTS\.md">/);
+  const renderedContinue = renderPrompt("write", "Build a CLI parser", projectBase, config, undefined, "continue");
+  assert.doesNotMatch(renderedContinue, /### REQUIREMENTS\.md/);
+  assert.doesNotMatch(renderedContinue, /### REFERENCES\.md/);
+  assert.doesNotMatch(renderedContinue, /### WORKFLOW\.md/);
+  assert.doesNotMatch(renderedContinue, /%%CONTEXT_FILES%%/);
+});
+
 test("pi.dev-aware prompts stay unchanged when the coding-agent-docs tree is absent", () => {
   ensureBundledResourcesAccessible();
   const projectBase = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-prompts-"));

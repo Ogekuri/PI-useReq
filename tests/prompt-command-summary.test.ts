@@ -34,3 +34,16 @@ test("renderPromptCommandSummary renders none for empty context files, static co
   assert.match(summary, /- static code checks:  none/);
   assert.match(summary, /- enabled tools:       none/);
 });
+
+test("renderPromptCommandSummary renders the resolved flow as the first configuration entry plus the injection status", () => {
+  const projectBase = process.cwd();
+  const config = getDefaultConfig(projectBase);
+  const newSummary = renderPromptCommandSummary("analyze", "Inspect runtime behavior", config, undefined, undefined, "new");
+  const continueSummary = renderPromptCommandSummary("analyze", "Inspect runtime behavior", config, undefined, undefined, "continue");
+  const firstNewEntry = newSummary.split("Configuration:\n")[1]!.split("\n")[0]!;
+  const firstContinueEntry = continueSummary.split("Configuration:\n")[1]!.split("\n")[0]!;
+  assert.equal(firstNewEntry, "- agent context flow:  new");
+  assert.equal(firstContinueEntry, "- agent context flow:  continue");
+  assert.match(newSummary, /- context injection:   performed\n- context files:/);
+  assert.match(continueSummary, /- context injection:   skipped\n- context files:/);
+});
