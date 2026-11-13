@@ -219,6 +219,7 @@ test(
  */
 interface NpmComplianceManifest {
   version?: unknown;
+  private?: unknown;
   description?: unknown;
   author?: unknown;
   keywords?: unknown;
@@ -263,6 +264,25 @@ function readNpmComplianceLock(): NpmComplianceLock {
     fs.readFileSync(path.join(process.cwd(), "package-lock.json"), "utf8"),
   ) as NpmComplianceLock;
 }
+
+/**
+ * @brief Asserts the manifest is publishable by the npm registry.
+ * @details Loads `package.json` and verifies that the manifest does not declare the `private` field, because a private manifest aborts publication with the `EPRIVATE` registry error before provenance or public access can be applied. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @return {void} No return value.
+ * @satisfies DES-025, REQ-140, TST-159
+ */
+test(
+  "package manifest remains publishable without the private flag",
+  () => {
+    const manifest = readNpmComplianceManifest();
+
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(manifest, "private"),
+      false,
+      "package.json must omit the private field so npm publish can run with public access",
+    );
+  },
+);
 
 /**
  * @brief Asserts the published version is semver-valid and identical across manifest and lockfile.
