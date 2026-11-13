@@ -1,6 +1,9 @@
 # Changelog
 
-## [0.109.3](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.3) - 2026-11-13
+## [0.109.4](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.4) - 2026-11-13
+### ⛰️  Features
+- Update prompts.
+
 ### 🐛  Bug Fixes
 - remove private manifest flag blocking npm publication [useReq] *(release)*
   Remove the package.json private field that made npm publish fail with EPRIVATE before provenance and public access were applied.; Add a release-workflow regression test asserting the manifest omits the private field.; Requirements: DES-025, REQ-140, TST-159.
@@ -1463,7 +1466,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.3\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.3
+- \[0.109.4\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.4
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1572,4 +1575,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.3]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.3
+[0.109.4]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.4
