@@ -590,7 +590,7 @@ function formatRenderedStatusField(
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] workflowState {PiUsereqWorkflowState} Current workflow state.
  * @return {string} Rendered workflow-state value.
- * @satisfies REQ-112, REQ-223, REQ-582
+ * @satisfies REQ-112, REQ-223, REQ-590
  */
 function formatWorkflowStateValue(
   theme: StatusThemeAdapter,

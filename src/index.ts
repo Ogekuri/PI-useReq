@@ -1831,7 +1831,7 @@ async function handleExtensionStatusEvent(
           promptContext,
         );
       } else if (markerBlockedOutcome) {
-        // Status-marker gate (REQ-579/REQ-580/REQ-581): the completed run did not
+        // Status-marker gate (REQ-585/REQ-586/REQ-587/REQ-588): the completed run did not
         // report `STATUS: OK`, so no merge and no worktree deletion may run. Keep
         // the worktree execution session visible, park the workflow in `error` for
         // `STATUS: ERROR` and in `warning` otherwise, and retain the active request
@@ -1961,7 +1961,7 @@ async function handleExtensionStatusEvent(
         }
         await finalizeMatchedPromptSuccess(pi, statusController, settledPromptRequest, ctx);
       } else if (pendingOutcome === "completed") {
-        // Status-marker gate (REQ-579/REQ-580/REQ-581): the settled completed run
+        // Status-marker gate (REQ-585/REQ-586/REQ-587/REQ-588): the settled completed run
         // reported no `STATUS: OK`, so merge and worktree deletion MUST NOT run. Keep
         // the worktree execution session visible, park the workflow in `error` for
         // `STATUS: ERROR` and in `warning` otherwise, and retain the active request so

@@ -3090,7 +3090,7 @@ in combined text length. No external state is mutated.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
 - @param[in] workflowState {PiUsereqWorkflowState} Current workflow state.
 - @return {string} Rendered workflow-state value.
-- @satisfies REQ-112, REQ-223, REQ-582
+- @satisfies REQ-112, REQ-223, REQ-590
 
 ### fn `function didAgentEndAbort(messages: AgentEndEvent["messages"]): boolean` (L614-621)
 - @brief Detects whether an agent run ended through abort semantics.
@@ -5195,20 +5195,20 @@ import {
 - type `export type PromptCommandStatusMarker = "ok" | "error" | "missing";` (L2094)
 - @brief Represents one inspected prompt-orchestration status marker.
 - @details Discriminates the merge-gating facts recovered from the final agent output: `ok` for `STATUS: OK`, `error` for `STATUS: ERROR`, and `missing` when neither marker is present. The alias is compile-time only and introduces no runtime cost.
-- @satisfies REQ-578, REQ-580, REQ-581
+- @satisfies REQ-584, REQ-585, REQ-586, REQ-587, REQ-588
 ### fn `export function resolvePromptCommandStatusMarker(agentOutputText: string): PromptCommandStatusMarker` (L2103-2110)
 - @brief Inspects the final agent output for the prompt-orchestration status marker.
 - @details Scans the concatenated assistant text blocks for the last occurrence of `STATUS: OK` and `STATUS: ERROR` so the terminal marker wins when earlier attempts reported a different status, and returns `missing` when neither marker occurs. Runtime is O(n) in output length. No external state is mutated.
 - @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
 - @return {PromptCommandStatusMarker} Inspected status marker.
-- @satisfies REQ-577, REQ-578, REQ-580
+- @satisfies REQ-584, REQ-585, REQ-587, REQ-588
 
 ### fn `export function resolvePromptCommandMergeGate(agentOutputText: string): PromptCommandStatusMarker` (L2119-2124)
 - @brief Resolves the merge gate for one terminal prompt-orchestration run.
 - @details Treats a terminal run that exposes no assistant text content block as merge-eligible because no report text was delivered for inspection, and otherwise delegates to `resolvePromptCommandStatusMarker(...)`. Runtime is O(n) in output length. No external state is mutated.
 - @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
 - @return {PromptCommandStatusMarker} Merge gate marker; only `ok` permits merge and worktree deletion.
-- @satisfies REQ-578, REQ-579, REQ-580, REQ-581, REQ-583
+- @satisfies REQ-584, REQ-585, REQ-586, REQ-589
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
