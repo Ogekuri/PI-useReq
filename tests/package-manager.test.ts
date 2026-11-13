@@ -5,8 +5,6 @@ import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 import {
-  PACKAGE_DEVELOP_UPGRADE_COMMAND,
-  PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND,
   PACKAGE_FORCED_UPGRADE_COMMAND,
   PACKAGE_MANAGER_GITHUB_RELEASES_API_URL,
   PACKAGE_MANAGER_GITHUB_REPOSITORY,
@@ -15,6 +13,8 @@ import {
   PACKAGE_MANAGER_REGISTRY_BASE_URL,
   PACKAGE_UNINSTALL_COMMAND,
   PACKAGE_UPGRADE_COMMAND,
+  buildPackageManagerDevelopSource,
+  buildPackageManagerDevelopUpdateCommand,
   comparePackageManagerVersionOrder,
   isNewerPackageManagerVersion,
   parsePackageManagerCommand,
@@ -36,6 +36,12 @@ import {
   type PackageManagerSpawnOptions,
   type PackageManagerStdout,
 } from "../src/core/package-manager.js";
+
+/**
+ * @brief Raw GitHub release tag shared by every develop-channel test double.
+ * @details Keeps pinned-source and pinned-command expectations identical across develop-channel cases so one deterministic `tag_name` flows from the probe double into installation and update assertions. Compile-time constant; no runtime cost.
+ */
+const DEVELOP_RELEASE_TAG = "v1.6.0";
 
 /**
  * @brief Describes one recorded package-manager child-process invocation.
@@ -220,19 +226,19 @@ test("dotted numeric version comparison admits only strictly newer candidates", 
 
 test("non-forced upgrade commands match the documented pi update forms", () => {
   assert.deepEqual(PACKAGE_UPGRADE_COMMAND, ["pi", "update", "npm:pi-usereq"]);
-  assert.deepEqual(PACKAGE_DEVELOP_UPGRADE_COMMAND, [
+  assert.deepEqual(buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG), [
     "pi",
     "update",
-    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
+    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}@${DEVELOP_RELEASE_TAG}`,
   ]);
 });
 
 test("forced upgrade commands match the documented pi update force-reinstall forms", () => {
   assert.deepEqual(PACKAGE_FORCED_UPGRADE_COMMAND, ["pi", "update", "npm:pi-usereq", "--force"]);
-  assert.deepEqual(PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND, [
+  assert.deepEqual(buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG, true), [
     "pi",
     "update",
-    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
+    `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}@${DEVELOP_RELEASE_TAG}`,
     "--force",
   ]);
 });
@@ -471,7 +477,7 @@ test("same-source upgrade repairs the deployed launcher before reporting complet
 
 /**
  * @brief Verifies that the develop-channel upgrade also repairs the deployed launcher.
- * @details The develop channel runs the git update child without a registry probe; the deployed launcher MUST still be re-verified because the update rewrites the managed git installation. Arrange injects spawn, stdout, version-resolver, and launcher-repair doubles; Act runs the develop-channel upgrade; Assert verifies exactly one repair and the documented completion summary.
+ * @details The develop channel runs the tag-pinned git update child without a registry probe but after the GitHub latest-release probe; the deployed launcher MUST still be re-verified because the update rewrites the managed git installation. Arrange injects spawn, GitHub probe, stdout, version-resolver, and launcher-repair doubles; Act runs the develop-channel upgrade; Assert verifies exactly one repair and the documented completion summary.
  * @satisfies REQ-482, REQ-504, REQ-507, TST-166
  */
 test("develop-channel upgrade repairs the deployed launcher before reporting completion", async () => {
@@ -483,6 +489,9 @@ test("develop-channel upgrade repairs the deployed launcher before reporting com
     {
       spawn,
       stdout: sink.stdout,
+      githubCheck: {
+        fetchImpl: createFetchJsonDouble({ tag_name: DEVELOP_RELEASE_TAG }).fetchImpl,
+      },
       resolveUpgradedVersion: () => "2.0.0",
       repairLauncher: () => {
         repairs += 1;
@@ -491,7 +500,10 @@ test("develop-channel upgrade repairs the deployed launcher before reporting com
   );
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args, [...PACKAGE_DEVELOP_UPGRADE_COMMAND.slice(1)]);
+  assert.deepEqual(
+    calls[0].args,
+    [...buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG).slice(1)],
+  );
   assert.equal(repairs, 1);
   assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
 });
@@ -562,13 +574,19 @@ test("develop-channel upgrade runs the git pi update command and prints the meta
     {
       spawn,
       stdout: sink.stdout,
+      githubCheck: {
+        fetchImpl: createFetchJsonDouble({ tag_name: DEVELOP_RELEASE_TAG }).fetchImpl,
+      },
       resolveUpgradedVersion: () => "2.0.0",
     },
   );
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].file, PACKAGE_DEVELOP_UPGRADE_COMMAND[0]);
-  assert.deepEqual(calls[0].args, [...PACKAGE_DEVELOP_UPGRADE_COMMAND.slice(1)]);
+  assert.equal(calls[0].file, "pi");
+  assert.deepEqual(
+    calls[0].args,
+    [...buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG).slice(1)],
+  );
   assert.equal(calls[0].options.cwd, homedir());
   assert.equal(calls[0].options.stdio, "inherit");
   assert.equal(calls[0].options.shell, process.platform === "win32");
@@ -580,10 +598,40 @@ test("develop-channel upgrade propagates child failure without printing a summar
   const sink = createStdoutSink();
   const exitCode = await runPackageManagerUpgradeCommand(
     { installedVersion: "1.0.0", channel: "develop" },
-    { spawn, stdout: sink.stdout },
+    {
+      spawn,
+      stdout: sink.stdout,
+      githubCheck: {
+        fetchImpl: createFetchJsonDouble({ tag_name: DEVELOP_RELEASE_TAG }).fetchImpl,
+      },
+    },
   );
   assert.equal(exitCode, 2);
   assert.equal(calls.length, 1);
+  assert.deepEqual(sink.chunks, []);
+});
+
+/**
+ * @brief Verifies that a failed GitHub latest-release probe aborts the develop channel before any child.
+ * @details Injects a rejecting GitHub fetch double while the develop channel runs; the handler MUST return exit code `1`, emit one stderr diagnostic, and spawn no package-manager child. Deterministic: fetch, spawn, logger, and stdout doubles; no network or child processes.
+ * @satisfies REQ-640, TST-208
+ */
+test("develop-channel upgrade aborts before spawning when the GitHub release probe fails", async () => {
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const { errors, logger } = createLoggerDouble();
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "develop" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      logger,
+      githubCheck: { fetchImpl: createFetchRejectDouble("rate limited").fetchImpl },
+    },
+  );
+  assert.equal(exitCode, 1);
+  assert.equal(calls.length, 0);
+  assert.match(errors.join("\n"), /GitHub latest release probe failed:.*rate limited/);
   assert.deepEqual(sink.chunks, []);
 });
 
@@ -617,6 +665,10 @@ test("installed-source identification classifies npm, git, and unknown installat
       { kind: "unknown" },
     );
     assert.equal(resolvePackageManagerUpgradeSource("npm"), PACKAGE_MANAGER_NPM_SOURCE);
+    assert.equal(
+      resolvePackageManagerUpgradeSource("develop", DEVELOP_RELEASE_TAG),
+      buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG),
+    );
     assert.equal(resolvePackageManagerUpgradeSource("develop"), PACKAGE_MANAGER_GIT_SOURCE);
   } finally {
     if (previous === undefined) {
@@ -659,8 +711,8 @@ test("default-channel upgrade from a git-managed installation removes it and ins
 
 /**
  * @brief Verifies the develop-channel source switch from one npm-managed installation.
- * @details Injects an npm-managed installed source so the run must remove `npm:pi-usereq` and install the git target source without any registry probe. Deterministic: spawn, stdout, and resolver doubles; no network or child processes.
- * @satisfies REQ-613, REQ-614, REQ-617, TST-200
+ * @details Injects an npm-managed installed source plus a GitHub latest-release probe so the run must remove `npm:pi-usereq` and install the ref-pinned release source without any registry probe. Deterministic: spawn, fetch, stdout, and resolver doubles; no network or child processes.
+ * @satisfies REQ-613, REQ-614, REQ-639, REQ-617, TST-200
  */
 test("develop-channel upgrade from an npm-managed installation removes it and installs the git source", async () => {
   const { calls, spawn } = createSpawnDouble();
@@ -671,13 +723,47 @@ test("develop-channel upgrade from an npm-managed installation removes it and in
       spawn,
       stdout: sink.stdout,
       resolveInstalledSource: () => ({ kind: "npm", source: PACKAGE_MANAGER_NPM_SOURCE }),
+      githubCheck: {
+        fetchImpl: createFetchJsonDouble({ tag_name: DEVELOP_RELEASE_TAG }).fetchImpl,
+      },
       resolveUpgradedVersion: () => "2.0.0",
     },
   );
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[0].args, ["remove", PACKAGE_MANAGER_NPM_SOURCE]);
-  assert.deepEqual(calls[1].args, ["install", PACKAGE_MANAGER_GIT_SOURCE]);
+  assert.deepEqual(
+    calls[1].args,
+    ["install", buildPackageManagerDevelopSource(DEVELOP_RELEASE_TAG)],
+  );
+  assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
+});
+
+/**
+ * @brief Verifies the develop-channel source switch installs the probed release tag instead of the default branch.
+ * @details Injects an npm-managed installed source plus a GitHub latest-release probe returning the published tag `v2.0.0` so the run must install the ref-pinned release source whose version equals the probed release, proving the develop channel no longer tracks the repository default branch. Deterministic: spawn, fetch, stdout, and resolver doubles; no network or child processes.
+ * @satisfies REQ-613, REQ-639, TST-209
+ */
+test("develop-channel upgrade from an npm-managed installation installs the probed release tag", async () => {
+  const releaseTag = "v2.0.0";
+  const { calls, spawn } = createSpawnDouble();
+  const sink = createStdoutSink();
+  const githubProbe = createFetchJsonDouble({ tag_name: releaseTag });
+  const exitCode = await runPackageManagerUpgradeCommand(
+    { installedVersion: "1.0.0", channel: "develop" },
+    {
+      spawn,
+      stdout: sink.stdout,
+      resolveInstalledSource: () => ({ kind: "npm", source: PACKAGE_MANAGER_NPM_SOURCE }),
+      githubCheck: { fetchImpl: githubProbe.fetchImpl },
+      resolveUpgradedVersion: () => "2.0.0",
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.deepEqual(githubProbe.urls, [PACKAGE_MANAGER_GITHUB_RELEASES_API_URL]);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1].args, ["install", buildPackageManagerDevelopSource(releaseTag)]);
+  assert.notEqual(calls[1].args[1], PACKAGE_MANAGER_GIT_SOURCE);
   assert.deepEqual(sink.chunks, ["pi-usereq upgrade completed: 1.0.0 -> 2.0.0\n"]);
 });
 
@@ -876,13 +962,19 @@ test("forced develop-channel upgrade runs the git pi update force command and pr
     {
       spawn,
       stdout: sink.stdout,
+      githubCheck: {
+        fetchImpl: createFetchJsonDouble({ tag_name: DEVELOP_RELEASE_TAG }).fetchImpl,
+      },
       resolveUpgradedVersion: () => "2.0.0",
     },
   );
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].file, PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND[0]);
-  assert.deepEqual(calls[0].args, [...PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND.slice(1)]);
+  assert.equal(calls[0].file, "pi");
+  assert.deepEqual(
+    calls[0].args,
+    [...buildPackageManagerDevelopUpdateCommand(DEVELOP_RELEASE_TAG, true).slice(1)],
+  );
   assert.equal(calls[0].options.cwd, homedir());
   assert.equal(calls[0].options.stdio, "inherit");
   assert.equal(calls[0].options.shell, process.platform === "win32");

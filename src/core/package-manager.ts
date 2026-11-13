@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Implements pi-usereq package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`).
- * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI package update matching the pi update forms (`pi update npm:pi-usereq` on the default `--upgrade` channel and `pi update git:github.com/Ogekuri/PI-useReq` on the develop channel) so an already-installed managed package advances beyond its saved dependency range, forced full re-download plus reinstallation through the documented pi CLI update force form (`pi update <source> --force`) for `--upgrade --force`, source-aware reconciliation that identifies the installed npm-managed or git-managed package and runs `pi remove <identified-source>` plus `pi install <target-source>` when the channel target differs from the installed source, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Upgrade completion summaries resolve the updated version from re-read installation-owned package metadata and warn when a non-forced child leaves it unchanged. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
+ * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI package update matching the pi update forms (`pi update npm:pi-usereq` on the default `--upgrade` channel and `pi update git:github.com/Ogekuri/PI-useReq@<tag>` on the develop channel after the GitHub latest-release probe) so an already-installed managed package advances beyond its saved dependency range, forced full re-download plus reinstallation through the documented pi CLI update force form (`pi update <source> --force`) for `--upgrade --force`, source-aware reconciliation that identifies the installed npm-managed or git-managed package and runs `pi remove <identified-source>` plus `pi install <target-source>` when the channel target differs from the installed source, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Upgrade completion summaries resolve the updated version from re-read installation-owned package metadata and warn when a non-forced child leaves it unchanged. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
  */
 
 import fs from "node:fs";
@@ -37,7 +37,7 @@ export const PACKAGE_MANAGER_REGISTRY_BASE_URL = "https://registry.npmjs.org";
 /** GitHub repository owner/name probed by the version report and installed from by the develop upgrade channel. */
 export const PACKAGE_MANAGER_GITHUB_REPOSITORY = "Ogekuri/PI-useReq";
 
-/** pi package source token of the git-managed installation. */
+/** Unpinned pi package source token of the git-managed installation; develop-channel releases append `@<tag>` through `buildPackageManagerDevelopSource(...)`. */
 export const PACKAGE_MANAGER_GIT_SOURCE = `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`;
 
 /** Default GitHub releases API URL resolving the latest published release of the distribution repository. */
@@ -57,13 +57,6 @@ export const PACKAGE_UPGRADE_COMMAND: readonly string[] = [
   `npm:${PACKAGE_MANAGER_PACKAGE_NAME}`,
 ];
 
-/** Package-manager command executed by the develop-channel `--upgrade`, matching the pi CLI update form that refreshes the git-source installation to its latest remote state. */
-export const PACKAGE_DEVELOP_UPGRADE_COMMAND: readonly string[] = [
-  "pi",
-  "update",
-  `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
-];
-
 /** Package-manager command executed by a forced default-channel `--upgrade`, matching the documented pi CLI `pi update <source> --force` force-reinstall form that forces full package download and reinstallation. */
 export const PACKAGE_FORCED_UPGRADE_COMMAND: readonly string[] = [
   "pi",
@@ -72,13 +65,34 @@ export const PACKAGE_FORCED_UPGRADE_COMMAND: readonly string[] = [
   "--force",
 ];
 
-/** Package-manager command executed by a forced develop-channel `--upgrade`, matching the documented pi CLI `pi update <source> --force` force-reinstall form for the git source. */
-export const PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND: readonly string[] = [
-  "pi",
-  "update",
-  `git:github.com/${PACKAGE_MANAGER_GITHUB_REPOSITORY}`,
-  "--force",
-];
+/**
+ * @brief Builds the ref-pinned pi package source of one GitHub release tag for the develop channel.
+ * @details Composes `git:github.com/Ogekuri/PI-useReq@<tag>` from the documented distribution repository identity plus the raw `tag_name` resolved by the GitHub latest-release probe, so the develop channel installs and updates the exact published release instead of the repository default branch. Runtime is O(n) in tag length. Pure; no side effects.
+ * @param[in] tag {string} Raw GitHub release `tag_name`, such as `v1.2.3`.
+ * @return {string} Ref-pinned develop-channel pi package source token.
+ * @note Complexity: O(n) in tag length. Pure; no side effects.
+ * @satisfies REQ-613, REQ-639
+ */
+export function buildPackageManagerDevelopSource(tag: string): string {
+  return `${PACKAGE_MANAGER_GIT_SOURCE}@${tag.trim()}`;
+}
+
+/**
+ * @brief Builds the develop-channel pi CLI update command for one resolved release tag.
+ * @details Emits `pi update git:github.com/Ogekuri/PI-useReq@<tag>` and appends `--force` for forced runs, so the develop channel reconciles the managed checkout to the exact probed release tag and optionally forces full re-download plus reinstallation. Runtime is O(n) in tag length. Pure; no side effects.
+ * @param[in] tag {string} Raw GitHub release `tag_name` resolved by the latest-release probe.
+ * @param[in] force {boolean} When `true`, append the pi CLI force-reinstall option. Defaults to `false`.
+ * @return {readonly string[]} Develop-channel pi CLI update command vector.
+ * @note Complexity: O(n) in tag length. Pure; no side effects.
+ * @satisfies REQ-482, REQ-527, REQ-641
+ */
+export function buildPackageManagerDevelopUpdateCommand(
+  tag: string,
+  force = false,
+): readonly string[] {
+  const command = ["pi", "update", buildPackageManagerDevelopSource(tag)];
+  return force ? [...command, "--force"] : command;
+}
 
 /** Package-manager command executed by `--uninstall`. */
 export const PACKAGE_UNINSTALL_COMMAND: readonly string[] = [
@@ -201,7 +215,7 @@ export interface PackageManagerGitHubProbeDeps {
 export interface PackageManagerCommandOptions {
   /** Installed package version backing the version report and upgrade comparisons; `unknown` when undeterminable. */
   installedVersion: string;
-  /** `--upgrade` install source; `develop` selects the latest tagged GitHub release. Default: `npm`. */
+  /** `--upgrade` install source; `develop` selects the latest tagged GitHub release pinned as `git:github.com/Ogekuri/PI-useReq@<tag>`. Default: `npm`. */
   channel?: PackageManagerUpgradeChannel;
   /** `--upgrade` force mode; `true` skips the already-latest gate and executes the pi CLI force-reinstall update command for the selected channel. Default: `false`. */
   force?: boolean;
@@ -810,14 +824,23 @@ export function buildPackageManagerInstallCommand(source: string): readonly stri
 
 /**
  * @brief Resolves the pi package source targeted by one `--upgrade` channel.
- * @details Maps the default channel onto the npm-managed source `npm:pi-usereq` and the develop channel onto the git-managed source `git:github.com/Ogekuri/PI-useReq`. Runtime is O(1). Pure; no side effects.
+ * @details Maps the default channel onto the npm-managed source `npm:pi-usereq` and the develop channel onto the ref-pinned git source `git:github.com/Ogekuri/PI-useReq@<tag>` when a resolved release tag is supplied, falling back to the unpinned base git source only for callers that resolve no tag. Runtime is O(1). Pure; no side effects.
  * @param[in] channel {PackageManagerUpgradeChannel} Selected upgrade channel.
+ * @param[in] developTag {string | undefined} Raw GitHub release `tag_name` resolved for the develop channel.
  * @return {string} Target pi package source token.
  * @note Complexity: O(1). Pure; no side effects.
  * @satisfies REQ-613
  */
-export function resolvePackageManagerUpgradeSource(channel: PackageManagerUpgradeChannel): string {
-  return channel === "develop" ? PACKAGE_MANAGER_GIT_SOURCE : PACKAGE_MANAGER_NPM_SOURCE;
+export function resolvePackageManagerUpgradeSource(
+  channel: PackageManagerUpgradeChannel,
+  developTag?: string,
+): string {
+  if (channel !== "develop") {
+    return PACKAGE_MANAGER_NPM_SOURCE;
+  }
+  return developTag === undefined
+    ? PACKAGE_MANAGER_GIT_SOURCE
+    : buildPackageManagerDevelopSource(developTag);
 }
 
 /**
@@ -1006,25 +1029,38 @@ function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["s
 
 /**
  * @brief Handles `--upgrade`: installed-source identification, optional source-switch removal plus installation, force mode, pi-CLI package reinstall, then stdout summary.
- * @details Identifies the installed package source before any child process. When the identified source resolves to a different kind than the channel target source, the handler skips the registry gate and runs `pi remove <identified-source>` followed by `pi install <target-source>`, propagating a non-zero removal or installation exit code without printing a summary; after a successful switch it re-deploys the agent-bin `pi-usereq` launcher onto the channel target installation root and resolves the completion `<updated>` version from that target root, because the removal child already deleted the installation that owned the running process. Otherwise develop channel (`--dev`/`--develop`) runs `PACKAGE_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq`) with inherited stdio and no GitHub probe; forced develop runs (`--force`) run `PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND` (`pi update git:github.com/Ogekuri/PI-useReq --force`), the documented pi CLI force-reinstall update form. Default npm channel forced runs skip the pre-upgrade probe and the already-latest skip path entirely and run `PACKAGE_FORCED_UPGRADE_COMMAND` (`pi update npm:pi-usereq --force`); otherwise one forced npmjs package-manifest probe bypassing every cache, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. Every same-source successful child repairs the deployed agent-bin `pi-usereq` launcher against the executing installation before reporting completion, because a `pi update` child rewrites the managed dependency tree and a completed upgrade MUST NOT leave the management CLI dangling behind a stale foreign shim. Every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` from re-read installation-owned package metadata, or from the post-switch target installation root after a source switch as a defect corrective action ensuring the CLI launcher and reported version stay aligned with the newly installed package, and warns when a non-forced run leaves the installed version unchanged.
+ * @details Identifies the installed package source before any child process. When the identified source resolves to a different kind than the channel target source, the handler runs `pi remove <identified-source>` followed by `pi install <target-source>`, propagating a non-zero removal or installation exit code without printing a summary; after a successful switch it re-deploys the agent-bin `pi-usereq` launcher onto the channel target installation root and resolves the completion `<updated>` version from that target root, because the removal child already deleted the installation that owned the running process. The develop channel (`--dev`/`--develop`) first resolves `<tag>` through `probeLatestGitHubRelease(...)` and aborts with exit code `1` plus one stderr diagnostic without spawning any child when that probe fails; a successful probe runs the tag-pinned `buildPackageManagerDevelopUpdateCommand(<tag>, force)` (`pi update git:github.com/Ogekuri/PI-useReq@<tag>`, plus `--force` for forced runs) with inherited stdio so the managed checkout reconciles to the latest published GitHub release instead of the repository default branch. Default npm channel forced runs skip the pre-upgrade probe and the already-latest skip path entirely and run `PACKAGE_FORCED_UPGRADE_COMMAND` (`pi update npm:pi-usereq --force`); otherwise one forced npmjs package-manifest probe bypassing every cache, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and any other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. Every same-source successful child repairs the deployed agent-bin `pi-usereq` launcher against the executing installation before reporting completion, because a `pi update` child rewrites the managed dependency tree and a completed upgrade MUST NOT leave the management CLI dangling behind a stale foreign shim. Every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` from re-read installation-owned package metadata, or from the post-switch target installation root after a source switch, and warns when a non-forced run leaves the installed version unchanged.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version, channel, and force mode.
  * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout/source-resolver overrides.
- * @return {Promise<number>} `0` when the non-forced same-source installed version is already the latest available or after a successful source switch; otherwise the propagated child exit code.
- * @note Complexity: zero to one HTTP round-trips plus at most two child process executions.
- * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, REQ-504, REQ-526, REQ-527, REQ-528, REQ-531, REQ-613, REQ-614, REQ-615, REQ-616, REQ-617, REQ-618, DES-026, DES-037
+ * @return {Promise<number>} `0` when the non-forced same-source installed version is already the latest available or after a successful source switch; `1` when the develop-channel release probe fails; otherwise the propagated child exit code.
+ * @note Complexity: zero to two HTTP round-trips plus at most two child process executions.
+ * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, REQ-504, REQ-526, REQ-527, REQ-528, REQ-531, REQ-613, REQ-614, REQ-615, REQ-616, REQ-617, REQ-618, REQ-639, REQ-640, REQ-641, DES-026, DES-037
  */
 export async function runPackageManagerUpgradeCommand(
   options: PackageManagerCommandOptions,
   deps: PackageManagerCommandDeps = {},
 ): Promise<number> {
   const stdout = deps.stdout ?? defaultPackageManagerStdout;
+  const logger = deps.logger ?? defaultPackageManagerLogger;
   const force = options.force === true;
   const channel = options.channel ?? "npm";
   const installed = (deps.resolveInstalledSource ?? resolveInstalledPackageManagerSource)();
+  const developProbe =
+    channel === "develop" ? await probeLatestGitHubRelease(deps.githubCheck) : undefined;
+  if (developProbe !== undefined && developProbe.status !== "ok") {
+    logger.error(
+      `GitHub latest release probe failed: ${developProbe.message}${
+        developProbe.reason === undefined ? "" : ` (${developProbe.reason})`
+      }`,
+    );
+    return 1;
+  }
+  const developTag =
+    developProbe !== undefined && developProbe.status === "ok" ? developProbe.tag : undefined;
   if (requiresPackageManagerSourceSwitch(installed, channel)) {
     const switched = switchPackageManagerSource(
       installed,
-      resolvePackageManagerUpgradeSource(channel),
+      resolvePackageManagerUpgradeSource(channel, developTag),
       deps,
     );
     if (switched !== 0) {
@@ -1035,9 +1071,9 @@ export async function runPackageManagerUpgradeCommand(
     reportPackageManagerUpgradeCompletion(options, deps, targetInstallationRoot);
     return 0;
   }
-  if (channel === "develop") {
+  if (channel === "develop" && developTag !== undefined) {
     const upgraded = runPackageManagerChildCommand(
-      force ? PACKAGE_FORCED_DEVELOP_UPGRADE_COMMAND : PACKAGE_DEVELOP_UPGRADE_COMMAND,
+      buildPackageManagerDevelopUpdateCommand(developTag, force),
       deps,
     );
     if (upgraded !== 0) {
