@@ -117,6 +117,61 @@ test("agent-final-output parsing rejects invalid outputs and mandatory-field vio
 });
 
 /**
+ * @brief Verifies final-output extraction recovers prose-wrapped, fenced, and prose-plus-fenced objects.
+ * @details Parses four wrapped terminal outputs carrying one identical valid final-output JSON object — bare-object-following prose, a ```json code fence, prose plus a ```json code fence, and prose with a quoted non-object brace pair — asserting each parse succeeds with the same validated report so closure keeps working when the model wraps the object. Runtime is O(n) in output length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when any wrapped output fails the parse or loses the report fields.
+ * @satisfies REQ-584, REQ-710, TST-225
+ */
+test("agent-final-output parsing extracts prose-wrapped, fenced, and prose-plus-fenced objects", () => {
+  const objectText = JSON.stringify({
+    result: "ok",
+    summary: "Wrapped summary.",
+    next_commands: [{ command: "/req-fix", text: "Fix the flaky retry path" }],
+  });
+  const wrappedOutputs: string[] = [
+    `Final verification passed.\n\n${objectText}`,
+    "```json\n" + objectText + "\n```",
+    `Validation commentary before the report.\n\n\`\`\`json\n${objectText}\n\`\`\``,
+    `Note "quoted {braces} in prose" then ${objectText}`,
+  ];
+  for (const output of wrappedOutputs) {
+    const parsed = parseAgentFinalOutput(output);
+    assert.equal(parsed.ok, true, `expected acceptance for: ${output}`);
+    if (!parsed.ok) {
+      continue;
+    }
+    assert.equal(parsed.report.summary, "Wrapped summary.");
+    assert.deepEqual(parsed.report.next_commands, [{ command: "req-fix", text: "Fix the flaky retry path" }]);
+  }
+});
+
+/**
+ * @brief Verifies final-output extraction rejects object-free and multi-object terminal outputs.
+ * @details Parses one prose-only output, one output carrying two valid JSON objects, and one output carrying an empty fenced object plus one valid object, asserting every rejection returns the existing JSON-contract diagnostic so invalid outputs never feed the merge gate. Runtime is O(n) in output length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when any rejected output parses successfully or returns the wrong diagnostic.
+ * @satisfies REQ-711, TST-225
+ */
+test("agent-final-output parsing rejects object-free and multi-object outputs", () => {
+  const firstObject = JSON.stringify({ result: "ok", summary: "First.", next_commands: [] });
+  const secondObject = JSON.stringify({ result: "error", summary: "Second.", next_commands: [] });
+  const rejectedOutputs: string[] = [
+    "No report object in this text at all.",
+    firstObject + " " + secondObject,
+    "```json\n{}\n```\n" + secondObject,
+  ];
+  for (const output of rejectedOutputs) {
+    const parsed = parseAgentFinalOutput(output);
+    assert.equal(parsed.ok, false, `expected rejection for: ${output}`);
+    if (parsed.ok) {
+      continue;
+    }
+    assert.equal(parsed.errorMessage, "The final agent output is not exactly one valid JSON object.");
+  }
+});
+
+/**
  * @brief Verifies markdown report rendering emits the fixed-order sections and omits absent fields.
  * @details Renders one report carrying `summary`, `outcome`, and `next_workflow`, asserting each present field renders as its `## **<Label>**` heading followed by the value in the fixed order with one blank line between sections; asserts a report with no optional field renders only the Summary section and `undefined` renders the empty string. Runtime is O(n) in report length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.

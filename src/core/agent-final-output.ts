@@ -1,8 +1,8 @@
 /**
  * @file
- * @brief Implements final-output JSON parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture.
- * @details Parses the terminal assistant text of one completed agentic prompt run as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
- * @satisfies DES-042, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684
+ * @brief Implements final-output JSON extraction, parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture.
+ * @details Extracts the one embedded JSON object from the terminal assistant text of one completed agentic prompt run, parses it as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+ * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711
  */
 
 /**
@@ -148,16 +148,103 @@ function normalizeAgentFinalOutputCommands(value: unknown): AgentFinalOutputComm
 }
 
 /**
- * @brief Parses the terminal agent output as exactly one validated final-output JSON object.
- * @details Requires the trimmed output to parse as exactly one plain JSON object, validates the mandatory `result` field against the `ok|error` domain, the mandatory `summary` field as a string, and the mandatory `next_commands` field as an array, normalizes `next_commands` entries, and copies every optional report field only when present as a string so absent optional fields never fail the parse. Every rejection returns one deterministic English diagnostic that callers surface to the user. Runtime is O(n) in output length. No external state is mutated.
+ * @brief Extracts the single embedded final-output JSON object from one terminal agent output.
+ * @details Scans the trimmed text for every balanced top-level brace pair using string-literal-aware matching, validates each candidate through the native JSON parser plus `isPlainJsonObject`, and returns the sole candidate when exactly one valid JSON object exists; every other outcome returns the original trimmed text unchanged so `JSON.parse` fails with the existing JSON-contract diagnostic. The scan strips surrounding non-JSON prose and optional markdown code fences around the first balanced top-level JSON object without mutating the source text. Runtime is O(n) in output length. No external state is mutated.
+ * @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
+ * @return {string} The extracted JSON object substring when exactly one exists; otherwise the trimmed input text unchanged.
+ * @satisfies REQ-710, REQ-711
+ */
+function extractFinalOutputJsonObject(agentOutputText: string): string {
+  const trimmed = agentOutputText.trim();
+  const candidates: string[] = [];
+  let insideString = false;
+  let escapedCharacter = false;
+  let index = 0;
+  while (index < trimmed.length) {
+    const character = trimmed[index];
+    if (insideString) {
+      if (escapedCharacter) {
+        escapedCharacter = false;
+      } else if (character === "\\") {
+        escapedCharacter = true;
+      } else if (character === '"') {
+        insideString = false;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      insideString = true;
+      index += 1;
+      continue;
+    }
+    if (character !== "{") {
+      index += 1;
+      continue;
+    }
+    let depth = 0;
+    let candidateString = false;
+    let candidateEscaped = false;
+    let candidateEnd = -1;
+    for (let scan = index; scan < trimmed.length; scan += 1) {
+      const scanCharacter = trimmed[scan];
+      if (candidateString) {
+        if (candidateEscaped) {
+          candidateEscaped = false;
+        } else if (scanCharacter === "\\") {
+          candidateEscaped = true;
+        } else if (scanCharacter === '"') {
+          candidateString = false;
+        }
+        continue;
+      }
+      if (scanCharacter === '"') {
+        candidateString = true;
+        continue;
+      }
+      if (scanCharacter === "{") {
+        depth += 1;
+        continue;
+      }
+      if (scanCharacter !== "}") {
+        continue;
+      }
+      depth -= 1;
+      if (depth === 0) {
+        candidateEnd = scan;
+        break;
+      }
+    }
+    if (candidateEnd === -1) {
+      index += 1;
+      continue;
+    }
+    const candidate = trimmed.slice(index, candidateEnd + 1);
+    let parsedCandidate: unknown;
+    try {
+      parsedCandidate = JSON.parse(candidate);
+    } catch {
+      parsedCandidate = undefined;
+    }
+    if (isPlainJsonObject(parsedCandidate)) {
+      candidates.push(candidate);
+    }
+    index = candidateEnd + 1;
+  }
+  return candidates.length === 1 ? candidates[0] : trimmed;
+}
+
+/**
+ * @brief Extracts and parses the terminal agent output as exactly one validated final-output JSON object.
+ * @details Extracts the one embedded JSON object from the trimmed output through `extractFinalOutputJsonObject(...)` (stripping surrounding non-JSON prose and optional markdown code fences, rejecting object-free and multi-object outputs), then validates the mandatory `result` field against the `ok|error` domain, the mandatory `summary` field as a string, and the mandatory `next_commands` field as an array, normalizes `next_commands` entries, and copies every optional report field only when present as a string so absent optional fields never fail the parse. Every rejection returns one deterministic English diagnostic that callers surface to the user. Runtime is O(n) in output length. No external state is mutated.
  * @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
  * @return {AgentFinalOutputParse} Validated report, or the deterministic parse/validation diagnostic.
- * @satisfies REQ-677, REQ-678, REQ-679, REQ-680
+ * @satisfies REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-710, REQ-711
  */
 export function parseAgentFinalOutput(agentOutputText: string): AgentFinalOutputParse {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(agentOutputText);
+    parsed = JSON.parse(extractFinalOutputJsonObject(agentOutputText));
   } catch {
     return { ok: false, errorMessage: "The final agent output is not exactly one valid JSON object." };
   }
