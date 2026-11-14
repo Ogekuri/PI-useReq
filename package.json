@@ -1,6 +1,6 @@
 {
   "name": "pi-usereq",
-  "version": "0.109.7",
+  "version": "0.109.8",
   "description": "Requirements-oriented pi extension plus Node CLI for prompt delivery, source summarization, static-check orchestration, git worktree automation, and npm release automation.",
   "keywords": [
     "pi",

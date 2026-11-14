@@ -1,7 +1,9 @@
 # Changelog
 
-## [0.109.7](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.7) - 2026-11-13
+## [0.109.8](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.8) - 2026-11-14
 ### ⛰️  Features
+- Update prompts.
+- Update prompts.
 - Add /req-continue-list printing full Next-Workflow list [useReq] *(next-workflow)*
   Add the dedicated req-continue-list slash command that prints the complete
   captured Next-Workflow entry list into the editor, rendering every command
@@ -26,6 +28,17 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- Write no-source REFERENCES.md placeholder like req-references [useReq] *(references)*
+  runReferences now probes hasAnalyzableSourceFiles before extraction and
+  writes the exact NO_SOURCE_REFERENCES_PLACEHOLDER payload through
+  writeNoSourcePlaceholderDocument when the configured src-dir git
+  inventory holds no supported source file, returning the status-only
+  success payload exactly like the /req-references command branch.
+  Genuine source-discovery, generation, and write failures still surface
+  error: diagnostics, preserving REQ-294/REQ-295/REQ-296 contracts.
+  references tool registration guidelines document the no-source contract.; Add failing-first reproducer test and replace the empty-inventory tool
+  error assertion with a real git discovery failure; full suite 547/547.
+  Regenerate WORKFLOW.md call traces and REFERENCES.md.
 - recover persisted terminal workflow state after rebind [useReq] *(status)*
   Add resynchronizePersistedTerminalWorkflowState to extension-status: a
   replacement runtime bound by switchSession during closure receives
@@ -45,6 +58,35 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: add scan-by-dir recursive directory-scan execution [useReq] *(static-check)*
+  Add optional boolean scan-by-dir flag to every static-check Command entry (REQ-694); Default scan-by-dir TRUE for cppcheck, ruff, eslint; FALSE otherwise (REQ-695, REQ-699); Execute scan-by-dir checkers once over src-dir plus tests-dir with checker-native
+  fixture-root exclusion arguments; keep per-file dispatch for all other entries
+  (REQ-696, REQ-697, REQ-698, REQ-700)
+  Support scan-by-dir reads and writes through the configuration CLI boolean field; Update REQUIREMENTS/WORKFLOW/REFERENCES docs and default-config test expectations; Speeds project static-check on this repository from ~232s to ~5s
+- Add --write-config default materialization command [useReq] *(config-cli)*
+  Implement the zero-argument --write-config configuration CLI command
+  (REQ-689..REQ-692) that materializes only absent schema parameter
+  defaults into the local and global configuration files without ever
+  overwriting persisted values, unknown keys, or file permissions.
+  Make --set/--unset persistence absence-preserving (REQ-693): absent
+  untouched parameters stay absent while requested mutations and
+  scope-policy effects still persist; identical payloads skip the write.
+  Add DES-043 plus TST-227/TST-228 with the new config CLI test suite
+  and update the SRS, WORKFLOW runtime model, and REFERENCES index.
+- BREAKING CHANGE: Parse final-output JSON gates and reports replacing fences [useReq] *(core)*
+  Add src/core/agent-final-output.ts: single-JSON-object parse, mandatory result/summary/next_commands validation, markdown report rendering, process-scoped report capture (REQ-677-684, DES-042).; Gate worktree merge on the JSON result field replacing STATUS_OK keywords (REQ-584-589); park error with user-facing diagnostics for result error and invalid outputs (REQ-580/587/588).; Resolve %%OUTPUT%% from the JSON summary on command-notify and Pushover (REQ-469-472).; Capture Next-Workflow commands from the next_commands array (REQ-653-655); render report sections before the retention line (REQ-681).; Update tests: next-workflow, agent-final-output suite, extension-registration closures; bump SRS to 0.0.157.
+- Parse STATUS_OK plus RESULT_SUMMARY and NEXT_WORKFLOW fences [useReq] *(core)*
+  Replace the legacy STATUS: OK / STATUS: ERROR marker scans with the
+  parseable STATUS_OK / STATUS_ERROR keywords in the worktree merge gate,
+  retention notifications, requirements, and closure tests.
+  Extract the Pushover %%OUTPUT%% channel exclusively from the closed
+  ~~~RESULT_SUMMARY fence, dropping the Summary/Outcome heading slicing
+  and its output-end fallback (REQ-510 removed).
+  Capture Next-Workflow commands exclusively from blank-line-separated
+  entries inside the ~~~NEXT_WORKFLOW fence, replacing the
+  ## **Next Workflow** section plus ~~~text block parser.
+  Update REQUIREMENTS/WORKFLOW/REFERENCES, source logic, and tests;
+  static-check clean, npm test 539/539 passed.
 - re-point pi CLI to retained worktree on merge failure [useReq] *(orchestration)*
   REQ-665..668: on fast-forward merge failure redirect the active session,
   process cwd, and context cwd back to the retained worktree, emit the
@@ -1525,7 +1567,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.7\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.7
+- \[0.109.8\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.8
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1634,4 +1676,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.7]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.7
+[0.109.8]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.8
