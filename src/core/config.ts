@@ -776,12 +776,12 @@ function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[] {
 
 /**
  * @brief Reads and validates one persisted config payload.
- * @details Returns `undefined` when the target file does not exist. Otherwise parses UTF-8 JSON, rejects array or primitive payloads, and surfaces deterministic `ReqError` diagnostics keyed by the exact path. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Returns `undefined` when the target file does not exist. Otherwise parses UTF-8 JSON, rejects array or primitive payloads, and surfaces deterministic `ReqError` diagnostics keyed by the exact path. Exported for configuration CLI raw-payload readers that must distinguish persisted keys from effective defaults. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] configPath {string} Absolute config file path.
  * @return {Record<string, unknown> | undefined} Parsed object payload or `undefined` when the file is absent.
  * @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
  */
-function readConfigPayload(configPath: string): Record<string, unknown> | undefined {
+export function readConfigPayload(configPath: string): Record<string, unknown> | undefined {
   if (!fs.existsSync(configPath)) {
     return undefined;
   }

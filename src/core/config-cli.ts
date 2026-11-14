@@ -1,8 +1,8 @@
 /**
  * @file
  * @brief Implements the additive pi-usereq configuration CLI.
- * @details Dispatches the leading `--print`, `--info`, `--print-raw`, `--get`, `--set`, and `--unset` commands over the canonical configuration schema. Loads the existing local and global scopes through the shared configuration loaders, bootstraps a missing global JSON file from schema defaults, renders `--print` and `--info` through one deterministic tree renderer, and persists mutations through an atomic same-directory temporary-file replace. Existing menu, prompt-command, and agent-tool behavior is untouched. Runtime is dominated by configuration I/O plus O(n) rendering in node count. Side effects include global-config bootstrapping and atomic configuration writes.
- * @satisfies PRJ-010, DES-032, DES-034, REQ-532, REQ-533, REQ-534, REQ-537, REQ-538, REQ-540, REQ-541, REQ-544, REQ-548, REQ-549, REQ-550, REQ-551, REQ-552, REQ-553, REQ-554, REQ-555, REQ-557, REQ-558, REQ-559, REQ-560, REQ-563
+ * @details Dispatches the leading `--print`, `--info`, `--print-raw`, `--get`, `--set`, `--unset`, and `--write-config` commands over the canonical configuration schema. Loads the existing local and global scopes through the shared configuration loaders, bootstraps a missing global JSON file from schema defaults, renders `--print` and `--info` through one deterministic tree renderer, persists mutations through an atomic same-directory temporary-file replace while keeping absent parameter chains absent, and materializes absent effective defaults through `--write-config` without ever overwriting persisted values. Existing menu, prompt-command, and agent-tool behavior is untouched. Runtime is dominated by configuration I/O plus O(n) rendering in node count. Side effects include global-config bootstrapping and atomic configuration writes.
+ * @satisfies PRJ-010, DES-032, DES-034, DES-043, REQ-532, REQ-533, REQ-534, REQ-537, REQ-538, REQ-540, REQ-541, REQ-544, REQ-548, REQ-549, REQ-550, REQ-551, REQ-552, REQ-553, REQ-554, REQ-555, REQ-557, REQ-558, REQ-559, REQ-560, REQ-563, REQ-689, REQ-690, REQ-691, REQ-692, REQ-693
  */
 
 import fs from "node:fs";
@@ -16,6 +16,7 @@ import {
   getProjectConfigPath,
   loadConfig,
   normalizeConfigPaths,
+  readConfigPayload,
 } from "./config.js";
 import {
   formatConfigTable,
@@ -26,7 +27,9 @@ import {
 import {
   applyConfigSet,
   applyConfigUnset,
+  buildScopeMutationWritePayload,
   getConfigSchema,
+  mergeScopeAbsentDefaults,
   projectParameterValue,
   projectScopePayload,
   projectSectionValue,
@@ -48,7 +51,7 @@ import { ReqError } from "./errors.js";
  * @details Uses a set for O(1) invocation detection so standard flag parsing stays untouched for every other argv shape. Access complexity is O(1).
  * @satisfies REQ-558
  */
-const CONFIG_CLI_FLAGS = new Set(["--print", "--info", "--print-raw", "--get", "--set", "--unset"]);
+const CONFIG_CLI_FLAGS = new Set(["--print", "--info", "--print-raw", "--get", "--set", "--unset", "--write-config"]);
 
 /**
  * @brief Tests whether one argv belongs to the configuration CLI surface.
@@ -642,24 +645,32 @@ function validateCrossFieldConstraints(scope: ConfigScope, payload: Record<strin
 
 /**
  * @brief Validates, projects, and atomically persists one mutated scope.
- * @details Applies scope policy, checks cross-field constraints, projects the payload onto the canonical schema, validates every leaf, and writes only the owning file. Runtime is dominated by configuration I/O. Side effects include conditional directory creation and atomic file replacement.
+ * @details Applies scope policy, checks cross-field constraints, projects the payload onto the canonical schema, validates every leaf, reads the raw persisted payload, builds the sparse write payload holding only persisted chains plus operation-changed chains so absent parameter chains stay absent, and writes only the owning file when the sparse payload differs from the persisted payload. Runtime is dominated by configuration I/O. Side effects include conditional directory creation and atomic file replacement.
  * @param[in] base {string} Absolute project base path.
  * @param[in] target {ConfigTarget} Resolved mutation target.
  * @param[in] payload {Record<string, unknown>} Mutated scope payload.
+ * @param[in] beforePayload {Record<string, unknown>} Schema-projected pre-mutation scope payload used for change detection.
  * @return {void} No return value.
  * @throws {ReqError} Throws without writing when validation fails.
- * @satisfies REQ-535, REQ-537, REQ-559, REQ-560, REQ-561
+ * @satisfies REQ-535, REQ-537, REQ-559, REQ-560, REQ-561, REQ-693
  */
 function persistScopeMutation(
   base: string,
   target: ConfigTarget,
   payload: Record<string, unknown>,
+  beforePayload: Record<string, unknown>,
 ): void {
   reconcileScopePolicy(target, payload);
   validateCrossFieldConstraints(target.scope, payload);
   const projected = projectScopePayload(target.scope, payload);
   validateScopePayload(target.scope, projected);
-  atomicWriteJsonPayload(resolveScopeWritePath(target.scope, base), projected);
+  const writePath = resolveScopeWritePath(target.scope, base);
+  const rawPayload = readConfigPayload(writePath);
+  const writtenPayload = buildScopeMutationWritePayload(target.scope, projected, beforePayload, rawPayload);
+  if (JSON.stringify(writtenPayload) === JSON.stringify(rawPayload ?? {})) {
+    return;
+  }
+  atomicWriteJsonPayload(writePath, writtenPayload);
 }
 
 /**
@@ -707,33 +718,35 @@ function runGetCommand(base: string, configPath: string): void {
 
 /**
  * @brief Executes one `--set` command.
- * @details Resolves the canonical target, applies the typed mutation to in-memory scope state, validates and persists the owning scope atomically, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
+ * @details Resolves the canonical target, loads the scope state, snapshots the pre-mutation payload, applies the typed mutation to in-memory scope state, validates and persists the owning scope atomically while keeping absent parameter chains absent, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
  * @param[in] base {string} Absolute project base path.
  * @param[in] configPath {string} Target canonical path.
  * @param[in] rawValue {string} Raw CLI value.
  * @return {void} No return value.
- * @satisfies REQ-535, REQ-536, REQ-537, REQ-546, REQ-556, REQ-563
+ * @satisfies REQ-535, REQ-536, REQ-537, REQ-546, REQ-556, REQ-563, REQ-693
  */
 function runSetCommand(base: string, configPath: string, rawValue: string): void {
   const target = resolveConfigTarget(configPath);
   const state = loadConfigCliState(base);
+  const beforePayload = structuredClone(state[target.scope]);
   applyConfigSet(state, target, rawValue);
-  persistScopeMutation(base, target, state[target.scope]);
+  persistScopeMutation(base, target, state[target.scope], beforePayload);
 }
 
 /**
  * @brief Executes one `--unset` command.
- * @details Resolves the canonical target, restores the documented default or removes the addressed row or optional field, validates and persists the owning scope atomically, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
+ * @details Resolves the canonical target, loads the scope state, snapshots the pre-mutation payload, restores the documented default or removes the addressed row or optional field in memory, validates and persists the owning scope atomically while keeping absent parameter chains absent, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
  * @param[in] base {string} Absolute project base path.
  * @param[in] configPath {string} Target canonical path.
  * @return {void} No return value.
- * @satisfies REQ-535, REQ-546, REQ-556, REQ-563
+ * @satisfies REQ-535, REQ-546, REQ-556, REQ-563, REQ-693
  */
 function runUnsetCommand(base: string, configPath: string): void {
   const target = resolveConfigTarget(configPath);
   const state = loadConfigCliState(base);
+  const beforePayload = structuredClone(state[target.scope]);
   applyConfigUnset(state, target);
-  persistScopeMutation(base, target, state[target.scope]);
+  persistScopeMutation(base, target, state[target.scope], beforePayload);
 }
 
 /**
@@ -749,12 +762,33 @@ function runPrintRawCommand(base: string): void {
 }
 
 /**
+ * @brief Executes one `--write-config` command.
+ * @details Loads the effective scope payloads, reads the raw persisted payload of each scope, merges the effective default value into every schema parameter chain absent from that raw payload while preserving persisted values, unknown keys, and key order, skips files whose merged payload equals the raw payload, and atomically persists the global scope before the local scope. Runtime is dominated by configuration I/O plus O(n) schema walking. Side effects include conditional atomic configuration writes.
+ * @param[in] base {string} Absolute project base path.
+ * @return {void} No return value.
+ * @throws {ReqError} Throws when a persisted configuration file is malformed or a write fails.
+ * @satisfies REQ-689, REQ-690, REQ-691, REQ-692
+ */
+function runWriteConfigCommand(base: string): void {
+  const state = loadConfigCliState(base);
+  for (const scope of ["global", "local"] as const) {
+    const writePath = resolveScopeWritePath(scope, base);
+    const rawPayload = readConfigPayload(writePath);
+    const mergedPayload = mergeScopeAbsentDefaults(scope, rawPayload, state[scope]);
+    if (rawPayload !== undefined && JSON.stringify(mergedPayload) === JSON.stringify(rawPayload)) {
+      continue;
+    }
+    atomicWriteJsonPayload(writePath, mergedPayload);
+  }
+}
+
+/**
  * @brief Executes one parsed configuration CLI invocation.
- * @details Validates the operand shape, bootstraps the global JSON file, and dispatches the selected display, read, or mutation command. Runtime is dominated by the delegated command. Side effects include global-config bootstrapping, stdout writes, and atomic configuration writes.
+ * @details Validates the operand shape, bootstraps the global JSON file, and dispatches the selected display, read, mutation, or default-materialization command. Runtime is dominated by the delegated command. Side effects include global-config bootstrapping, stdout writes, and atomic configuration writes.
  * @param[in] argv {readonly string[]} Raw configuration CLI arguments.
  * @return {void} No return value.
  * @throws {ReqError} Throws on malformed invocations or failing commands.
- * @satisfies REQ-534, REQ-538, REQ-558
+ * @satisfies REQ-534, REQ-538, REQ-558, REQ-689
  */
 function executeConfigCli(argv: readonly string[]): void {
   const command = argv[0]!;
@@ -794,6 +828,10 @@ function executeConfigCli(argv: readonly string[]): void {
       assertPathArgument(args[0]!);
       ensureGlobalConfigFile(base);
       runUnsetCommand(base, args[0]!);
+      return;
+    case "--write-config":
+      assertCommandArgumentCount(command, args, 0, 0, "no arguments");
+      runWriteConfigCommand(base);
       return;
     default:
       throw new ReqError(`Error: unknown configuration command "${command}".`, 1);

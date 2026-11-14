@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.157"
+version: "0.0.158"
 date: "2026-11-14"
 author: "OpenAI Codex"
 scope:
@@ -50,7 +50,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
 - **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery, base-path session restoration, and force cleanup of generated worktrees plus branches.
 - **PRJ-009**: MUST expose a distributable `pi-usereq` npm bin program accepting the management commands `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop] [--force]`, and `--uninstall`.
-- **PRJ-010**: MUST expose an additive configuration CLI with `--get`, `--set`, `--unset`, `--print`, `--info`, and `--print-raw` over the existing local and global JSON scopes.
+- **PRJ-010**: MUST expose an additive configuration CLI with `--get`, `--set`, `--unset`, `--print`, `--info`, `--print-raw`, and `--write-config` over the existing local and global JSON scopes.
 
 ### 2.2 Project Constraints
 - **CTN-001**: MUST persist local project configuration only at `<base-path>/.pi-usereq.json` with default `docs-dir=usereq/docs`, `tests-dir=tests`, and `src-dir=["src"]`.
@@ -129,6 +129,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-040**: MUST implement Next-Workflow capture, process-scoped storage, numbered-list rendering, ordinal selection, and `/req-continue` handler dispatch in one dedicated `src/core/next-workflow.ts` module outside `src/index.ts` business logic.
 - **DES-041**: MUST implement the dedicated `req-continue-list` editor printing in `src/index.ts` outside the bundled prompt inventory, reusing `src/core/next-workflow.ts` full-entry list rendering.
 - **DES-042**: MUST implement final-output JSON parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture in one dedicated `src/core/` module outside `src/index.ts` business logic.
+- **DES-043**: MUST implement `--write-config` absent-default materialization plus absence-preserving `--set`/`--unset` write pruning in `src/core/config-cli.ts` reusing schema-projected defaults from `src/core/config-cli-schema.ts`.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -768,6 +769,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-686**: MUST bind every bundled prompt's final-output format constraint to exactly one valid JSON object without surrounding text or fences.
 - **REQ-687**: MUST restrict each bundled prompt's final-output format constraint to the report fields that prompt generates, omitting non-applicable fields.
 - **REQ-688**: MUST bind each prompt-mandated `next_commands` entry to string fields `command` and `text` only, using `[]` when no command is mandated.
+- **REQ-689**: MUST expose a zero-argument `--write-config` configuration CLI command dispatching before standard flag parsing over the existing local and global JSON scopes.
+- **REQ-690**: MUST materialize into each configuration file only schema parameter values absent from its persisted payload during `--write-config`, sourcing absent values from the effective documented defaults.
+- **REQ-691**: MUST preserve every persisted parameter value, unknown persisted key, and existing file permission during `--write-config`.
+- **REQ-692**: MUST emit no stdout on successful `--write-config` and one English stderr diagnostic with non-zero exit code on failure.
+- **REQ-693**: MUST NOT add absent parameter values to an existing persisted configuration file during `--set` or `--unset` unless the requested operation changes that parameter value.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -991,6 +997,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-224**: MUST verify `req-continue-list` emits no notification, performs no workflow-state transition from any workflow state, and preserves the captured Next-Workflow array.
 - **TST-225**: MUST verify final-output JSON parsing accepts one valid object, rejects non-JSON output, missing or invalid `result`, missing `summary`, and missing `next_commands`, and tolerates absent optional report fields.
 - **TST-226**: MUST verify notification `%%OUTPUT%%` resolution uses the final-output JSON `summary` for completed outcomes and keeps the raw output for unparseable completed outputs.
+- **TST-227**: MUST verify `--write-config` materializes only absent schema defaults into both scopes while preserving every persisted value, emits no stdout on success, and fails with one stderr diagnostic.
+- **TST-228**: MUST verify `--set` and `--unset` keep absent parameters absent in persisted configuration files while persisting requested mutations and preserving effective reads.
 
 ## 5. Observed Component Model
 
@@ -1004,7 +1012,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, installation-owned bundled-resource resolution, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
 - `src/core/agent-final-output.ts` parses the terminal agent output as one validated final-output JSON object, renders its markdown report sections, and stores the process-scoped captured report consumed by the final context-retention notification.
 - `src/core/next-workflow.ts` provides Next-Workflow command capture from the parsed final-output JSON `next_commands` array, process-scoped Next-Workflow array storage, numbered-list rendering plus `/req-continue-list` full-entry list rendering, ordinal selection, and `/req-continue` handler dispatch helpers.
-- `src/core/config-cli-schema.ts`, `src/core/config-cli-render.ts`, and `src/core/config-cli.ts` provide the additive configuration CLI schema, deterministic tree plus table rendering, and CLI dispatch over the existing local and global scopes.
+- `src/core/config-cli-schema.ts`, `src/core/config-cli-render.ts`, and `src/core/config-cli.ts` provide the additive configuration CLI schema, deterministic tree plus table rendering, and CLI dispatch over the existing local and global scopes, plus the `--write-config` absent-default materialization with absence-preserving mutation persistence.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `src/core/source-presence.ts` detects analyzable source presence from the configured `src-dir` git file inventory and writes the documented no-source placeholder payloads for `REFERENCES.md` and `WORKFLOW.md`.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
@@ -1379,6 +1387,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-686 | `src/resources/prompts/*.md` :: the constraint sentence binding the final response to exactly one valid JSON object without surrounding text or fences. |
 | REQ-687 | `src/resources/prompts/*.md` :: per-prompt field lists omitting non-applicable report fields such as deltas on analysis-only prompts. |
 | REQ-688 | `src/resources/prompts/*.md` :: the `next_commands` constraint bullet mandating string-only `command` plus `text`, `[]` for no command, and empty `text` without input. |
+| REQ-689 | `src/core/config-cli.ts` :: `CONFIG_CLI_FLAGS` plus `executeConfigCli` :: route the zero-argument `--write-config` token through the configuration CLI dispatch before standard flag parsing. |
+| REQ-690 | `src/core/config-cli-schema.ts` :: `mergeScopeAbsentDefaults`; `src/core/config-cli.ts` :: `runWriteConfigCommand` :: add only schema parameter chains absent from the raw payload, sourcing values from the effective scope payload. |
+| REQ-691 | `src/core/config-cli-schema.ts` :: `mergeScopeAbsentDefaults` :: clone the raw payload and fill only absent chains; `src/core/config-cli.ts` :: `atomicWriteJsonPayload` :: preserve permissions during the atomic replace. |
+| REQ-692 | `src/core/config-cli.ts` :: `runWriteConfigCommand` and `runConfigCli` :: emit no stdout on success and one English stderr diagnostic with non-zero exit code on failure. |
+| REQ-693 | `src/core/config-cli.ts` :: `persistScopeMutation`; `src/core/config-cli-schema.ts` :: `buildScopeMutationWritePayload` :: write only raw-present chains plus operation-changed chains into the owning scope file. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1461,6 +1474,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-224 | `tests/extension-registration.test.ts` :: `req-continue-list prints the full captured list from every workflow state without notifications or state changes` (L10044-10147) :: zero-notification deltas, preserved `idle`/`done`/`error` statuses, and unchanged captured array. |
 | TST-225 | `tests/agent-final-output.test.ts` :: parsing, validation, and report-rendering tests :: valid object acceptance, non-JSON and mandatory-field rejections, and optional-field tolerance. |
 | TST-226 | `tests/agent-final-output.test.ts` :: summary-resolution tests plus `src/core/pi-notify.ts` :: `resolvePiNotifyAgentOutput` :: completed outcomes resolve `%%OUTPUT%%` from the JSON `summary` with raw-output fallback. |
+| TST-227 | `tests/config-cli-write-config.test.ts` :: `--write-config` coverage :: absent-default materialization in both scopes, persisted-value and unknown-key preservation, silent success, and failure diagnostics. |
+| TST-228 | `tests/config-cli-write-config.test.ts` :: `--set` plus `--unset` absence-preservation coverage :: absent parameters stay absent while requested mutations and effective reads persist. |
 
 ## 9. Performance Notes
 No explicit performance optimizations identified.

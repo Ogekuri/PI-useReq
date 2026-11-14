@@ -1156,6 +1156,95 @@ export function getSectionDefaultValue(section: ConfigSchemaSection): Record<str
 }
 
 /**
+ * @brief Collects every schema parameter leaf of one scope section.
+ * @details Performs one depth-first walk over the section children, recursing into nested sections and collecting parameter leaves in schema declaration order so default-merge and write-pruning consumers iterate one canonical parameter list. Runtime is O(n) in subtree node count. No external state is mutated.
+ * @param[in] section {ConfigSchemaSection} Section subtree to walk.
+ * @return {ConfigSchemaParameter[]} Parameter leaves in schema order.
+ */
+function collectScopeParameters(section: ConfigSchemaSection): ConfigSchemaParameter[] {
+  const parameters: ConfigSchemaParameter[] = [];
+  const visit = (node: ConfigSchemaNode): void => {
+    if (node.kind === "section") {
+      for (const child of node.children) visit(child);
+      return;
+    }
+    parameters.push(node);
+  };
+  for (const child of section.children) visit(child);
+  return parameters;
+}
+
+/**
+ * @brief Tests whether two schema values render identical JSON text.
+ * @details Compares `JSON.stringify(...)` renderings so typed scalars, arrays, and objects compare structurally while `undefined` equals only `undefined`. Runtime is O(n) in serialized size. No external state is mutated.
+ * @param[in] left {unknown} First schema value.
+ * @param[in] right {unknown} Second schema value.
+ * @return {boolean} `true` when both values render identical JSON text.
+ */
+function isSameSchemaValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * @brief Merges one fallback value into every absent parameter chain of one raw scope payload.
+ * @details Starts from a detached clone of the raw payload so persisted values, unknown persisted keys, and key order stay verbatim, then writes the fallback payload value into every schema parameter chain absent from the raw payload. Runtime is O(n) in schema node count plus clone size. No external state is mutated beyond the returned clone.
+ * @param[in] scope {ConfigScope} Owning configuration scope.
+ * @param[in] rawPayload {Record<string, unknown> | undefined} Raw persisted payload; `undefined` yields an empty base.
+ * @param[in] fallbackPayload {Record<string, unknown>} Effective scope payload supplying the fallback value of every absent chain.
+ * @return {Record<string, unknown>} Merged payload holding every persisted value plus one fallback value per absent parameter chain.
+ * @satisfies REQ-690, REQ-691
+ */
+export function mergeScopeAbsentDefaults(
+  scope: ConfigScope,
+  rawPayload: Record<string, unknown> | undefined,
+  fallbackPayload: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = rawPayload === undefined ? {} : structuredClone(rawPayload);
+  for (const parameter of collectScopeParameters(getScopeSection(scope))) {
+    if (getAtPath(merged, parameter.access) !== undefined) {
+      continue;
+    }
+    const fallbackValue = getAtPath(fallbackPayload, parameter.access);
+    if (fallbackValue !== undefined) {
+      setAtPath(merged, parameter.access, structuredClone(fallbackValue));
+    }
+  }
+  return merged;
+}
+
+/**
+ * @brief Builds the sparse write payload of one `--set` or `--unset` mutation.
+ * @details Starts from a detached clone of the raw persisted payload so absent parameter chains stay absent, writes the projected post-mutation value into every chain present in the raw payload, and additionally writes only chains whose value the requested operation changed relative to the pre-mutation payload; unknown raw keys are preserved verbatim. Runtime is O(n) in schema node count plus clone size. No external state is mutated beyond the returned clone.
+ * @param[in] scope {ConfigScope} Owning configuration scope.
+ * @param[in] projectedPayload {Record<string, unknown>} Schema-projected post-mutation scope payload.
+ * @param[in] beforePayload {Record<string, unknown>} Schema-projected pre-mutation scope payload.
+ * @param[in] rawPayload {Record<string, unknown> | undefined} Raw persisted payload; `undefined` yields an empty base.
+ * @return {Record<string, unknown>} Sparse payload holding every persisted chain plus operation-changed chains only.
+ * @satisfies REQ-693
+ */
+export function buildScopeMutationWritePayload(
+  scope: ConfigScope,
+  projectedPayload: Record<string, unknown>,
+  beforePayload: Record<string, unknown>,
+  rawPayload: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const raw = rawPayload ?? {};
+  const written = structuredClone(raw);
+  for (const parameter of collectScopeParameters(getScopeSection(scope))) {
+    const afterValue = getAtPath(projectedPayload, parameter.access);
+    if (afterValue === undefined) {
+      continue;
+    }
+    const rawValue = getAtPath(raw, parameter.access);
+    if (rawValue === undefined && isSameSchemaValue(afterValue, getAtPath(beforePayload, parameter.access))) {
+      continue;
+    }
+    setAtPath(written, parameter.access, structuredClone(afterValue));
+  }
+  return written;
+}
+
+/**
  * @brief Parses one raw JSON value for a configuration input.
  * @details Wraps `JSON.parse(...)` with a deterministic English diagnostic naming the target path. Runtime is O(n) in input length. No external state is mutated.
  * @param[in] rawValue {string} Raw JSON text.

@@ -867,7 +867,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ---
 
-# config-cli-schema.ts | TypeScript | 1699L | 44 symbols | 5 imports | 54 comments
+# config-cli-schema.ts | TypeScript | 1788L | 49 symbols | 5 imports | 58 comments
 > Path: `src/core/config-cli-schema.ts`
 - @brief Defines the canonical configuration CLI schema plus typed path operations.
 - @details Supplies one strict schema for the additive `--get`, `--set`, `--unset`, `--print`, and `--info` commands over the existing local and global configuration scopes. Defaults derive from `getDefaultConfig(...)` and enum domains derive from the existing configuration inventories, so the CLI never keeps a diverging parameter list. The module resolves case-sensitive colon paths, parses typed input, validates whole payloads, projects payloads onto the schema, and applies mutations to in-memory scope payloads. Runtime is O(n) in schema node count plus payload size. No filesystem writes occur here.
@@ -1065,7 +1065,41 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {Record<string, unknown>} Default subtree.
 - @satisfies REQ-556, REQ-562
 
-### fn `function parseJsonInput(rawValue: string, pathLabel: string): unknown` (L1167-1174)
+### fn `function collectScopeParameters(section: ConfigSchemaSection): ConfigSchemaParameter[]` (L1164-1175)
+- @brief Collects every schema parameter leaf of one scope section.
+- @details Performs one depth-first walk over the section children, recursing into nested sections and collecting parameter leaves in schema declaration order so default-merge and write-pruning consumers iterate one canonical parameter list. Runtime is O(n) in subtree node count. No external state is mutated.
+- @param[in] section {ConfigSchemaSection} Section subtree to walk.
+- @return {ConfigSchemaParameter[]} Parameter leaves in schema order.
+
+### fn `const visit = (node: ConfigSchemaNode): void =>` (L1166-1172)
+
+### fn `function isSameSchemaValue(left: unknown, right: unknown): boolean` (L1184-1186)
+- @brief Tests whether two schema values render identical JSON text.
+- @details Compares `JSON.stringify(...)` renderings so typed scalars, arrays, and objects compare structurally while `undefined` equals only `undefined`. Runtime is O(n) in serialized size. No external state is mutated.
+- @param[in] left {unknown} First schema value.
+- @param[in] right {unknown} Second schema value.
+- @return {boolean} `true` when both values render identical JSON text.
+
+### fn `export function mergeScopeAbsentDefaults(` (L1197-1213)
+- @brief Merges one fallback value into every absent parameter chain of one raw scope payload.
+- @details Starts from a detached clone of the raw payload so persisted values, unknown persisted keys, and key order stay verbatim, then writes the fallback payload value into every schema parameter chain absent from the raw payload. Runtime is O(n) in schema node count plus clone size. No external state is mutated beyond the returned clone.
+- @param[in] scope {ConfigScope} Owning configuration scope.
+- @param[in] rawPayload {Record<string, unknown> | undefined} Raw persisted payload; `undefined` yields an empty base.
+- @param[in] fallbackPayload {Record<string, unknown>} Effective scope payload supplying the fallback value of every absent chain.
+- @return {Record<string, unknown>} Merged payload holding every persisted value plus one fallback value per absent parameter chain.
+- @satisfies REQ-690, REQ-691
+
+### fn `export function buildScopeMutationWritePayload(` (L1225-1245)
+- @brief Builds the sparse write payload of one `--set` or `--unset` mutation.
+- @details Starts from a detached clone of the raw persisted payload so absent parameter chains stay absent, writes the projected post-mutation value into every chain present in the raw payload, and additionally writes only chains whose value the requested operation changed relative to the pre-mutation payload; unknown raw keys are preserved verbatim. Runtime is O(n) in schema node count plus clone size. No external state is mutated beyond the returned clone.
+- @param[in] scope {ConfigScope} Owning configuration scope.
+- @param[in] projectedPayload {Record<string, unknown>} Schema-projected post-mutation scope payload.
+- @param[in] beforePayload {Record<string, unknown>} Schema-projected pre-mutation scope payload.
+- @param[in] rawPayload {Record<string, unknown> | undefined} Raw persisted payload; `undefined` yields an empty base.
+- @return {Record<string, unknown>} Sparse payload holding every persisted chain plus operation-changed chains only.
+- @satisfies REQ-693
+
+### fn `function parseJsonInput(rawValue: string, pathLabel: string): unknown` (L1256-1263)
 - @brief Parses one raw JSON value for a configuration input.
 - @details Wraps `JSON.parse(...)` with a deterministic English diagnostic naming the target path. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] rawValue {string} Raw JSON text.
@@ -1074,7 +1108,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the text is not valid JSON.
 - @satisfies REQ-536
 
-### fn `function validateStringArray(` (L1187-1207)
+### fn `function validateStringArray(` (L1276-1296)
 - @brief Validates one string-array field or parameter item list.
 - @details Requires string items, enforces non-empty items when configured, and checks the optional enum domain before reporting the first failure. Runtime is O(n) in item count. No external state is mutated.
 - @param[in] value {unknown} Candidate array.
@@ -1085,7 +1119,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the array or one item is invalid.
 - @satisfies REQ-535, REQ-536
 
-### fn `function validateFieldValue(field: ConfigSchemaField, value: unknown, pathLabel: string): void` (L1219-1230)
+### fn `function validateFieldValue(field: ConfigSchemaField, value: unknown, pathLabel: string): void` (L1308-1319)
 - @brief Validates one fixed object-array field value.
 - @details Branches between scalar strings and string arrays so field updates share one validation contract. Runtime is O(n) in array size. No external state is mutated.
 - @param[in] field {ConfigSchemaField} Field schema.
@@ -1095,7 +1129,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the value violates the field schema.
 - @satisfies REQ-535
 
-### fn `function validateObjectRow(` (L1242-1266)
+### fn `function validateObjectRow(` (L1331-1355)
 - @brief Validates one object-array row against its fixed field schema.
 - @details Rejects non-objects, unknown field tokens, missing required fields, and invalid field values so rows stay strict. Runtime is O(f) in field count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Object-array parameter.
@@ -1105,7 +1139,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the row violates the schema.
 - @satisfies REQ-535, REQ-555
 
-### fn `export function validateParameterValue(` (L1278-1322)
+### fn `export function validateParameterValue(` (L1367-1411)
 - @brief Validates one parameter value against the strict schema.
 - @details Enforces scalar type, non-empty constraints, selection domains, integer domains, and array item or row schemas. Runtime is O(n) in array size. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
@@ -1115,7 +1149,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the value violates the schema.
 - @satisfies REQ-535
 
-### fn `function validateSectionPayload(` (L1333-1351)
+### fn `function validateSectionPayload(` (L1422-1440)
 - @brief Recursively validates one section subtree against the schema.
 - @details Requires section values to be objects, every schema leaf to be present, and every leaf value to validate; unknown keys are ignored here because projection already removed them. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Section schema.
@@ -1124,7 +1158,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when a section or leaf violates the schema.
 - @satisfies REQ-535
 
-### fn `export function validateScopePayload(scope: ConfigScope, payload: Record<string, unknown>): void` (L1362-1364)
+### fn `export function validateScopePayload(scope: ConfigScope, payload: Record<string, unknown>): void` (L1451-1453)
 - @brief Validates one complete schema-projected scope payload.
 - @details Enforces every leaf constraint of the supplied scope before a write so invalid payloads never reach disk. Runtime is O(n) in schema node count. No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
@@ -1133,7 +1167,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the payload violates the schema.
 - @satisfies REQ-535
 
-### fn `export function parseWholeParameterInput(` (L1375-1391)
+### fn `export function parseWholeParameterInput(` (L1464-1480)
 - @brief Parses one whole-parameter `--set` input into the schema type.
 - @details Keeps strings verbatim, parses JSON for typed scalars and arrays, and delegates value-shape errors to the caller validation. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Target parameter.
@@ -1142,7 +1176,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown} Parsed candidate value.
 - @satisfies REQ-536
 
-### fn `export function parseArrayItemInput(` (L1403-1416)
+### fn `export function parseArrayItemInput(` (L1492-1505)
 - @brief Parses one array-item `--set` input into the item type.
 - @details Keeps primitive string items verbatim and requires exactly one JSON object for object-array items. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Array parameter.
@@ -1152,7 +1186,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when an object-array item is not one JSON object.
 - @satisfies REQ-536, REQ-555
 
-### fn `export function parseFieldInput(` (L1427-1433)
+### fn `export function parseFieldInput(` (L1516-1522)
 - @brief Parses one object-array field `--set` input into the field type.
 - @details Keeps string fields verbatim and parses JSON for string-array fields. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] field {ConfigSchemaField} Target field.
@@ -1161,7 +1195,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown} Parsed field value.
 - @satisfies REQ-536
 
-### fn `function parseSectionInput(rawValue: string, pathLabel: string): Record<string, unknown>` (L1444-1450)
+### fn `function parseSectionInput(rawValue: string, pathLabel: string): Record<string, unknown>` (L1533-1539)
 - @brief Parses one section `--set` input into a JSON object.
 - @details Requires exactly one JSON object for branch replacement so arrays and scalars are rejected deterministically. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] rawValue {string} Raw CLI value.
@@ -1170,7 +1204,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the input is not one JSON object.
 - @satisfies REQ-536
 
-### fn `function completeSectionValue(` (L1462-1492)
+### fn `function completeSectionValue(` (L1551-1581)
 - @brief Completes one section replacement value from supplied keys plus schema defaults.
 - @details Rejects unknown keys, fills omitted children with documented defaults, and validates every supplied leaf so branch replacement always yields a complete schema-compatible subtree. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Target section.
@@ -1180,7 +1214,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the supplied object violates the schema.
 - @satisfies REQ-535, REQ-561
 
-### fn `function getMutableArray(` (L1502-1514)
+### fn `function getMutableArray(` (L1591-1603)
 - @brief Resolves the mutable array value of one array parameter.
 - @details Returns the persisted array or installs a detached default array when the payload omits one. Runtime is O(k) in access chain length. Side effect: may mutate the supplied payload.
 - @param[in] parameter {ConfigSchemaParameter} Array parameter.
@@ -1188,7 +1222,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown[]} Mutable array value.
 - @satisfies REQ-546
 
-### fn `function throwIndexRangeError(` (L1527-1539)
+### fn `function throwIndexRangeError(` (L1616-1628)
 - @brief Rejects one out-of-range array index with a deterministic diagnostic.
 - @details Reports the target path, rejected index, valid range, and append affordance so index failures stay actionable. Runtime is O(1). No external state is mutated.
 - @param[in] index {number} Rejected index.
@@ -1199,7 +1233,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Always throws.
 - @satisfies REQ-546
 
-### fn `export function applyConfigSet(` (L1551-1615)
+### fn `export function applyConfigSet(` (L1640-1704)
 - @brief Applies one `--set` mutation to a mutable scope state.
 - @details Parses and validates the supplied input for the resolved target kind, then mutates the owning scope payload: whole branches, whole parameters, single array rows, single fields, appends, and inserts. Runtime is O(n) in affected array or subtree size. Side effect: mutates `state`.
 - @param[in] target {ConfigTarget} Resolved target.
@@ -1209,7 +1243,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws on invalid input or out-of-range indices without mutating state.
 - @satisfies REQ-535, REQ-536, REQ-546, REQ-556
 
-### fn `export function applyConfigUnset(state: ConfigScopeState, target: ConfigTarget): void` (L1626-1667)
+### fn `export function applyConfigUnset(state: ConfigScopeState, target: ConfigTarget): void` (L1715-1756)
 - @brief Applies one `--unset` mutation to a mutable scope state.
 - @details Restores documented defaults for parameters and branches, removes one array row with index compaction, and resets or removes one object-array field under the required-field rule. Runtime is O(n) in affected array or subtree size. Side effect: mutates `state`.
 - @param[in] target {ConfigTarget} Resolved reset target.
@@ -1218,7 +1252,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws for append/insert targets, out-of-range indices, or required field resets.
 - @satisfies REQ-546, REQ-556
 
-### fn `export function readArrayTargetValue(` (L1678-1680)
+### fn `export function readArrayTargetValue(` (L1767-1769)
 - @brief Reads one array row or field value for `--get`.
 - @details Resolves the array, enforces the read index range, and projects object rows onto the schema. Runtime is O(1) plus row projection. No external state is mutated.
 - @param[in] scopePayload {Record<string, unknown>} Scope payload.
@@ -1257,32 +1291,37 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 |`projectSectionValue`|fn||1119-1130|export function projectSectionValue(|
 |`projectScopePayload`|fn||1140-1145|export function projectScopePayload(|
 |`getSectionDefaultValue`|fn||1154-1156|export function getSectionDefaultValue(section: ConfigSch...|
-|`parseJsonInput`|fn||1167-1174|function parseJsonInput(rawValue: string, pathLabel: stri...|
-|`validateStringArray`|fn||1187-1207|function validateStringArray(|
-|`validateFieldValue`|fn||1219-1230|function validateFieldValue(field: ConfigSchemaField, val...|
-|`validateObjectRow`|fn||1242-1266|function validateObjectRow(|
-|`validateParameterValue`|fn||1278-1322|export function validateParameterValue(|
-|`validateSectionPayload`|fn||1333-1351|function validateSectionPayload(|
-|`validateScopePayload`|fn||1362-1364|export function validateScopePayload(scope: ConfigScope, ...|
-|`parseWholeParameterInput`|fn||1375-1391|export function parseWholeParameterInput(|
-|`parseArrayItemInput`|fn||1403-1416|export function parseArrayItemInput(|
-|`parseFieldInput`|fn||1427-1433|export function parseFieldInput(|
-|`parseSectionInput`|fn||1444-1450|function parseSectionInput(rawValue: string, pathLabel: s...|
-|`completeSectionValue`|fn||1462-1492|function completeSectionValue(|
-|`getMutableArray`|fn||1502-1514|function getMutableArray(|
-|`throwIndexRangeError`|fn||1527-1539|function throwIndexRangeError(|
-|`applyConfigSet`|fn||1551-1615|export function applyConfigSet(|
-|`applyConfigUnset`|fn||1626-1667|export function applyConfigUnset(state: ConfigScopeState,...|
-|`readArrayTargetValue`|fn||1678-1680|export function readArrayTargetValue(|
+|`collectScopeParameters`|fn||1164-1175|function collectScopeParameters(section: ConfigSchemaSect...|
+|`visit`|fn||1166-1172|const visit = (node: ConfigSchemaNode): void =>|
+|`isSameSchemaValue`|fn||1184-1186|function isSameSchemaValue(left: unknown, right: unknown)...|
+|`mergeScopeAbsentDefaults`|fn||1197-1213|export function mergeScopeAbsentDefaults(|
+|`buildScopeMutationWritePayload`|fn||1225-1245|export function buildScopeMutationWritePayload(|
+|`parseJsonInput`|fn||1256-1263|function parseJsonInput(rawValue: string, pathLabel: stri...|
+|`validateStringArray`|fn||1276-1296|function validateStringArray(|
+|`validateFieldValue`|fn||1308-1319|function validateFieldValue(field: ConfigSchemaField, val...|
+|`validateObjectRow`|fn||1331-1355|function validateObjectRow(|
+|`validateParameterValue`|fn||1367-1411|export function validateParameterValue(|
+|`validateSectionPayload`|fn||1422-1440|function validateSectionPayload(|
+|`validateScopePayload`|fn||1451-1453|export function validateScopePayload(scope: ConfigScope, ...|
+|`parseWholeParameterInput`|fn||1464-1480|export function parseWholeParameterInput(|
+|`parseArrayItemInput`|fn||1492-1505|export function parseArrayItemInput(|
+|`parseFieldInput`|fn||1516-1522|export function parseFieldInput(|
+|`parseSectionInput`|fn||1533-1539|function parseSectionInput(rawValue: string, pathLabel: s...|
+|`completeSectionValue`|fn||1551-1581|function completeSectionValue(|
+|`getMutableArray`|fn||1591-1603|function getMutableArray(|
+|`throwIndexRangeError`|fn||1616-1628|function throwIndexRangeError(|
+|`applyConfigSet`|fn||1640-1704|export function applyConfigSet(|
+|`applyConfigUnset`|fn||1715-1756|export function applyConfigUnset(state: ConfigScopeState,...|
+|`readArrayTargetValue`|fn||1767-1769|export function readArrayTargetValue(|
 
 
 ---
 
-# config-cli.ts | TypeScript | 819L | 36 symbols | 7 imports | 41 comments
+# config-cli.ts | TypeScript | 857L | 37 symbols | 7 imports | 42 comments
 > Path: `src/core/config-cli.ts`
 - @brief Implements the additive pi-usereq configuration CLI.
-- @details Dispatches the leading `--print`, `--info`, `--print-raw`, `--get`, `--set`, and `--unset` commands over the canonical configuration schema. Loads the existing local and global scopes through the shared configuration loaders, bootstraps a missing global JSON file from schema defaults, renders `--print` and `--info` through one deterministic tree renderer, and persists mutations through an atomic same-directory temporary-file replace. Existing menu, prompt-command, and agent-tool behavior is untouched. Runtime is dominated by configuration I/O plus O(n) rendering in node count. Side effects include global-config bootstrapping and atomic configuration writes.
-- @satisfies PRJ-010, DES-032, DES-034, REQ-532, REQ-533, REQ-534, REQ-537, REQ-538, REQ-540, REQ-541, REQ-544, REQ-548, REQ-549, REQ-550, REQ-551, REQ-552, REQ-553, REQ-554, REQ-555, REQ-557, REQ-558, REQ-559, REQ-560, REQ-563
+- @details Dispatches the leading `--print`, `--info`, `--print-raw`, `--get`, `--set`, `--unset`, and `--write-config` commands over the canonical configuration schema. Loads the existing local and global scopes through the shared configuration loaders, bootstraps a missing global JSON file from schema defaults, renders `--print` and `--info` through one deterministic tree renderer, persists mutations through an atomic same-directory temporary-file replace while keeping absent parameter chains absent, and materializes absent effective defaults through `--write-config` without ever overwriting persisted values. Existing menu, prompt-command, and agent-tool behavior is untouched. Runtime is dominated by configuration I/O plus O(n) rendering in node count. Side effects include global-config bootstrapping and atomic configuration writes.
+- @satisfies PRJ-010, DES-032, DES-034, DES-043, REQ-532, REQ-533, REQ-534, REQ-537, REQ-538, REQ-540, REQ-541, REQ-544, REQ-548, REQ-549, REQ-550, REQ-551, REQ-552, REQ-553, REQ-554, REQ-555, REQ-557, REQ-558, REQ-559, REQ-560, REQ-563, REQ-689, REQ-690, REQ-691, REQ-692, REQ-693
 
 ## Imports
 ```
@@ -1297,28 +1336,28 @@ import { ReqError } from "./errors.js";
 
 ## Definitions
 
-### fn `export function isConfigCliInvocation(argv: readonly string[]): boolean` (L60-62)
+### fn `export function isConfigCliInvocation(argv: readonly string[]): boolean` (L63-65)
 - @brief Tests whether one argv belongs to the configuration CLI surface.
 - @details Requires the configuration flag to be the leading token so the additive commands never capture existing option values. Runtime is O(1). No external state is mutated.
 - @param[in] argv {readonly string[]} Raw CLI arguments excluding the executable and script path.
 - @return {boolean} `true` when the invocation targets the configuration CLI.
 - @satisfies REQ-558
 
-### fn `function renderJsonValue(value: unknown): string` (L71-74)
+### fn `function renderJsonValue(value: unknown): string` (L74-77)
 - @brief Renders one value as compact JSON text.
 - @details Serializes strings with JSON quoting while keeping numbers and booleans literal, and maps an unserializable value to `null`. Runtime is O(n) in value size. No external state is mutated.
 - @param[in] value {unknown} Value to render.
 - @return {string} JSON text.
 - @satisfies REQ-539, REQ-548
 
-### fn `function formatShellArgument(value: unknown): string` (L83-92)
+### fn `function formatShellArgument(value: unknown): string` (L86-95)
 - @brief Formats one shell-safe argument for a generated command example.
 - @details Leaves simple tokens bare, single-quotes every string containing spaces or shell metacharacters while escaping embedded single quotes, and renders numbers plus booleans as JSON literals. Runtime is O(n) in value length. No external state is mutated.
 - @param[in] value {unknown} Example value.
 - @return {string} Shell-ready argument text.
 - @satisfies REQ-553
 
-### fn `function formatSetCommand(commandPath: string, value: unknown): string` (L102-104)
+### fn `function formatSetCommand(commandPath: string, value: unknown): string` (L105-107)
 - @brief Formats one `--set` command example.
 - @details Combines the canonical target path with a shell-safe example argument. Runtime is O(n) in argument length. No external state is mutated.
 - @param[in] commandPath {string} Canonical target path.
@@ -1326,7 +1365,7 @@ import { ReqError } from "./errors.js";
 - @return {string} Complete `--set` command text.
 - @satisfies REQ-553
 
-### fn `function formatValueStatus(currentValue: unknown, defaultValue: unknown): string` (L114-119)
+### fn `function formatValueStatus(currentValue: unknown, defaultValue: unknown): string` (L117-122)
 - @brief Formats the default-or-custom status suffix of one `--print` value.
 - @details Compares the rendered value with the rendered schema default so typed values stay comparable without ad-hoc equality logic. Runtime is O(n) in value size. No external state is mutated.
 - @param[in] currentValue {unknown} Current typed value.
@@ -1334,21 +1373,21 @@ import { ReqError } from "./errors.js";
 - @return {string} `(default)` or `(custom | default: <JSON>)`.
 - @satisfies REQ-548
 
-### fn `function renderTableCell(value: unknown): string` (L128-130)
+### fn `function renderTableCell(value: unknown): string` (L131-133)
 - @brief Renders one table cell from a typed configuration value.
 - @details Uses JSON text for present values and `-` for absent optional keys so multi-line strings stay escaped on one physical line. Runtime is O(n) in value size. No external state is mutated.
 - @param[in] value {unknown} Cell value.
 - @return {string} Rendered cell text.
 - @satisfies REQ-547
 
-### fn `function getArrayItemExample(parameter: ConfigSchemaParameter): unknown` (L139-141)
+### fn `function getArrayItemExample(parameter: ConfigSchemaParameter): unknown` (L142-144)
 - @brief Resolves the example item used by append, insert, and replace commands.
 - @details Returns the schema example verbatim so generated commands stay schema-valid. Runtime is O(1). No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Array parameter.
 - @return {unknown} Example item value.
 - @satisfies REQ-551
 
-### fn `function buildPrintParameterHeading(parameter: ConfigSchemaParameter, value: unknown): string` (L151-163)
+### fn `function buildPrintParameterHeading(parameter: ConfigSchemaParameter, value: unknown): string` (L154-166)
 - @brief Builds the complete `--print` heading of one parameter.
 - @details Emits primitive values as JSON with default status, selection values as JSON with default status, and array collections with the documented count, target, and append summaries; empty collections receive a complete-path add hint instead of a table. Runtime is O(n) in collection size. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
@@ -1356,7 +1395,7 @@ import { ReqError } from "./errors.js";
 - @return {string} Parameter heading.
 - @satisfies REQ-548, REQ-550, REQ-551
 
-### fn `function buildPrintParameterDetails(parameter: ConfigSchemaParameter, value: unknown): string[]` (L173-202)
+### fn `function buildPrintParameterDetails(parameter: ConfigSchemaParameter, value: unknown): string[]` (L176-205)
 - @brief Builds the attached `--print` details of one parameter.
 - @details Emits the `Sel | Value` selection table with exactly one active row and the `Idx`-prefixed primitive or object-array tables for non-empty collections. Runtime is O(r * c) in table size. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
@@ -1364,56 +1403,56 @@ import { ReqError } from "./errors.js";
 - @return {string[]} Attached detail lines.
 - @satisfies REQ-549, REQ-550, REQ-551
 
-### fn `function buildInfoParameterHeading(parameter: ConfigSchemaParameter): string` (L211-213)
+### fn `function buildInfoParameterHeading(parameter: ConfigSchemaParameter): string` (L214-216)
 - @brief Builds the complete `--info` heading of one parameter.
 - @details Emits the exact token, typed constraint text, and one concise English description. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
 - @return {string} Parameter heading.
 - @satisfies REQ-552
 
-### fn `function resolveInfoExampleValue(parameter: ConfigSchemaParameter): unknown` (L222-233)
+### fn `function resolveInfoExampleValue(parameter: ConfigSchemaParameter): unknown` (L225-236)
 - @brief Resolves one schema-valid example value distinct from the default when possible.
 - @details Selects an example that exercises the set command without restating the default for booleans, selections, and integer domains, and reuses the schema example otherwise. Runtime is O(e) in enum size. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
 - @return {unknown} Example value.
 - @satisfies REQ-553
 
-### fn `function buildInfoAllowedValuesTable(parameter: ConfigSchemaParameter): string[]` (L242-253)
+### fn `function buildInfoAllowedValuesTable(parameter: ConfigSchemaParameter): string[]` (L245-256)
 - @brief Builds the provided `Value`, `Default`, `Meaning`, and `Set cmd` table.
 - @details Renders one row per enum or integer value with a complete valid set command so `--info` documents the whole selection domain. Runtime is O(v * c) in value count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Selection or integer-enum parameter.
 - @return {string[]} Rendered table lines.
 - @satisfies REQ-554
 
-### fn `function formatItemSchemaDescription(field: ConfigSchemaField): string` (L262-264)
+### fn `function formatItemSchemaDescription(field: ConfigSchemaField): string` (L265-267)
 - @brief Builds the field-description cell of one item-schema row.
 - @details Appends the schema-valid example to the English field description so downstream agents can construct valid rows without extra lookups. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] field {ConfigSchemaField} Field schema.
 - @return {string} Description and example cell text.
 - @satisfies REQ-555
 
-### fn `function buildInfoItemSchemaTable(parameter: ConfigSchemaParameter): string[]` (L273-285)
+### fn `function buildInfoItemSchemaTable(parameter: ConfigSchemaParameter): string[]` (L276-288)
 - @brief Builds the `Item Schema` table of one object-array parameter.
 - @details Emits the exact field tokens, type constraints, default-or-requirement status, and description with example for every fixed field. Runtime is O(f * c) in field count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Object-array parameter.
 - @return {string[]} Rendered table lines.
 - @satisfies REQ-555
 
-### fn `function buildInfoArrayDetails(parameter: ConfigSchemaParameter): string[]` (L294-318)
+### fn `function buildInfoArrayDetails(parameter: ConfigSchemaParameter): string[]` (L297-321)
 - @brief Builds the array command details of one primitive or object array.
 - @details Emits complete overwrite, append, insert, replace, delete, and reset commands with canonical paths; single-row operations receive exactly one item, whole-array overwrite receives one JSON array, and object arrays additionally emit the item-schema table plus update and reset cell commands. Runtime is O(f * c) in field count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Array parameter.
 - @return {string[]} Attached detail lines.
 - @satisfies REQ-553, REQ-555, REQ-556
 
-### fn `function buildInfoParameterDetails(parameter: ConfigSchemaParameter): string[]` (L327-342)
+### fn `function buildInfoParameterDetails(parameter: ConfigSchemaParameter): string[]` (L330-345)
 - @brief Builds the attached `--info` details of one parameter.
 - @details Emits the default line with its reset command, the set or array command family with complete canonical paths and schema-valid examples, the selection allowed-values table, and the object-array item-schema commands. Runtime is O(f + v) in field and value count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
 - @return {string[]} Attached detail lines.
 - @satisfies REQ-553, REQ-554, REQ-555, REQ-556
 
-### fn `function buildSectionRenderNode(` (L353-365)
+### fn `function buildSectionRenderNode(` (L356-368)
 - @brief Builds one rendered section node.
 - @details Emits the canonical `[Path: ...]` badge, an optional `--info` reset block, and every real child in schema order. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Section schema.
@@ -1422,7 +1461,7 @@ import { ReqError } from "./errors.js";
 - @return {ConfigRenderTreeNode} Rendered section node.
 - @satisfies REQ-541, REQ-543
 
-### fn `function buildParameterRenderNode(` (L376-387)
+### fn `function buildParameterRenderNode(` (L379-390)
 - @brief Builds one rendered parameter node.
 - @details Chooses the `--print` or `--info` heading and detail formatters over the same real node so both commands share one tree topology. Runtime is O(n) in value and table size. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
@@ -1431,7 +1470,7 @@ import { ReqError } from "./errors.js";
 - @return {ConfigRenderTreeNode} Rendered parameter node.
 - @satisfies REQ-541, REQ-548, REQ-549, REQ-550, REQ-552, REQ-553
 
-### fn `function buildFullRenderRoot(state: ConfigScopeState, info: boolean): ConfigRenderRoot` (L397-404)
+### fn `function buildFullRenderRoot(state: ConfigScopeState, info: boolean): ConfigRenderRoot` (L400-407)
 - @brief Builds the complete rendered root for one display command.
 - @details Emits the virtual `Application_Configuration` root with the documented heading and both real scope sections. Runtime is O(n) in schema node count. No external state is mutated.
 - @param[in] state {ConfigScopeState} Mutable scope state.
@@ -1439,7 +1478,7 @@ import { ReqError } from "./errors.js";
 - @return {ConfigRenderRoot} Rendered display root.
 - @satisfies REQ-541, REQ-543
 
-### fn `function buildRequestedRenderRoot(` (L416-431)
+### fn `function buildRequestedRenderRoot(` (L419-434)
 - @brief Builds the rendered root for one requested subtree or parameter.
 - @details Emits the requested section or parameter as the unconnected display root with a four-space detail indent and renders only its own descendants, never invented ancestors. Runtime is O(n) in subtree size. No external state is mutated.
 - @param[in] state {ConfigScopeState} Mutable scope state.
@@ -1449,14 +1488,14 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when the path does not address a section or parameter.
 - @satisfies REQ-544, REQ-545
 
-### fn `function loadConfigCliState(base: string): ConfigScopeState` (L440-446)
+### fn `function loadConfigCliState(base: string): ConfigScopeState` (L443-449)
 - @brief Loads mutable scope state from the existing configuration loaders.
 - @details Reuses `loadConfig(...)` plus the persisted scope projections so reads and writes observe the same state as the existing menu and prompt-command interfaces. Runtime is dominated by configuration I/O. Side effects are limited to filesystem reads.
 - @param[in] base {string} Absolute project base path.
 - @return {ConfigScopeState} Mutable scope state pair.
 - @satisfies REQ-532, REQ-533
 
-### fn `function resolveScopeWritePath(scope: ConfigScope, base: string): string` (L456-458)
+### fn `function resolveScopeWritePath(scope: ConfigScope, base: string): string` (L459-461)
 - @brief Resolves the persisted file path owned by one scope.
 - @details Uses the shared project-local and global configuration path helpers so writes target the same files as the existing interfaces. Runtime is O(p) in path length. No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
@@ -1464,7 +1503,7 @@ import { ReqError } from "./errors.js";
 - @return {string} Absolute configuration file path.
 - @satisfies REQ-533
 
-### fn `function atomicWriteJsonPayload(filePath: string, payload: Record<string, unknown>): void` (L469-520)
+### fn `function atomicWriteJsonPayload(filePath: string, payload: Record<string, unknown>): void` (L472-523)
 - @brief Atomically replaces one JSON configuration file.
 - @details Writes the complete payload into a same-directory temporary file with exclusive creation, flushes and fsyncs it, preserves the existing permission bits when the target already exists, atomically renames it over the target, and best-effort fsyncs the directory. Failures remove the temporary file and surface one English diagnostic without touching the target. Runtime is O(n) in serialized size plus filesystem I/O. Side effects include directory creation, temporary-file creation, rename, and conditional fsync.
 - @param[in] filePath {string} Absolute target path.
@@ -1473,7 +1512,7 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when the write fails.
 - @satisfies REQ-537
 
-### fn `function ensureGlobalConfigFile(base: string): void` (L530-546)
+### fn `function ensureGlobalConfigFile(base: string): void` (L533-549)
 - @brief Initializes the global configuration file from schema defaults when missing.
 - @details Creates the parent directory and writes the documented default payload atomically when the global JSON file is absent, and leaves any existing valid file untouched while rejecting malformed JSON. Runtime is dominated by configuration I/O. Side effects include directory creation and conditional global-file creation.
 - @param[in] base {string} Absolute project base path.
@@ -1481,7 +1520,7 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when the existing global file is malformed or not a JSON object.
 - @satisfies REQ-534
 
-### fn `function assertCommandArgumentCount(` (L560-570)
+### fn `function assertCommandArgumentCount(` (L563-573)
 - @brief Enforces the exact argument count of one configuration command.
 - @details Emits one English diagnostic naming the command and its required operands. Runtime is O(1). No external state is mutated.
 - @param[in] command {string} Configuration command token.
@@ -1493,7 +1532,7 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when the operand count is outside the requested range.
 - @satisfies REQ-557
 
-### fn `function assertPathArgument(candidate: string): void` (L580-584)
+### fn `function assertPathArgument(candidate: string): void` (L583-587)
 - @brief Rejects one path operand that is actually another option token.
 - @details Keeps the configuration CLI grammar unambiguous by refusing option-like path values. Runtime is O(1). No external state is mutated.
 - @param[in] candidate {string} Path operand.
@@ -1501,7 +1540,7 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when the operand starts with `--`.
 - @satisfies REQ-545
 
-### fn `function reconcileScopePolicy(target: ConfigTarget, payload: Record<string, unknown>): void` (L595-608)
+### fn `function reconcileScopePolicy(target: ConfigTarget, payload: Record<string, unknown>): void` (L598-611)
 - @brief Reconciles scope-level policy after one mutation.
 - @details Forces persisted worktree disablement whenever automatic git commit is disabled and rejects an explicit attempt to enable worktrees under that policy. Runtime is O(1). Side effect: may mutate the supplied payload.
 - @param[in] target {ConfigTarget} Resolved mutation target.
@@ -1510,7 +1549,7 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when the mutation contradicts the automatic-commit policy.
 - @satisfies REQ-560
 
-### fn `function validateCrossFieldConstraints(scope: ConfigScope, payload: Record<string, unknown>): void` (L619-641)
+### fn `function validateCrossFieldConstraints(scope: ConfigScope, payload: Record<string, unknown>): void` (L622-644)
 - @brief Validates cross-field scope constraints before a write.
 - @details Enforces the Pushover credential prerequisite and the automatic-commit worktree policy so schema-valid payloads cannot encode unusable cross-field states. Runtime is O(1). No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
@@ -1519,17 +1558,18 @@ import { ReqError } from "./errors.js";
 - @throws {ReqError} Throws when a cross-field constraint fails.
 - @satisfies REQ-559, REQ-560
 
-### fn `function persistScopeMutation(` (L653-663)
+### fn `function persistScopeMutation(` (L657-674)
 - @brief Validates, projects, and atomically persists one mutated scope.
-- @details Applies scope policy, checks cross-field constraints, projects the payload onto the canonical schema, validates every leaf, and writes only the owning file. Runtime is dominated by configuration I/O. Side effects include conditional directory creation and atomic file replacement.
+- @details Applies scope policy, checks cross-field constraints, projects the payload onto the canonical schema, validates every leaf, reads the raw persisted payload, builds the sparse write payload holding only persisted chains plus operation-changed chains so absent parameter chains stay absent, and writes only the owning file when the sparse payload differs from the persisted payload. Runtime is dominated by configuration I/O. Side effects include conditional directory creation and atomic file replacement.
 - @param[in] base {string} Absolute project base path.
 - @param[in] target {ConfigTarget} Resolved mutation target.
 - @param[in] payload {Record<string, unknown>} Mutated scope payload.
+- @param[in] beforePayload {Record<string, unknown>} Schema-projected pre-mutation scope payload used for change detection.
 - @return {void} No return value.
 - @throws {ReqError} Throws without writing when validation fails.
-- @satisfies REQ-535, REQ-537, REQ-559, REQ-560, REQ-561
+- @satisfies REQ-535, REQ-537, REQ-559, REQ-560, REQ-561, REQ-693
 
-### fn `function runDisplayCommand(base: string, configPath: string | undefined, info: boolean): void` (L674-680)
+### fn `function runDisplayCommand(base: string, configPath: string | undefined, info: boolean): void` (L685-691)
 - @brief Executes one `--print` or `--info` display command.
 - @details Loads scope state, builds the full or requested render root, and writes the rendered tree to stdout. Runtime is O(n) in rendered node and table size. Side effect: writes to stdout.
 - @param[in] base {string} Absolute project base path.
@@ -1538,7 +1578,7 @@ import { ReqError } from "./errors.js";
 - @return {void} No return value.
 - @satisfies REQ-541, REQ-543, REQ-544, REQ-557
 
-### fn `function runGetCommand(base: string, configPath: string): void` (L690-706)
+### fn `function runGetCommand(base: string, configPath: string): void` (L701-717)
 - @brief Executes one `--get` command.
 - @details Resolves the canonical target, reads the typed value from the owning scope, and writes valid JSON to stdout without decoration. Runtime is O(n) in value size. Side effect: writes to stdout.
 - @param[in] base {string} Absolute project base path.
@@ -1546,39 +1586,47 @@ import { ReqError } from "./errors.js";
 - @return {void} No return value.
 - @satisfies REQ-539, REQ-545
 
-### fn `function runSetCommand(base: string, configPath: string, rawValue: string): void` (L717-722)
+### fn `function runSetCommand(base: string, configPath: string, rawValue: string): void` (L728-734)
 - @brief Executes one `--set` command.
-- @details Resolves the canonical target, applies the typed mutation to in-memory scope state, validates and persists the owning scope atomically, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
+- @details Resolves the canonical target, loads the scope state, snapshots the pre-mutation payload, applies the typed mutation to in-memory scope state, validates and persists the owning scope atomically while keeping absent parameter chains absent, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
 - @param[in] base {string} Absolute project base path.
 - @param[in] configPath {string} Target canonical path.
 - @param[in] rawValue {string} Raw CLI value.
 - @return {void} No return value.
-- @satisfies REQ-535, REQ-536, REQ-537, REQ-546, REQ-556, REQ-563
+- @satisfies REQ-535, REQ-536, REQ-537, REQ-546, REQ-556, REQ-563, REQ-693
 
-### fn `function runUnsetCommand(base: string, configPath: string): void` (L732-737)
+### fn `function runUnsetCommand(base: string, configPath: string): void` (L744-750)
 - @brief Executes one `--unset` command.
-- @details Resolves the canonical target, restores the documented default or removes the addressed row or optional field, validates and persists the owning scope atomically, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
+- @details Resolves the canonical target, loads the scope state, snapshots the pre-mutation payload, restores the documented default or removes the addressed row or optional field in memory, validates and persists the owning scope atomically while keeping absent parameter chains absent, and writes nothing to stdout on success. Runtime is dominated by configuration I/O. Side effects include atomic configuration writes.
 - @param[in] base {string} Absolute project base path.
 - @param[in] configPath {string} Target canonical path.
 - @return {void} No return value.
-- @satisfies REQ-535, REQ-546, REQ-556, REQ-563
+- @satisfies REQ-535, REQ-546, REQ-556, REQ-563, REQ-693
 
-### fn `function runPrintRawCommand(base: string): void` (L746-749)
+### fn `function runPrintRawCommand(base: string): void` (L759-762)
 - @brief Executes one `--print-raw` command.
 - @details Bootstraps a missing global file, then writes the selected global configuration file bytes to stdout without parsing, reformatting, or tree decoration. Runtime is O(n) in file size. Side effect: writes raw bytes to stdout.
 - @param[in] base {string} Absolute project base path used for bootstrapping.
 - @return {void} No return value.
 - @satisfies REQ-540
 
-### fn `function executeConfigCli(argv: readonly string[]): void` (L759-801)
+### fn `function runWriteConfigCommand(base: string): void` (L772-783)
+- @brief Executes one `--write-config` command.
+- @details Loads the effective scope payloads, reads the raw persisted payload of each scope, merges the effective default value into every schema parameter chain absent from that raw payload while preserving persisted values, unknown keys, and key order, skips files whose merged payload equals the raw payload, and atomically persists the global scope before the local scope. Runtime is dominated by configuration I/O plus O(n) schema walking. Side effects include conditional atomic configuration writes.
+- @param[in] base {string} Absolute project base path.
+- @return {void} No return value.
+- @throws {ReqError} Throws when a persisted configuration file is malformed or a write fails.
+- @satisfies REQ-689, REQ-690, REQ-691, REQ-692
+
+### fn `function executeConfigCli(argv: readonly string[]): void` (L793-839)
 - @brief Executes one parsed configuration CLI invocation.
-- @details Validates the operand shape, bootstraps the global JSON file, and dispatches the selected display, read, or mutation command. Runtime is dominated by the delegated command. Side effects include global-config bootstrapping, stdout writes, and atomic configuration writes.
+- @details Validates the operand shape, bootstraps the global JSON file, and dispatches the selected display, read, mutation, or default-materialization command. Runtime is dominated by the delegated command. Side effects include global-config bootstrapping, stdout writes, and atomic configuration writes.
 - @param[in] argv {readonly string[]} Raw configuration CLI arguments.
 - @return {void} No return value.
 - @throws {ReqError} Throws on malformed invocations or failing commands.
-- @satisfies REQ-534, REQ-538, REQ-558
+- @satisfies REQ-534, REQ-538, REQ-558, REQ-689
 
-### fn `export function runConfigCli(argv: readonly string[]): number` (L810-819)
+### fn `export function runConfigCli(argv: readonly string[]): number` (L848-857)
 - @brief Runs one configuration CLI invocation and normalizes its exit contract.
 - @details Executes the selected command, returns `0` on success, and converts every failure into one English stderr diagnostic with exit code `1` without partial stdout success output. Runtime is dominated by the delegated command. Side effects are stdout or stderr writes plus delegated configuration changes.
 - @param[in] argv {readonly string[]} Raw configuration CLI arguments.
@@ -1588,42 +1636,43 @@ import { ReqError } from "./errors.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`isConfigCliInvocation`|fn||60-62|export function isConfigCliInvocation(argv: readonly stri...|
-|`renderJsonValue`|fn||71-74|function renderJsonValue(value: unknown): string|
-|`formatShellArgument`|fn||83-92|function formatShellArgument(value: unknown): string|
-|`formatSetCommand`|fn||102-104|function formatSetCommand(commandPath: string, value: unk...|
-|`formatValueStatus`|fn||114-119|function formatValueStatus(currentValue: unknown, default...|
-|`renderTableCell`|fn||128-130|function renderTableCell(value: unknown): string|
-|`getArrayItemExample`|fn||139-141|function getArrayItemExample(parameter: ConfigSchemaParam...|
-|`buildPrintParameterHeading`|fn||151-163|function buildPrintParameterHeading(parameter: ConfigSche...|
-|`buildPrintParameterDetails`|fn||173-202|function buildPrintParameterDetails(parameter: ConfigSche...|
-|`buildInfoParameterHeading`|fn||211-213|function buildInfoParameterHeading(parameter: ConfigSchem...|
-|`resolveInfoExampleValue`|fn||222-233|function resolveInfoExampleValue(parameter: ConfigSchemaP...|
-|`buildInfoAllowedValuesTable`|fn||242-253|function buildInfoAllowedValuesTable(parameter: ConfigSch...|
-|`formatItemSchemaDescription`|fn||262-264|function formatItemSchemaDescription(field: ConfigSchemaF...|
-|`buildInfoItemSchemaTable`|fn||273-285|function buildInfoItemSchemaTable(parameter: ConfigSchema...|
-|`buildInfoArrayDetails`|fn||294-318|function buildInfoArrayDetails(parameter: ConfigSchemaPar...|
-|`buildInfoParameterDetails`|fn||327-342|function buildInfoParameterDetails(parameter: ConfigSchem...|
-|`buildSectionRenderNode`|fn||353-365|function buildSectionRenderNode(|
-|`buildParameterRenderNode`|fn||376-387|function buildParameterRenderNode(|
-|`buildFullRenderRoot`|fn||397-404|function buildFullRenderRoot(state: ConfigScopeState, inf...|
-|`buildRequestedRenderRoot`|fn||416-431|function buildRequestedRenderRoot(|
-|`loadConfigCliState`|fn||440-446|function loadConfigCliState(base: string): ConfigScopeState|
-|`resolveScopeWritePath`|fn||456-458|function resolveScopeWritePath(scope: ConfigScope, base: ...|
-|`atomicWriteJsonPayload`|fn||469-520|function atomicWriteJsonPayload(filePath: string, payload...|
-|`ensureGlobalConfigFile`|fn||530-546|function ensureGlobalConfigFile(base: string): void|
-|`assertCommandArgumentCount`|fn||560-570|function assertCommandArgumentCount(|
-|`assertPathArgument`|fn||580-584|function assertPathArgument(candidate: string): void|
-|`reconcileScopePolicy`|fn||595-608|function reconcileScopePolicy(target: ConfigTarget, paylo...|
-|`validateCrossFieldConstraints`|fn||619-641|function validateCrossFieldConstraints(scope: ConfigScope...|
-|`persistScopeMutation`|fn||653-663|function persistScopeMutation(|
-|`runDisplayCommand`|fn||674-680|function runDisplayCommand(base: string, configPath: stri...|
-|`runGetCommand`|fn||690-706|function runGetCommand(base: string, configPath: string):...|
-|`runSetCommand`|fn||717-722|function runSetCommand(base: string, configPath: string, ...|
-|`runUnsetCommand`|fn||732-737|function runUnsetCommand(base: string, configPath: string...|
-|`runPrintRawCommand`|fn||746-749|function runPrintRawCommand(base: string): void|
-|`executeConfigCli`|fn||759-801|function executeConfigCli(argv: readonly string[]): void|
-|`runConfigCli`|fn||810-819|export function runConfigCli(argv: readonly string[]): nu...|
+|`isConfigCliInvocation`|fn||63-65|export function isConfigCliInvocation(argv: readonly stri...|
+|`renderJsonValue`|fn||74-77|function renderJsonValue(value: unknown): string|
+|`formatShellArgument`|fn||86-95|function formatShellArgument(value: unknown): string|
+|`formatSetCommand`|fn||105-107|function formatSetCommand(commandPath: string, value: unk...|
+|`formatValueStatus`|fn||117-122|function formatValueStatus(currentValue: unknown, default...|
+|`renderTableCell`|fn||131-133|function renderTableCell(value: unknown): string|
+|`getArrayItemExample`|fn||142-144|function getArrayItemExample(parameter: ConfigSchemaParam...|
+|`buildPrintParameterHeading`|fn||154-166|function buildPrintParameterHeading(parameter: ConfigSche...|
+|`buildPrintParameterDetails`|fn||176-205|function buildPrintParameterDetails(parameter: ConfigSche...|
+|`buildInfoParameterHeading`|fn||214-216|function buildInfoParameterHeading(parameter: ConfigSchem...|
+|`resolveInfoExampleValue`|fn||225-236|function resolveInfoExampleValue(parameter: ConfigSchemaP...|
+|`buildInfoAllowedValuesTable`|fn||245-256|function buildInfoAllowedValuesTable(parameter: ConfigSch...|
+|`formatItemSchemaDescription`|fn||265-267|function formatItemSchemaDescription(field: ConfigSchemaF...|
+|`buildInfoItemSchemaTable`|fn||276-288|function buildInfoItemSchemaTable(parameter: ConfigSchema...|
+|`buildInfoArrayDetails`|fn||297-321|function buildInfoArrayDetails(parameter: ConfigSchemaPar...|
+|`buildInfoParameterDetails`|fn||330-345|function buildInfoParameterDetails(parameter: ConfigSchem...|
+|`buildSectionRenderNode`|fn||356-368|function buildSectionRenderNode(|
+|`buildParameterRenderNode`|fn||379-390|function buildParameterRenderNode(|
+|`buildFullRenderRoot`|fn||400-407|function buildFullRenderRoot(state: ConfigScopeState, inf...|
+|`buildRequestedRenderRoot`|fn||419-434|function buildRequestedRenderRoot(|
+|`loadConfigCliState`|fn||443-449|function loadConfigCliState(base: string): ConfigScopeState|
+|`resolveScopeWritePath`|fn||459-461|function resolveScopeWritePath(scope: ConfigScope, base: ...|
+|`atomicWriteJsonPayload`|fn||472-523|function atomicWriteJsonPayload(filePath: string, payload...|
+|`ensureGlobalConfigFile`|fn||533-549|function ensureGlobalConfigFile(base: string): void|
+|`assertCommandArgumentCount`|fn||563-573|function assertCommandArgumentCount(|
+|`assertPathArgument`|fn||583-587|function assertPathArgument(candidate: string): void|
+|`reconcileScopePolicy`|fn||598-611|function reconcileScopePolicy(target: ConfigTarget, paylo...|
+|`validateCrossFieldConstraints`|fn||622-644|function validateCrossFieldConstraints(scope: ConfigScope...|
+|`persistScopeMutation`|fn||657-674|function persistScopeMutation(|
+|`runDisplayCommand`|fn||685-691|function runDisplayCommand(base: string, configPath: stri...|
+|`runGetCommand`|fn||701-717|function runGetCommand(base: string, configPath: string):...|
+|`runSetCommand`|fn||728-734|function runSetCommand(base: string, configPath: string, ...|
+|`runUnsetCommand`|fn||744-750|function runUnsetCommand(base: string, configPath: string...|
+|`runPrintRawCommand`|fn||759-762|function runPrintRawCommand(base: string): void|
+|`runWriteConfigCommand`|fn||772-783|function runWriteConfigCommand(base: string): void|
+|`executeConfigCli`|fn||793-839|function executeConfigCli(argv: readonly string[]): void|
+|`runConfigCli`|fn||848-857|export function runConfigCli(argv: readonly string[]): nu...|
 
 
 ---
@@ -1824,9 +1873,9 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @param[in] value {unknown} Candidate persisted checker array.
 - @return {StaticCheckEntry[]} Normalized checker-entry vector.
 
-### fn `function readConfigPayload(configPath: string): Record<string, unknown> | undefined` (L784-800)
+### fn `export function readConfigPayload(configPath: string): Record<string, unknown> | undefined` (L784-800)
 - @brief Reads and validates one persisted config payload.
-- @details Returns `undefined` when the target file does not exist. Otherwise parses UTF-8 JSON, rejects array or primitive payloads, and surfaces deterministic `ReqError` diagnostics keyed by the exact path. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+- @details Returns `undefined` when the target file does not exist. Otherwise parses UTF-8 JSON, rejects array or primitive payloads, and surfaces deterministic `ReqError` diagnostics keyed by the exact path. Exported for configuration CLI raw-payload readers that must distinguish persisted keys from effective defaults. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] configPath {string} Absolute config file path.
 - @return {Record<string, unknown> | undefined} Parsed object payload or `undefined` when the file is absent.
 - @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
@@ -1973,7 +2022,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 |`mergeConfigScopes`|fn||660-732|function mergeConfigScopes(|
 |`getDefaultConfig`|fn||741-747|export function getDefaultConfig(_projectBase: string): U...|
 |`normalizeStaticCheckEntries`|fn||755-775|function normalizeStaticCheckEntries(value: unknown): Sta...|
-|`readConfigPayload`|fn||784-800|function readConfigPayload(configPath: string): Record<st...|
+|`readConfigPayload`|fn||784-800|export function readConfigPayload(configPath: string): Re...|
 |`normalizeLocalStaticCheckConfig`|fn||810-834|function normalizeLocalStaticCheckConfig(|
 |`normalizeGlobalStaticCheckConfig`|fn||843-860|function normalizeGlobalStaticCheckConfig(|
 |`loadLocalConfig`|fn||870-926|function loadLocalConfig(|
