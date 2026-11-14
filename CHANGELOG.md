@@ -1,7 +1,10 @@
 # Changelog
 
-## [0.109.8](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.8) - 2026-11-14
+## [0.109.9](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.9) - 2026-11-14
 ### ⛰️  Features
+- Update prompt with json validator.
+- Add json-validator agent tool with native TypeScript validation [useReq] *(json-validator)*
+  Register the default-enabled configurable json-validator agent tool; Validate inline content plus UTF-8 files through native JSON.parse; Emit one monolithic markdown verdict with line/column diagnostics; Extend SRS with DES-044, REQ-701..REQ-709, TST-229..TST-231; Add core and registration test coverage; no new runtime dependency
 - Update prompts.
 - Update prompts.
 - Add /req-continue-list printing full Next-Workflow list [useReq] *(next-workflow)*
@@ -1567,7 +1570,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.8\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.8
+- \[0.109.9\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.9
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1676,4 +1679,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.8]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.8
+[0.109.9]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.9
