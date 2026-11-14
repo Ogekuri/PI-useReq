@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.9](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.9) - 2026-11-14
+## [0.109.10](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.10) - 2026-11-14
 ### ⛰️  Features
 - Update prompt with json validator.
 - Add json-validator agent tool with native TypeScript validation [useReq] *(json-validator)*
@@ -61,6 +61,15 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- extract embedded final-output JSON at prompt closure [useReq] *(agent-final-output)*
+  SRS 0.0.161: REQ-584 extracts one embedded JSON object; REQ-710/REQ-711 added.
+  REQ-678 validates the extracted object; TST-225 covers wrapped and fenced cases.
+  agent-final-output adds extractFinalOutputJsonObject with a string-aware balance scan.
+  parseAgentFinalOutput strips prose plus markdown fences before JSON.parse.
+  Object-free and multi-object outputs keep the JSON-contract diagnostic.
+  tests/agent-final-output.test.ts extends TST-225 with the reproducer cases.
+  WORKFLOW.md and REFERENCES.md updated for the changed symbols.
+  Verified: static-check clean; npm test 563/563 passed.
 - BREAKING CHANGE: add scan-by-dir recursive directory-scan execution [useReq] *(static-check)*
   Add optional boolean scan-by-dir flag to every static-check Command entry (REQ-694); Default scan-by-dir TRUE for cppcheck, ruff, eslint; FALSE otherwise (REQ-695, REQ-699); Execute scan-by-dir checkers once over src-dir plus tests-dir with checker-native
   fixture-root exclusion arguments; keep per-file dispatch for all other entries
@@ -1570,7 +1579,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.9\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.9
+- \[0.109.10\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.10
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1679,4 +1688,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.9]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.9
+[0.109.10]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.10
