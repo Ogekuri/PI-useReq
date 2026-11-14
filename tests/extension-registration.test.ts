@@ -1441,8 +1441,37 @@ test("references overwrites the configured REFERENCES.md and returns status-only
   }
 });
 
+/**
+ * @brief Verifies the `references` tool writes the no-source placeholder like `req-references`.
+ * @details Runs the `references` agent tool against a documentation-only fixture repository whose configured source directory holds no supported source file, then confirms the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` payload is written into the configured `REFERENCES.md` and the tool reports the status-only `success` payload with clean execution metadata, mirroring the `/req-references` no-source branch through the shared `hasAnalyzableSourceFiles(...)` plus `writeNoSourcePlaceholderDocument(...)` helpers. Runtime is dominated by temporary fixture setup plus one placeholder write. Side effects are limited to temporary repository mutation.
+ * @return {Promise<void>} Promise resolved after no-source tool assertions complete.
+ * @throws {AssertionError} Throws when the placeholder content diverges, the tool reports an error payload, or execution metadata leaks stdout diagnostics.
+ * @satisfies REQ-293, REQ-294, REQ-296, REQ-300, REQ-620, REQ-622, TST-100, TST-204
+ */
+test("references tool writes the no-source REFERENCES.md placeholder like req-references", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
+    };
+
+    const referencesPath = path.join(projectBase, DEFAULT_DOCS_DIR, "REFERENCES.md");
+    assert.equal(result.content?.[0]?.text ?? "", "success");
+    assert.equal(fs.readFileSync(referencesPath, "utf8"), NO_SOURCE_REFERENCES_PLACEHOLDER);
+    assert.equal(result.details?.execution.code, 0);
+    assert.deepEqual(result.details?.execution.stderr_lines, undefined);
+    assert.deepEqual(result.details?.execution.stdout_lines, undefined);
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
 test("references returns status-only errors for source-discovery and write failures", async () => {
   const sourceFailure = initFixtureRepo({ fixtures: [] });
+  fs.rmSync(path.join(sourceFailure.projectBase, ".git"), { recursive: true, force: true });
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
@@ -1451,10 +1480,10 @@ test("references returns status-only errors for source-discovery and write failu
       details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
     };
 
-    assert.equal(result.content?.[0]?.text ?? "", "error: no source files found in configured directories.");
+    assert.equal(result.content?.[0]?.text ?? "", "error: failed to collect source files with `git ls-files` in project root.");
     assert.equal(result.details?.execution.code, 1);
     assert.deepEqual(result.details?.execution.stdout_lines, undefined);
-    assert.ok(result.details?.execution.stderr_lines?.some((line) => line.includes("no source files found in configured directories.")));
+    assert.ok(result.details?.execution.stderr_lines?.some((line) => line.includes("failed to collect source files")));
   } finally {
     fs.rmSync(sourceFailure.projectBase, { recursive: true, force: true });
   }

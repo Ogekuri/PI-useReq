@@ -7172,7 +7172,7 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# tool-runner.ts | TypeScript | 458L | 22 symbols | 11 imports | 24 comments
+# tool-runner.ts | TypeScript | 463L | 22 symbols | 12 imports | 24 comments
 > Path: `src/core/tool-runner.ts`
 - @brief Implements the executable back-end for pi-usereq CLI analysis and static-check commands.
 - @details Centralizes project discovery, git-backed source-file collection, documentation token generation, compression, construct lookup, and static-check dispatch. Runtime depends on the selected command and may include filesystem reads, config writes, and process spawning.
@@ -7190,22 +7190,23 @@ import { searchConstructsInFiles } from "./find-constructs.js";
 import { generateMarkdown } from "./generate-markdown.js";
 import { STATIC_CHECK_EXT_TO_LANG, dispatchStaticCheckForFile } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
+import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./source-presence.js";
 ```
 
 ## Definitions
 
-### iface `export interface ToolResult` (L29-33)
+### iface `export interface ToolResult` (L30-34)
 - @brief Represents the normalized output contract for a tool invocation.
 - @details Every tool emits stdout, stderr, and a numeric exit code so CLI and extension front-ends can handle results uniformly. The interface is compile-time only and adds no runtime cost.
 
-### fn `function ok(stdout = "", stderr = ""): ToolResult` (L53-55)
+### fn `function ok(stdout = "", stderr = ""): ToolResult` (L54-56)
 - @brief Creates a successful tool result payload.
 - @details Wraps stdout and stderr text with exit code `0`. Runtime is O(1). No side effects occur.
 - @param[in] stdout {string} Standard-output text.
 - @param[in] stderr {string} Standard-error text.
 - @return {ToolResult} Successful result object.
 
-### fn `function fail(message: string, code = 1, stdout = "", stderr = ""): never` (L67-72)
+### fn `function fail(message: string, code = 1, stdout = "", stderr = ""): never` (L68-73)
 - @brief Throws a `ReqError` populated with tool-result stream content.
 - @details Creates a structured failure object, attaches optional stdout and stderr payloads, and throws immediately. Runtime is O(1). Side effect: throws an exception.
 - @param[in] message {string} Primary failure message.
@@ -7215,14 +7216,14 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {never} This function never returns.
 - @throws {ReqError} Always throws.
 
-### fn `function runCapture(command: string[], options: { cwd?: string } = {})` (L81-86)
+### fn `function runCapture(command: string[], options: { cwd?: string } = {})` (L82-87)
 - @brief Executes a subprocess synchronously and captures its output.
 - @details Delegates to `spawnSync`, passes through an optional working directory, and forces UTF-8 decoding. Runtime is dominated by external process execution. Side effects include process spawning.
 - @param[in] command {string[]} Executable plus argument vector.
 - @param[in] options {{ cwd?: string }} Optional process-spawn settings.
 - @return {ReturnType<typeof spawnSync>} Captured subprocess result.
 
-### fn `export function collectSourceFiles(srcDirs: string[], projectBase: string): string[]` (L96-123)
+### fn `export function collectSourceFiles(srcDirs: string[], projectBase: string): string[]` (L97-124)
 - @brief Collects tracked and untracked source files from configured source directories.
 - @details Uses `git ls-files` to enumerate candidate files, filters them by configured source roots, excluded directories, and supported extensions, and returns sorted absolute paths. Runtime is O(n log n) in collected file count plus git execution cost. Side effects include process spawning.
 - @param[in] srcDirs {string[]} Configured source-directory roots.
@@ -7230,29 +7231,29 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {string[]} Sorted absolute source-file paths.
 - @throws {ReqError} Throws when `git ls-files` fails.
 
-### fn `function buildAsciiTree(paths: string[]): string` (L131-159)
+### fn `function buildAsciiTree(paths: string[]): string` (L132-160)
 - @brief Builds an ASCII tree from relative file paths.
 - @details Materializes a nested object tree and renders it using box-drawing characters for markdown display. Runtime is O(n log n) in path count due to sorting. No side effects occur.
 - @param[in] paths {string[]} Relative POSIX-style file paths.
 - @return {string} Rendered ASCII tree.
 
-### fn `const emit = (branch: Record<string, Record<string, unknown> | null>, prefix = "") =>` (L147-156)
+### fn `const emit = (branch: Record<string, Record<string, unknown> | null>, prefix = "") =>` (L148-157)
 
-### fn `function formatFilesStructureMarkdown(files: string[], projectBase: string): string` (L168-171)
+### fn `function formatFilesStructureMarkdown(files: string[], projectBase: string): string` (L169-172)
 - @brief Formats the collected file structure as markdown.
 - @details Converts absolute file paths to project-relative POSIX paths, renders an ASCII tree, and wraps the result in a fenced markdown block. Runtime is O(n log n) in file count. No side effects occur.
 - @param[in] files {string[]} Absolute file paths.
 - @param[in] projectBase {string} Absolute project root.
 - @return {string} Markdown section describing the file structure.
 
-### fn `export function resolveProjectBase(projectBase?: string): string` (L180-186)
+### fn `export function resolveProjectBase(projectBase?: string): string` (L181-187)
 - @brief Resolves and validates the project base directory.
 - @details Uses the supplied path or the current working directory, normalizes it to an absolute path, and verifies that it exists. Runtime is O(1) plus one filesystem existence check. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string | undefined} Optional project-root override.
 - @return {string} Absolute validated project root.
 - @throws {ReqError} Throws when the resolved path does not exist.
 
-### fn `export function resolveProjectSrcDirs(projectBase: string, config?: UseReqConfig): [string, string[]]` (L196-204)
+### fn `export function resolveProjectSrcDirs(projectBase: string, config?: UseReqConfig): [string, string[]]` (L197-205)
 - @brief Resolves the project base and effective source-directory list.
 - @details Loads configuration when not supplied, validates that at least one source directory exists in config, and returns both the absolute base path and source-directory array. Runtime is O(s). Side effects are limited to config reads.
 - @param[in] projectBase {string} Candidate project root.
@@ -7260,21 +7261,21 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {[string, string[]]} Tuple of absolute project base and configured source directories.
 - @throws {ReqError} Throws when no source directories are configured.
 
-### fn `export function loadAndRepairConfig(projectBase: string): UseReqConfig` (L213-218)
+### fn `export function loadAndRepairConfig(projectBase: string): UseReqConfig` (L214-219)
 - @brief Loads project configuration and persists normalized path fields.
 - @details Resolves the base path, normalizes persisted docs/tests/source directories into project-relative form, writes the normalized config back to disk, and returns the in-memory result without persisting runtime-derived path metadata. Runtime is dominated by config I/O. Side effects include config writes.
 - @param[in] projectBase {string} Candidate project root.
 - @return {UseReqConfig} Normalized effective configuration.
 - @satisfies CTN-012, REQ-146
 
-### fn `export function runFilesTokens(files: string[]): ToolResult` (L227-239)
+### fn `export function runFilesTokens(files: string[]): ToolResult` (L228-240)
 - @brief Counts tokens and characters for explicit files.
 - @details Filters missing files into stderr warnings, counts metrics for valid files, and returns a formatted summary. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] files {string[]} Explicit file paths.
 - @return {ToolResult} Tool result containing the formatted summary and warnings.
 - @throws {ReqError} Throws when no valid files are provided.
 
-### fn `export function runFilesSummarize(files: string[], cwd = process.cwd(), verbose = false): ToolResult` (L250-256)
+### fn `export function runFilesSummarize(files: string[], cwd = process.cwd(), verbose = false): ToolResult` (L251-257)
 - @brief Generates the monolithic summary markdown for explicit files.
 - @details Delegates to `generateMarkdown(...)`, keeps output paths relative to the caller cwd, and returns the Python-compatible summary markdown document through stdout. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] files {string[]} Explicit file paths.
@@ -7283,7 +7284,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {ToolResult} Successful tool result containing monolithic markdown.
 - @satisfies REQ-011, REQ-076, REQ-077, REQ-078, REQ-079
 
-### fn `export function runFilesCompress(files: string[], cwd = process.cwd(), enableLineNumbers = false, verbose = false): ToolResult` (L267-269)
+### fn `export function runFilesCompress(files: string[], cwd = process.cwd(), enableLineNumbers = false, verbose = false): ToolResult` (L268-270)
 - @brief Compresses explicit files into compact source excerpts.
 - @details Delegates to `compressFiles` using the caller working directory as the relative-output base by default. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] files {string[]} Explicit file paths.
@@ -7292,7 +7293,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
 - @return {ToolResult} Successful tool result containing compressed output.
 
-### fn `export function runFilesSearch(argsList: string[], enableLineNumbers = false, verbose = false): ToolResult` (L280-286)
+### fn `export function runFilesSearch(argsList: string[], enableLineNumbers = false, verbose = false): ToolResult` (L281-287)
 - @brief Searches named constructs in explicit files.
 - @details Expects `[TAG, PATTERN, ...FILES]`, validates minimum arity, and delegates to `searchConstructsInFiles`. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] argsList {string[]} Positional argument list containing tag filter, regex pattern, and files.
@@ -7301,7 +7302,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {ToolResult} Successful tool result containing construct markdown.
 - @throws {ReqError} Throws when required arguments are missing.
 
-### fn `export function runSummarize(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L298-309)
+### fn `export function runSummarize(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L299-310)
 - @brief Generates the monolithic summary markdown for configured source directories.
 - @details Resolves the project base, collects configured source files, prepends the repository file-structure markdown block, and returns the Python-compatible summary document through stdout. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
@@ -7311,17 +7312,17 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @throws {ReqError} Throws when no source files are found or no file can be analyzed.
 - @satisfies REQ-014, REQ-076, REQ-077, REQ-078, REQ-079
 
-### fn `export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L321-329)
+### fn `export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L322-334)
 - @brief Writes configured project references markdown to the canonical docs file.
-- @details Reuses `runSummarize(...)` to generate the same file-structure-plus-summary markdown, resolves `<docs-dir>/REFERENCES.md` from the effective project configuration, overwrites the target file, and returns the status-only stdout `success`. Runtime is O(F log F + S) plus one file write. Side effects include filesystem writes.
+- @details Probes the configured `src-dir` git file inventory through `hasAnalyzableSourceFiles(...)` before reference extraction: when no supported source file exists, overwrites `<docs-dir>/REFERENCES.md` with the exact declared `NO_SOURCE_REFERENCES_PLACEHOLDER` payload through `writeNoSourcePlaceholderDocument(...)` and returns the status-only stdout `success` without invoking source extraction, matching the `/req-references` no-source branch; otherwise reuses `runSummarize(...)` to generate the same file-structure-plus-summary markdown, resolves `<docs-dir>/REFERENCES.md` from the effective project configuration, overwrites the target file, and returns the status-only stdout `success`. Runtime is O(F log F + S) plus one `git ls-files` probe and one file write. Side effects include subprocess creation and filesystem writes.
 - @param[in] projectBase {string} Candidate project root.
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr during summary generation.
-- @return {ToolResult} Successful tool result containing the status-only stdout payload.
-- @throws {ReqError} Throws when source discovery, summary generation, or file writing fails.
-- @satisfies REQ-293
+- @return {ToolResult} Successful tool result containing the status-only stdout payload for both the generated and the no-source placeholder outcomes.
+- @throws {ReqError} Throws when the git file inventory cannot be collected, when summary generation fails for a non-empty inventory, or when the placeholder or generated file write fails.
+- @satisfies REQ-293, REQ-294, REQ-300, REQ-620, REQ-622
 
-### fn `export function runCompress(projectBase: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L341-346)
+### fn `export function runCompress(projectBase: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L346-351)
 - @brief Compresses all source files from configured source directories.
 - @details Resolves the project base, collects source files, and delegates to `compressFiles`. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
@@ -7331,7 +7332,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {ToolResult} Successful tool result containing compressed output.
 - @throws {ReqError} Throws when no source files are found.
 
-### fn `export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L360-369)
+### fn `export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L365-374)
 - @brief Searches named constructs across configured project source files.
 - @details Resolves the project base, collects source files, delegates to `searchConstructsInFiles`, and converts thrown search errors into structured `ReqError` failures. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
@@ -7343,7 +7344,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {ToolResult} Successful tool result containing construct markdown.
 - @throws {ReqError} Throws when no source files are found or the search fails.
 
-### fn `export function runTokens(projectBase: string, config?: UseReqConfig): ToolResult` (L379-388)
+### fn `export function runTokens(projectBase: string, config?: UseReqConfig): ToolResult` (L384-393)
 - @brief Counts tokens for canonical documentation files.
 - @details Loads the configured docs directory, selects `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` when present, and delegates to `runFilesTokens`. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Candidate project root.
@@ -7351,7 +7352,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {ToolResult} Tool result containing documentation token metrics.
 - @throws {ReqError} Throws when no canonical docs files exist.
 
-### fn `export function runFilesStaticCheck(files: string[], projectBase: string, config?: UseReqConfig): ToolResult` (L398-434)
+### fn `export function runFilesStaticCheck(files: string[], projectBase: string, config?: UseReqConfig): ToolResult` (L403-439)
 - @brief Runs configured static checks for explicit files.
 - @details Loads the effective static-check config, resolves the active checker list per file-extension language through the per-language enable flag, captures checker stdout for each dispatched entry, and aggregates stderr warnings for invalid paths. Runtime is O(F * C) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
 - @param[in] files {string[]} Explicit file paths.
@@ -7359,7 +7360,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
 - @return {ToolResult} Aggregated static-check result.
 
-### fn `export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult` (L444-457)
+### fn `export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult` (L449-462)
 - @brief Runs configured static checks for project source and test directories.
 - @details Collects source and test files, excludes fixture roots, and delegates to `runFilesStaticCheck`. Runtime is O(F * C) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
 - @param[in] projectBase {string} Candidate project root.
@@ -7370,28 +7371,28 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`ToolResult`|iface||29-33|export interface ToolResult|
-|`ok`|fn||53-55|function ok(stdout = "", stderr = ""): ToolResult|
-|`fail`|fn||67-72|function fail(message: string, code = 1, stdout = "", std...|
-|`runCapture`|fn||81-86|function runCapture(command: string[], options: { cwd?: s...|
-|`collectSourceFiles`|fn||96-123|export function collectSourceFiles(srcDirs: string[], pro...|
-|`buildAsciiTree`|fn||131-159|function buildAsciiTree(paths: string[]): string|
-|`emit`|fn||147-156|const emit = (branch: Record<string, Record<string, unkno...|
-|`formatFilesStructureMarkdown`|fn||168-171|function formatFilesStructureMarkdown(files: string[], pr...|
-|`resolveProjectBase`|fn||180-186|export function resolveProjectBase(projectBase?: string):...|
-|`resolveProjectSrcDirs`|fn||196-204|export function resolveProjectSrcDirs(projectBase: string...|
-|`loadAndRepairConfig`|fn||213-218|export function loadAndRepairConfig(projectBase: string):...|
-|`runFilesTokens`|fn||227-239|export function runFilesTokens(files: string[]): ToolResult|
-|`runFilesSummarize`|fn||250-256|export function runFilesSummarize(files: string[], cwd = ...|
-|`runFilesCompress`|fn||267-269|export function runFilesCompress(files: string[], cwd = p...|
-|`runFilesSearch`|fn||280-286|export function runFilesSearch(argsList: string[], enable...|
-|`runSummarize`|fn||298-309|export function runSummarize(projectBase: string, config?...|
-|`runReferences`|fn||321-329|export function runReferences(projectBase: string, config...|
-|`runCompress`|fn||341-346|export function runCompress(projectBase: string, config?:...|
-|`runSearch`|fn||360-369|export function runSearch(projectBase: string, tagFilter:...|
-|`runTokens`|fn||379-388|export function runTokens(projectBase: string, config?: U...|
-|`runFilesStaticCheck`|fn||398-434|export function runFilesStaticCheck(files: string[], proj...|
-|`runProjectStaticCheck`|fn||444-457|export function runProjectStaticCheck(projectBase: string...|
+|`ToolResult`|iface||30-34|export interface ToolResult|
+|`ok`|fn||54-56|function ok(stdout = "", stderr = ""): ToolResult|
+|`fail`|fn||68-73|function fail(message: string, code = 1, stdout = "", std...|
+|`runCapture`|fn||82-87|function runCapture(command: string[], options: { cwd?: s...|
+|`collectSourceFiles`|fn||97-124|export function collectSourceFiles(srcDirs: string[], pro...|
+|`buildAsciiTree`|fn||132-160|function buildAsciiTree(paths: string[]): string|
+|`emit`|fn||148-157|const emit = (branch: Record<string, Record<string, unkno...|
+|`formatFilesStructureMarkdown`|fn||169-172|function formatFilesStructureMarkdown(files: string[], pr...|
+|`resolveProjectBase`|fn||181-187|export function resolveProjectBase(projectBase?: string):...|
+|`resolveProjectSrcDirs`|fn||197-205|export function resolveProjectSrcDirs(projectBase: string...|
+|`loadAndRepairConfig`|fn||214-219|export function loadAndRepairConfig(projectBase: string):...|
+|`runFilesTokens`|fn||228-240|export function runFilesTokens(files: string[]): ToolResult|
+|`runFilesSummarize`|fn||251-257|export function runFilesSummarize(files: string[], cwd = ...|
+|`runFilesCompress`|fn||268-270|export function runFilesCompress(files: string[], cwd = p...|
+|`runFilesSearch`|fn||281-287|export function runFilesSearch(argsList: string[], enable...|
+|`runSummarize`|fn||299-310|export function runSummarize(projectBase: string, config?...|
+|`runReferences`|fn||322-334|export function runReferences(projectBase: string, config...|
+|`runCompress`|fn||346-351|export function runCompress(projectBase: string, config?:...|
+|`runSearch`|fn||365-374|export function runSearch(projectBase: string, tagFilter:...|
+|`runTokens`|fn||384-393|export function runTokens(projectBase: string, config?: U...|
+|`runFilesStaticCheck`|fn||403-439|export function runFilesStaticCheck(files: string[], proj...|
+|`runProjectStaticCheck`|fn||449-462|export function runProjectStaticCheck(projectBase: string...|
 
 
 ---
@@ -7478,7 +7479,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 5809L | 132 symbols | 35 imports | 246 comments
+# index.ts | TypeScript | 5810L | 132 symbols | 35 imports | 246 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -8234,7 +8235,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102, REQ-293, REQ-294, REQ-295, REQ-296, REQ-297
 
-### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4470-4495)
+### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4471-4496)
 - @brief Builds the shared settings-menu choices for startup-tool management.
 - @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting the removed status-reference action. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8242,7 +8243,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
 - @satisfies REQ-007, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4505-4519)
+### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4506-4520)
 - @brief Builds the shared settings-menu choices for per-tool startup toggles.
 - @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends a value-less subtree-local `Reset defaults` row. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8250,7 +8251,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
 - @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-231, REQ-232
 
-### fn `async function configurePiUsereqToolsMenu(` (L4530-4647)
+### fn `async function configurePiUsereqToolsMenu(` (L4531-4648)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with the effective config, renders startup-tool actions through the shared settings-menu UI, persists enablement changes into global configuration, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8259,78 +8260,78 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-231, REQ-232
 
-### fn `function getStaticCheckLanguageConfigForMenu(` (L4656-4661)
+### fn `function getStaticCheckLanguageConfigForMenu(` (L4657-4662)
 - @brief Resolves one static-check language config for menu rendering.
 - @details Returns the configured per-language static-check object when present and otherwise synthesizes a disabled empty-language object so menu code can render all supported languages deterministically. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {StaticCheckLanguageConfig} Resolved per-language config object.
 
-### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4669-4671)
+### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4670-4672)
 - @brief Counts languages that currently expose at least one configured checker.
 - @details Treats configured-but-disabled languages as configured when their checker list is non-empty so removal actions remain deterministic. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of languages with at least one configured checker.
 
-### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4679-4681)
+### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4680-4682)
 - @brief Counts languages whose static-check enable flag is on.
 - @details Counts only languages whose persisted per-language config explicitly sets `enabled=enable`, regardless of checker count. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of enabled languages.
 
-### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4690-4692)
+### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4691-4693)
 - @brief Restores the documented static-check default configuration.
 - @details Replaces the mutable config subtree with a fresh clone of the documented per-language defaults so menu reset actions restore both enable flags and checker lists in one step. Runtime is O(l + c). Side effect: mutates `config`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 - @satisfies REQ-250, REQ-251, REQ-252
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4700-4702)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4701-4703)
 - @brief Summarizes enabled and configured static-check languages.
 - @details Counts enabled languages and languages with at least one checker, then emits one compact summary string suitable for the top-level configuration menu. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string.
 
-### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4711-4755)
+### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4712-4756)
 - @brief Builds the shared settings-menu choices for static-check management.
 - @details Serializes guided Command-oriented add and remove actions, renders one direct on/off toggle row for every supported language, and appends canonical terminal rows while omitting raw-spec and reference-only actions. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
 - @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248, REQ-345, REQ-347
 
-### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4763-4780)
+### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4764-4781)
 - @brief Builds the shared settings-menu choices for supported static-check languages.
 - @details Exposes every supported language as one row whose right-side value reports extensions, enablement, and configured checker count for guided Command configuration flows, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
 
-### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4788-4805)
+### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4789-4806)
 - @brief Builds the shared settings-menu choices for configured static-check languages.
 - @details Exposes only languages whose checker lists are non-empty so removal remains deterministic, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
 
-### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4813-4817)
+### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4814-4818)
 - @brief Formats one static-check checker entry as a compact command summary.
 - @details Joins the module command plus its parameter list into a single shell-like token sequence so inspection and confirmation menus can render checker identity deterministically. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Compact command summary string.
 
-### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4826-4832)
+### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4827-4833)
 - @brief Summarizes every configured checker for one language as a delimited command list.
 - @details Joins each checker entry summary with `; ` so the value column exposes the full language configuration in one row. Runtime is O(c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {string} Delimited checker summary string, or `(none)` when no checkers are configured.
 
-### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4841-4886)
+### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4842-4887)
 - @brief Builds the shared settings-menu choices for the read-only static-check inspection submenu.
 - @details Exposes only configured languages as disabled rows whose value column renders the full checker command list, appends one selectable `Close` row, and emits a disabled placeholder when no language is configured so the submenu never mutates configuration. Runtime is O(l * c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered read-only inspection choices.
 - @satisfies REQ-346
 
-### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4896-4934)
+### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4897-4935)
 - @brief Builds the confirmation submenu choices for removing one configured static-check language.
 - @details Renders each configured checker as a disabled preview row, appends explicit approve and abort actions, and falls back to one disabled no-op row when the language has no checkers. Runtime is O(c * p). No external state is mutated.
 - @param[in] language {string} Canonical language name targeted for removal.
@@ -8338,7 +8339,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removal-confirmation choices.
 - @satisfies REQ-349
 
-### fn `async function confirmStaticCheckRemoval(` (L4945-4956)
+### fn `async function confirmStaticCheckRemoval(` (L4946-4957)
 - @brief Opens one explicit removal-confirmation submenu for a configured static-check language.
 - @details Renders the targeted checker entries before removal and returns `true` only when the user selects the explicit approval action. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -8347,7 +8348,7 @@ registration and status updates.
 - @return {Promise<boolean>} `true` when the removal is explicitly approved.
 - @satisfies REQ-349
 
-### fn `async function configureStaticCheckMenu(` (L4966-5145)
+### fn `async function configureStaticCheckMenu(` (L4967-5146)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user add, inspect, confirm-before-remove, and reset global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -8355,7 +8356,7 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253, REQ-345, REQ-346, REQ-347, REQ-348, REQ-349
 
-### fn `function formatContextFilesSummary(` (L5156-5171)
+### fn `function formatContextFilesSummary(` (L5157-5172)
 - @brief Summarizes the `Context Files` flag state with measured sizes and context occupancy for the top-level menu value column.
 - @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -8364,7 +8365,7 @@ registration and status updates.
 - @return {string} Compact `Context Files` summary string with the occupancy suffix.
 - @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405
 
-### fn `function buildContextFilesMenuChoices(` (L5182-5225)
+### fn `function buildContextFilesMenuChoices(` (L5183-5226)
 - @brief Builds the shared settings-menu choices for the `Context Files` submenu.
 - @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -8373,7 +8374,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412
 
-### fn `async function configureContextFilesMenu(` (L5237-5297)
+### fn `async function configureContextFilesMenu(` (L5238-5298)
 - @brief Runs the `Context Files` configuration submenu.
 - @details Measures the context files through the yielding async measurement helper, then loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -8383,9 +8384,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-406
 
-### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L5244-5248)
+### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L5245-5249)
 
-### fn `function buildPiUsereqMenuChoices(` (L5308-5414)
+### fn `function buildPiUsereqMenuChoices(` (L5309-5415)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
 - @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] cwd {string} Current working directory.
@@ -8394,21 +8395,21 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376, REQ-405
 
-### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5423-5441)
+### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5424-5442)
 - @brief Builds the shared settings-menu choices for source-directory management.
 - @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5450-5462)
+### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5451-5463)
 - @brief Builds the shared settings-menu choices for removing one source-directory entry.
 - @details Exposes every configured `src-dir` entry as one removable row and appends a value-less subtree-local `Reset defaults` row. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L5473-5734)
+### fn `async function configurePiUsereq(` (L5474-5735)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads the effective merged config, performs one yielding async context-file measurement warm pass so menu renders resolve through stat-signed cache hits instead of first-measurement encodes, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8417,9 +8418,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-327, REQ-328, REQ-333
 
-### fn `const persistConfigChange = () =>` (L5486-5491)
+### fn `const persistConfigChange = () =>` (L5487-5492)
 
-### fn `function registerConfigCommands(` (L5744-5754)
+### fn `function registerConfigCommands(` (L5745-5755)
 - @brief Registers configuration-management commands.
 - @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8427,14 +8428,14 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-006, REQ-031
 
-### fn `function activatePiUsereqExtension(pi: ExtensionAPI): void` (L5763-5790)
+### fn `function activatePiUsereqExtension(pi: ExtensionAPI): void` (L5764-5791)
 - @brief Activates the complete pi-usereq extension surface.
 - @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset`, `req-references`, `req-continue`, and `req-continue-list` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies DES-002, DES-015, DES-030, DES-040, DES-041, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520, REQ-653, REQ-656, REQ-659, REQ-663, REQ-671, REQ-672, REQ-673, REQ-674, REQ-675, REQ-676
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5799-5809)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5800-5810)
 - @brief Registers the complete pi-usereq extension at most once per installation in one pi host process.
 - @details Claims activation ownership for the executing installation path before any launcher deployment, registration, persistence, or probe scheduling, so a duplicated installation of the same package from another pi-managed source cannot register the documented commands, agent tools, shortcuts, and lifecycle hooks a second time; pi keeps every loaded extension active and reports duplicated tool names as extension load errors, so skipping the duplicate keeps the effective registered inventory identical (pi already resolves precedence by load order) while removing the conflict diagnostics. Repeated activation of the same installation path stays allowed because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` and the extension must re-register on every rebind. Claim release on activation failure preserves the documented behavior where a partially initialized installation surfaces its failure while another installed copy can still activate. Runtime is O(1) plus the delegated activation cost. Side effects are limited to process-scoped activation state mutation plus the delegated activation side effects only for the owning installation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8547,33 +8548,33 @@ registration and status updates.
 |`registerPromptCommands`|fn||3921-4116|function registerPromptCommands(|
 |`promptCommandHandler`|fn||3926-4109|const promptCommandHandler = async (args: string, ctx: Ex...|
 |`registerAgentTools`|fn||4126-4425|function registerAgentTools(pi: ExtensionAPI): void|
-|`buildPiUsereqToolsMenuChoices`|fn||4470-4495|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
-|`buildPiUsereqToolToggleChoices`|fn||4505-4519|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
-|`configurePiUsereqToolsMenu`|fn||4530-4647|async function configurePiUsereqToolsMenu(|
-|`getStaticCheckLanguageConfigForMenu`|fn||4656-4661|function getStaticCheckLanguageConfigForMenu(|
-|`countConfiguredStaticCheckLanguages`|fn||4669-4671|function countConfiguredStaticCheckLanguages(config: UseR...|
-|`countEnabledStaticCheckLanguages`|fn||4679-4681|function countEnabledStaticCheckLanguages(config: UseReqC...|
-|`resetStaticCheckConfig`|fn||4690-4692|function resetStaticCheckConfig(config: UseReqConfig): void|
-|`formatStaticCheckLanguagesSummary`|fn||4700-4702|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckMenuChoices`|fn||4711-4755|function buildStaticCheckMenuChoices(config: UseReqConfig...|
-|`buildSupportedStaticCheckLanguageChoices`|fn||4763-4780|function buildSupportedStaticCheckLanguageChoices(config:...|
-|`buildConfiguredStaticCheckLanguageChoices`|fn||4788-4805|function buildConfiguredStaticCheckLanguageChoices(config...|
-|`formatStaticCheckCheckerEntry`|fn||4813-4817|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
-|`formatStaticCheckLanguageCheckerSummary`|fn||4826-4832|function formatStaticCheckLanguageCheckerSummary(config: ...|
-|`buildStaticCheckViewChoices`|fn||4841-4886|function buildStaticCheckViewChoices(config: UseReqConfig...|
-|`buildStaticCheckRemovalConfirmationChoices`|fn||4896-4934|function buildStaticCheckRemovalConfirmationChoices(|
-|`confirmStaticCheckRemoval`|fn||4945-4956|async function confirmStaticCheckRemoval(|
-|`configureStaticCheckMenu`|fn||4966-5145|async function configureStaticCheckMenu(|
-|`formatContextFilesSummary`|fn||5156-5171|function formatContextFilesSummary(|
-|`buildContextFilesMenuChoices`|fn||5182-5225|function buildContextFilesMenuChoices(|
-|`configureContextFilesMenu`|fn||5237-5297|async function configureContextFilesMenu(|
-|`setFlag`|fn||5244-5248|const setFlag = (flagKey: "context-files-requirements" | ...|
-|`buildPiUsereqMenuChoices`|fn||5308-5414|function buildPiUsereqMenuChoices(|
-|`buildSrcDirMenuChoices`|fn||5423-5441|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
-|`buildSrcDirRemovalChoices`|fn||5450-5462|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||5473-5734|async function configurePiUsereq(|
-|`persistConfigChange`|fn||5486-5491|const persistConfigChange = () =>|
-|`registerConfigCommands`|fn||5744-5754|function registerConfigCommands(|
-|`activatePiUsereqExtension`|fn||5763-5790|function activatePiUsereqExtension(pi: ExtensionAPI): void|
-|`piUsereqExtension`|fn||5799-5809|export default function piUsereqExtension(pi: ExtensionAP...|
+|`buildPiUsereqToolsMenuChoices`|fn||4471-4496|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
+|`buildPiUsereqToolToggleChoices`|fn||4506-4520|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
+|`configurePiUsereqToolsMenu`|fn||4531-4648|async function configurePiUsereqToolsMenu(|
+|`getStaticCheckLanguageConfigForMenu`|fn||4657-4662|function getStaticCheckLanguageConfigForMenu(|
+|`countConfiguredStaticCheckLanguages`|fn||4670-4672|function countConfiguredStaticCheckLanguages(config: UseR...|
+|`countEnabledStaticCheckLanguages`|fn||4680-4682|function countEnabledStaticCheckLanguages(config: UseReqC...|
+|`resetStaticCheckConfig`|fn||4691-4693|function resetStaticCheckConfig(config: UseReqConfig): void|
+|`formatStaticCheckLanguagesSummary`|fn||4701-4703|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckMenuChoices`|fn||4712-4756|function buildStaticCheckMenuChoices(config: UseReqConfig...|
+|`buildSupportedStaticCheckLanguageChoices`|fn||4764-4781|function buildSupportedStaticCheckLanguageChoices(config:...|
+|`buildConfiguredStaticCheckLanguageChoices`|fn||4789-4806|function buildConfiguredStaticCheckLanguageChoices(config...|
+|`formatStaticCheckCheckerEntry`|fn||4814-4818|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
+|`formatStaticCheckLanguageCheckerSummary`|fn||4827-4833|function formatStaticCheckLanguageCheckerSummary(config: ...|
+|`buildStaticCheckViewChoices`|fn||4842-4887|function buildStaticCheckViewChoices(config: UseReqConfig...|
+|`buildStaticCheckRemovalConfirmationChoices`|fn||4897-4935|function buildStaticCheckRemovalConfirmationChoices(|
+|`confirmStaticCheckRemoval`|fn||4946-4957|async function confirmStaticCheckRemoval(|
+|`configureStaticCheckMenu`|fn||4967-5146|async function configureStaticCheckMenu(|
+|`formatContextFilesSummary`|fn||5157-5172|function formatContextFilesSummary(|
+|`buildContextFilesMenuChoices`|fn||5183-5226|function buildContextFilesMenuChoices(|
+|`configureContextFilesMenu`|fn||5238-5298|async function configureContextFilesMenu(|
+|`setFlag`|fn||5245-5249|const setFlag = (flagKey: "context-files-requirements" | ...|
+|`buildPiUsereqMenuChoices`|fn||5309-5415|function buildPiUsereqMenuChoices(|
+|`buildSrcDirMenuChoices`|fn||5424-5442|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
+|`buildSrcDirRemovalChoices`|fn||5451-5463|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
+|`configurePiUsereq`|fn||5474-5735|async function configurePiUsereq(|
+|`persistConfigChange`|fn||5487-5492|const persistConfigChange = () =>|
+|`registerConfigCommands`|fn||5745-5755|function registerConfigCommands(|
+|`activatePiUsereqExtension`|fn||5764-5791|function activatePiUsereqExtension(pi: ExtensionAPI): void|
+|`piUsereqExtension`|fn||5800-5810|export default function piUsereqExtension(pi: ExtensionAP...|
 

@@ -21,6 +21,7 @@ import { searchConstructsInFiles } from "./find-constructs.js";
 import { generateMarkdown } from "./generate-markdown.js";
 import { STATIC_CHECK_EXT_TO_LANG, dispatchStaticCheckForFile } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
+import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./source-presence.js";
 
 /**
  * @brief Represents the normalized output contract for a tool invocation.
@@ -310,17 +311,21 @@ export function runSummarize(projectBase: string, config?: UseReqConfig, verbose
 
 /**
  * @brief Writes configured project references markdown to the canonical docs file.
- * @details Reuses `runSummarize(...)` to generate the same file-structure-plus-summary markdown, resolves `<docs-dir>/REFERENCES.md` from the effective project configuration, overwrites the target file, and returns the status-only stdout `success`. Runtime is O(F log F + S) plus one file write. Side effects include filesystem writes.
+ * @details Probes the configured `src-dir` git file inventory through `hasAnalyzableSourceFiles(...)` before reference extraction: when no supported source file exists, overwrites `<docs-dir>/REFERENCES.md` with the exact declared `NO_SOURCE_REFERENCES_PLACEHOLDER` payload through `writeNoSourcePlaceholderDocument(...)` and returns the status-only stdout `success` without invoking source extraction, matching the `/req-references` no-source branch; otherwise reuses `runSummarize(...)` to generate the same file-structure-plus-summary markdown, resolves `<docs-dir>/REFERENCES.md` from the effective project configuration, overwrites the target file, and returns the status-only stdout `success`. Runtime is O(F log F + S) plus one `git ls-files` probe and one file write. Side effects include subprocess creation and filesystem writes.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr during summary generation.
- * @return {ToolResult} Successful tool result containing the status-only stdout payload.
- * @throws {ReqError} Throws when source discovery, summary generation, or file writing fails.
- * @satisfies REQ-293
+ * @return {ToolResult} Successful tool result containing the status-only stdout payload for both the generated and the no-source placeholder outcomes.
+ * @throws {ReqError} Throws when the git file inventory cannot be collected, when summary generation fails for a non-empty inventory, or when the placeholder or generated file write fails.
+ * @satisfies REQ-293, REQ-294, REQ-300, REQ-620, REQ-622
  */
 export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult {
   const base = resolveProjectBase(projectBase);
   const effectiveConfig = config ?? loadConfig(base);
+  if (!hasAnalyzableSourceFiles(base, effectiveConfig)) {
+    writeNoSourcePlaceholderDocument(base, effectiveConfig, "REFERENCES.md");
+    return ok("success\n");
+  }
   const docsDir = effectiveConfig["docs-dir"].replace(/[/\\]+$/, "");
   const referencesPath = path.join(base, docsDir, "REFERENCES.md");
   const summarizeResult = runSummarize(base, effectiveConfig, verbose);

@@ -4311,6 +4311,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Behavior contract: generate the same file-structure-plus-summary markdown as `summarize` and overwrite `<docs-dir>/REFERENCES.md`.",
       "Output contract: `content[0].text` is `success` on success or `error: <diagnostic>` on failure; generated markdown is never returned to the LLM.",
       "Failure contract: source discovery, markdown generation, and file-write errors surface through the status text plus details.execution diagnostics.",
+      "No-source contract: when the configured src-dir git inventory holds no supported source file, overwrite `<docs-dir>/REFERENCES.md` with the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` payload from `src/core/source-presence.ts` and still return `success`, matching `/req-references`.",
     ],
     renderResult: buildStructuredToolRenderResult("references"),
     parameters: referencesSchema,
