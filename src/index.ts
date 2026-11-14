@@ -252,6 +252,7 @@ import {
   runTokens,
   type ToolResult,
 } from "./core/tool-runner.js";
+import { runJsonValidator } from "./core/json-validator.js";
 import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
   checkDefaultCheckersAvailability,
@@ -4458,6 +4459,38 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
+  const jsonValidatorSchema = Type.Object(
+    {
+      content: Type.Optional(Type.String({
+        description: "Raw JSON text to validate inline; omit when files are supplied",
+      })),
+      files: Type.Optional(Type.Array(
+        Type.String({ description: "Project-relative or absolute file path resolved from the current working directory when not already absolute" }),
+        { description: "Explicit file list preserved in caller order; every entry is read as UTF-8 text and validated as JSON" },
+      )),
+    },
+    {
+      description: "Input contract: optional content string plus optional files[]; at least one must be supplied. Scope: caller-supplied JSON only, independent of project configuration. Output contract: monolithic markdown verdict in content[0].text plus details.execution diagnostics. Invalid JSON is reported as an invalid verdict record and never fails the tool; only malformed requests fail.",
+    },
+  );
+
+  pi.registerTool({
+    name: "json-validator",
+    label: "json-validator",
+    description: "Scope: caller-supplied inline JSON content or explicit files. Validate JSON formatting and return the monolithic markdown verdict in content[0].text and keep only execution metadata in details.execution. Use this tool every time a request requires validating JSON content or a JSON structure.",
+    promptSnippet: "Return the monolithic JSON-validation verdict for caller-supplied content or files.",
+    promptGuidelines: [
+      "Input contract: optional content string plus optional files[]; the tool fails with a deterministic diagnostic when neither is supplied.",
+      "Output contract: monolithic markdown verdict in content[0].text with one `@@@ <label> | JSON` record per input carrying Result, root type, structural counts, parser line/column diagnostics for invalid JSON, and character plus cl100k_base token facts; details.execution preserves only exit code and residual diagnostics.",
+      "Behavior contract: invalid JSON is reported as an invalid verdict record and never throws; unreadable file entries surface as failed records without aborting remaining entries.",
+      "Usage contract: use this tool every time a request requires validating the formatting or structural validity of JSON content or a JSON structure.",
+    ],
+    renderResult: buildStructuredToolRenderResult("json-validator"),
+    parameters: jsonValidatorSchema,
+    async execute(_toolCallId, params) {
+      return executeMonolithicTool(() => runJsonValidator(params));
+    },
+  });
 }
 
 /**

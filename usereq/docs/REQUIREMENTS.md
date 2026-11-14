@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.159"
+version: "0.0.160"
 date: "2026-11-14"
 author: "OpenAI Codex"
 scope:
@@ -130,6 +130,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-041**: MUST implement the dedicated `req-continue-list` editor printing in `src/index.ts` outside the bundled prompt inventory, reusing `src/core/next-workflow.ts` full-entry list rendering.
 - **DES-042**: MUST implement final-output JSON parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture in one dedicated `src/core/` module outside `src/index.ts` business logic.
 - **DES-043**: MUST implement `--write-config` absent-default materialization plus absence-preserving `--set`/`--unset` write pruning in `src/core/config-cli.ts` reusing schema-projected defaults from `src/core/config-cli-schema.ts`.
+- **DES-044**: MUST implement JSON parsing, verdict rendering, and file-based validation in one dedicated `src/core/json-validator.ts` module outside `src/index.ts` business logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -195,7 +196,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-231**: MUST order non-`files-*` custom-tool toggles alphabetically, append `files-*` custom-tool toggles alphabetically, and place default-disabled custom-tool toggles after default-enabled custom-tool toggles inside each custom subgroup.
 - **REQ-232**: MUST order embedded-tool toggles alphabetically and place default-disabled embedded-tool toggles after default-enabled embedded-tool toggles.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls`.
-- **REQ-064**: MUST default `files-tokens`, `files-summarize`, `files-compress`, `files-search`, `summarize`, `references`, `compress`, `search`, `tokens`, `files-static-check`, `static-check`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
+- **REQ-064**: MUST default `files-tokens`, `files-summarize`, `files-compress`, `files-search`, `summarize`, `references`, `compress`, `search`, `tokens`, `files-static-check`, `static-check`, `json-validator`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted local and global configuration.
 - **REQ-067**: MUST send every bundled prompt-backed `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that sends bundled prompt-backed `req-<prompt>` payloads through the forked execution session by using only the replacement-session context for post-switch session-bound operations.
@@ -781,6 +782,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-698**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from directory-scan invocations through checker-native exclusion arguments for capable commands.
 - **REQ-699**: MUST default shipped `cppcheck`, `ruff`, and `eslint` checker entries to `scan-by-dir` TRUE and every other shipped entry to FALSE.
 - **REQ-700**: MUST keep `files-static-check` per-file dispatch independent of `scan-by-dir`.
+- **REQ-701**: MUST expose `json-validator` only through agent-tool registration.
+- **REQ-702**: MUST validate JSON formatting through native TypeScript parsing and MUST NOT declare a JSON-validation runtime dependency in `package.json`.
+- **REQ-703**: MUST make `json-validator` pass exactly one monolithic markdown verdict document to the LLM through `content[0].text`.
+- **REQ-704**: MUST report one valid parse with root type, structural counts, and character plus `cl100k_base` token size facts inside the monolithic verdict.
+- **REQ-705**: MUST report one invalid parse with the parser error message plus computed line and column diagnostics inside the monolithic verdict and MUST NOT throw for invalid JSON.
+- **REQ-706**: MUST make `json-validator` accept optional `content` and `files` parameters and MUST reject requests supplying neither with a deterministic diagnostic.
+- **REQ-707**: MUST validate every supplied `files` entry as UTF-8 text and MUST report unreadable file entries as failed records without aborting remaining entries.
+- **REQ-708**: MUST keep `json-validator` `details` limited to `execution` metadata and MUST NOT mirror request echoes or verdict content there.
+- **REQ-709**: MUST register `json-validator` with a machine-oriented description binding every JSON-formatting validation request to this tool.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1006,6 +1016,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-226**: MUST verify notification `%%OUTPUT%%` resolution uses the final-output JSON `summary` for completed outcomes and keeps the raw output for unparseable completed outputs.
 - **TST-227**: MUST verify `--write-config` materializes only absent schema defaults into both scopes while preserving every persisted value, emits no stdout on success, and fails with one stderr diagnostic.
 - **TST-228**: MUST verify `--set` and `--unset` keep absent parameters absent in persisted configuration files while persisting requested mutations and preserving effective reads.
+- **TST-229**: MUST verify extension activation registers `json-validator` outside slash-command surfaces with default-enabled configurable-tool configuration and documented custom-tool ordering.
+- **TST-230**: MUST verify `json-validator` places one monolithic markdown verdict in `content[0].text` for valid inline content, invalid inline content with line and column diagnostics, and file-path inputs while restricting `details` to execution metadata.
+- **TST-231**: MUST verify `json-validator` rejects requests supplying neither `content` nor `files` with one deterministic diagnostic without throwing.
 
 ## 5. Observed Component Model
 

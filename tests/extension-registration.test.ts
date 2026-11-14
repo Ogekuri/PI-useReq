@@ -1022,6 +1022,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "summarize",
     "references",
     "compress",
+    "json-validator",
     "search",
     "tokens",
     "files-static-check",
@@ -1245,6 +1246,7 @@ test("agent tools define custom renderResult with compact and expanded structure
       "summarize",
       "references",
       "compress",
+      "json-validator",
       "search",
       "tokens",
       "files-static-check",
@@ -1334,6 +1336,92 @@ test("files-tokens defers js-tiktoken loading until execution and returns monoli
     assert.ok(result.details?.execution.stderr_lines?.some((line) => /npm ci/.test(line)));
   } finally {
     setJsTiktokenModuleLoaderForTests(undefined);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies json-validator registers as a default-enabled agent tool outside slash commands.
+ * @details Activates the extension once, asserts the tool registers with a custom renderer, a
+ * machine-oriented description binding every JSON validation request to the tool, a schema
+ * describing the monolithic verdict contract, default-enabled configurable-tool membership, and the
+ * documented alphabetical non-files custom-tool menu ordering, while no slash command of the same
+ * name exists. Runtime is O(1) plus extension registration. Side effects are limited to in-memory
+ * registration state. No filesystem or network access occurs.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when json-validator registration, description, or default
+ * enablement deviates from the documented contract.
+ * @satisfies TST-229, REQ-701, REQ-709
+ */
+test("json-validator registers as a default-enabled agent tool outside slash commands", () => {
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  assert.ok(![...pi.commands.keys()].includes("json-validator"), "json-validator must not register as a slash command");
+  const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "json-validator");
+  assert.ok(tool, "missing json-validator tool");
+  assert.equal(typeof tool?.renderResult, "function", "missing renderResult for json-validator");
+  assert.match(tool?.description ?? "", /validate JSON formatting/i);
+  assert.match(tool?.description ?? "", /every time/);
+  assert.match(
+    String((tool?.parameters as { description?: string } | undefined)?.description ?? ""),
+    /monolithic markdown verdict/,
+  );
+  assert.ok(tool?.promptGuidelines?.some((line: string) => line.includes("every time")));
+  assert.ok((PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES as readonly string[]).includes("json-validator"));
+  const sortedCustomTools = [...PI_USEREQ_CUSTOM_TOOL_NAMES].sort(comparePiUsereqStartupToolNames);
+  assert.equal(sortedCustomTools.indexOf("json-validator"), sortedCustomTools.indexOf("compress") + 1);
+});
+
+/**
+ * @brief Verifies json-validator returns monolithic verdict documents with execution diagnostics.
+ * @details Writes one valid and one invalid JSON file next to one missing file, executes the
+ * registered tool with inline content plus the three file paths, and asserts one monolithic verdict
+ * document in content[0].text carrying a record per input in request order, valid and invalid
+ * results, root type and structural counts, line plus column diagnostics, the validation summary,
+ * and details.execution limited to the numeric exit code. Runtime is dominated by extension
+ * registration plus one tokenizer encode per record. Side effects are limited to temporary
+ * filesystem mutation and process cwd changes inside the helper.
+ * @return {Promise<void>} Promise resolved when every assertion completes.
+ * @throws {AssertionError} Throws when the verdict payload, record ordering, or execution metadata
+ * deviates from the documented contract.
+ * @satisfies TST-230, REQ-703, REQ-704, REQ-705, REQ-707, REQ-708
+ */
+test("json-validator returns monolithic verdict markdown with execution diagnostics", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  try {
+    fs.writeFileSync(path.join(projectBase, "valid.json"), '{"alpha": 1, "beta": [true, null]}', "utf8");
+    fs.writeFileSync(path.join(projectBase, "invalid.json"), '{\n  "alpha": 1,\n}\n', "utf8");
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const result = await executeRegisteredTool(pi, "json-validator", projectBase, {
+      content: '{"alpha": 1}',
+      files: ["valid.json", "invalid.json", "missing.json"],
+    }) as {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { execution: { code: number } };
+    };
+
+    const text = result.content?.[0]?.text ?? "";
+    assert.match(text, /@@@ content \| JSON/);
+    assert.match(text, /@@@ valid\.json \| JSON/);
+    assert.match(text, /@@@ invalid\.json \| JSON/);
+    assert.match(text, /@@@ missing\.json \| JSON/);
+    assert.match(text, /> Result: valid/);
+    assert.match(text, /> Result: invalid/);
+    assert.match(text, /- @root-type object/);
+    assert.match(text, /- @total-keys 1/);
+    assert.match(text, /- @line 3/);
+    assert.match(text, /- @column 1/);
+    assert.match(text, /Unable to read file/);
+    assert.match(text, /## Validation Summary/);
+    assert.match(text, /- @requests 4/);
+    assert.match(text, /- @valid 2/);
+    assert.match(text, /- @invalid 2/);
+    assert.equal(result.details?.execution.code, 0);
+    assert.ok(Array.isArray((result.details?.execution as { stdout_lines?: string[] }).stdout_lines));
+    assert.equal((result.details?.execution as { stderr_lines?: string[] }).stderr_lines, undefined);
+  } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
@@ -8160,6 +8248,7 @@ test("configuration menu orders tool toggles and can enable embedded builtin too
   const config = readGlobalConfigJson();
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
     "compress",
+    "json-validator",
     "references",
     "search",
     "static-check",
