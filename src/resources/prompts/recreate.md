@@ -27,6 +27,14 @@ In scope: static analysis of source under %%SRC_PATHS%% (and targeted tests only
 
 
 ## Absolute Rules, Non-Negotiable
+- **CRITICAL**: The final response, including every early termination, MUST be exactly one valid JSON object without surrounding text or fences. Set `result` to `ok` on success and `error` on failure, blockage, or no-change termination. Include only the fields described below. All fields except `next_commands` MUST be human-readable strings in the user request language; preserve exact diagnostic literals, commands, identifiers, and Unicode. Escape quotation marks, backslashes, control characters, and newlines as JSON requires.
+  - `summary`: Summarize the entire final response in at most 1010 Unicode characters.
+  - `outcome`: Report the workflow outcome and required exact diagnostics, including partial results on failure.
+  - `evidence`: Report concrete evidence, paths, and line numbers as required by the workflow.
+  - `assumptions`: Report relevant assumptions or state that none were made.
+  - `next_workflow`: Describe the mandated next actions consistently with `next_commands`, or state that none are required.
+  - `next_commands`: Use an array of objects containing only string fields `command` and `text`; include only outcome-mandated commands, with the exact slash command and required input text, or an empty `text` when input is unnecessary; use `[]` when no command is mandated.
+  - For a required field without applicable content, provide a clear not-applicable description; retain required evidence, conflict tables, diagnostics, and partial work in the appropriate fields.
 - **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
 - **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active repository directory, except under `/tmp`.
 - You can read, write, or edit `%%DOC_PATH%%/REQUIREMENTS.md`.
@@ -172,7 +180,7 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
       - Must be optimized for machine comprehension. Do not write flowery prose. Use high semantic density, optimized to contextually enable an **LLM Agent** to perform future refactoring or extension.
       - Write requirements, section titles, tables, and other content in **English language**.
       - Follow `%%TEMPLATE_PATH%%/Requirements_Template.md`.
-      - Output the entire response in clean, properly formatted Markdown.
+      - Write the requirements document in clean, properly formatted Markdown.
    - Preserve requirement identifiers and cross-references.
       - You MUST ensure all requirement IDs in the saved document are unique (no collisions).
       - If the input document contains duplicate IDs, preserve the first occurrence and assign NEW non-colliding IDs to subsequent duplicates (treating them as appended IDs), and update any now-ambiguous internal references as needed.
@@ -184,9 +192,11 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
       - Report `OK` if the draft accurately describes the code (even if the code is buggy). Report `FAIL` only if the draft makes assertions that are not present or contradicted by the source code.
 3. %%COMMIT%%
 4. Present results
-   - PRINT, in the response, the results for a human reader using clear, easily understandable sentences and readable Markdown formatting that highlight key findings, file paths, and concise evidence. PRINT first a ## **Summary** section containing a human-readable summary of the entire final output, at most 1010 Unicode characters encoded as UTF-8, enclosed in exactly one `~~~RESULT_SUMMARY` fenced block, then the verbose report using the fixed report schema: ## **Outcome**, ## **Requirement Delta**, ## **Design Delta**, ## **Implementation Delta**, ## **Verification Delta**, ## **Evidence**, ## **Assumptions**, ## **Next Workflow**.
-   - Under `## **Next Workflow**`, print a brief human-readable description followed by exactly one `~~~NEXT_WORKFLOW` fenced block. Include only commands mandated by the completed workflow outcome; never add optional or elective commands. For each command, print the exact slash command followed by its input text when required, and separate commands with blank lines. If no command is mandated, describe that no next action is required and leave the block empty.
-   - Emit exactly one terminal status line as the final line of the response, after `## **Next Workflow**`: `STATUS_OK` when the workflow completed successfully, or `STATUS_ERROR` when it failed, was blocked, or ended without change; print no content after it.
+   - Emit the JSON object required by the `## Absolute Rules, Non-Negotiable` section.
+   - Set `result` to `ok` for success or `error` for failure, blockage, or no-change termination. All fields except `next_commands` are human-readable strings; retain exact diagnostic literals and commands. Use the user request language for human-readable values; keep repository artifacts in English. Limit `summary` to 1010 Unicode characters.
+   - Populate the report fields with all applicable results, diagnostics, evidence and partial work; use a clear not-applicable description when a section has no content. Preserve required paths, line numbers, conflict tables and exact diagnostic strings inside the appropriate strings.
+   - Set `next_commands` to an array of objects containing only string fields `command` and `text`. Include only commands mandated by the outcome, never optional commands; use the exact slash command and its required input text, or an empty `text` if input is unnecessary. Use `[]` when none are mandated. Describe the same next actions in `next_workflow`, or state that none are required.
+   - Serialize the object as JSON, using valid JSON escaping for quotation marks, backslashes, control characters and newlines in string values; preserve Unicode. Do not interpolate unescaped content. Apply this complete contract to early terminations as well as normal completion.
 
 
 ## Context Files
