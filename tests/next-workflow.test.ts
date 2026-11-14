@@ -18,41 +18,43 @@ import {
 } from "../src/core/next-workflow.js";
 
 /**
- * @brief Builds one synthetic final agent output carrying a Next-Workflow section.
- * @details Joins the supplied section body lines under the canonical `## **Next Workflow**` heading so parser tests exercise the exact block contract emitted by bundled prompts. Runtime is O(n) in body length. No external state is mutated.
- * @param[in] sectionBodyLines {string[]} Section body lines placed after the heading.
+ * @brief Builds one synthetic final agent output carrying a `~~~NEXT_WORKFLOW` fence.
+ * @details Joins the supplied fence body lines between the `~~~NEXT_WORKFLOW` opening fence and its `~~~` closing fence inside one synthetic report carrying the parseable `~~~RESULT_SUMMARY` summary block and the terminal `STATUS_OK` keyword, so parser tests exercise the exact fence contract emitted by bundled prompts. Runtime is O(n) in body length. No external state is mutated.
+ * @param[in] fenceBodyLines {string[]} Fence body lines placed between the fence markers.
  * @return {string} Synthetic final agent output text.
  */
-function buildNextWorkflowOutput(sectionBodyLines: string[]): string {
-  return ["## **Summary**", "Implementation complete.", "", "## **Next Workflow**", ...sectionBodyLines, "", "STATUS: OK"].join("\n");
+function buildNextWorkflowOutput(fenceBodyLines: string[]): string {
+  return [
+    "~~~RESULT_SUMMARY",
+    "Implementation complete.",
+    "~~~",
+    "",
+    "~~~NEXT_WORKFLOW",
+    ...fenceBodyLines,
+    "~~~",
+    "",
+    "STATUS_OK",
+  ].join("\n");
 }
 
 /**
- * @brief Verifies Next-Workflow parsing keeps pi-usereq commands plus `/req-continue` in section order.
- * @details Parses one synthetic final output carrying a `/req-fix` block with multi-line input text, a `/req-check` block without input text, a `/req-continue` exception block, and a purged `/new` orchestration block, then asserts the captured entries preserve section order, keep the multi-line input text, and drop the non-pi-usereq orchestration command. Runtime is O(n) in output length. Side effects are limited to process-scoped capture reset.
+ * @brief Verifies Next-Workflow parsing keeps pi-usereq commands plus `/req-continue` in entry order.
+ * @details Parses one synthetic final output carrying one `~~~NEXT_WORKFLOW` fence with a `/req-fix` entry with multi-line input text, a `/req-check` entry without input text, a `/req-continue` exception entry, and a purged `/new` orchestration entry, then asserts the captured entries preserve entry order, keep the multi-line input text, and drop the non-pi-usereq orchestration command. Runtime is O(n) in output length. Side effects are limited to process-scoped capture reset.
  * @return {void} Promise-less assertions executed synchronously.
- * @throws {AssertionError} Throws when the parser keeps purged commands, drops the `/req-continue` exception, or loses section order.
+ * @throws {AssertionError} Throws when the parser keeps purged commands, drops the `/req-continue` exception, or loses entry order.
  * @satisfies REQ-653, REQ-654, REQ-655, TST-215
  */
 test("next-workflow parser keeps pi-usereq commands plus req-continue and purges orchestration commands", () => {
   resetNextWorkflowStateForTests();
   const entries = parseNextWorkflowCommandEntries(buildNextWorkflowOutput([
-    "~~~text",
     "/req-fix",
     "Fix the flaky retry path in the orchestrator loop",
-    "~~~",
     "",
-    "~~~text",
     "/req-check",
-    "~~~",
     "",
-    "~~~text",
     "/new",
-    "~~~",
     "",
-    "~~~text",
     "/req-continue",
-    "~~~",
   ]));
   assert.deepEqual(entries, [
     { command: "req-fix", inputText: "Fix the flaky retry path in the orchestrator loop" },
@@ -62,35 +64,31 @@ test("next-workflow parser keeps pi-usereq commands plus req-continue and purges
 });
 
 /**
- * @brief Verifies Next-Workflow parsing selects the last section and skips non-command blocks.
- * @details Parses one output carrying an earlier Next-Workflow section and a later one, then asserts only the terminal section contributes entries and blocks whose first non-empty line is not a `/` command are ignored. Runtime is O(n) in output length. Side effects are limited to process-scoped capture reset.
+ * @brief Verifies Next-Workflow parsing selects the last fence and skips non-command entries.
+ * @details Parses one output carrying an earlier `~~~NEXT_WORKFLOW` fence and a later one, then asserts only the terminal fence contributes entries and entries whose first non-empty line is not a `/` command are ignored. Runtime is O(n) in output length. Side effects are limited to process-scoped capture reset.
  * @return {void} Promise-less assertions executed synchronously.
- * @throws {AssertionError} Throws when an earlier section leaks entries or prose blocks produce commands.
+ * @throws {AssertionError} Throws when an earlier fence leaks entries or prose entries produce commands.
  * @satisfies REQ-653, REQ-654, TST-215
  */
-test("next-workflow parser selects the last section and skips non-command blocks", () => {
+test("next-workflow parser selects the last fence and skips non-command entries", () => {
   resetNextWorkflowStateForTests();
   const entries = parseNextWorkflowCommandEntries([
-    "## **Next Workflow**",
-    "~~~text",
+    "~~~NEXT_WORKFLOW",
     "/req-check",
     "~~~",
     "",
     "## **Evidence**",
     "Evidence body.",
     "",
-    "## **Next Workflow**",
-    "~~~text",
+    "~~~NEXT_WORKFLOW",
     "not-a-command line",
-    "~~~",
     "",
-    "~~~text",
     "/req-refactor",
     "Rename the duplicated retry helper",
     "~~~",
   ].join("\n"));
   assert.deepEqual(entries, [{ command: "req-refactor", inputText: "Rename the duplicated retry helper" }]);
-  assert.deepEqual(parseNextWorkflowCommandEntries("No Next-Workflow section here."), []);
+  assert.deepEqual(parseNextWorkflowCommandEntries("No Next-Workflow fence here."), []);
 });
 
 /**
@@ -173,9 +171,7 @@ test("next-workflow capture store replaces entries and clears deterministically"
   resetNextWorkflowStateForTests();
   assert.deepEqual(getNextWorkflowCommands(), []);
   const captured = captureNextWorkflowCommands(buildNextWorkflowOutput([
-    "~~~text",
     "/req-check",
-    "~~~",
   ]));
   assert.equal(captured.length, 1);
   const snapshot = getNextWorkflowCommands();

@@ -2158,22 +2158,36 @@ export function classifyPromptCommandOutcome(
 }
 
 /**
+ * @brief Stores the parseable `STATUS_OK` keyword marking a merge-eligible completed prompt run.
+ * @details Bundled prompts emit this keyword as the terminal report line; `resolvePromptCommandStatusMarker` scans the final agent output for its last occurrence. Access complexity is O(1).
+ * @satisfies REQ-584, REQ-585
+ */
+export const PROMPT_COMMAND_STATUS_OK_KEYWORD = "STATUS_OK";
+
+/**
+ * @brief Stores the parseable `STATUS_ERROR` keyword marking a failed prompt run.
+ * @details Bundled prompts emit this keyword as the terminal report line; `resolvePromptCommandStatusMarker` scans the final agent output for its last occurrence. Access complexity is O(1).
+ * @satisfies REQ-584, REQ-587
+ */
+export const PROMPT_COMMAND_STATUS_ERROR_KEYWORD = "STATUS_ERROR";
+
+/**
  * @brief Represents one inspected prompt-orchestration status marker.
- * @details Discriminates the merge-gating facts recovered from the final agent output: `ok` for `STATUS: OK`, `error` for `STATUS: ERROR`, and `missing` when neither marker is present. The alias is compile-time only and introduces no runtime cost.
+ * @details Discriminates the merge-gating facts recovered from the final agent output: `ok` for the `STATUS_OK` keyword, `error` for the `STATUS_ERROR` keyword, and `missing` when neither keyword is present. The alias is compile-time only and introduces no runtime cost.
  * @satisfies REQ-584, REQ-585, REQ-586, REQ-587, REQ-588
  */
 export type PromptCommandStatusMarker = "ok" | "error" | "missing";
 
 /**
- * @brief Inspects the final agent output for the prompt-orchestration status marker.
- * @details Scans the concatenated assistant text blocks for the last occurrence of `STATUS: OK` and `STATUS: ERROR` so the terminal marker wins when earlier attempts reported a different status, and returns `missing` when neither marker occurs. Runtime is O(n) in output length. No external state is mutated.
+ * @brief Inspects the final agent output for the prompt-orchestration status keyword.
+ * @details Scans the concatenated assistant text blocks for the last occurrence of the `STATUS_OK` and `STATUS_ERROR` keywords so the terminal keyword wins when earlier attempts reported a different status, and returns `missing` when neither keyword occurs. Runtime is O(n) in output length. No external state is mutated.
  * @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
  * @return {PromptCommandStatusMarker} Inspected status marker.
  * @satisfies REQ-584, REQ-585, REQ-587, REQ-588
  */
 export function resolvePromptCommandStatusMarker(agentOutputText: string): PromptCommandStatusMarker {
-  const okIndex = agentOutputText.lastIndexOf("STATUS: OK");
-  const errorIndex = agentOutputText.lastIndexOf("STATUS: ERROR");
+  const okIndex = agentOutputText.lastIndexOf(PROMPT_COMMAND_STATUS_OK_KEYWORD);
+  const errorIndex = agentOutputText.lastIndexOf(PROMPT_COMMAND_STATUS_ERROR_KEYWORD);
   if (okIndex < 0 && errorIndex < 0) {
     return "missing";
   }

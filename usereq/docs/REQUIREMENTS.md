@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.155"
-date: "2026-11-13"
+version: "0.0.156"
+date: "2026-11-14"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -573,17 +573,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-464**: On hosts emitting `agent_settled`, MUST NOT park workflow state `error`, emit the worktree-retention error notification, or clear prompt-run ownership at intermediate `agent_end` events.
 - **REQ-465**: On hosts without `agent_settled`, MUST determine the terminal prompt-orchestration outcome at the final `agent_end` event.
 - **REQ-584**: MUST inspect the concatenated assistant text blocks of the final agent message before executing worktree merge or worktree deletion in every agentic prompt orchestration.
-- **REQ-585**: MUST execute worktree merge and worktree deletion only when the inspected final agent output contains the exact `STATUS: OK` marker.
-- **REQ-586**: MUST NOT execute worktree merge or worktree deletion when the inspected final agent output lacks the exact `STATUS: OK` marker.
-- **REQ-587**: MUST park workflow state `error`, retain the worktree, and emit one error notification when the inspected final agent output contains `STATUS: ERROR`.
+- **REQ-585**: MUST execute worktree merge and worktree deletion only when the inspected final agent output contains the exact `STATUS_OK` keyword.
+- **REQ-586**: MUST NOT execute worktree merge or worktree deletion when the inspected final agent output lacks the exact `STATUS_OK` keyword.
+- **REQ-587**: MUST park workflow state `error`, retain the worktree, and emit one error notification when the inspected final agent output contains `STATUS_ERROR`.
 - **REQ-588**: MUST park workflow state `warning`, retain the worktree, and emit one warning notification when the inspected final agent output contains neither marker.
 - **REQ-589**: MUST treat a terminal agent run whose final assistant message exposes no text content block as merge-eligible.
 - **REQ-590**: MUST render `status:warning` with theme `error` plus terminal blink when supported, matching the `status:error` rendering.
-- **REQ-469**: MUST resolve the Pushover-channel `%%OUTPUT%%` for completed prompt-end outcomes as the trimmed text after the first `## **Summary**` heading and before the first subsequent `## **Outcome**` heading.
-- **REQ-470**: MUST keep the Pushover-channel `%%OUTPUT%%` unchanged for completed prompt-end outcomes whose final agent output does not contain `## **Summary**`.
-- **REQ-471**: MUST NOT substitute into Pushover title or Pushover text any final-agent-output text outside the `## **Summary**` section for completed prompt-end outcomes.
-- **REQ-472**: MUST restrict the `## **Summary**` Pushover extraction to completed prompt-end outcomes and MUST NOT apply it to `PI_NOTIFY_CMD` command-notify substitution.
-- **REQ-510**: MUST resolve the Pushover-channel `%%OUTPUT%%` through the output end as trimmed text after the first `## **Summary**` heading when no subsequent `## **Outcome**` heading exists for completed outcomes.
+- **REQ-469**: MUST resolve the Pushover-channel `%%OUTPUT%%` for completed prompt-end outcomes as the trimmed content between the `~~~RESULT_SUMMARY` opening fence and its closing `~~~` fence line.
+- **REQ-470**: MUST keep the Pushover-channel `%%OUTPUT%%` unchanged for completed prompt-end outcomes whose final agent output exposes no closed `~~~RESULT_SUMMARY` fence.
+- **REQ-471**: MUST NOT substitute into Pushover title or Pushover text any final-agent-output text outside the `~~~RESULT_SUMMARY` fenced content for completed prompt-end outcomes.
+- **REQ-472**: MUST restrict the `~~~RESULT_SUMMARY` Pushover extraction to completed prompt-end outcomes and MUST NOT apply it to `PI_NOTIFY_CMD` command-notify substitution.
 - **REQ-473**: MUST detect management commands as exactly one argv token among `--ver`, `--version`, `--upgrade`, `--uninstall`, and `--help`.
 - **REQ-474**: MUST return no management command for every other non-empty argv shape so standard flag parsing stays untouched.
 - **REQ-524**: MUST detect two-token management argv shapes pairing `--upgrade` with exactly one of `--dev`, `--develop`, or `--force`, in either order.
@@ -732,8 +731,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-637**: MUST persist and restore the active workflow request alongside the workflow state across extension rebinding.
 - **REQ-638**: MUST render `done` with the non-error warning-token status value convention.
 - **REQ-649**: MUST resolve at command bootstrap whether each bundled agentic `req-<prompt>` command runs a `new` chain-of-thought from workflow state `idle` or a `continue` flow from any other startable state.
-- **REQ-653**: MUST inspect the final agent output of every completed agentic prompt run before emitting the final context-retention notification and MUST parse its `## **Next Workflow**` section for `~~~text` fenced command blocks.
-- **REQ-654**: MUST capture each fenced block whose first line is a pi-usereq slash command into one process-scoped Next-Workflow array as command plus input-text pairs in section order.
+- **REQ-653**: MUST inspect the final agent output of every completed agentic prompt run before emitting the final context-retention notification and MUST parse its `~~~NEXT_WORKFLOW` fenced block for command entries.
+- **REQ-654**: MUST capture each blank-line-separated fenced entry whose first line is a pi-usereq slash command into one process-scoped Next-Workflow array as command plus input-text pairs in entry order.
 - **REQ-655**: MUST purge every non-pi-usereq orchestration command from the Next-Workflow array while keeping the `/req-continue` exception.
 - **REQ-656**: MUST preserve the Next-Workflow array across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` recovery so `/req-continue` consumes the last completed flow's commands.
 - **REQ-657**: MUST render the numbered Next-Workflow list after the "Context retained." retention line, printing one command per line.
@@ -940,8 +939,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-182**: MUST verify `--get`, `--set`, and `--unset` JSON semantics, index bounds, reset rules, and no mutation on rejected operations.
 - **TST-183**: MUST verify `--print-raw` byte preservation plus global-config bootstrapping without overwriting an existing file.
 - **TST-184**: MUST verify `--info Global` renders `Global`-level detail prefixes `│   `, non-last leaf `│   │   `, last leaf `│       `, and last `Local` leaf eight spaces.
-- **TST-185**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: OK` merges, deletes the worktree plus branch, and returns workflow state `done`.
-- **TST-186**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS: ERROR` performs no merge or worktree deletion and parks workflow state `error`.
+- **TST-185**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS_OK` merges, deletes the worktree plus branch, and returns workflow state `done`.
+- **TST-186**: MUST verify a completed worktree-backed run whose final assistant text contains `STATUS_ERROR` performs no merge or worktree deletion and parks workflow state `error`.
 - **TST-187**: MUST verify a completed worktree-backed run whose final assistant text contains neither marker performs no merge or worktree deletion and parks blinking `warning`.
 - **TST-188**: MUST verify a completed worktree-backed run whose final assistant message exposes no text content block remains merge-eligible.
 - **TST-190**: MUST verify `scripts/pre-release-check.sh` passes `bash -n` and excludes `dist/` entries from generic artifact removal.
@@ -967,7 +966,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-211**: MUST verify develop-channel `--upgrade` spawns only the tag-pinned `pi install` child, never a `pi update` child, when the configured package entry is unpinned.
 - **TST-212**: MUST verify installed-version resolution returns the pi-managed installation version when the executing installation is a source checkout.
 - **TST-213**: MUST verify pi-managed-first installed-version resolution prefers the git installation root, then the npm installation root, then the executing manifest.
-- **TST-215**: MUST verify Next-Workflow capture parses `~~~text` fenced blocks from the `## **Next Workflow**` section, keeps pi-usereq commands plus `/req-continue`, purges other orchestration commands, and preserves section order.
+- **TST-215**: MUST verify Next-Workflow capture parses blank-line-separated command entries from the `~~~NEXT_WORKFLOW` fenced block, keeps pi-usereq commands plus `/req-continue`, purges other orchestration commands, and preserves entry order.
 - **TST-216**: MUST verify the final context-retention notification renders the numbered Next-Workflow list after the retention line with the first-20/last-10 quotation and omits quotation for commands without input text.
 - **TST-217**: MUST verify `req-continue` registers outside the bundled prompt inventory and delegates the selected first or one-based ordinal entry through the registered handler with the captured input text.
 - **TST-218**: MUST verify `req-continue` registers outside the bundled prompt inventory, executes from `idle` and `done` whenever the Next-Workflow array holds commands, and rejects empty arrays and invalid ordinals with an error and no workflow-state transition.
@@ -1321,12 +1320,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-584 | `src/index.ts` :: `handleExtensionStatusEvent` :: records the inspected status marker in the `workflow_closure` debug payload and the deferred terminal state. |
 | REQ-585 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandStatusMarker`; `src/index.ts` :: `handleExtensionStatusEvent` :: merges and deletes the worktree only for `ok` markers. |
 | REQ-586 | `src/index.ts` :: `handleExtensionStatusEvent` :: marker-blocked branches skip `finalizeMatchedPromptSuccess` and retain the worktree. |
-| REQ-587 | `src/index.ts` :: `handleExtensionStatusEvent` :: `STATUS: ERROR` parks workflow state `error` with one error notification. |
+| REQ-587 | `src/index.ts` :: `handleExtensionStatusEvent` :: `STATUS_ERROR` parks workflow state `error` with one error notification. |
 | REQ-588 | `src/index.ts` :: `handleExtensionStatusEvent` :: missing markers park workflow state `warning` with one warning notification. |
 | REQ-589 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandMergeGate` :: empty inspected text stays merge-eligible. |
 | REQ-590 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `warning` with the blinking `error` theme token. |
-| REQ-653 | `src/index.ts` :: `handleExtensionStatusEvent` capture block (L1770-1775) :: parses the terminal completed output through `captureNextWorkflowCommands(...)` before the retention notification; `src/core/next-workflow.ts` :: `parseNextWorkflowCommandEntries` (L167-199) :: last-section `~~~text` fenced-block parsing. |
-| REQ-654 | `src/core/next-workflow.ts` :: `appendNextWorkflowBlockEntry` (L112-136) plus `captureNextWorkflowCommands` (L205-216) :: command plus input-text pair capture into the process-scoped array in section order. |
+| REQ-653 | `src/index.ts` :: `handleExtensionStatusEvent` capture block :: parses the terminal completed output through `captureNextWorkflowCommands(...)` before the retention notification; `src/core/next-workflow.ts` :: `parseNextWorkflowCommandEntries` :: last `~~~NEXT_WORKFLOW` fenced-block entry parsing. |
+| REQ-654 | `src/core/next-workflow.ts` :: `appendNextWorkflowEntry` plus `captureNextWorkflowCommands` :: command plus input-text pair capture into the process-scoped array in entry order. |
 | REQ-655 | `src/core/next-workflow.ts` :: `appendNextWorkflowBlockEntry` purge branch (L126-129) plus `NEXT_WORKFLOW_COMMAND_NAMES` (L36-43) :: non-pi-usereq orchestration commands dropped while `req-continue` stays eligible. |
 | REQ-656 | `src/core/next-workflow.ts` :: `ProcessScopedNextWorkflowStore` (L78-84) plus `getNextWorkflowStore` (L95-103); `src/index.ts` :: `session_start` clear (L1624-1629) plus `promptCommandHandler` pre-dispatch wipe (L4003-4009) :: array preserved across terminal transitions, rebinds, `/new`, and `/req-reset` while `startup|reload` and the pre-dispatch `new`-flow wipe clear it. |
 | REQ-657 | `src/index.ts` :: `notifyContextRetentionReminder` (L1292-1311) :: appends the numbered list after the retention line; `src/core/next-workflow.ts` :: `formatNextWorkflowList` (L292-300) :: one command per line. |
@@ -1392,8 +1391,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-182 | `tests/config-cli.test.ts` :: CLI behavior tests cover JSON reads, typed writes, bounds, resets, and no mutation on rejection. |
 | TST-183 | `tests/config-cli.test.ts` :: CLI behavior tests cover raw-byte output and global bootstrapping without overwrite. |
 | TST-184 | `tests/config-cli.test.ts` :: `--info Global` regression asserts `│   `, `│   │   `, `│       `, and eight-space detail prefixes. |
-| TST-185 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts merge plus deletion for `STATUS: OK` final assistant text. |
-| TST-186 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus workflow `error` for `STATUS: ERROR` final assistant text. |
+| TST-185 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts merge plus deletion for `STATUS_OK` final assistant text. |
+| TST-186 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus workflow `error` for `STATUS_ERROR` final assistant text. |
 | TST-187 | `tests/extension-registration.test.ts` :: status-marker closure coverage asserts retained worktree plus blinking workflow `warning` when neither marker is present. |
 | TST-188 | `tests/extension-registration.test.ts` :: existing worktree closure fixtures with empty assistant content remain merge-eligible. |
 | TST-190 | `tests/gitignore-dist.test.ts` :: `scripts/pre-release-check.sh` passes `bash -n` and declares the `dist/` cleanup exclusion. |
@@ -1419,7 +1418,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-211 | `tests/package-manager.test.ts` :: unpinned develop-channel reconciliation coverage asserts one tag-pinned `pi install` child and no `pi update` child. |
 | TST-212 | `tests/package-manager.test.ts` :: source-checkout installed-version coverage asserts the pi-managed installation version instead of the executing manifest version. |
 | TST-213 | `tests/package-manager.test.ts` :: pi-managed-first resolution coverage asserts the git root, then npm root, then executing-manifest ordering. |
-| TST-215 | `tests/next-workflow.test.ts` :: parser, purge, section-selection, and capture-store tests (L35-99, L147-176) :: fenced-block parsing, `/req-continue` exception, orchestration-command purge, and section order. |
+| TST-215 | `tests/next-workflow.test.ts` :: parser, purge, fence-selection, and capture-store tests :: `~~~NEXT_WORKFLOW` fenced-entry parsing, `/req-continue` exception, orchestration-command purge, and entry order. |
 | TST-216 | `tests/next-workflow.test.ts` :: condensation plus list-rendering tests (L101-132); `tests/extension-registration.test.ts` :: `completed prompt run captures next-workflow commands and renders the numbered retention list` (L9934-10012) :: numbered list after the retention line with the first-20/last-10 quotation. |
 | TST-217 | `tests/extension-registration.test.ts` :: `req-continue delegates the selected first or ordinal entry through the registered handler` (L9875-9933); `tests/next-workflow.test.ts` :: ordinal-selection and handler-registry tests (L133-145, L177-191) :: first and one-based ordinal delegation with the captured input text. |
 | TST-218 | `tests/extension-registration.test.ts` :: `req-continue registers as a dedicated command, runs from idle with captured commands, and rejects empty arrays and invalid ordinals` (L9855) :: idle delegation plus error rejections without workflow-state transitions. |

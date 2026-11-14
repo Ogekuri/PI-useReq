@@ -110,6 +110,8 @@ import {
   getPromptCommandErrorContext,
   preparePromptCommandExecution,
   PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE,
+  PROMPT_COMMAND_STATUS_ERROR_KEYWORD,
+  PROMPT_COMMAND_STATUS_OK_KEYWORD,
   reapplyPromptCommandSessionSelection,
   resolvePromptCommandMergeGate,
   restorePromptCommandExecution,
@@ -1787,7 +1789,7 @@ async function handleExtensionStatusEvent(
         // Stage A (REQ-653/REQ-654/REQ-655): capture the Next-Workflow commands from the
         // terminal output of every completed agentic run before the final retention
         // notification renders them; worktree-backed completed runs additionally require
-        // the merge-eligible `STATUS: OK` marker so retained-worktree failures never feed
+        // the merge-eligible `STATUS_OK` marker so retained-worktree failures never feed
         // the array.
         captureNextWorkflowCommands(agentEndOutputText);
       }
@@ -1846,16 +1848,16 @@ async function handleExtensionStatusEvent(
         );
       } else if (markerBlockedOutcome) {
         // Status-marker gate (REQ-585/REQ-586/REQ-587/REQ-588): the completed run did not
-        // report `STATUS: OK`, so no merge and no worktree deletion may run. Keep
+        // report `STATUS_OK`, so no merge and no worktree deletion may run. Keep
         // the worktree execution session visible, park the workflow in `error` for
-        // `STATUS: ERROR` and in `warning` otherwise, and retain the active request
+        // `STATUS_ERROR` and in `warning` otherwise, and retain the active request
         // so `req-reset` can restore `base-path` and remove the retained worktree.
         const blockedWorkflowState = statusMarker === "error" ? "error" : "warning";
         notifyContextSafely(
           promptContext,
           statusMarker === "error"
-            ? `ERROR: Prompt closure retained worktree ${completionPromptRequest.worktreeDir} after STATUS: ERROR.`
-            : `WARNING: Prompt closure retained worktree ${completionPromptRequest.worktreeDir}; the agent output carries no STATUS: OK marker.`,
+            ? `ERROR: Prompt closure retained worktree ${completionPromptRequest.worktreeDir} after ${PROMPT_COMMAND_STATUS_ERROR_KEYWORD}.`
+            : `WARNING: Prompt closure retained worktree ${completionPromptRequest.worktreeDir}; the agent output carries no ${PROMPT_COMMAND_STATUS_OK_KEYWORD} marker.`,
           blockedWorkflowState === "error" ? "error" : "warning",
         );
         statusController.state.activeRunBelongsToPrompt = false;
@@ -1977,16 +1979,16 @@ async function handleExtensionStatusEvent(
         await finalizeMatchedPromptSuccess(pi, statusController, settledPromptRequest, ctx);
       } else if (pendingOutcome === "completed") {
         // Status-marker gate (REQ-585/REQ-586/REQ-587/REQ-588): the settled completed run
-        // reported no `STATUS: OK`, so merge and worktree deletion MUST NOT run. Keep
+        // reported no `STATUS_OK`, so merge and worktree deletion MUST NOT run. Keep
         // the worktree execution session visible, park the workflow in `error` for
-        // `STATUS: ERROR` and in `warning` otherwise, and retain the active request so
+        // `STATUS_ERROR` and in `warning` otherwise, and retain the active request so
         // `req-reset` can restore `base-path` and remove the retained worktree.
         const blockedWorkflowState = pendingStatusMarker === "error" ? "error" : "warning";
         notifyContextSafely(
           ctx,
           pendingStatusMarker === "error"
-            ? `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after STATUS: ERROR.`
-            : `WARNING: Prompt closure retained worktree ${settledPromptRequest.worktreeDir}; the agent output carries no STATUS: OK marker.`,
+            ? `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after ${PROMPT_COMMAND_STATUS_ERROR_KEYWORD}.`
+            : `WARNING: Prompt closure retained worktree ${settledPromptRequest.worktreeDir}; the agent output carries no ${PROMPT_COMMAND_STATUS_OK_KEYWORD} marker.`,
           blockedWorkflowState === "error" ? "error" : "warning",
         );
         statusController.state.activeRunBelongsToPrompt = false;
