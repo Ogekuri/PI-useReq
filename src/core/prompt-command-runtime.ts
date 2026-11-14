@@ -9,6 +9,7 @@ import path from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { ReqError } from "./errors.js";
 import { enforceContextOccupancyLimit, measureContextFileSizes } from "./context-file-size.js";
+import { parseAgentFinalOutput, type AgentFinalOutputParse } from "./agent-final-output.js";
 import { classifyPiNotifyOutcome, type PiNotifyOutcome } from "./pi-notify.js";
 import {
   normalizeGitWorktreePrefix,
@@ -2158,52 +2159,29 @@ export function classifyPromptCommandOutcome(
 }
 
 /**
- * @brief Stores the parseable `STATUS_OK` keyword marking a merge-eligible completed prompt run.
- * @details Bundled prompts emit this keyword as the terminal report line; `resolvePromptCommandStatusMarker` scans the final agent output for its last occurrence. Access complexity is O(1).
- * @satisfies REQ-584, REQ-585
- */
-export const PROMPT_COMMAND_STATUS_OK_KEYWORD = "STATUS_OK";
-
-/**
- * @brief Stores the parseable `STATUS_ERROR` keyword marking a failed prompt run.
- * @details Bundled prompts emit this keyword as the terminal report line; `resolvePromptCommandStatusMarker` scans the final agent output for its last occurrence. Access complexity is O(1).
- * @satisfies REQ-584, REQ-587
- */
-export const PROMPT_COMMAND_STATUS_ERROR_KEYWORD = "STATUS_ERROR";
-
-/**
- * @brief Represents one inspected prompt-orchestration status marker.
- * @details Discriminates the merge-gating facts recovered from the final agent output: `ok` for the `STATUS_OK` keyword, `error` for the `STATUS_ERROR` keyword, and `missing` when neither keyword is present. The alias is compile-time only and introduces no runtime cost.
+ * @brief Represents one inspected final-output gate of a terminal prompt-orchestration run.
+ * @details Discriminates the merge-gating facts recovered from the final agent output: `ok` for one final-output JSON carrying `result` `ok` (or one empty inspected output), `error` for one final-output JSON carrying `result` `error`, and `invalid` for one output that is not one valid final-output JSON object. The alias is compile-time only and introduces no runtime cost.
  * @satisfies REQ-584, REQ-585, REQ-586, REQ-587, REQ-588
  */
-export type PromptCommandStatusMarker = "ok" | "error" | "missing";
-
-/**
- * @brief Inspects the final agent output for the prompt-orchestration status keyword.
- * @details Scans the concatenated assistant text blocks for the last occurrence of the `STATUS_OK` and `STATUS_ERROR` keywords so the terminal keyword wins when earlier attempts reported a different status, and returns `missing` when neither keyword occurs. Runtime is O(n) in output length. No external state is mutated.
- * @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
- * @return {PromptCommandStatusMarker} Inspected status marker.
- * @satisfies REQ-584, REQ-585, REQ-587, REQ-588
- */
-export function resolvePromptCommandStatusMarker(agentOutputText: string): PromptCommandStatusMarker {
-  const okIndex = agentOutputText.lastIndexOf(PROMPT_COMMAND_STATUS_OK_KEYWORD);
-  const errorIndex = agentOutputText.lastIndexOf(PROMPT_COMMAND_STATUS_ERROR_KEYWORD);
-  if (okIndex < 0 && errorIndex < 0) {
-    return "missing";
-  }
-  return errorIndex > okIndex ? "error" : "ok";
-}
+export type PromptCommandStatusMarker = "ok" | "error" | "invalid";
 
 /**
  * @brief Resolves the merge gate for one terminal prompt-orchestration run.
- * @details Treats a terminal run that exposes no assistant text content block as merge-eligible because no report text was delivered for inspection, and otherwise delegates to `resolvePromptCommandStatusMarker(...)`. Runtime is O(n) in output length. No external state is mutated.
+ * @details Treats a terminal run that exposes no assistant text content block as merge-eligible because no report text was delivered for inspection; otherwise consumes the supplied final-output parse, mapping `result` `ok` to the merge-eligible `ok` gate, `result` `error` to the `error` gate, and every invalid parse to the `invalid` gate. Runtime is O(n) in output length when the parse is supplied lazily. No external state is mutated.
  * @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
+ * @param[in] finalOutput {AgentFinalOutputParse} Precomputed parse of `agentOutputText`; defaults to one fresh `parseAgentFinalOutput(...)` call so single-argument callers parse on demand.
  * @return {PromptCommandStatusMarker} Merge gate marker; only `ok` permits merge and worktree deletion.
- * @satisfies REQ-584, REQ-585, REQ-586, REQ-589
+ * @satisfies REQ-584, REQ-585, REQ-586, REQ-587, REQ-588, REQ-589
  */
-export function resolvePromptCommandMergeGate(agentOutputText: string): PromptCommandStatusMarker {
+export function resolvePromptCommandMergeGate(
+  agentOutputText: string,
+  finalOutput: AgentFinalOutputParse = parseAgentFinalOutput(agentOutputText),
+): PromptCommandStatusMarker {
   if (agentOutputText.trim().length === 0) {
     return "ok";
   }
-  return resolvePromptCommandStatusMarker(agentOutputText);
+  if (!finalOutput.ok) {
+    return "invalid";
+  }
+  return finalOutput.report.result;
 }

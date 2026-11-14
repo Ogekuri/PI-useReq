@@ -116,7 +116,7 @@ export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" 
 
 /**
  * @brief Stores the mutable runtime facts displayed by the status bar.
- * @details Persists the prompt-orchestration workflow state, the active orchestration request token, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome plus inspected status marker recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
+ * @details Persists the prompt-orchestration workflow state, the active orchestration request token, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome, inspected status gate, and blocked-gate message recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqStatusState {
   workflowState: PiUsereqWorkflowState;
@@ -132,6 +132,7 @@ export interface PiUsereqStatusState {
   activePromptRequest: PiUsereqPromptRequest | undefined;
   pendingFinalizationOutcome: PiNotifyOutcome | undefined;
   pendingFinalizationStatusMarker: PromptCommandStatusMarker | undefined;
+  pendingFinalizationBlockedMessage: string | undefined;
   agentSettledEventSupported: boolean | undefined;
 }
 
@@ -788,6 +789,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       activePromptRequest: undefined,
       pendingFinalizationOutcome: undefined,
       pendingFinalizationStatusMarker: undefined,
+      pendingFinalizationBlockedMessage: undefined,
       agentSettledEventSupported: undefined,
     },
     tickHandle: undefined,
@@ -1008,6 +1010,7 @@ export function updateExtensionStatus(
       controller.state.activePromptRequest = undefined;
       controller.state.pendingFinalizationOutcome = undefined;
       controller.state.pendingFinalizationStatusMarker = undefined;
+      controller.state.pendingFinalizationBlockedMessage = undefined;
     }
   }
 
@@ -1095,6 +1098,7 @@ export function updateExtensionStatus(
       controller.state.activePromptRequest = undefined;
       controller.state.pendingFinalizationOutcome = undefined;
       controller.state.pendingFinalizationStatusMarker = undefined;
+      controller.state.pendingFinalizationBlockedMessage = undefined;
       if (
         controller.state.workflowState === "checking"
         || controller.state.workflowState === "running"

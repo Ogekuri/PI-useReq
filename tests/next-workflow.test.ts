@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { parseAgentFinalOutput, type AgentFinalOutputCommandEntry } from "../src/core/agent-final-output.js";
 import {
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
@@ -18,44 +19,34 @@ import {
 } from "../src/core/next-workflow.js";
 
 /**
- * @brief Builds one synthetic final agent output carrying a `~~~NEXT_WORKFLOW` fence.
- * @details Joins the supplied fence body lines between the `~~~NEXT_WORKFLOW` opening fence and its `~~~` closing fence inside one synthetic report carrying the parseable `~~~RESULT_SUMMARY` summary block and the terminal `STATUS_OK` keyword, so parser tests exercise the exact fence contract emitted by bundled prompts. Runtime is O(n) in body length. No external state is mutated.
- * @param[in] fenceBodyLines {string[]} Fence body lines placed between the fence markers.
- * @return {string} Synthetic final agent output text.
+ * @brief Builds one synthetic final-output JSON carrying the supplied `next_commands` entries.
+ * @details Serializes one valid final-output JSON object with `result` `ok`, a fixed summary, and the supplied command entries so parser tests exercise the exact JSON contract emitted by bundled prompts. Runtime is O(n) in entry count. No external state is mutated.
+ * @param[in] nextCommands {AgentFinalOutputCommandEntry[]} Command entries placed inside the `next_commands` array.
+ * @return {string} Synthetic final agent output text parsing to one valid final-output JSON object.
  */
-function buildNextWorkflowOutput(fenceBodyLines: string[]): string {
-  return [
-    "~~~RESULT_SUMMARY",
-    "Implementation complete.",
-    "~~~",
-    "",
-    "~~~NEXT_WORKFLOW",
-    ...fenceBodyLines,
-    "~~~",
-    "",
-    "STATUS_OK",
-  ].join("\n");
+function buildFinalOutputJson(nextCommands: AgentFinalOutputCommandEntry[]): string {
+  return JSON.stringify({
+    result: "ok",
+    summary: "Implementation complete.",
+    next_commands: nextCommands,
+  });
 }
 
 /**
- * @brief Verifies Next-Workflow parsing keeps pi-usereq commands plus `/req-continue` in entry order.
- * @details Parses one synthetic final output carrying one `~~~NEXT_WORKFLOW` fence with a `/req-fix` entry with multi-line input text, a `/req-check` entry without input text, a `/req-continue` exception entry, and a purged `/new` orchestration entry, then asserts the captured entries preserve entry order, keep the multi-line input text, and drop the non-pi-usereq orchestration command. Runtime is O(n) in output length. Side effects are limited to process-scoped capture reset.
+ * @brief Verifies Next-Workflow mapping keeps pi-usereq commands plus `/req-continue` in entry order.
+ * @details Parses one synthetic final-output JSON whose `next_commands` array carries a `/req-fix` entry with input text, a `/req-check` entry without input text, a `/req-continue` exception entry, and a purged `/new` orchestration entry, then asserts the captured entries preserve entry order, keep the input text verbatim, and drop the non-pi-usereq orchestration command. Runtime is O(n) in entry count. Side effects are limited to process-scoped capture reset.
  * @return {void} Promise-less assertions executed synchronously.
- * @throws {AssertionError} Throws when the parser keeps purged commands, drops the `/req-continue` exception, or loses entry order.
+ * @throws {AssertionError} Throws when the mapping keeps purged commands, drops the `/req-continue` exception, or loses entry order.
  * @satisfies REQ-653, REQ-654, REQ-655, TST-215
  */
-test("next-workflow parser keeps pi-usereq commands plus req-continue and purges orchestration commands", () => {
+test("next-workflow mapping keeps pi-usereq commands plus req-continue and purges orchestration commands", () => {
   resetNextWorkflowStateForTests();
-  const entries = parseNextWorkflowCommandEntries(buildNextWorkflowOutput([
-    "/req-fix",
-    "Fix the flaky retry path in the orchestrator loop",
-    "",
-    "/req-check",
-    "",
-    "/new",
-    "",
-    "/req-continue",
-  ]));
+  const entries = parseNextWorkflowCommandEntries(parseAgentFinalOutput(buildFinalOutputJson([
+    { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    { command: "/req-check", text: "" },
+    { command: "/new", text: "" },
+    { command: "/req-continue", text: "" },
+  ])));
   assert.deepEqual(entries, [
     { command: "req-fix", inputText: "Fix the flaky retry path in the orchestrator loop" },
     { command: "req-check", inputText: "" },
@@ -64,31 +55,29 @@ test("next-workflow parser keeps pi-usereq commands plus req-continue and purges
 });
 
 /**
- * @brief Verifies Next-Workflow parsing selects the last fence and skips non-command entries.
- * @details Parses one output carrying an earlier `~~~NEXT_WORKFLOW` fence and a later one, then asserts only the terminal fence contributes entries and entries whose first non-empty line is not a `/` command are ignored. Runtime is O(n) in output length. Side effects are limited to process-scoped capture reset.
+ * @brief Verifies Next-Workflow mapping skips malformed entries and yields none for invalid parses.
+ * @details Parses one valid final-output JSON whose `next_commands` array mixes one well-formed entry with a non-object entry, an entry missing `command`, and an entry whose `command` is a number, asserting only the well-formed entry survives; additionally asserts one non-JSON terminal output parses to no valid final-output JSON and yields no entry. Runtime is O(n) in entry count. Side effects are limited to process-scoped capture reset.
  * @return {void} Promise-less assertions executed synchronously.
- * @throws {AssertionError} Throws when an earlier fence leaks entries or prose entries produce commands.
+ * @throws {AssertionError} Throws when malformed entries leak into the array or an invalid parse produces entries.
  * @satisfies REQ-653, REQ-654, TST-215
  */
-test("next-workflow parser selects the last fence and skips non-command entries", () => {
+test("next-workflow mapping skips malformed entries and yields none for invalid parses", () => {
   resetNextWorkflowStateForTests();
-  const entries = parseNextWorkflowCommandEntries([
-    "~~~NEXT_WORKFLOW",
-    "/req-check",
-    "~~~",
-    "",
-    "## **Evidence**",
-    "Evidence body.",
-    "",
-    "~~~NEXT_WORKFLOW",
-    "not-a-command line",
-    "",
-    "/req-refactor",
-    "Rename the duplicated retry helper",
-    "~~~",
-  ].join("\n"));
+  const rawPayload = JSON.stringify({
+    result: "ok",
+    summary: "Mixed entries.",
+    next_commands: [
+      "not-an-object",
+      { text: "missing command" },
+      { command: 7, text: "numeric command" },
+      { command: "req-refactor", text: "Rename the duplicated retry helper" },
+    ],
+  });
+  const entries = parseNextWorkflowCommandEntries(parseAgentFinalOutput(rawPayload));
   assert.deepEqual(entries, [{ command: "req-refactor", inputText: "Rename the duplicated retry helper" }]);
-  assert.deepEqual(parseNextWorkflowCommandEntries("No Next-Workflow fence here."), []);
+  const invalidParse = parseAgentFinalOutput("No final-output JSON here.");
+  assert.equal(invalidParse.ok, false);
+  assert.deepEqual(parseNextWorkflowCommandEntries(invalidParse), []);
 });
 
 /**
@@ -162,23 +151,23 @@ test("next-workflow ordinal selection maps empty to first and validates numeric 
 
 /**
  * @brief Verifies the process-scoped capture store replace, snapshot, and clear contract.
- * @details Asserts capture replaces the stored array with the parsed entries of the last output, snapshots are detached copies, clearing empties the array, and the captured inventory accepts every pi-usereq command while excluding the `/new` orchestration command. Runtime is O(n) in output length. Side effects are limited to process-scoped store mutation.
+ * @details Asserts capture replaces the stored array with the mapped entries of the last parsed final-output JSON, snapshots are detached copies, clearing empties the array, one invalid final-output parse captures no entry, and the captured inventory accepts every pi-usereq command while excluding the `/new` orchestration command. Runtime is O(n) in entry count. Side effects are limited to process-scoped store mutation.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when the store accumulates stale entries or leaks detached references.
- * @satisfies REQ-654, REQ-655, REQ-656, TST-215
+ * @satisfies REQ-653, REQ-654, REQ-655, REQ-656, TST-215
  */
 test("next-workflow capture store replaces entries and clears deterministically", () => {
   resetNextWorkflowStateForTests();
   assert.deepEqual(getNextWorkflowCommands(), []);
-  const captured = captureNextWorkflowCommands(buildNextWorkflowOutput([
-    "/req-check",
-  ]));
+  const captured = captureNextWorkflowCommands(parseAgentFinalOutput(buildFinalOutputJson([
+    { command: "/req-check", text: "" },
+  ])));
   assert.equal(captured.length, 1);
   const snapshot = getNextWorkflowCommands();
   assert.equal(snapshot.length, 1);
   snapshot.length = 0;
   assert.equal(getNextWorkflowCommands().length, 1);
-  captureNextWorkflowCommands("No section.");
+  captureNextWorkflowCommands(parseAgentFinalOutput("No final-output JSON section."));
   assert.deepEqual(getNextWorkflowCommands(), []);
   clearNextWorkflowCommands();
   assert.deepEqual(getNextWorkflowCommands(), []);

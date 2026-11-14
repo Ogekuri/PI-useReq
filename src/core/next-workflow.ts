@@ -1,24 +1,13 @@
 /**
  * @file
  * @brief Implements Next-Workflow command capture, process-scoped storage, list rendering, `/req-continue` selection, and `/req-continue-list` printing helpers.
- * @details Parses the `~~~NEXT_WORKFLOW` fenced block of the final agent output for blank-line-separated command entries, captures pi-usereq slash commands plus input-text pairs into one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the numbered list appended after the final context-retention notification, resolves one-based ordinal selection, and stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation. Runtime is O(n) in inspected output length per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+ * @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the numbered list appended after the final context-retention notification, resolves one-based ordinal selection, and stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
  * @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-672, REQ-676
  */
 
+import { type AgentFinalOutputCommandEntry, type AgentFinalOutputParse, resetAgentFinalOutputStateForTests } from "./agent-final-output.js";
 import { ReqError } from "./errors.js";
 import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
-
-/**
- * @brief Fence line opening the parseable Next-Workflow command block of one final agent output.
- * @details Matched as an exact trimmed line so the parser ignores prose mentions of the fence keyword and selects the last occurrence so the terminal report wins over earlier attempts. Access complexity is O(1).
- */
-const NEXT_WORKFLOW_FENCE_OPEN = "~~~NEXT_WORKFLOW";
-
-/**
- * @brief Fence line closing the parseable Next-Workflow command block.
- * @details Matched as an exact trimmed line after the opening fence; an unterminated fence extends through the output end so the bundled prompt contract still parses when the closing line is missing. Access complexity is O(1).
- */
-const NEXT_WORKFLOW_FENCE_CLOSE = "~~~";
 
 /**
  * @brief Lists the specialized non-prompt pi-usereq commands eligible for Next-Workflow capture.
@@ -61,7 +50,7 @@ export const REQ_CONTINUE_LIST_COMMAND_DESCRIPTION =
 
 /**
  * @brief Describes one captured Next-Workflow command entry.
- * @details Pairs the invokable pi-usereq command name without the leading slash with the trimmed fence-entry input text, preserving the entry order of the captured fence block. The interface is compile-time only and introduces no runtime cost.
+ * @details Pairs the invokable pi-usereq command name without the leading slash with the captured `next_commands` input text, preserving the entry order of the final-output JSON. The interface is compile-time only and introduces no runtime cost.
  * @satisfies REQ-654
  */
 export interface NextWorkflowCommandEntry {
@@ -109,107 +98,57 @@ function getNextWorkflowStore(): ProcessScopedNextWorkflowStore {
 }
 
 /**
- * @brief Appends one parsed fence entry when its first line names an allowed pi-usereq command.
- * @details Requires a non-empty first entry line starting with `/`, strips the leading slash, drops the entry when the command is outside the pi-usereq inventory so non-pi-usereq orchestration commands are purged while `/req-continue` stays, and joins the remaining non-empty entry lines as the input text. Runtime is O(n) in entry length. No external state is mutated.
+ * @brief Appends one parsed `next_commands` entry when it names an allowed pi-usereq command.
+ * @details Drops the entry when the normalized command is outside the pi-usereq inventory so non-pi-usereq orchestration commands are purged while `/req-continue` stays, and carries the entry `text` verbatim as the input text. Runtime is O(1). No external state is mutated.
  * @param[in,out] entries {NextWorkflowCommandEntry[]} Entry accumulator in entry order.
- * @param[in] entryLines {string[]} Raw fence-entry lines of one blank-line-separated entry.
+ * @param[in] entry {AgentFinalOutputCommandEntry} Normalized `next_commands` entry of the final-output JSON.
  * @return {void} No return value.
  * @satisfies REQ-654, REQ-655
- * @note Complexity: O(n) in entry length.
+ * @note Complexity: O(1).
  */
 function appendNextWorkflowEntry(
   entries: NextWorkflowCommandEntry[],
-  entryLines: string[],
+  entry: AgentFinalOutputCommandEntry,
 ): void {
-  const contentLines = entryLines.map((line) => line.trim());
-  const firstContentIndex = contentLines.findIndex((line) => line !== "");
-  if (firstContentIndex === -1) {
-    return;
-  }
-  const firstLine = contentLines[firstContentIndex] ?? "";
-  if (!firstLine.startsWith("/")) {
-    return;
-  }
-  const command = firstLine.slice(1).trim();
-  if (!NEXT_WORKFLOW_COMMAND_SET.has(command)) {
+  if (!NEXT_WORKFLOW_COMMAND_SET.has(entry.command)) {
     // Purge rule: non-pi-usereq orchestration commands never enter the array; the
     // `/req-continue` exception stays eligible because its name is in the inventory.
     return;
   }
-  const inputLines = contentLines.slice(firstContentIndex + 1).filter((line) => line !== "");
-  entries.push({ command, inputText: inputLines.join("\n") });
+  entries.push({ command: entry.command, inputText: entry.text });
 }
 
 /**
- * @brief Extracts the ordered lines following the last `~~~NEXT_WORKFLOW` opening fence.
- * @details Splits the inspected text into lines, selects the last exact trimmed opening-fence occurrence so the terminal report wins over earlier attempts, and returns the lines up to the exact trimmed closing-fence line or the end of the text. Runtime is O(n) in text length. No external state is mutated.
- * @param[in] agentOutputText {string} Final agent output text.
- * @return {string[]} Fence body lines, or an empty array when the opening fence is absent.
- * @satisfies REQ-653
- * @note Complexity: O(n) in text length.
+ * @brief Maps the `next_commands` entries of one parsed final-output JSON into Next-Workflow entries.
+ * @details Iterates the normalized `next_commands` entries in payload order, keeps each entry naming a pi-usereq slash command with its verbatim input text, and purges every non-pi-usereq orchestration command while keeping the `/req-continue` exception; one invalid final-output parse yields no entry because no consumable JSON object exists. Runtime is O(n) in entry count. No external state is mutated.
+ * @param[in] finalOutput {AgentFinalOutputParse} Parse result of the terminal agent output.
+ * @return {NextWorkflowCommandEntry[]} Captured command entries in payload order.
+ * @satisfies REQ-653, REQ-654, REQ-655
+ * @note Complexity: O(n) in entry count. Pure; no side effects.
  */
-function extractNextWorkflowFenceLines(agentOutputText: string): string[] {
-  const lines = agentOutputText.split(/\r?\n/);
-  let fenceStart = -1;
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index].trim() === NEXT_WORKFLOW_FENCE_OPEN) {
-      fenceStart = index;
-    }
-  }
-  if (fenceStart === -1) {
+export function parseNextWorkflowCommandEntries(
+  finalOutput: AgentFinalOutputParse,
+): NextWorkflowCommandEntry[] {
+  if (!finalOutput.ok) {
     return [];
   }
-  const fenceLines: string[] = [];
-  for (let index = fenceStart + 1; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (line.trim() === NEXT_WORKFLOW_FENCE_CLOSE) {
-      break;
-    }
-    fenceLines.push(line);
-  }
-  return fenceLines;
-}
-
-/**
- * @brief Parses every blank-line-separated command entry inside one `~~~NEXT_WORKFLOW` fenced block.
- * @details Selects the last fence block, splits its body into blank-line-separated entries, requires each entry's first non-empty line to be a `/`-prefixed pi-usereq slash command, joins the remaining non-empty entry lines as the input text, and skips entries naming purged non-pi-usereq orchestration commands or carrying no command at all. Runtime is O(n) in output length. No external state is mutated.
- * @param[in] agentOutputText {string} Final agent output text.
- * @return {NextWorkflowCommandEntry[]} Captured command entries in entry order.
- * @satisfies REQ-653, REQ-654, REQ-655
- * @note Complexity: O(n) in output length. Pure; no side effects.
- */
-export function parseNextWorkflowCommandEntries(agentOutputText: string): NextWorkflowCommandEntry[] {
   const entries: NextWorkflowCommandEntry[] = [];
-  let entryLines: string[] | undefined;
-  for (const line of extractNextWorkflowFenceLines(agentOutputText)) {
-    if (line.trim() === "") {
-      if (entryLines !== undefined) {
-        appendNextWorkflowEntry(entries, entryLines);
-        entryLines = undefined;
-      }
-      continue;
-    }
-    if (entryLines === undefined) {
-      entryLines = [];
-    }
-    entryLines.push(line);
-  }
-  if (entryLines !== undefined) {
-    appendNextWorkflowEntry(entries, entryLines);
+  for (const entry of finalOutput.report.next_commands) {
+    appendNextWorkflowEntry(entries, entry);
   }
   return entries;
 }
 
 /**
- * @brief Captures the Next-Workflow commands of one final agent output into the process-scoped array.
- * @details Parses the fenced command entries and replaces the stored array so the captured commands always reflect the last completed agentic flow, including the empty result when the terminal output carries no `~~~NEXT_WORKFLOW` fence. Runtime is O(n) in output length. Side effect: replaces process-scoped capture state.
- * @param[in] agentOutputText {string} Final agent output text of the completed run.
- * @return {NextWorkflowCommandEntry[]} Captured command entries in entry order.
+ * @brief Captures the Next-Workflow commands of one parsed final agent output into the process-scoped array.
+ * @details Maps the `next_commands` entries of the final-output JSON and replaces the stored array so the captured commands always reflect the last captured completed agentic flow, including the empty result when the terminal output parses to no valid final-output JSON. Runtime is O(n) in entry count. Side effect: replaces process-scoped capture state.
+ * @param[in] finalOutput {AgentFinalOutputParse} Parse result of the terminal agent output of the completed run.
+ * @return {NextWorkflowCommandEntry[]} Captured command entries in payload order.
  * @satisfies REQ-653, REQ-654, REQ-655, REQ-656
- * @note Complexity: O(n) in output length.
+ * @note Complexity: O(n) in entry count.
  */
-export function captureNextWorkflowCommands(agentOutputText: string): NextWorkflowCommandEntry[] {
-  const entries = parseNextWorkflowCommandEntries(agentOutputText);
+export function captureNextWorkflowCommands(finalOutput: AgentFinalOutputParse): NextWorkflowCommandEntry[] {
+  const entries = parseNextWorkflowCommandEntries(finalOutput);
   getNextWorkflowStore().entries = entries;
   return entries;
 }
@@ -368,7 +307,7 @@ export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: numbe
 
 /**
  * @brief Resets the process-scoped Next-Workflow state for deterministic tests.
- * @details Clears both the captured entries and the handler registry so one test can simulate independent pi host processes without leaking captured follow-up commands or stale handlers into later cases. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @details Clears both the captured entries and the handler registry plus the process-scoped captured final-output report so one test can simulate independent pi host processes without leaking captured follow-up commands, stale handlers, or stale report sections into later cases. Runtime is O(1). Side effect: mutates process-scoped state.
  * @return {void} No return value.
  * @note Complexity: O(1).
  */
@@ -376,4 +315,5 @@ export function resetNextWorkflowStateForTests(): void {
   const store = getNextWorkflowStore();
   store.entries = [];
   store.handlers.clear();
+  resetAgentFinalOutputStateForTests();
 }

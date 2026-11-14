@@ -99,6 +99,7 @@ import {
 } from "../src/core/extension-status.js";
 import { showPiUsereqSettingsMenu } from "../src/core/settings-menu.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
+import { parseAgentFinalOutput } from "../src/core/agent-final-output.js";
 import {
   createTempDir,
   initFixtureRepo,
@@ -664,6 +665,37 @@ function buildExpectedShowLocalConfigPath(cwd: string): string {
  */
 function buildExpectedShowGlobalConfigPath(): string {
   return buildExpectedDisplayPath(getGlobalConfigPath());
+}
+
+/**
+ * @brief Builds one valid final-output JSON text for terminal agent messages.
+ * @details Serializes one final-output JSON object carrying `result` `ok`, the supplied summary, optional string report fields, and the supplied `next_commands` entries so terminal-message fixtures satisfy the mandatory JSON contract. Runtime is O(n) in summary and entry length. No external state is mutated.
+ * @param[in] summary {string} Mandatory human-readable summary value.
+ * @param[in] nextCommands {Array<{ command: string; text?: string }>} Mandated follow-up command entries; defaults to none.
+ * @param[in] extra {Record<string, string>} Optional string report fields merged into the object.
+ * @return {string} Serialized final-output JSON text.
+ */
+function buildFinalOutputText(
+  summary: string,
+  nextCommands: Array<{ command: string; text?: string }> = [],
+  extra: Record<string, string> = {},
+): string {
+  return JSON.stringify({
+    result: "ok",
+    summary,
+    next_commands: nextCommands.map((entry) => ({ command: entry.command, text: entry.text ?? "" })),
+    ...extra,
+  });
+}
+
+/**
+ * @brief Captures Next-Workflow test entries through one valid final-output JSON.
+ * @details Parses one synthetic final-output JSON carrying the supplied command entries and feeds the parse result into `captureNextWorkflowCommands` so capture fixtures exercise the JSON capture path. Runtime is O(n) in entry count. Side effects are limited to process-scoped capture mutation.
+ * @param[in] commands {Array<{ command: string; text?: string }>} Command entries captured as the Next-Workflow array.
+ * @return {void} No return value.
+ */
+function captureTestNextWorkflowCommands(commands: Array<{ command: string; text?: string }>): void {
+  captureNextWorkflowCommands(parseAgentFinalOutput(buildFinalOutputText("Test summary.", commands)));
 }
 
 /**
@@ -3973,12 +4005,9 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
 
     // REQ-670: the recovered flow's captured follow-up commands must survive the reset
     // boundary so `/req-continue` can still dispatch them from the restored `idle` state.
-    captureNextWorkflowCommands([
-      "~~~NEXT_WORKFLOW",
-      "/req-fix",
-      "Fix the flaky retry path in the orchestrator loop",
-      "~~~",
-    ].join("\n"));
+    captureTestNextWorkflowCommands([
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    ]);
     assert.equal(getNextWorkflowCommands().length, 1);
 
     const sentMessageCountBeforeReset = pi.sentUserMessages.length;
@@ -5274,7 +5303,7 @@ test("prompt-command bootstrap ignores stale deleted-worktree session metadata o
 
 /**
  * @brief Verifies worktree merge-failure closure re-points the pi CLI to the retained worktree and renders the uniform merge-failure output.
- * @details Runs one worktree-backed `req-change` orchestration whose terminal output carries `STATUS_OK` plus two Next-Workflow commands, diverges `base-path` with a root commit plus a worktree commit so the `--ff-only` merge fails, and asserts the closure retains the worktree and branch, re-points `process.cwd()` and the context cwd mirror to the retained worktree execution path, emits the context-retention notification with the numbered Next-Workflow list before the error notification, terminates the error output with the hardcoded uniform merge-failure message, preserves the captured Next-Workflow array, and parks the workflow state in `error`. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @details Runs one worktree-backed `req-change` orchestration whose terminal output is one final-output JSON carrying `result` `ok` plus two Next-Workflow commands, diverges `base-path` with a root commit plus a worktree commit so the `--ff-only` merge fails, and asserts the closure retains the worktree and branch, re-points `process.cwd()` and the context cwd mirror to the retained worktree execution path, emits the context-retention notification with the markdown report sections plus the numbered Next-Workflow list before the error notification, terminates the error output with the hardcoded uniform merge-failure message, preserves the captured Next-Workflow array, and parks the workflow state in `error`. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after merge-failure closure assertions complete.
  * @throws {AssertionError} Throws when the closure deletes the worktree, leaves the pi CLI on `base-path`, drops the captured Next-Workflow array, or misrenders the retention or merge-failure error output.
  * @satisfies REQ-208, REQ-665, REQ-666, REQ-667, REQ-668, TST-083, TST-219
@@ -5322,20 +5351,14 @@ test("worktree-backed finalization transitions through merging, error, and idle 
         stopReason: "stop",
         content: [{
           type: "text",
-          text: [
-            "~~~RESULT_SUMMARY",
+          text: buildFinalOutputText(
             "Change completed inside the worktree.",
-            "~~~",
-            "",
-            "~~~NEXT_WORKFLOW",
-            "/req-fix",
-            "Fix the flaky retry path in the orchestrator loop",
-            "",
-            "/req-check",
-            "~~~",
-            "",
-            "STATUS_OK",
-          ].join("\n"),
+            [
+              { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+              { command: "/req-check" },
+            ],
+            { next_workflow: "Continue with the captured commands." },
+          ),
         }],
       }],
     }, ctx);
@@ -5358,12 +5381,18 @@ test("worktree-backed finalization transitions through merging, error, and idle 
     assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><error>\u001b\[5mchange ➔ error\u001b\[25m<\/error>/);
     const retentionNotifications = ctx.__state.notifications.filter(
       (entry: { message: string; level: string }) => entry.level === "info"
-        && entry.message.startsWith("Context retained."),
+        && entry.message.includes("Context retained."),
     );
     assert.equal(retentionNotifications.length, 1);
     assert.equal(
       retentionNotifications[0]?.message,
       [
+        "## **Summary**",
+        "Change completed inside the worktree.",
+        "",
+        "## **Next Workflow**",
+        "Continue with the captured commands.",
+        "",
         "Context retained. Start a new session with a clean context (/new) before the next /req-* command.",
         "1. /req-fix \"Fix the flaky retry ...rator loop\"",
         "2. /req-check",
@@ -8330,7 +8359,7 @@ test("agent_end pushover delivery survives mid-run run-timer loss and reuses liv
         {
           role: "assistant",
           stopReason: "stop",
-          content: [{ type: "text", text: "Final agent report after timer loss." }],
+          content: [{ type: "text", text: buildFinalOutputText("Final agent report after timer loss.") }],
         },
       ],
     }, ctx);
@@ -8377,7 +8406,7 @@ test("agent_end pushover reports the ended run's own duration after mid-run run-
     nowMs = 120_000;
     await pi.emit("agent_end", {
       messages: [
-        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Run A report." }] },
+        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("Run A report.") }] },
       ],
     }, ctx);
     // Run B: five minutes with the in-memory run timer cleared mid-run.
@@ -8388,7 +8417,7 @@ test("agent_end pushover reports the ended run's own duration after mid-run run-
     nowMs = 420_000;
     await pi.emit("agent_end", {
       messages: [
-        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Run B report." }] },
+        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("Run B report.") }] },
       ],
     }, ctx);
 
@@ -8528,7 +8557,7 @@ test("agent_end pushover recovers the run duration and prompt state on a fresh c
     nowMs = 420_000;
     await reboundPi.emit("agent_end", {
       messages: [
-        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Rebound run report." }] },
+        { role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("Rebound run report.") }] },
       ],
     }, reboundCtx);
 
@@ -8861,7 +8890,7 @@ test("prompt-end pushover requests honor global enable, event toggles, credentia
         {
           role: "assistant",
           stopReason: "stop",
-          content: [{ type: "text", text: "Final agent report from req-analyze." }],
+          content: [{ type: "text", text: buildFinalOutputText("Final agent report from req-analyze.") }],
         },
       ],
     }, ctx);
@@ -9578,20 +9607,20 @@ function buildExpectedFakeStatusFieldFragment(workflowState: string, workflowReq
 }
 
 /**
- * @brief Verifies a completed worktree-backed run reporting `STATUS_OK` merges and cleans up.
- * @details Starts one worktree-backed `req-change` execution, commits a worktree change, emits an `agent_end` whose final assistant text block ends with `STATUS_OK`, and settles the orchestration. The test proves the inspected marker permits the stash-assisted fast-forward merge from restored `base-path`, deletes the worktree plus branch, leaves the merged file in `base-path`, renders workflow state `idle`, and raises no error notification. Runtime is dominated by temporary git worktree setup, commit creation, and prompt finalization. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @brief Verifies a completed worktree-backed run reporting final-output JSON `result` `ok` merges and cleans up.
+ * @details Starts one worktree-backed `req-change` execution, commits a worktree change, emits an `agent_end` whose final assistant text block is one final-output JSON with `result` `ok`, and settles the orchestration. The test proves the parsed gate permits the stash-assisted fast-forward merge from restored `base-path`, deletes the worktree plus branch, leaves the merged file in `base-path`, renders workflow state `idle`, and raises no error notification. Runtime is dominated by temporary git worktree setup, commit creation, and prompt finalization. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after merge and cleanup assertions complete.
- * @throws {AssertionError} Throws when `STATUS_OK` closure skips the merge, retains the worktree, or renders a non-idle workflow state.
+ * @throws {AssertionError} Throws when the `result` `ok` closure skips the merge, retains the worktree, or renders a non-idle workflow state.
  * @satisfies REQ-584, REQ-585, TST-185
  */
-test("status-marker closure merges and deletes the worktree plus branch for a STATUS_OK final message", async () => {
+test("status-marker closure merges and deletes the worktree plus branch for a result ok final message", async () => {
   const run = await startStatusMarkerClosureRun("status-ok.ts");
   try {
     await run.emitAgentEnd([
       {
         role: "assistant",
         stopReason: "stop",
-        content: [{ type: "text", text: "Merged.\n\nSTATUS_OK" }],
+        content: [{ type: "text", text: buildFinalOutputText("Merged.") }],
       },
     ]);
     await run.pi.emit("agent_settled", {}, run.eventCtx);
@@ -9608,7 +9637,7 @@ test("status-marker closure merges and deletes the worktree plus branch for a ST
     );
     assert.ok(
       run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
-      "expected a rendered idle workflow state after STATUS_OK closure",
+      "expected a rendered idle workflow state after result ok closure",
     );
     assert.equal(
       run.eventCtx.__state.notifications.filter((entry: { level: string }) => entry.level === "error").length,
@@ -9620,20 +9649,20 @@ test("status-marker closure merges and deletes the worktree plus branch for a ST
 });
 
 /**
- * @brief Verifies a completed worktree-backed run reporting `STATUS_ERROR` retains the worktree in `error`.
- * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block ends with `STATUS_ERROR`, and settles the orchestration. The test proves the inspected marker blocks merge and worktree deletion, keeps the worktree directory plus branch and the execution-session context visible, renders the blinking error workflow state, and emits one worktree-retention error notification naming `STATUS_ERROR`. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @brief Verifies a completed worktree-backed run carrying final-output JSON `result` `error` retains the worktree in `error`.
+ * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block is one final-output JSON with `result` `error`, and settles the orchestration. The test proves the parsed gate blocks merge and worktree deletion, keeps the worktree directory plus branch and the execution-session context visible, renders the blinking error workflow state, and emits one worktree-retention error notification naming the JSON result. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after retention assertions complete.
- * @throws {AssertionError} Throws when `STATUS_ERROR` closure merges, deletes the worktree, or hides the error state.
+ * @throws {AssertionError} Throws when the `result` `error` closure merges, deletes the worktree, or hides the error state.
  * @satisfies REQ-584, REQ-586, REQ-587, TST-186
  */
-test("status-marker closure retains the worktree and parks error for a STATUS_ERROR final message", async () => {
+test("status-marker closure retains the worktree and parks error for a result error final message", async () => {
   const run = await startStatusMarkerClosureRun("status-error.ts");
   try {
     await run.emitAgentEnd([
       {
         role: "assistant",
         stopReason: "stop",
-        content: [{ type: "text", text: "Blocked.\n\nSTATUS_ERROR" }],
+        content: [{ type: "text", text: JSON.stringify({ result: "error", summary: "Blocked.", next_commands: [] }) }],
       },
     ]);
     await run.pi.emit("agent_settled", {}, run.eventCtx);
@@ -9649,7 +9678,7 @@ test("status-marker closure retains the worktree and parks error for a STATUS_ER
     );
     assert.ok(
       run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
-      "expected a rendered blinking error workflow state after STATUS_ERROR closure",
+      "expected a rendered blinking error workflow state after result error closure",
     );
     await assert.rejects(
       run.pi.commands.get("req-analyze")!.handler("Inspect src", run.commandCtx),
@@ -9659,9 +9688,9 @@ test("status-marker closure retains the worktree and parks error for a STATUS_ER
       run.eventCtx.__state.notifications.some(
         (entry: { message: string; level: string }) => entry.level === "error"
           && /retained worktree/.test(entry.message)
-          && /STATUS_ERROR/.test(entry.message),
+          && /JSON result "error"/.test(entry.message),
       ),
-      "expected one worktree-retention error notification naming STATUS_ERROR",
+      "expected one worktree-retention error notification naming the JSON result error gate",
     );
   } finally {
     run.cleanup();
@@ -9669,20 +9698,20 @@ test("status-marker closure retains the worktree and parks error for a STATUS_ER
 });
 
 /**
- * @brief Verifies a completed worktree-backed run without any terminal marker parks blinking `warning`.
- * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block carries no `STATUS_OK` or `STATUS_ERROR` marker, and settles the orchestration. The test proves the inspected output blocks merge and worktree deletion, retains the worktree directory plus branch, renders the blinking warning workflow state through the shared error theme token, and emits one worktree-retention warning notification. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
- * @return {Promise<void>} Promise resolved after markerless retention assertions complete.
- * @throws {AssertionError} Throws when a markerless closure merges, deletes the worktree, or renders a non-warning state.
+ * @brief Verifies a completed worktree-backed run without one valid final-output JSON parks `error` with the diagnostic.
+ * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block carries no valid final-output JSON, and settles the orchestration. The test proves the invalid output blocks merge and worktree deletion, retains the worktree directory plus branch, renders the blinking error workflow state through the shared error theme token, and emits one worktree-retention error notification carrying the JSON-contract diagnostic. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after invalid-output retention assertions complete.
+ * @throws {AssertionError} Throws when an invalid-output closure merges, deletes the worktree, or renders a non-error state.
  * @satisfies REQ-584, REQ-586, REQ-588, REQ-590, TST-187
  */
-test("status-marker closure retains the worktree and parks blinking warning when neither marker is present", async () => {
+test("status-marker closure retains the worktree and parks error when the final output is not one valid JSON object", async () => {
   const run = await startStatusMarkerClosureRun("status-missing.ts");
   try {
     await run.emitAgentEnd([
       {
         role: "assistant",
         stopReason: "stop",
-        content: [{ type: "text", text: "Report without a terminal marker." }],
+        content: [{ type: "text", text: "Report without a final-output JSON object." }],
       },
     ]);
     await run.pi.emit("agent_settled", {}, run.eventCtx);
@@ -9697,8 +9726,8 @@ test("status-marker closure retains the worktree and parks blinking warning when
       0,
     );
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning", "change"))),
-      "expected a rendered blinking warning workflow state when no marker is present",
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
+      "expected a rendered blinking error workflow state when the final output is not one valid JSON object",
     );
     await assert.rejects(
       run.pi.commands.get("req-analyze")!.handler("Inspect src", run.commandCtx),
@@ -9706,11 +9735,11 @@ test("status-marker closure retains the worktree and parks blinking warning when
     );
     assert.ok(
       run.eventCtx.__state.notifications.some(
-        (entry: { message: string; level: string }) => entry.level === "warning"
+        (entry: { message: string; level: string }) => entry.level === "error"
           && /retained worktree/.test(entry.message)
-          && /STATUS_OK/.test(entry.message),
+          && /not exactly one valid JSON object/.test(entry.message),
       ),
-      "expected one worktree-retention warning notification naming the missing STATUS_OK marker",
+      "expected one worktree-retention error notification carrying the JSON-contract diagnostic",
     );
   } finally {
     run.cleanup();
@@ -9756,13 +9785,13 @@ test("status-marker closure stays merge-eligible when the final assistant messag
 });
 
 /**
- * @brief Verifies dual-marker terminal output resolves to the last occurring marker.
- * @details Starts one worktree-backed `req-change` execution and emits an `agent_end` whose final assistant text quotes `STATUS_OK` and then repeats the reporting contract sentence ending with `STATUS_ERROR`. The test proves the documented last-occurrence scan selects the `error` gate, retains the worktree, and renders the blinking error workflow state instead of merging. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
- * @return {Promise<void>} Promise resolved after dual-marker assertions complete.
- * @throws {AssertionError} Throws when the later marker does not override the earlier one.
- * @satisfies REQ-584, REQ-587
+ * @brief Verifies one final-output JSON with an invalid `result` domain parks `error`.
+ * @details Starts one worktree-backed `req-change` execution and emits an `agent_end` whose final assistant text is one JSON object whose `result` carries the out-of-domain value `warn`. The test proves the mandatory `result` validation rejects the payload, retains the worktree, and renders the blinking error workflow state instead of merging. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after invalid-domain assertions complete.
+ * @throws {AssertionError} Throws when the out-of-domain `result` permits the merge.
+ * @satisfies REQ-584, REQ-588, REQ-678
  */
-test("status-marker closure resolves dual-marker output to the last occurring marker", async () => {
+test("status-marker closure rejects one final-output JSON with an invalid result domain", async () => {
   const run = await startStatusMarkerClosureRun("status-dual.ts");
   try {
     await run.emitAgentEnd([
@@ -9771,7 +9800,7 @@ test("status-marker closure resolves dual-marker output to the last occurring ma
         stopReason: "stop",
         content: [{
           type: "text",
-          text: "Quoting the reporting contract: STATUS_OK\n\nFinal line MUST be exactly: STATUS_OK or STATUS_ERROR",
+          text: JSON.stringify({ result: "warn", summary: "Invalid result domain.", next_commands: [] }),
         }],
       },
     ]);
@@ -9781,7 +9810,7 @@ test("status-marker closure resolves dual-marker output to the last occurring ma
     assert.equal(fs.existsSync(path.join(run.projectBase, "src", "status-dual.ts")), false);
     assert.ok(
       run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
-      "expected the later STATUS_ERROR occurrence to select the error gate",
+      "expected the invalid result domain to select the error gate",
     );
   } finally {
     run.cleanup();
@@ -9790,7 +9819,7 @@ test("status-marker closure resolves dual-marker output to the last occurring ma
 
 /**
  * @brief Verifies the terminal marker candidate follows the last `agent_end` run before settling.
- * @details Runs two worktree-backed `req-change` scenarios. The first emits `STATUS_OK` and then a markerless follow-up run before `agent_settled`, proving the later run replaces the earlier candidate and retains the worktree in `warning`. The second emits `STATUS_ERROR` and then a retried `STATUS_OK` run, proving the later marker makes closure merge, delete the worktree plus branch, and render `idle`. Runtime is dominated by two temporary git worktree fixtures plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @details Runs two worktree-backed `req-change` scenarios. The first emits one `result` `ok` final-output JSON and then one invalid follow-up run before `agent_settled`, proving the later run replaces the earlier candidate and retains the worktree in `error`. The second emits one `result` `error` final-output JSON and then one retried `result` `ok` run, proving the later gate makes closure merge, delete the worktree plus branch, and render `idle`. Runtime is dominated by two temporary git worktree fixtures plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after both overwrite directions are asserted.
  * @throws {AssertionError} Throws when the recorded candidate is not overwritten by the later run.
  * @satisfies REQ-463, REQ-584, REQ-585, REQ-588
@@ -9799,17 +9828,17 @@ test("status-marker closure lets the last agent_end run overwrite the recorded m
   const errorAfterOk = await startStatusMarkerClosureRun("status-overwrite-error.ts");
   try {
     await errorAfterOk.emitAgentEnd([
-      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "First attempt.\nSTATUS_OK" }] },
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("First attempt.") }] },
     ]);
     await errorAfterOk.emitAgentEnd([
-      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Follow-up attempt without a marker." }] },
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Follow-up attempt without one valid JSON object." }] },
     ]);
     await errorAfterOk.pi.emit("agent_settled", {}, errorAfterOk.eventCtx);
 
     assert.equal(fs.existsSync(errorAfterOk.executionBasePath), true);
     assert.ok(
-      errorAfterOk.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning", "change"))),
-      "expected the later markerless run to replace the earlier STATUS_OK candidate",
+      errorAfterOk.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
+      "expected the later invalid run to replace the earlier result ok candidate",
     );
   } finally {
     errorAfterOk.cleanup();
@@ -9818,10 +9847,10 @@ test("status-marker closure lets the last agent_end run overwrite the recorded m
   const okAfterError = await startStatusMarkerClosureRun("status-overwrite-ok.ts");
   try {
     await okAfterError.emitAgentEnd([
-      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "First attempt.\nSTATUS_ERROR" }] },
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: JSON.stringify({ result: "error", summary: "First attempt.", next_commands: [] }) }] },
     ]);
     await okAfterError.emitAgentEnd([
-      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Retried attempt.\nSTATUS_OK" }] },
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("Retried attempt.") }] },
     ]);
     await okAfterError.pi.emit("agent_settled", {}, okAfterError.eventCtx);
 
@@ -9830,7 +9859,7 @@ test("status-marker closure lets the last agent_end run overwrite the recorded m
     assert.equal(fs.existsSync(okAfterError.executionBasePath), false);
     assert.ok(
       okAfterError.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
-      "expected the later STATUS_OK run to replace the earlier STATUS_ERROR candidate",
+      "expected the later result ok run to replace the earlier result error candidate",
     );
   } finally {
     okAfterError.cleanup();
@@ -9839,25 +9868,25 @@ test("status-marker closure lets the last agent_end run overwrite the recorded m
 
 /**
  * @brief Verifies an earlier assistant message of the same run is not inspected for the marker.
- * @details Starts one worktree-backed `req-change` execution and emits an `agent_end` whose `messages` array carries an earlier assistant message containing `STATUS_OK` followed by the final assistant message without any marker. The test proves the inspection uses only the final assistant message, so closure treats the output as markerless, retains the worktree, and renders the blinking warning workflow state. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @details Starts one worktree-backed `req-change` execution and emits an `agent_end` whose `messages` array carries an earlier assistant message containing one `result` `ok` final-output JSON followed by the final assistant message without one valid JSON object. The test proves the inspection uses only the final assistant message, so closure treats the output as invalid, retains the worktree, and renders the blinking error workflow state. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after final-message inspection assertions complete.
- * @throws {AssertionError} Throws when an earlier-message marker permits the merge.
+ * @throws {AssertionError} Throws when an earlier-message final-output JSON permits the merge.
  * @satisfies REQ-584, REQ-588
  */
 test("status-marker closure inspects only the final assistant message of the terminal run", async () => {
   const run = await startStatusMarkerClosureRun("status-earlier-message.ts");
   try {
     await run.emitAgentEnd([
-      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Tool phase.\nSTATUS_OK" }] },
-      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Closing note without a marker." }] },
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("Tool phase.") }] },
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Closing note without one valid JSON object." }] },
     ]);
     await run.pi.emit("agent_settled", {}, run.eventCtx);
 
     assert.equal(fs.existsSync(run.executionBasePath), true);
     assert.equal(fs.existsSync(path.join(run.projectBase, "src", "status-earlier-message.ts")), false);
     assert.ok(
-      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("warning", "change"))),
-      "expected an earlier-message STATUS_OK marker to remain uninspected",
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
+      "expected an earlier-message final-output JSON to remain uninspected",
     );
   } finally {
     run.cleanup();
@@ -9887,14 +9916,10 @@ test("req-continue registers as a dedicated command, runs from idle with capture
     assert.ok(PROMPT_COMMAND_NAMES.every((promptName) => `req-${promptName}` !== "req-continue"));
 
     // REQ-660: `idle` stays runnable whenever the Next-Workflow array holds commands.
-    captureNextWorkflowCommands([
-      "~~~NEXT_WORKFLOW",
-      "/req-check",
-      "",
-      "/req-fix",
-      "Fix the flaky retry path in the orchestrator loop",
-      "~~~",
-    ].join("\n"));
+    captureTestNextWorkflowCommands([
+      { command: "/req-check" },
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    ]);
     const idleDelegationArgs: string[] = [];
     registerNextWorkflowCommandHandler("req-check", async (args) => {
       idleDelegationArgs.push(args);
@@ -9917,14 +9942,10 @@ test("req-continue registers as a dedicated command, runs from idle with capture
       /<accent>status:<\/accent><warning>idle<\/warning>/,
     );
 
-    captureNextWorkflowCommands([
-      "~~~NEXT_WORKFLOW",
-      "/req-check",
-      "",
-      "/req-fix",
-      "Fix the flaky retry path in the orchestrator loop",
-      "~~~",
-    ].join("\n"));
+    captureTestNextWorkflowCommands([
+      { command: "/req-check" },
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    ]);
     await pi.commands.get("req-workflow")!.handler("", ctx);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
@@ -9941,14 +9962,10 @@ test("req-continue registers as a dedicated command, runs from idle with capture
       /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
     );
 
-    captureNextWorkflowCommands([
-      "~~~NEXT_WORKFLOW",
-      "/req-check",
-      "",
-      "/req-fix",
-      "Fix the flaky retry path in the orchestrator loop",
-      "~~~",
-    ].join("\n"));
+    captureTestNextWorkflowCommands([
+      { command: "/req-check" },
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    ]);
     await assert.rejects(
       continueCommand!.handler("3", ctx),
       /outside the captured Next-Workflow range 1\.\.2/,
@@ -9985,14 +10002,10 @@ test("req-continue delegates the selected first or ordinal entry through the reg
     piUsereqExtension(pi);
     const ctx = createFakeCtx(projectBase);
     await pi.emit("session_start", { reason: "startup" }, ctx);
-    captureNextWorkflowCommands([
-      "~~~NEXT_WORKFLOW",
-      "/req-check",
-      "",
-      "/req-fix",
-      "Fix the flaky retry path in the orchestrator loop",
-      "~~~",
-    ].join("\n"));
+    captureTestNextWorkflowCommands([
+      { command: "/req-check" },
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    ]);
     await pi.commands.get("req-workflow")!.handler("", ctx);
 
     const checkCalls: Array<{ args: string; ctx: unknown }> = [];
@@ -10057,15 +10070,11 @@ test("req-continue-list prints the full captured list from every workflow state 
     );
 
     const fullInputText = "Fix the flaky retry path in the orchestrator loop and verify every regression suite stays green";
-    const captureOutput = [
-      "~~~NEXT_WORKFLOW",
-      "/req-fix",
-      fullInputText,
-      "",
-      "/req-check",
-      "~~~",
-    ].join("\n");
-    captureNextWorkflowCommands(captureOutput);
+    const captureParse = parseAgentFinalOutput(buildFinalOutputText("Test summary.", [
+      { command: "/req-fix", text: fullInputText },
+      { command: "/req-check" },
+    ]));
+    captureNextWorkflowCommands(captureParse);
     const expectedList = `1. /req-fix "${fullInputText}"\n2. /req-check`;
 
     // REQ-672: full untruncated input text in capture order; the condensed retention
@@ -10087,7 +10096,7 @@ test("req-continue-list prints the full captured list from every workflow state 
       ctx.__state.statuses.get("pi-usereq") ?? "",
       /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
     );
-    captureNextWorkflowCommands(captureOutput);
+    captureNextWorkflowCommands(captureParse);
     const notificationsBeforeDonePrint = ctx.__state.notifications.length;
     await listCommand!.handler("", ctx);
     assert.equal(ctx.__state.editorText, expectedList);
@@ -10129,13 +10138,13 @@ test("req-continue-list prints the full captured list from every workflow state 
 });
 
 /**
- * @brief Verifies a completed prompt run captures the Next-Workflow commands and renders the numbered list inside the final retention notification.
- * @details Runs one no-worktree `req-change` orchestration until workflow state becomes `running`, emits `agent_end` whose final assistant text carries a `~~~NEXT_WORKFLOW` fenced block with a purged `/new` entry plus two pi-usereq command entries, and asserts the terminal `done` state, the numbered list rendered one command per line after the `Context retained.` retention line with the first-20/last-10 quotation, and the subsequent `/req-continue` ordinal delegation carrying the exact captured input text. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @brief Verifies a completed prompt run captures the Next-Workflow commands and renders the report plus numbered list inside the final retention notification.
+ * @details Runs one no-worktree `req-change` orchestration until workflow state becomes `running`, emits `agent_end` whose final assistant text is one final-output JSON whose `next_commands` array carries a purged `/new` entry plus two pi-usereq command entries, and asserts the terminal `done` state, the markdown report sections rendered before the `Context retained.` retention line, the numbered list rendered one command per line after the retention line with the first-20/last-10 quotation, and the subsequent `/req-continue` ordinal delegation carrying the exact captured input text. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after capture and retention assertions complete.
- * @throws {AssertionError} Throws when the capture skips the terminal output, the retention notification omits or misrenders the list, or the ordinal delegation forwards the wrong input text.
- * @satisfies REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, TST-216
+ * @throws {AssertionError} Throws when the capture skips the terminal output, the retention notification omits or misrenders the report or the list, or the ordinal delegation forwards the wrong input text.
+ * @satisfies REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, TST-216
  */
-test("completed prompt run captures next-workflow commands and renders the numbered retention list", async () => {
+test("completed prompt run captures next-workflow commands and renders the report plus numbered retention list", async () => {
   resetNextWorkflowStateForTests();
   const { projectBase } = initFixtureRepo();
   const previousCwd = process.cwd();
@@ -10163,22 +10172,18 @@ test("completed prompt run captures next-workflow commands and renders the numbe
         stopReason: "stop",
         content: [{
           type: "text",
-          text: [
-            "~~~RESULT_SUMMARY",
+          text: buildFinalOutputText(
             "Retry handling improved.",
-            "~~~",
-            "",
-            "~~~NEXT_WORKFLOW",
-            "/req-fix",
-            "Fix the flaky retry path in the orchestrator loop",
-            "",
-            "/req-check",
-            "",
-            "/new",
-            "~~~",
-            "",
-            "STATUS_OK",
-          ].join("\n"),
+            [
+              { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+              { command: "/req-check" },
+              { command: "/new" },
+            ],
+            {
+              outcome: "Retry handling hardened.",
+              next_workflow: "Continue with the captured commands.",
+            },
+          ),
         }],
       }],
     }, ctx);
@@ -10189,12 +10194,21 @@ test("completed prompt run captures next-workflow commands and renders the numbe
     );
     const retentionNotifications = ctx.__state.notifications.filter(
       (entry: { message: string; level: string }) => entry.level === "info"
-        && entry.message.startsWith("Context retained."),
+        && entry.message.includes("Context retained."),
     );
     assert.equal(retentionNotifications.length, 1);
     assert.equal(
       retentionNotifications[0]?.message,
       [
+        "## **Summary**",
+        "Retry handling improved.",
+        "",
+        "## **Outcome**",
+        "Retry handling hardened.",
+        "",
+        "## **Next Workflow**",
+        "Continue with the captured commands.",
+        "",
         "Context retained. Start a new session with a clean context (/new) before the next /req-* command.",
         "1. /req-fix \"Fix the flaky retry ...rator loop\"",
         "2. /req-check",
@@ -10273,12 +10287,9 @@ test("req-continue recovers the persisted terminal state on a replacement runtim
       pendingPromptRequest: undefined,
       activePromptRequest: undefined,
     });
-    captureNextWorkflowCommands([
-      "~~~NEXT_WORKFLOW",
-      "/req-fix",
-      "Fix the flaky retry path in the orchestrator loop",
-      "~~~",
-    ].join("\n"));
+    captureTestNextWorkflowCommands([
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    ]);
 
     const fixSpyArgs: string[] = [];
     registerNextWorkflowCommandHandler("req-fix", async (args) => {
@@ -10318,14 +10329,10 @@ test("next-workflow wipe runs right before a new flow dispatch and survives fail
     const ctx = createFakeCtx(projectBase);
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
-    captureNextWorkflowCommands([
-      "~~~NEXT_WORKFLOW",
-      "/req-fix",
-      "Fix the flaky retry path in the orchestrator loop",
-      "",
-      "/req-check",
-      "~~~",
-    ].join("\n"));
+    captureTestNextWorkflowCommands([
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+      { command: "/req-check" },
+    ]);
     assert.equal(getNextWorkflowCommands().length, 2);
 
     // REQ-669: failed slash-command pre-checks preserve the captured array.
