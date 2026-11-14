@@ -867,7 +867,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ---
 
-# config-cli-schema.ts | TypeScript | 1788L | 49 symbols | 5 imports | 58 comments
+# config-cli-schema.ts | TypeScript | 1804L | 49 symbols | 5 imports | 58 comments
 > Path: `src/core/config-cli-schema.ts`
 - @brief Defines the canonical configuration CLI schema plus typed path operations.
 - @details Supplies one strict schema for the additive `--get`, `--set`, `--unset`, `--print`, and `--info` commands over the existing local and global configuration scopes. Defaults derive from `getDefaultConfig(...)` and enum domains derive from the existing configuration inventories, so the CLI never keeps a diverging parameter list. The module resolves case-sensitive colon paths, parses typed input, validates whole payloads, projects payloads onto the schema, and applies mutations to in-memory scope payloads. Runtime is O(n) in schema node count plus payload size. No filesystem writes occur here.
@@ -920,27 +920,27 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @details Keys the projected local and global payloads used by read and mutation commands so a single invocation can resolve any schema path. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-533
 
-### fn `function getSchemaDefaults(): ConfigScopeState` (L239-248)
+### fn `function getSchemaDefaults(): ConfigScopeState` (L249-258)
 - @brief Resolves the projected default payloads for both scopes.
 - @details Derives defaults from the canonical `getDefaultConfig(...)` composition rather than duplicating literals. Runtime is O(n) on the first call in config size and O(1) afterwards. Side effect: initializes the module-local cache.
 - @return {ConfigScopeState} Projected default payloads keyed by scope.
 - @satisfies REQ-562
 
-### fn `function isPlainObject(value: unknown): value is Record<string, unknown>` (L264-266)
+### fn `function isPlainObject(value: unknown): value is Record<string, unknown>` (L274-276)
 - @brief Tests whether one value is a plain JSON object.
 - @details Rejects null, arrays, and non-objects so payload handling never misclassifies containers. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate value.
 - @return {boolean} `true` when the value is a plain object.
 - @satisfies REQ-535
 
-### fn `export function cloneConfigSchemaValue(value: unknown): unknown` (L275-277)
+### fn `export function cloneConfigSchemaValue(value: unknown): unknown` (L285-287)
 - @brief Clones one JSON-compatible schema value.
 - @details Uses `structuredClone` so populated defaults never leak mutations back into the cached schema. Runtime is O(n) in value size. No external state is mutated.
 - @param[in] value {unknown} Value to clone.
 - @return {unknown} Detached clone.
 - @satisfies REQ-561
 
-### fn `function getAtPath(source: unknown, keys: readonly string[]): unknown` (L287-296)
+### fn `function getAtPath(source: unknown, keys: readonly string[]): unknown` (L297-306)
 - @brief Reads one nested value from a payload.
 - @details Walks the supplied key chain, returning `undefined` when any intermediate value is not a plain object. Runtime is O(k) in key count. No external state is mutated.
 - @param[in] source {unknown} Payload root.
@@ -948,7 +948,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown} Nested value or `undefined`.
 - @satisfies REQ-545
 
-### fn `function setAtPath(target: Record<string, unknown>, keys: readonly string[], value: unknown): void` (L307-321)
+### fn `function setAtPath(target: Record<string, unknown>, keys: readonly string[], value: unknown): void` (L317-331)
 - @brief Writes one nested value into a payload, creating intermediate objects.
 - @details Mutates the supplied payload so mutation commands can share one scope state. Runtime is O(k) in key count. Side effect: mutates `target`.
 - @param[in] keys {readonly string[]} Key chain.
@@ -957,41 +957,41 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {void} No return value.
 - @satisfies REQ-545
 
-### fn `function getScopeToken(scope: ConfigScope): string` (L330-332)
+### fn `function getScopeToken(scope: ConfigScope): string` (L340-342)
 - @brief Resolves the scope token rendered as the top-level section identifier.
 - @details Maps each persisted scope onto the documented capitalised section token. Runtime is O(1). No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
 - @return {string} Top-level section token.
 - @satisfies REQ-533
 
-### fn `function createParameter(input:` (L341-379)
+### fn `function createParameter(input:` (L351-389)
 - @brief Builds one parameter schema node with defaults resolved from the shared default payloads.
 - @details Computes the full canonical path, resolves the default value by access chain, and copies every supplied domain or field descriptor. Runtime is O(1) plus clone cost of the default. No external state is mutated.
 - @param[in] input {object} Parameter descriptor without path and default.
 - @return {ConfigSchemaParameter} Completed parameter node.
 - @satisfies REQ-552, REQ-562
 
-### fn `function createStaticCheckLanguageSections(scope: ConfigScope): ConfigSchemaSection[]` (L388-425)
+### fn `function createStaticCheckLanguageSections(scope: ConfigScope): ConfigSchemaSection[]` (L398-435)
 - @brief Builds the per-language static-check sections for one scope.
 - @details Emits one fixed-schema branch per documented language, exposing only the persisted `enabled` leaf for the local scope and only the persisted `checkers` array for the global scope. Runtime is O(l). No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
 - @return {ConfigSchemaSection[]} Ordered language sections.
 - @satisfies REQ-541, REQ-562
 
-### fn `export function getConfigSchema(): ConfigSchemaSection[]` (L433-732)
+### fn `export function getConfigSchema(): ConfigSchemaSection[]` (L443-742)
 - @brief Builds the complete canonical configuration schema tree.
 - @details Composes the `Local` and `Global` scopes in persisted-key order, including the fixed-schema `static-check` dictionary branches, and memoizes the result. Runtime is O(n) on the first call in schema size and O(1) afterwards. No external state is mutated beyond the module-local cache.
 - @return {ConfigSchemaSection[]} Top-level schema sections.
 - @satisfies REQ-533, REQ-541, REQ-562
 
-### fn `export function getScopeSection(scope: ConfigScope): ConfigSchemaSection` (L933-935)
+### fn `export function getScopeSection(scope: ConfigScope): ConfigSchemaSection` (L943-945)
 - @brief Resolves one top-level schema section by scope.
 - @details Looks up the `Local` or `Global` section from the cached schema. Runtime is O(1). No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
 - @return {ConfigSchemaSection} Matching top-level section.
 - @satisfies REQ-533
 
-### fn `function parseIndexToken(token: string, configPath: string): number` (L946-951)
+### fn `function parseIndexToken(token: string, configPath: string): number` (L956-961)
 - @brief Parses one array index token into a non-negative integer.
 - @details Accepts only canonical decimal text without signs or leading zeroes so ambiguous indices are rejected deterministically. Runtime is O(n) in token length. No external state is mutated.
 - @param[in] token {string} Raw index token.
@@ -1000,7 +1000,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the token is not a canonical non-negative decimal index.
 - @satisfies REQ-545, REQ-546
 
-### fn `function resolveParameterTail(` (L963-1002)
+### fn `function resolveParameterTail(` (L973-1012)
 - @brief Resolves the array-operation tail of one parameter path.
 - @details Recognises `:append`, `:+`, `:insert:<Idx>`, `:<Idx>`, and `:<Idx>:<Field>` tails for array parameters and rejects every other extension deterministically. Runtime is O(t) in tail token count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Array parameter being extended.
@@ -1010,7 +1010,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the tail cannot address the parameter.
 - @satisfies REQ-545, REQ-546
 
-### fn `export function resolveConfigTarget(configPath: string): ConfigTarget` (L1012-1041)
+### fn `export function resolveConfigTarget(configPath: string): ConfigTarget` (L1022-1051)
 - @brief Resolves one canonical configuration path against the schema.
 - @details Performs a case-sensitive token walk from the top-level scope section and delegates array tails to `resolveParameterTail(...)`. Runtime is O(p) in path token count. No external state is mutated.
 - @param[in] configPath {string} Canonical colon-separated path.
@@ -1018,7 +1018,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws for empty, malformed, or unknown paths.
 - @satisfies REQ-545, REQ-546
 
-### fn `export function readParameterValue(` (L1051-1057)
+### fn `export function readParameterValue(` (L1061-1067)
 - @brief Reads one parameter value from a scope payload with default fallback.
 - @details Returns the persisted value when present and a detached default clone otherwise. Runtime is O(k) in key count. No external state is mutated.
 - @param[in] scopePayload {Record<string, unknown>} Scope payload.
@@ -1026,7 +1026,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown} Parameter value.
 - @satisfies REQ-539
 
-### fn `function projectObjectRow(` (L1067-1085)
+### fn `function projectObjectRow(` (L1077-1095)
 - @brief Projects one object-array row onto the fixed field schema.
 - @details Copies only known field tokens, preserves string-array fields as string arrays, and drops unknown keys so payloads stay schema-strict. Runtime is O(f) in field count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Object-array parameter.
@@ -1034,7 +1034,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {Record<string, unknown>} Projected row.
 - @satisfies REQ-561
 
-### fn `export function projectParameterValue(` (L1095-1109)
+### fn `export function projectParameterValue(` (L1105-1119)
 - @brief Projects one parameter value onto the schema.
 - @details Normalizes object-array rows and string arrays so `--print` and `--get` always expose schema-shaped values. Runtime is O(n) in array size. No external state is mutated.
 - @param[in] scopePayload {Record<string, unknown>} Scope payload.
@@ -1042,7 +1042,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown} Projected value.
 - @satisfies REQ-561
 
-### fn `export function projectSectionValue(` (L1119-1130)
+### fn `export function projectSectionValue(` (L1129-1140)
 - @brief Projects one section subtree onto the schema.
 - @details Emits the exact persisted key order for every schema child, reading values through the absolute access chain so nested `static-check` branches resolve correctly. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Section to project.
@@ -1050,7 +1050,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {Record<string, unknown>} Projected subtree.
 - @satisfies REQ-561
 
-### fn `export function projectScopePayload(` (L1140-1145)
+### fn `export function projectScopePayload(` (L1150-1155)
 - @brief Projects one complete scope payload onto the schema.
 - @details Drops every key absent from the canonical schema before a write so the persisted file always validates against the strict schema. Runtime is O(n) in schema node count. No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
@@ -1058,29 +1058,29 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {Record<string, unknown>} Schema-projected payload.
 - @satisfies REQ-561
 
-### fn `export function getSectionDefaultValue(section: ConfigSchemaSection): Record<string, unknown>` (L1154-1156)
+### fn `export function getSectionDefaultValue(section: ConfigSchemaSection): Record<string, unknown>` (L1164-1166)
 - @brief Resolves the projected default subtree of one section.
 - @details Projects the section against the cached default payload so `--unset` and branch completion restore documented defaults. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Section to resolve.
 - @return {Record<string, unknown>} Default subtree.
 - @satisfies REQ-556, REQ-562
 
-### fn `function collectScopeParameters(section: ConfigSchemaSection): ConfigSchemaParameter[]` (L1164-1175)
+### fn `function collectScopeParameters(section: ConfigSchemaSection): ConfigSchemaParameter[]` (L1174-1185)
 - @brief Collects every schema parameter leaf of one scope section.
 - @details Performs one depth-first walk over the section children, recursing into nested sections and collecting parameter leaves in schema declaration order so default-merge and write-pruning consumers iterate one canonical parameter list. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Section subtree to walk.
 - @return {ConfigSchemaParameter[]} Parameter leaves in schema order.
 
-### fn `const visit = (node: ConfigSchemaNode): void =>` (L1166-1172)
+### fn `const visit = (node: ConfigSchemaNode): void =>` (L1176-1182)
 
-### fn `function isSameSchemaValue(left: unknown, right: unknown): boolean` (L1184-1186)
+### fn `function isSameSchemaValue(left: unknown, right: unknown): boolean` (L1194-1196)
 - @brief Tests whether two schema values render identical JSON text.
 - @details Compares `JSON.stringify(...)` renderings so typed scalars, arrays, and objects compare structurally while `undefined` equals only `undefined`. Runtime is O(n) in serialized size. No external state is mutated.
 - @param[in] left {unknown} First schema value.
 - @param[in] right {unknown} Second schema value.
 - @return {boolean} `true` when both values render identical JSON text.
 
-### fn `export function mergeScopeAbsentDefaults(` (L1197-1213)
+### fn `export function mergeScopeAbsentDefaults(` (L1207-1223)
 - @brief Merges one fallback value into every absent parameter chain of one raw scope payload.
 - @details Starts from a detached clone of the raw payload so persisted values, unknown persisted keys, and key order stay verbatim, then writes the fallback payload value into every schema parameter chain absent from the raw payload. Runtime is O(n) in schema node count plus clone size. No external state is mutated beyond the returned clone.
 - @param[in] scope {ConfigScope} Owning configuration scope.
@@ -1089,7 +1089,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {Record<string, unknown>} Merged payload holding every persisted value plus one fallback value per absent parameter chain.
 - @satisfies REQ-690, REQ-691
 
-### fn `export function buildScopeMutationWritePayload(` (L1225-1245)
+### fn `export function buildScopeMutationWritePayload(` (L1235-1255)
 - @brief Builds the sparse write payload of one `--set` or `--unset` mutation.
 - @details Starts from a detached clone of the raw persisted payload so absent parameter chains stay absent, writes the projected post-mutation value into every chain present in the raw payload, and additionally writes only chains whose value the requested operation changed relative to the pre-mutation payload; unknown raw keys are preserved verbatim. Runtime is O(n) in schema node count plus clone size. No external state is mutated beyond the returned clone.
 - @param[in] scope {ConfigScope} Owning configuration scope.
@@ -1099,7 +1099,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {Record<string, unknown>} Sparse payload holding every persisted chain plus operation-changed chains only.
 - @satisfies REQ-693
 
-### fn `function parseJsonInput(rawValue: string, pathLabel: string): unknown` (L1256-1263)
+### fn `function parseJsonInput(rawValue: string, pathLabel: string): unknown` (L1266-1273)
 - @brief Parses one raw JSON value for a configuration input.
 - @details Wraps `JSON.parse(...)` with a deterministic English diagnostic naming the target path. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] rawValue {string} Raw JSON text.
@@ -1108,7 +1108,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the text is not valid JSON.
 - @satisfies REQ-536
 
-### fn `function validateStringArray(` (L1276-1296)
+### fn `function validateStringArray(` (L1286-1306)
 - @brief Validates one string-array field or parameter item list.
 - @details Requires string items, enforces non-empty items when configured, and checks the optional enum domain before reporting the first failure. Runtime is O(n) in item count. No external state is mutated.
 - @param[in] value {unknown} Candidate array.
@@ -1119,7 +1119,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the array or one item is invalid.
 - @satisfies REQ-535, REQ-536
 
-### fn `function validateFieldValue(field: ConfigSchemaField, value: unknown, pathLabel: string): void` (L1308-1319)
+### fn `function validateFieldValue(field: ConfigSchemaField, value: unknown, pathLabel: string): void` (L1318-1335)
 - @brief Validates one fixed object-array field value.
 - @details Branches between scalar strings and string arrays so field updates share one validation contract. Runtime is O(n) in array size. No external state is mutated.
 - @param[in] field {ConfigSchemaField} Field schema.
@@ -1129,7 +1129,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the value violates the field schema.
 - @satisfies REQ-535
 
-### fn `function validateObjectRow(` (L1331-1355)
+### fn `function validateObjectRow(` (L1347-1371)
 - @brief Validates one object-array row against its fixed field schema.
 - @details Rejects non-objects, unknown field tokens, missing required fields, and invalid field values so rows stay strict. Runtime is O(f) in field count. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Object-array parameter.
@@ -1139,7 +1139,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the row violates the schema.
 - @satisfies REQ-535, REQ-555
 
-### fn `export function validateParameterValue(` (L1367-1411)
+### fn `export function validateParameterValue(` (L1383-1427)
 - @brief Validates one parameter value against the strict schema.
 - @details Enforces scalar type, non-empty constraints, selection domains, integer domains, and array item or row schemas. Runtime is O(n) in array size. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Parameter schema.
@@ -1149,7 +1149,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the value violates the schema.
 - @satisfies REQ-535
 
-### fn `function validateSectionPayload(` (L1422-1440)
+### fn `function validateSectionPayload(` (L1438-1456)
 - @brief Recursively validates one section subtree against the schema.
 - @details Requires section values to be objects, every schema leaf to be present, and every leaf value to validate; unknown keys are ignored here because projection already removed them. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Section schema.
@@ -1158,7 +1158,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when a section or leaf violates the schema.
 - @satisfies REQ-535
 
-### fn `export function validateScopePayload(scope: ConfigScope, payload: Record<string, unknown>): void` (L1451-1453)
+### fn `export function validateScopePayload(scope: ConfigScope, payload: Record<string, unknown>): void` (L1467-1469)
 - @brief Validates one complete schema-projected scope payload.
 - @details Enforces every leaf constraint of the supplied scope before a write so invalid payloads never reach disk. Runtime is O(n) in schema node count. No external state is mutated.
 - @param[in] scope {ConfigScope} Configuration scope.
@@ -1167,7 +1167,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the payload violates the schema.
 - @satisfies REQ-535
 
-### fn `export function parseWholeParameterInput(` (L1464-1480)
+### fn `export function parseWholeParameterInput(` (L1480-1496)
 - @brief Parses one whole-parameter `--set` input into the schema type.
 - @details Keeps strings verbatim, parses JSON for typed scalars and arrays, and delegates value-shape errors to the caller validation. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Target parameter.
@@ -1176,7 +1176,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown} Parsed candidate value.
 - @satisfies REQ-536
 
-### fn `export function parseArrayItemInput(` (L1492-1505)
+### fn `export function parseArrayItemInput(` (L1508-1521)
 - @brief Parses one array-item `--set` input into the item type.
 - @details Keeps primitive string items verbatim and requires exactly one JSON object for object-array items. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] parameter {ConfigSchemaParameter} Array parameter.
@@ -1186,7 +1186,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when an object-array item is not one JSON object.
 - @satisfies REQ-536, REQ-555
 
-### fn `export function parseFieldInput(` (L1516-1522)
+### fn `export function parseFieldInput(` (L1532-1538)
 - @brief Parses one object-array field `--set` input into the field type.
 - @details Keeps string fields verbatim and parses JSON for string-array fields. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] field {ConfigSchemaField} Target field.
@@ -1195,7 +1195,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown} Parsed field value.
 - @satisfies REQ-536
 
-### fn `function parseSectionInput(rawValue: string, pathLabel: string): Record<string, unknown>` (L1533-1539)
+### fn `function parseSectionInput(rawValue: string, pathLabel: string): Record<string, unknown>` (L1549-1555)
 - @brief Parses one section `--set` input into a JSON object.
 - @details Requires exactly one JSON object for branch replacement so arrays and scalars are rejected deterministically. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] rawValue {string} Raw CLI value.
@@ -1204,7 +1204,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the input is not one JSON object.
 - @satisfies REQ-536
 
-### fn `function completeSectionValue(` (L1551-1581)
+### fn `function completeSectionValue(` (L1567-1597)
 - @brief Completes one section replacement value from supplied keys plus schema defaults.
 - @details Rejects unknown keys, fills omitted children with documented defaults, and validates every supplied leaf so branch replacement always yields a complete schema-compatible subtree. Runtime is O(n) in subtree node count. No external state is mutated.
 - @param[in] section {ConfigSchemaSection} Target section.
@@ -1214,7 +1214,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws when the supplied object violates the schema.
 - @satisfies REQ-535, REQ-561
 
-### fn `function getMutableArray(` (L1591-1603)
+### fn `function getMutableArray(` (L1607-1619)
 - @brief Resolves the mutable array value of one array parameter.
 - @details Returns the persisted array or installs a detached default array when the payload omits one. Runtime is O(k) in access chain length. Side effect: may mutate the supplied payload.
 - @param[in] parameter {ConfigSchemaParameter} Array parameter.
@@ -1222,7 +1222,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @return {unknown[]} Mutable array value.
 - @satisfies REQ-546
 
-### fn `function throwIndexRangeError(` (L1616-1628)
+### fn `function throwIndexRangeError(` (L1632-1644)
 - @brief Rejects one out-of-range array index with a deterministic diagnostic.
 - @details Reports the target path, rejected index, valid range, and append affordance so index failures stay actionable. Runtime is O(1). No external state is mutated.
 - @param[in] index {number} Rejected index.
@@ -1233,7 +1233,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Always throws.
 - @satisfies REQ-546
 
-### fn `export function applyConfigSet(` (L1640-1704)
+### fn `export function applyConfigSet(` (L1656-1720)
 - @brief Applies one `--set` mutation to a mutable scope state.
 - @details Parses and validates the supplied input for the resolved target kind, then mutates the owning scope payload: whole branches, whole parameters, single array rows, single fields, appends, and inserts. Runtime is O(n) in affected array or subtree size. Side effect: mutates `state`.
 - @param[in] target {ConfigTarget} Resolved target.
@@ -1243,7 +1243,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws on invalid input or out-of-range indices without mutating state.
 - @satisfies REQ-535, REQ-536, REQ-546, REQ-556
 
-### fn `export function applyConfigUnset(state: ConfigScopeState, target: ConfigTarget): void` (L1715-1756)
+### fn `export function applyConfigUnset(state: ConfigScopeState, target: ConfigTarget): void` (L1731-1772)
 - @brief Applies one `--unset` mutation to a mutable scope state.
 - @details Restores documented defaults for parameters and branches, removes one array row with index compaction, and resets or removes one object-array field under the required-field rule. Runtime is O(n) in affected array or subtree size. Side effect: mutates `state`.
 - @param[in] target {ConfigTarget} Resolved reset target.
@@ -1252,7 +1252,7 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 - @throws {ReqError} Throws for append/insert targets, out-of-range indices, or required field resets.
 - @satisfies REQ-546, REQ-556
 
-### fn `export function readArrayTargetValue(` (L1767-1769)
+### fn `export function readArrayTargetValue(` (L1783-1785)
 - @brief Reads one array row or field value for `--get`.
 - @details Resolves the array, enforces the read index range, and projects object rows onto the schema. Runtime is O(1) plus row projection. No external state is mutated.
 - @param[in] scopePayload {Record<string, unknown>} Scope payload.
@@ -1272,47 +1272,47 @@ import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 |`ConfigSchemaNode`|type||102||
 |`ConfigTarget`|type||109||
 |`ConfigScopeState`|iface||122-125|export interface ConfigScopeState|
-|`getSchemaDefaults`|fn||239-248|function getSchemaDefaults(): ConfigScopeState|
-|`isPlainObject`|fn||264-266|function isPlainObject(value: unknown): value is Record<s...|
-|`cloneConfigSchemaValue`|fn||275-277|export function cloneConfigSchemaValue(value: unknown): u...|
-|`getAtPath`|fn||287-296|function getAtPath(source: unknown, keys: readonly string...|
-|`setAtPath`|fn||307-321|function setAtPath(target: Record<string, unknown>, keys:...|
-|`getScopeToken`|fn||330-332|function getScopeToken(scope: ConfigScope): string|
-|`createParameter`|fn||341-379|function createParameter(input:|
-|`createStaticCheckLanguageSections`|fn||388-425|function createStaticCheckLanguageSections(scope: ConfigS...|
-|`getConfigSchema`|fn||433-732|export function getConfigSchema(): ConfigSchemaSection[]|
-|`getScopeSection`|fn||933-935|export function getScopeSection(scope: ConfigScope): Conf...|
-|`parseIndexToken`|fn||946-951|function parseIndexToken(token: string, configPath: strin...|
-|`resolveParameterTail`|fn||963-1002|function resolveParameterTail(|
-|`resolveConfigTarget`|fn||1012-1041|export function resolveConfigTarget(configPath: string): ...|
-|`readParameterValue`|fn||1051-1057|export function readParameterValue(|
-|`projectObjectRow`|fn||1067-1085|function projectObjectRow(|
-|`projectParameterValue`|fn||1095-1109|export function projectParameterValue(|
-|`projectSectionValue`|fn||1119-1130|export function projectSectionValue(|
-|`projectScopePayload`|fn||1140-1145|export function projectScopePayload(|
-|`getSectionDefaultValue`|fn||1154-1156|export function getSectionDefaultValue(section: ConfigSch...|
-|`collectScopeParameters`|fn||1164-1175|function collectScopeParameters(section: ConfigSchemaSect...|
-|`visit`|fn||1166-1172|const visit = (node: ConfigSchemaNode): void =>|
-|`isSameSchemaValue`|fn||1184-1186|function isSameSchemaValue(left: unknown, right: unknown)...|
-|`mergeScopeAbsentDefaults`|fn||1197-1213|export function mergeScopeAbsentDefaults(|
-|`buildScopeMutationWritePayload`|fn||1225-1245|export function buildScopeMutationWritePayload(|
-|`parseJsonInput`|fn||1256-1263|function parseJsonInput(rawValue: string, pathLabel: stri...|
-|`validateStringArray`|fn||1276-1296|function validateStringArray(|
-|`validateFieldValue`|fn||1308-1319|function validateFieldValue(field: ConfigSchemaField, val...|
-|`validateObjectRow`|fn||1331-1355|function validateObjectRow(|
-|`validateParameterValue`|fn||1367-1411|export function validateParameterValue(|
-|`validateSectionPayload`|fn||1422-1440|function validateSectionPayload(|
-|`validateScopePayload`|fn||1451-1453|export function validateScopePayload(scope: ConfigScope, ...|
-|`parseWholeParameterInput`|fn||1464-1480|export function parseWholeParameterInput(|
-|`parseArrayItemInput`|fn||1492-1505|export function parseArrayItemInput(|
-|`parseFieldInput`|fn||1516-1522|export function parseFieldInput(|
-|`parseSectionInput`|fn||1533-1539|function parseSectionInput(rawValue: string, pathLabel: s...|
-|`completeSectionValue`|fn||1551-1581|function completeSectionValue(|
-|`getMutableArray`|fn||1591-1603|function getMutableArray(|
-|`throwIndexRangeError`|fn||1616-1628|function throwIndexRangeError(|
-|`applyConfigSet`|fn||1640-1704|export function applyConfigSet(|
-|`applyConfigUnset`|fn||1715-1756|export function applyConfigUnset(state: ConfigScopeState,...|
-|`readArrayTargetValue`|fn||1767-1769|export function readArrayTargetValue(|
+|`getSchemaDefaults`|fn||249-258|function getSchemaDefaults(): ConfigScopeState|
+|`isPlainObject`|fn||274-276|function isPlainObject(value: unknown): value is Record<s...|
+|`cloneConfigSchemaValue`|fn||285-287|export function cloneConfigSchemaValue(value: unknown): u...|
+|`getAtPath`|fn||297-306|function getAtPath(source: unknown, keys: readonly string...|
+|`setAtPath`|fn||317-331|function setAtPath(target: Record<string, unknown>, keys:...|
+|`getScopeToken`|fn||340-342|function getScopeToken(scope: ConfigScope): string|
+|`createParameter`|fn||351-389|function createParameter(input:|
+|`createStaticCheckLanguageSections`|fn||398-435|function createStaticCheckLanguageSections(scope: ConfigS...|
+|`getConfigSchema`|fn||443-742|export function getConfigSchema(): ConfigSchemaSection[]|
+|`getScopeSection`|fn||943-945|export function getScopeSection(scope: ConfigScope): Conf...|
+|`parseIndexToken`|fn||956-961|function parseIndexToken(token: string, configPath: strin...|
+|`resolveParameterTail`|fn||973-1012|function resolveParameterTail(|
+|`resolveConfigTarget`|fn||1022-1051|export function resolveConfigTarget(configPath: string): ...|
+|`readParameterValue`|fn||1061-1067|export function readParameterValue(|
+|`projectObjectRow`|fn||1077-1095|function projectObjectRow(|
+|`projectParameterValue`|fn||1105-1119|export function projectParameterValue(|
+|`projectSectionValue`|fn||1129-1140|export function projectSectionValue(|
+|`projectScopePayload`|fn||1150-1155|export function projectScopePayload(|
+|`getSectionDefaultValue`|fn||1164-1166|export function getSectionDefaultValue(section: ConfigSch...|
+|`collectScopeParameters`|fn||1174-1185|function collectScopeParameters(section: ConfigSchemaSect...|
+|`visit`|fn||1176-1182|const visit = (node: ConfigSchemaNode): void =>|
+|`isSameSchemaValue`|fn||1194-1196|function isSameSchemaValue(left: unknown, right: unknown)...|
+|`mergeScopeAbsentDefaults`|fn||1207-1223|export function mergeScopeAbsentDefaults(|
+|`buildScopeMutationWritePayload`|fn||1235-1255|export function buildScopeMutationWritePayload(|
+|`parseJsonInput`|fn||1266-1273|function parseJsonInput(rawValue: string, pathLabel: stri...|
+|`validateStringArray`|fn||1286-1306|function validateStringArray(|
+|`validateFieldValue`|fn||1318-1335|function validateFieldValue(field: ConfigSchemaField, val...|
+|`validateObjectRow`|fn||1347-1371|function validateObjectRow(|
+|`validateParameterValue`|fn||1383-1427|export function validateParameterValue(|
+|`validateSectionPayload`|fn||1438-1456|function validateSectionPayload(|
+|`validateScopePayload`|fn||1467-1469|export function validateScopePayload(scope: ConfigScope, ...|
+|`parseWholeParameterInput`|fn||1480-1496|export function parseWholeParameterInput(|
+|`parseArrayItemInput`|fn||1508-1521|export function parseArrayItemInput(|
+|`parseFieldInput`|fn||1532-1538|export function parseFieldInput(|
+|`parseSectionInput`|fn||1549-1555|function parseSectionInput(rawValue: string, pathLabel: s...|
+|`completeSectionValue`|fn||1567-1597|function completeSectionValue(|
+|`getMutableArray`|fn||1607-1619|function getMutableArray(|
+|`throwIndexRangeError`|fn||1632-1644|function throwIndexRangeError(|
+|`applyConfigSet`|fn||1656-1720|export function applyConfigSet(|
+|`applyConfigUnset`|fn||1731-1772|export function applyConfigUnset(state: ConfigScopeState,...|
+|`readArrayTargetValue`|fn||1783-1785|export function readArrayTargetValue(|
 
 
 ---
@@ -1677,7 +1677,7 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# config.ts | TypeScript | 1229L | 46 symbols | 8 imports | 56 comments
+# config.ts | TypeScript | 1243L | 46 symbols | 9 imports | 56 comments
 > Path: `src/core/config.ts`
 - @brief Loads, normalizes, merges, and persists pi-usereq configuration.
 - @details Defines the effective configuration schema, split local/global persistence contracts, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq.json` and `~/.config/pi-usereq/config.json`.
@@ -1691,100 +1691,102 @@ import {
 import {
 import {
 import { normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
+import { supportsStaticCheckDirScan } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 ```
 
 ## Definitions
 
-### iface `export interface StaticCheckEntry` (L63-67)
+### iface `export interface StaticCheckEntry` (L65-70)
 - @brief Describes one static-check module configuration entry.
-- @details Each record identifies the checker module and optional command or parameter list used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
+- @details Each record identifies the checker module, optional command or parameter list, and the optional `scan-by-dir` flag selecting recursive directory-scan execution over per-file execution used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
+- @satisfies REQ-694
 
-- type `export type StaticCheckEnabled = "enable" | "disable";` (L73)
+- type `export type StaticCheckEnabled = "enable" | "disable";` (L76)
 - @brief Represents the persisted per-language static-check enable flag.
 - @details Narrows persisted per-language enablement to the documented `enable|disable` domain reused by configuration loading, menu toggles, and static-check dispatch. The alias is compile-time only and introduces no runtime cost.
-### iface `export interface StaticCheckLanguageConfig` (L79-82)
+### iface `export interface StaticCheckLanguageConfig` (L82-85)
 - @brief Describes one persisted per-language static-check configuration object.
 - @details Couples the per-language enable flag with the ordered checker-entry list so menu toggles, config serialization, and execution dispatch can distinguish configured-but-disabled languages from enabled active checker lists. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface UseReqConfig` (L88-132)
+### iface `export interface UseReqConfig` (L91-135)
 - @brief Defines the effective pi-usereq configuration schema.
 - @details Captures the merged runtime view produced from project-local and cross-project persisted scopes, including documentation paths, source/test directory selection, per-language static-check enablement plus checker configuration, prompt-command worktree settings, enabled startup tools, and notification settings while excluding runtime-derived path metadata. The interface is compile-time only and introduces no runtime side effects.
 
-### iface `interface LocalStaticCheckLanguageConfig` (L138-140)
+### iface `interface LocalStaticCheckLanguageConfig` (L141-143)
 - @brief Defines one persisted local static-check language configuration.
 - @details Stores only the project-local enable flag so checker command definitions can live exclusively in global configuration. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface GlobalStaticCheckLanguageConfig` (L146-148)
+### iface `interface GlobalStaticCheckLanguageConfig` (L149-151)
 - @brief Defines one persisted global static-check language configuration.
 - @details Stores only the cross-project checker-entry array so project-local files do not duplicate command definitions. The interface is compile-time only and introduces no runtime cost.
 
-### iface `interface UseReqLocalConfig` (L155-172)
+### iface `interface UseReqLocalConfig` (L158-175)
 - @brief Defines the persisted local pi-usereq configuration schema.
 - @details Captures project-scoped directory, debug, and static-check enablement fields written to `<base-path>/.pi-usereq.json` while excluding the runtime-only `DEBUG_ENABLED` flag and global notification, tool, git, and checker-command settings. The interface is compile-time only and introduces no runtime side effects.
 - @satisfies REQ-426
 
-### iface `interface UseReqGlobalConfig` (L178-206)
+### iface `interface UseReqGlobalConfig` (L181-209)
 - @brief Defines the persisted global pi-usereq configuration schema.
 - @details Captures cross-project static-check checker commands, enabled tool names, git automation fields, and notification settings written to `~/.config/pi-usereq/config.json` while excluding project-local directory and debug fields. The interface is compile-time only and introduces no runtime side effects.
 
-### fn `export function normalizeContextFilesFlag(value: unknown): boolean` (L238-240)
+### fn `export function normalizeContextFilesFlag(value: unknown): boolean` (L241-243)
 - @brief Normalizes one persisted context-file injection flag.
 - @details Returns the documented default (`true`) for missing or non-boolean values and preserves only explicit boolean input, so any malformed persisted entry keeps context-file injection enabled. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted context-file flag.
 - @return {boolean} Normalized context-file injection flag.
 - @satisfies REQ-328
 
-### fn `function cloneStaticCheckEntry(entry: StaticCheckEntry): StaticCheckEntry` (L340-349)
+### fn `function cloneStaticCheckEntry(entry: StaticCheckEntry): StaticCheckEntry` (L347-357)
 - @brief Clones one static-check entry into its persisted shape.
 - @details Copies only the stable module, cmd, and params fields so runtime-only or unknown metadata never leaks into persisted configuration payloads. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Source static-check entry.
 - @return {StaticCheckEntry} Persistable static-check entry clone.
 
-### fn `export function createStaticCheckLanguageConfig(` (L358-367)
+### fn `export function createStaticCheckLanguageConfig(` (L366-375)
 - @brief Builds one per-language static-check configuration object.
 - @details Clones the supplied checker entries, derives `enabled` from the explicit argument or checker-list emptiness, and preserves checker order for menu and dispatch determinism. Runtime is O(c + p). No external state is mutated.
 - @param[in] checkers {StaticCheckEntry[]} Ordered checker entries.
 - @param[in] enabled {StaticCheckEnabled | undefined} Optional explicit enable flag.
 - @return {StaticCheckLanguageConfig} Normalized per-language config object.
 
-### fn `function createLocalStaticCheckLanguageConfig(` (L375-379)
+### fn `function createLocalStaticCheckLanguageConfig(` (L383-387)
 - @brief Builds one persisted local static-check language configuration object.
 - @details Stores only the normalized enable flag so local project files do not duplicate checker command definitions. Runtime is O(1). No external state is mutated.
 - @param[in] enabled {StaticCheckEnabled} Canonical per-language enable flag.
 - @return {LocalStaticCheckLanguageConfig} Persistable local static-check language config.
 
-### fn `function createGlobalStaticCheckLanguageConfig(` (L387-393)
+### fn `function createGlobalStaticCheckLanguageConfig(` (L395-401)
 - @brief Builds one persisted global static-check language configuration object.
 - @details Clones the supplied checker entries so global configuration retains only stable module, command, and parameter fields. Runtime is O(c + p). No external state is mutated.
 - @param[in] checkers {StaticCheckEntry[]} Ordered checker entries.
 - @return {GlobalStaticCheckLanguageConfig} Persistable global static-check language config.
 
-### fn `function getDefaultGlobalStaticCheckConfig(): Record<string, GlobalStaticCheckLanguageConfig>` (L400-405)
+### fn `function getDefaultGlobalStaticCheckConfig(): Record<string, GlobalStaticCheckLanguageConfig>` (L408-413)
 - @brief Returns the documented default global static-check checker map.
 - @details Emits one checker-array object for every supported language, preserving documented Command entries for default-enabled languages and `[]` for every other language. Runtime is O(l + c). No external state is mutated.
 - @return {Record<string, GlobalStaticCheckLanguageConfig>} Fresh default global checker map.
 
-### fn `function getDefaultLocalStaticCheckConfig(` (L413-422)
+### fn `function getDefaultLocalStaticCheckConfig(` (L421-430)
 - @brief Returns the documented default local static-check enable map.
 - @details Derives each per-language enable flag from the supplied global checker definitions using the rule `enable` when `checkers` is non-empty and `disable` otherwise. Runtime is O(l). No external state is mutated.
 - @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker map used to derive default enablement.
 - @return {Record<string, LocalStaticCheckLanguageConfig>} Fresh default local enable map.
 
-### fn `function mergeStaticCheckConfig(` (L431-450)
+### fn `function mergeStaticCheckConfig(` (L439-458)
 - @brief Merges local enable flags with global checker definitions into the effective static-check map.
 - @details Unifies all language keys present in either persisted scope, applies the default-enable rule when the local scope omits a language, and clones checker entries into the effective runtime config. Runtime is O(l + c + p). No external state is mutated.
 - @param[in] localStaticCheckConfig {Record<string, LocalStaticCheckLanguageConfig>} Persisted local enable map.
 - @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Persisted global checker map.
 - @return {Record<string, StaticCheckLanguageConfig>} Effective per-language static-check config.
 
-### fn `export function getDefaultStaticCheckConfig(): Record<string, StaticCheckLanguageConfig>` (L458-464)
+### fn `export function getDefaultStaticCheckConfig(): Record<string, StaticCheckLanguageConfig>` (L466-472)
 - @brief Returns the documented default static-check configuration.
 - @details Emits one effective per-language config object for every supported language by merging documented global checker defaults with derived local enable defaults. Runtime is O(l + c). No external state is mutated.
 - @return {Record<string, StaticCheckLanguageConfig>} Fresh default effective static-check config.
 - @satisfies REQ-249, REQ-250, REQ-251, REQ-252, REQ-316
 
-### fn `export function normalizeStaticCheckEnabled(` (L474-479)
+### fn `export function normalizeStaticCheckEnabled(` (L482-487)
 - @brief Normalizes one persisted per-language static-check enable flag.
 - @details Accepts only the documented `enable|disable` values and falls back to the supplied default when the candidate is absent or invalid. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted enable flag.
@@ -1792,7 +1794,7 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {StaticCheckEnabled} Canonical per-language enable flag.
 - @satisfies REQ-249
 
-### fn `export function getActiveStaticCheckEntries(` (L489-498)
+### fn `export function getActiveStaticCheckEntries(` (L497-506)
 - @brief Resolves the active checker list for one language.
 - @details Returns the persisted checker list only when the language is enabled; disabled or missing languages yield an empty list without mutating the source config. Runtime is O(c). No external state is mutated.
 - @param[in] staticCheckConfig {Record<string, StaticCheckLanguageConfig>} Effective static-check config.
@@ -1800,21 +1802,21 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {StaticCheckEntry[]} Active checker list for the language.
 - @satisfies REQ-019
 
-### fn `export function normalizeAutoGitCommit(value: unknown): "enable" | "disable"` (L513-515)
+### fn `export function normalizeAutoGitCommit(value: unknown): "enable" | "disable"` (L521-523)
 - @brief Normalizes one persisted automatic git-commit mode value.
 - @details Accepts only the documented `enable|disable` values and falls back to `DEFAULT_AUTO_GIT_COMMIT` for all other payloads. Runtime is O(1). No side effects occur.
 - @param[in] value {unknown} Candidate persisted automatic git-commit payload.
 - @return {"enable" | "disable"} Canonical automatic git-commit mode.
 - @satisfies REQ-212
 
-### fn `export function normalizeGitWorktreeEnabled(value: unknown): "enable" | "disable"` (L529-531)
+### fn `export function normalizeGitWorktreeEnabled(value: unknown): "enable" | "disable"` (L537-539)
 - @brief Normalizes one persisted worktree-enable flag value.
 - @details Accepts only the documented `enable|disable` values and falls back to `DEFAULT_GIT_WORKTREE_ENABLED` for all other payloads. Runtime is O(1). No side effects occur.
 - @param[in] value {unknown} Candidate persisted worktree-enable payload.
 - @return {"enable" | "disable"} Canonical persisted worktree-enable mode.
 - @satisfies REQ-204
 
-### fn `export function resolveEffectiveGitWorktreeEnabled(` (L540-545)
+### fn `export function resolveEffectiveGitWorktreeEnabled(` (L548-553)
 - @brief Resolves the effective worktree mode after automatic-commit policy is applied.
 - @details Forces `disable` whenever `AUTO_GIT_COMMIT` is disabled; otherwise preserves the normalized persisted worktree flag. Runtime is O(1). No side effects occur.
 - @param[in] autoGitCommit {"enable" | "disable"} Effective automatic git-commit mode.
@@ -1822,37 +1824,37 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {"enable" | "disable"} Effective worktree mode used by menus, persistence, and prompt execution.
 - @satisfies REQ-204, REQ-215
 
-### fn `export function normalizeGitWorktreePrefix(value: unknown): string` (L559-565)
+### fn `export function normalizeGitWorktreePrefix(value: unknown): string` (L567-573)
 - @brief Normalizes one persisted worktree-name prefix value.
 - @details Accepts only non-empty strings, trims surrounding whitespace, and falls back to `DEFAULT_GIT_WORKTREE_PREFIX` when the candidate is absent or blank. Runtime is O(n) in prefix length. No side effects occur.
 - @param[in] value {unknown} Candidate persisted prefix payload.
 - @return {string} Canonical worktree-name prefix.
 - @satisfies REQ-205
 
-### fn `export function getProjectConfigPath(projectBase: string): string` (L572-574)
+### fn `export function getProjectConfigPath(projectBase: string): string` (L580-582)
 - @brief Computes the per-project local config file path.
 - @details Joins the project base with `.pi-usereq.json`, producing the canonical local persistence location used by CLI and extension code. Time complexity is O(1). No I/O side effects occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @return {string} Absolute local config file path.
 
-### fn `export function getGlobalConfigPath(): string` (L581-583)
+### fn `export function getGlobalConfigPath(): string` (L589-591)
 - @brief Computes the cross-project global config file path.
 - @details Resolves `~/.config/pi-usereq/config.json` through the shared runtime path helper so CLI and extension code use one canonical global persistence location. Time complexity is O(1). No I/O side effects occur.
 - @return {string} Absolute global config file path.
 
-### fn `function getDefaultLocalConfig(` (L592-613)
+### fn `function getDefaultLocalConfig(` (L600-621)
 - @brief Builds the default persisted local configuration.
 - @details Populates canonical docs/test/source directories, derives local static-check enable defaults from the supplied global checker definitions, and seeds documented debug defaults including tool-wrapper command registration without any cross-project fields. Runtime is O(l). No filesystem side effects occur.
 - @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker definitions used to derive local enable defaults.
 - @return {UseReqLocalConfig} Fresh default local configuration object.
 - @satisfies CTN-013, CTN-019, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `function getDefaultGlobalConfig(): UseReqGlobalConfig` (L620-650)
+### fn `function getDefaultGlobalConfig(): UseReqGlobalConfig` (L628-658)
 - @brief Builds the default persisted global configuration.
 - @details Populates documented cross-project static-check checker commands, enabled tools, git automation fields, and notification defaults without any project-local directory or debug fields. Runtime is O(l + c). No filesystem side effects occur.
 - @return {UseReqGlobalConfig} Fresh default global configuration object.
 
-### fn `function mergeConfigScopes(` (L660-732)
+### fn `function mergeConfigScopes(` (L668-740)
 - @brief Merges persisted local and global configuration scopes into the effective runtime config.
 - @details Normalizes local directories, combines local static-check enable flags with global checker arrays, resolves effective worktree disablement when automatic git commit is off, normalizes debug and notification fields including tool-wrapper command registration, sources the runtime-only `DEBUG_ENABLED` flag from the process-scoped debug store, and disables Pushover until both credentials are populated. Runtime is O(l + c + p). No external state is mutated.
 - @param[in] localConfig {UseReqLocalConfig} Persisted local configuration.
@@ -1860,27 +1862,28 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {UseReqConfig} Effective merged configuration.
 - @satisfies REQ-236, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `export function getDefaultConfig(_projectBase: string): UseReqConfig` (L741-747)
+### fn `export function getDefaultConfig(_projectBase: string): UseReqConfig` (L749-755)
 - @brief Builds the default effective configuration.
 - @details Composes documented local and global defaults, then merges them into the effective runtime config consumed by CLI and extension code. Time complexity is O(l + c). No filesystem side effects occur.
 - @param[in] _projectBase {string} Absolute project root path retained for stable call sites.
 - @return {UseReqConfig} Fresh default effective configuration object.
 - @satisfies CTN-001, CTN-012, CTN-013, CTN-018, CTN-019, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-250, REQ-251, REQ-252, REQ-277, REQ-315, REQ-316, REQ-413, REQ-414
 
-### fn `function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[]` (L755-775)
+### fn `function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[]` (L764-789)
 - @brief Normalizes one raw checker-entry array from persisted config.
-- @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
+- @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, preserves an explicit persisted `scan-by-dir` boolean, defaults absent flags to `true` for directory-scan-capable commands (`cppcheck`, `ruff`, `eslint`) and `false` otherwise, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted checker array.
 - @return {StaticCheckEntry[]} Normalized checker-entry vector.
+- @satisfies REQ-694, REQ-695
 
-### fn `export function readConfigPayload(configPath: string): Record<string, unknown> | undefined` (L784-800)
+### fn `export function readConfigPayload(configPath: string): Record<string, unknown> | undefined` (L798-814)
 - @brief Reads and validates one persisted config payload.
 - @details Returns `undefined` when the target file does not exist. Otherwise parses UTF-8 JSON, rejects array or primitive payloads, and surfaces deterministic `ReqError` diagnostics keyed by the exact path. Exported for configuration CLI raw-payload readers that must distinguish persisted keys from effective defaults. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] configPath {string} Absolute config file path.
 - @return {Record<string, unknown> | undefined} Parsed object payload or `undefined` when the file is absent.
 - @throws {ReqError} Throws with exit code `11` when the config file contains invalid JSON or a non-object payload.
 
-### fn `function normalizeLocalStaticCheckConfig(` (L810-834)
+### fn `function normalizeLocalStaticCheckConfig(` (L824-848)
 - @brief Normalizes the persisted local static-check enable map.
 - @details Starts from the supplied default enable map, accepts only object-valued language entries, reads only `enabled`, and ignores misplaced checker arrays or legacy non-object payloads without migration. Runtime is O(l). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted local static-check payload.
@@ -1888,14 +1891,14 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {Record<string, LocalStaticCheckLanguageConfig>} Normalized local static-check enable map.
 - @satisfies REQ-249, REQ-316
 
-### fn `function normalizeGlobalStaticCheckConfig(` (L843-860)
+### fn `function normalizeGlobalStaticCheckConfig(` (L857-874)
 - @brief Normalizes the persisted global static-check checker map.
 - @details Starts from documented global checker defaults, accepts only object-valued language entries, reads only `checkers`, and ignores misplaced local enable flags or legacy non-object payloads without migration. Runtime is O(l + c + p). No external state is mutated.
 - @param[in] value {unknown} Candidate persisted global static-check payload.
 - @return {Record<string, GlobalStaticCheckLanguageConfig>} Normalized global static-check checker map.
 - @satisfies REQ-249, REQ-250, REQ-251, REQ-252
 
-### fn `function loadLocalConfig(` (L870-926)
+### fn `function loadLocalConfig(` (L884-940)
 - @brief Loads and sanitizes the persisted local configuration.
 - @details Returns defaults when `<base-path>/.pi-usereq.json` is absent. Otherwise parses the local JSON payload, normalizes project-scoped directory, debug, tool-wrapper command registration, and static-check enable fields, ignores any persisted `DEBUG_ENABLED` payload, and ignores misplaced global keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -1903,12 +1906,12 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {UseReqLocalConfig} Sanitized local configuration.
 - @satisfies CTN-019, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `function loadGlobalConfig(): UseReqGlobalConfig` (L933-974)
+### fn `function loadGlobalConfig(): UseReqGlobalConfig` (L947-988)
 - @brief Loads and sanitizes the persisted global configuration.
 - @details Returns defaults when `~/.config/pi-usereq/config.json` is absent. Otherwise parses the global JSON payload, normalizes cross-project checker, tool, git, and notification fields, and ignores misplaced local keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @return {UseReqGlobalConfig} Sanitized global configuration.
 
-### fn `export function loadConfig(projectBase: string): UseReqConfig` (L984-991)
+### fn `export function loadConfig(projectBase: string): UseReqConfig` (L998-1005)
 - @brief Loads and sanitizes the effective merged configuration.
 - @details Loads global configuration first so local static-check enable defaults can be derived from the active global checker map, then merges both scopes into the effective runtime config without applying legacy single-file migrations. Runtime is O(n) in combined local and global config size. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -1916,42 +1919,42 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @throws {ReqError} Throws with exit code `11` when either persisted config file contains invalid JSON or a non-object payload.
 - @satisfies CTN-012, CTN-013, CTN-018, CTN-019, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-215, REQ-234, REQ-235, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-277, REQ-315, REQ-316, REQ-413, REQ-414
 
-### fn `function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig` (L1000-1032)
+### fn `function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig` (L1014-1046)
 - @brief Builds the persisted local configuration payload.
 - @details Copies only project-scoped keys into a fresh object so runtime-derived metadata, the runtime-only `DEBUG_ENABLED` flag, and global checker, tool, git, and notification fields never reach `.pi-usereq.json`, while preserving the debug tool-wrapper command flag beside other persisted local debug settings. Runtime is O(n) in config size. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective configuration object.
 - @return {UseReqLocalConfig} Persistable local configuration payload.
 - @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-249, REQ-316, REQ-277, REQ-328, REQ-413, REQ-414, REQ-426
 
-### fn `function buildPersistedGlobalConfig(config: UseReqConfig): UseReqGlobalConfig` (L1041-1080)
+### fn `function buildPersistedGlobalConfig(config: UseReqConfig): UseReqGlobalConfig` (L1055-1094)
 - @brief Builds the persisted global configuration payload.
 - @details Copies only cross-project keys into a fresh object so local directory and debug fields never reach `~/.config/pi-usereq/config.json`, while forcing persisted worktree disablement when automatic git commit is disabled and forcing persisted Pushover disablement until both credentials are populated. Runtime is O(n) in config size. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective configuration object.
 - @return {UseReqGlobalConfig} Persistable global configuration payload.
 - @satisfies REQ-137, REQ-163, REQ-174, REQ-178, REQ-184, REQ-196, REQ-204, REQ-205, REQ-212, REQ-234, REQ-249, REQ-315
 
-### fn `function writeConfigFile(configPath: string, payload: object): void` (L1089-1092)
+### fn `function writeConfigFile(configPath: string, payload: object): void` (L1103-1106)
 - @brief Writes one normalized config payload to disk.
 - @details Creates the parent directory when required, formats JSON with two-space indentation, and terminates the file with a newline. Runtime is O(n) in serialized payload size. Side effects include directory creation and file overwrite.
 - @param[in] configPath {string} Absolute destination config path.
 - @param[in] payload {object} Persistable config payload.
 - @return {void} No return value.
 
-### fn `export function getPersistedLocalConfigPayload(config: UseReqConfig): Record<string, unknown>` (L1101-1103)
+### fn `export function getPersistedLocalConfigPayload(config: UseReqConfig): Record<string, unknown>` (L1115-1117)
 - @brief Builds the persisted local configuration payload for external writers.
 - @details Exposes the same project-scoped projection used by `saveLocalConfig(...)` so additive CLI persistence layers can write an identical local JSON payload through their own atomic-write path without duplicating the schema mapping. Runtime is O(n) in config size. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective configuration object.
 - @return {Record<string, unknown>} Persistable local configuration payload.
 - @satisfies REQ-533, REQ-561
 
-### fn `export function getPersistedGlobalConfigPayload(config: UseReqConfig): Record<string, unknown>` (L1112-1114)
+### fn `export function getPersistedGlobalConfigPayload(config: UseReqConfig): Record<string, unknown>` (L1126-1128)
 - @brief Builds the persisted global configuration payload for external writers.
 - @details Exposes the same cross-project projection used by `saveGlobalConfig(...)` so additive CLI persistence layers can write an identical global JSON payload through their own atomic-write path without duplicating the schema mapping. Runtime is O(n) in config size. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective configuration object.
 - @return {Record<string, unknown>} Persistable global configuration payload.
 - @satisfies REQ-533, REQ-561
 
-### fn `export function saveLocalConfig(projectBase: string, config: UseReqConfig): void` (L1124-1126)
+### fn `export function saveLocalConfig(projectBase: string, config: UseReqConfig): void` (L1138-1140)
 - @brief Persists the local configuration scope to disk.
 - @details Serializes only project-scoped fields into `<base-path>/.pi-usereq.json`, excluding runtime-derived metadata and every global-scope configuration key. Runtime is O(n) in serialized local config size. Side effects include directory creation and file overwrite.
 - @param[in] projectBase {string} Absolute project root path.
@@ -1959,14 +1962,14 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {void} No return value.
 - @satisfies CTN-012, REQ-104, REQ-146
 
-### fn `export function saveGlobalConfig(config: UseReqConfig): void` (L1135-1137)
+### fn `export function saveGlobalConfig(config: UseReqConfig): void` (L1149-1151)
 - @brief Persists the global configuration scope to disk.
 - @details Serializes only cross-project fields into `~/.config/pi-usereq/config.json`, excluding every project-local directory and debug setting. Runtime is O(n) in serialized global config size. Side effects include directory creation and file overwrite.
 - @param[in] config {UseReqConfig} Effective configuration object to persist.
 - @return {void} No return value.
 - @satisfies CTN-012, CTN-018, REQ-137, REQ-146, REQ-315
 
-### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L1147-1150)
+### fn `export function saveConfig(projectBase: string, config: UseReqConfig): void` (L1161-1164)
 - @brief Persists the effective configuration to local and global config files.
 - @details Splits the effective runtime config into project-scoped and cross-project payloads, then writes both files with normalized JSON formatting. Runtime is O(n) in combined serialized config size. Side effects include directory creation and file overwrite in both persistence locations.
 - @param[in] projectBase {string} Absolute project root path.
@@ -1974,14 +1977,14 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {void} No return value.
 - @satisfies CTN-012, CTN-018, REQ-137, REQ-146, REQ-315
 
-### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L1159-1177)
+### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L1173-1191)
 - @brief Normalizes persisted directory fields to project-relative forms.
 - @details Rewrites docs, tests, and source directories using project containment heuristics, strips trailing separators, and restores defaults for empty results. Runtime is O(n) in configured path count plus path-length processing. No filesystem writes occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Configuration object to normalize.
 - @return {UseReqConfig} Normalized configuration copy.
 
-### fn `export function buildPromptReplacementPaths(` (L1187-1229)
+### fn `export function buildPromptReplacementPaths(` (L1201-1243)
 - @brief Builds placeholder replacements for bundled prompt rendering.
 - @details Computes runtime path context from the execution path, derives installation-owned template and guideline paths, enumerates visible guideline files from the installed resource tree, and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -1992,52 +1995,52 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`StaticCheckEntry`|iface||63-67|export interface StaticCheckEntry|
-|`StaticCheckEnabled`|type||73||
-|`StaticCheckLanguageConfig`|iface||79-82|export interface StaticCheckLanguageConfig|
-|`UseReqConfig`|iface||88-132|export interface UseReqConfig|
-|`LocalStaticCheckLanguageConfig`|iface||138-140|interface LocalStaticCheckLanguageConfig|
-|`GlobalStaticCheckLanguageConfig`|iface||146-148|interface GlobalStaticCheckLanguageConfig|
-|`UseReqLocalConfig`|iface||155-172|interface UseReqLocalConfig|
-|`UseReqGlobalConfig`|iface||178-206|interface UseReqGlobalConfig|
-|`normalizeContextFilesFlag`|fn||238-240|export function normalizeContextFilesFlag(value: unknown)...|
-|`cloneStaticCheckEntry`|fn||340-349|function cloneStaticCheckEntry(entry: StaticCheckEntry): ...|
-|`createStaticCheckLanguageConfig`|fn||358-367|export function createStaticCheckLanguageConfig(|
-|`createLocalStaticCheckLanguageConfig`|fn||375-379|function createLocalStaticCheckLanguageConfig(|
-|`createGlobalStaticCheckLanguageConfig`|fn||387-393|function createGlobalStaticCheckLanguageConfig(|
-|`getDefaultGlobalStaticCheckConfig`|fn||400-405|function getDefaultGlobalStaticCheckConfig(): Record<stri...|
-|`getDefaultLocalStaticCheckConfig`|fn||413-422|function getDefaultLocalStaticCheckConfig(|
-|`mergeStaticCheckConfig`|fn||431-450|function mergeStaticCheckConfig(|
-|`getDefaultStaticCheckConfig`|fn||458-464|export function getDefaultStaticCheckConfig(): Record<str...|
-|`normalizeStaticCheckEnabled`|fn||474-479|export function normalizeStaticCheckEnabled(|
-|`getActiveStaticCheckEntries`|fn||489-498|export function getActiveStaticCheckEntries(|
-|`normalizeAutoGitCommit`|fn||513-515|export function normalizeAutoGitCommit(value: unknown): "...|
-|`normalizeGitWorktreeEnabled`|fn||529-531|export function normalizeGitWorktreeEnabled(value: unknow...|
-|`resolveEffectiveGitWorktreeEnabled`|fn||540-545|export function resolveEffectiveGitWorktreeEnabled(|
-|`normalizeGitWorktreePrefix`|fn||559-565|export function normalizeGitWorktreePrefix(value: unknown...|
-|`getProjectConfigPath`|fn||572-574|export function getProjectConfigPath(projectBase: string)...|
-|`getGlobalConfigPath`|fn||581-583|export function getGlobalConfigPath(): string|
-|`getDefaultLocalConfig`|fn||592-613|function getDefaultLocalConfig(|
-|`getDefaultGlobalConfig`|fn||620-650|function getDefaultGlobalConfig(): UseReqGlobalConfig|
-|`mergeConfigScopes`|fn||660-732|function mergeConfigScopes(|
-|`getDefaultConfig`|fn||741-747|export function getDefaultConfig(_projectBase: string): U...|
-|`normalizeStaticCheckEntries`|fn||755-775|function normalizeStaticCheckEntries(value: unknown): Sta...|
-|`readConfigPayload`|fn||784-800|export function readConfigPayload(configPath: string): Re...|
-|`normalizeLocalStaticCheckConfig`|fn||810-834|function normalizeLocalStaticCheckConfig(|
-|`normalizeGlobalStaticCheckConfig`|fn||843-860|function normalizeGlobalStaticCheckConfig(|
-|`loadLocalConfig`|fn||870-926|function loadLocalConfig(|
-|`loadGlobalConfig`|fn||933-974|function loadGlobalConfig(): UseReqGlobalConfig|
-|`loadConfig`|fn||984-991|export function loadConfig(projectBase: string): UseReqCo...|
-|`buildPersistedLocalConfig`|fn||1000-1032|function buildPersistedLocalConfig(config: UseReqConfig):...|
-|`buildPersistedGlobalConfig`|fn||1041-1080|function buildPersistedGlobalConfig(config: UseReqConfig)...|
-|`writeConfigFile`|fn||1089-1092|function writeConfigFile(configPath: string, payload: obj...|
-|`getPersistedLocalConfigPayload`|fn||1101-1103|export function getPersistedLocalConfigPayload(config: Us...|
-|`getPersistedGlobalConfigPayload`|fn||1112-1114|export function getPersistedGlobalConfigPayload(config: U...|
-|`saveLocalConfig`|fn||1124-1126|export function saveLocalConfig(projectBase: string, conf...|
-|`saveGlobalConfig`|fn||1135-1137|export function saveGlobalConfig(config: UseReqConfig): void|
-|`saveConfig`|fn||1147-1150|export function saveConfig(projectBase: string, config: U...|
-|`normalizeConfigPaths`|fn||1159-1177|export function normalizeConfigPaths(projectBase: string,...|
-|`buildPromptReplacementPaths`|fn||1187-1229|export function buildPromptReplacementPaths(|
+|`StaticCheckEntry`|iface||65-70|export interface StaticCheckEntry|
+|`StaticCheckEnabled`|type||76||
+|`StaticCheckLanguageConfig`|iface||82-85|export interface StaticCheckLanguageConfig|
+|`UseReqConfig`|iface||91-135|export interface UseReqConfig|
+|`LocalStaticCheckLanguageConfig`|iface||141-143|interface LocalStaticCheckLanguageConfig|
+|`GlobalStaticCheckLanguageConfig`|iface||149-151|interface GlobalStaticCheckLanguageConfig|
+|`UseReqLocalConfig`|iface||158-175|interface UseReqLocalConfig|
+|`UseReqGlobalConfig`|iface||181-209|interface UseReqGlobalConfig|
+|`normalizeContextFilesFlag`|fn||241-243|export function normalizeContextFilesFlag(value: unknown)...|
+|`cloneStaticCheckEntry`|fn||347-357|function cloneStaticCheckEntry(entry: StaticCheckEntry): ...|
+|`createStaticCheckLanguageConfig`|fn||366-375|export function createStaticCheckLanguageConfig(|
+|`createLocalStaticCheckLanguageConfig`|fn||383-387|function createLocalStaticCheckLanguageConfig(|
+|`createGlobalStaticCheckLanguageConfig`|fn||395-401|function createGlobalStaticCheckLanguageConfig(|
+|`getDefaultGlobalStaticCheckConfig`|fn||408-413|function getDefaultGlobalStaticCheckConfig(): Record<stri...|
+|`getDefaultLocalStaticCheckConfig`|fn||421-430|function getDefaultLocalStaticCheckConfig(|
+|`mergeStaticCheckConfig`|fn||439-458|function mergeStaticCheckConfig(|
+|`getDefaultStaticCheckConfig`|fn||466-472|export function getDefaultStaticCheckConfig(): Record<str...|
+|`normalizeStaticCheckEnabled`|fn||482-487|export function normalizeStaticCheckEnabled(|
+|`getActiveStaticCheckEntries`|fn||497-506|export function getActiveStaticCheckEntries(|
+|`normalizeAutoGitCommit`|fn||521-523|export function normalizeAutoGitCommit(value: unknown): "...|
+|`normalizeGitWorktreeEnabled`|fn||537-539|export function normalizeGitWorktreeEnabled(value: unknow...|
+|`resolveEffectiveGitWorktreeEnabled`|fn||548-553|export function resolveEffectiveGitWorktreeEnabled(|
+|`normalizeGitWorktreePrefix`|fn||567-573|export function normalizeGitWorktreePrefix(value: unknown...|
+|`getProjectConfigPath`|fn||580-582|export function getProjectConfigPath(projectBase: string)...|
+|`getGlobalConfigPath`|fn||589-591|export function getGlobalConfigPath(): string|
+|`getDefaultLocalConfig`|fn||600-621|function getDefaultLocalConfig(|
+|`getDefaultGlobalConfig`|fn||628-658|function getDefaultGlobalConfig(): UseReqGlobalConfig|
+|`mergeConfigScopes`|fn||668-740|function mergeConfigScopes(|
+|`getDefaultConfig`|fn||749-755|export function getDefaultConfig(_projectBase: string): U...|
+|`normalizeStaticCheckEntries`|fn||764-789|function normalizeStaticCheckEntries(value: unknown): Sta...|
+|`readConfigPayload`|fn||798-814|export function readConfigPayload(configPath: string): Re...|
+|`normalizeLocalStaticCheckConfig`|fn||824-848|function normalizeLocalStaticCheckConfig(|
+|`normalizeGlobalStaticCheckConfig`|fn||857-874|function normalizeGlobalStaticCheckConfig(|
+|`loadLocalConfig`|fn||884-940|function loadLocalConfig(|
+|`loadGlobalConfig`|fn||947-988|function loadGlobalConfig(): UseReqGlobalConfig|
+|`loadConfig`|fn||998-1005|export function loadConfig(projectBase: string): UseReqCo...|
+|`buildPersistedLocalConfig`|fn||1014-1046|function buildPersistedLocalConfig(config: UseReqConfig):...|
+|`buildPersistedGlobalConfig`|fn||1055-1094|function buildPersistedGlobalConfig(config: UseReqConfig)...|
+|`writeConfigFile`|fn||1103-1106|function writeConfigFile(configPath: string, payload: obj...|
+|`getPersistedLocalConfigPayload`|fn||1115-1117|export function getPersistedLocalConfigPayload(config: Us...|
+|`getPersistedGlobalConfigPayload`|fn||1126-1128|export function getPersistedGlobalConfigPayload(config: U...|
+|`saveLocalConfig`|fn||1138-1140|export function saveLocalConfig(projectBase: string, conf...|
+|`saveGlobalConfig`|fn||1149-1151|export function saveGlobalConfig(config: UseReqConfig): void|
+|`saveConfig`|fn||1161-1164|export function saveConfig(projectBase: string, config: U...|
+|`normalizeConfigPaths`|fn||1173-1191|export function normalizeConfigPaths(projectBase: string,...|
+|`buildPromptReplacementPaths`|fn||1201-1243|export function buildPromptReplacementPaths(|
 
 
 ---
@@ -6807,7 +6810,7 @@ import { collectSourceFiles } from "./tool-runner.js";
 
 ---
 
-# static-check.ts | TypeScript | 601L | 18 symbols | 8 imports | 31 comments
+# static-check.ts | TypeScript | 710L | 22 symbols | 8 imports | 36 comments
 > Path: `src/core/static-check.ts`
 - @brief Defines static-check language mappings and checker dispatch implementations.
 - @details Parses Command-only user static-check specifications, preserves debug `Dummy` config handling, resolves file targets, and runs modular dummy or command-based analyzers. Runtime is linear in file count plus external tool cost. Side effects include filesystem reads, PATH probing, process spawning, and console output.
@@ -6885,11 +6888,24 @@ import { getInstallationPath } from "./path-context.js";
 - @param[in] inputs {string[]} Raw file, directory, or glob inputs.
 - @return {string[]} Unique absolute file paths.
 
-### class `export class StaticCheckBase` (L309-383)
+### fn `function normalizeStaticCheckDirScanCommand(cmd: string): string` (L322-324)
+- @brief Normalizes one checker command for directory-scan capability comparison.
+- @details Strips the `%%INSTALLATION_PATH%%` keyword, reduces the candidate to its basename, and lowercases it so explicit paths and bare command names compare identically. Runtime is O(p) in command length. No side effects occur.
+- @param[in] cmd {string} Configured checker executable name or installation-anchored path.
+- @return {string} Normalized command basename.
+
+### fn `export function supportsStaticCheckDirScan(cmd: string | undefined): boolean` (L333-338)
+- @brief Tests whether one Command checker supports recursive directory-scan execution.
+- @details Accepts exactly the checkers that natively accept recursive directory targets and expose a CLI exclusion flag for the project fixture roots: `cppcheck`, `ruff`, and `eslint`. Runtime is O(p) in command length. No side effects occur.
+- @param[in] cmd {string} Configured checker executable name, explicit path, or `%%INSTALLATION_PATH%%`-anchored path.
+- @return {boolean} `true` when the command is directory-scan capable.
+- @satisfies REQ-695
+
+### class `export class StaticCheckBase` (L344-418)
 - @brief Provides the shared and debug-capable base implementation for file-oriented static checks.
 - @details Resolves input files once, emits standardized headers, implements the debug `Dummy` checker behavior, and defines overridable `checkFile` plus `emitLine` hooks used by concrete analyzers. Runtime is O(f) plus subclass checker cost. Side effects include console output.
 
-### class `export class StaticCheckCommand extends StaticCheckBase` : StaticCheckBase (L389-439)
+### class `export class StaticCheckCommand extends StaticCheckBase` : StaticCheckBase (L424-474)
 - @brief Runs the user-facing external-command static checker.
 - @brief Initializes a command-backed checker instance.
 - @details Validates command availability on PATH during construction, then invokes the command with configured extra arguments plus one target file at a time. Runtime is dominated by external command execution. Side effects include PATH probing, process spawning, and console output.
@@ -6900,33 +6916,51 @@ import { getInstallationPath } from "./path-context.js";
 - @param[in] failOnly {boolean} When `true`, suppress successful-file output.
 - @throws {ReqError} Throws when the executable cannot be found on PATH.
 
-### fn `function isExecutableFile(candidate: string): boolean` (L447-457)
+### fn `function buildStaticCheckDirScanExclusionArgs(cmd: string, excludedDirectoryPaths: string[]): string[]` (L484-490)
+- @brief Builds checker-native exclusion arguments for one directory-scan-capable command.
+- @details Maps the normalized command basename onto its native exclusion flag so directory-scan invocations honor the project fixture-root exclusion contract: `cppcheck -i <root>`, `ruff --exclude <root>`, and `eslint --ignore-pattern <root>/**`. Commands without a native exclusion flag produce no arguments. Runtime is O(r) in exclusion-root count. No side effects occur.
+- @param[in] cmd {string} Configured checker executable name or installation-anchored path.
+- @param[in] excludedDirectoryPaths {string[]} Project-relative fixture-root directories excluded from directory-scan execution.
+- @return {string[]} Ordered exclusion argument tokens appended before directory targets.
+- @satisfies REQ-698
+
+### fn `export function dispatchStaticCheckForDirectories(` (L502-505)
+- @brief Dispatches one configured static checker over directory roots as a single recursive invocation.
+- @details Resolves the Command executable, appends checker-native exclusion arguments for the supplied fixture roots, and executes one process with `[..., params, ...exclusionArgs, ...directoryPaths]` from the project base so checker-native recursive discovery replaces per-file dispatch. Emits the standardized `# Static-Check(Command[<cmd>] (scan-by-dir))` header with OK/FAIL result and captured evidence. Runtime is dominated by one external command execution. Side effects include PATH probing, process spawning, and console output.
+- @param[in] directoryPaths {string[]} Absolute directory roots passed to the checker.
+- @param[in] langConfig {StaticCheckEntry} Normalized static-check configuration entry carrying `scan-by-dir: true`.
+- @param[in] options {{ failOnly?: boolean; projectBase?: string; excludedDirectoryPaths?: string[] }} Optional execution controls.
+- @return {number} Checker exit status where `0` means success and non-zero means failure.
+- @throws {ReqError} Throws for non-Command modules, missing `cmd`, missing directories, or unresolvable executables.
+- @satisfies REQ-697, REQ-698
+
+### fn `function isExecutableFile(candidate: string): boolean` (L556-566)
 - @brief Tests whether one filesystem path is executable.
 - @details Requires the candidate to exist, be a regular file, and pass `X_OK` access checks. Runtime is O(1). Side effects are limited to filesystem reads.
 - @param[in] candidate {string} Absolute or relative path to inspect.
 - @return {boolean} `true` when the candidate is executable by the current process.
 
-### fn `export function findExecutable(cmd: string): string | undefined` (L465-476)
+### fn `export function findExecutable(cmd: string): string | undefined` (L574-585)
 - @brief Locates an executable by scanning the current PATH.
 - @details Checks each PATH directory for an executable file named exactly as the requested command. Runtime is O(p) in PATH entry count. Side effects are filesystem reads.
 - @param[in] cmd {string} Executable name to locate.
 - @return {string | undefined} Absolute executable path, or `undefined` when not found.
 
-### fn `export function resolveCheckerExecutable(cmd: string): string | undefined` (L485-505)
+### fn `export function resolveCheckerExecutable(cmd: string): string | undefined` (L594-614)
 - @brief Resolves one checker executable across installation-keyword, bundled `node_modules/.bin`, and PATH locations.
 - @details Substitutes the `%%INSTALLATION_PATH%%` keyword with the runtime installation path and verifies the resulting explicit path when present, then probes the installation-owned `node_modules/.bin` directory, the project-scope parent `node_modules/.bin` directory used by `--prefix` layouts, and finally the system PATH scan, returning the first executable match so default configuration requires no target-project module installation. Runtime is O(p) in PATH entry count plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
 - @param[in] cmd {string} Executable name, explicit path, or `%%INSTALLATION_PATH%%`-anchored path to resolve.
 - @return {string | undefined} Absolute executable path, or `undefined` when not found in any probed location.
 - @satisfies REQ-023, REQ-037, DES-018, DES-019, REQ-350, REQ-351
 
-### fn `export function checkDefaultCheckersAvailability(config: UseReqConfig): string[]` (L514-534)
+### fn `export function checkDefaultCheckersAvailability(config: UseReqConfig): string[]` (L623-643)
 - @brief Determines which enabled static-check executables are missing from the runtime environment.
 - @details Iterates every enabled language checker entry in the effective config, resolves each `Command` entry executable through `resolveCheckerExecutable`, and collects the missing command names so the caller can surface one consolidated warning. Runtime is O(l * c * p) where l is language count, c is checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
 - @param[in] config {UseReqConfig} Effective merged configuration.
 - @return {string[]} Unique command names that are enabled but unresolvable.
 - @satisfies REQ-341, REQ-343, REQ-344
 
-### fn `export function dispatchStaticCheckForFile(` (L545-548)
+### fn `export function dispatchStaticCheckForFile(` (L654-657)
 - @brief Dispatches one configured static checker for a single file.
 - @details Selects the debug `Dummy` or user-facing `Command` implementation by module name, normalizes parameter arrays, and runs exactly one checker instance against the target file. Runtime is dominated by the selected checker. Side effects include console output and possible process spawning.
 - @param[in] filePath {string} Absolute or relative file path to check.
@@ -6935,7 +6969,7 @@ import { getInstallationPath } from "./path-context.js";
 - @return {number} Checker exit status where `0` means success and non-zero means failure.
 - @throws {ReqError} Throws when configuration is incomplete or names an unknown module.
 
-### fn `export function runStaticCheck(argv: string[]): number` (L577-601)
+### fn `export function runStaticCheck(argv: string[]): number` (L686-710)
 - @brief Runs the standalone static-check test driver.
 - @details Dispatches debug `dummy` or user-facing `command` subcommands without consulting project configuration. Runtime is O(n) in argument count plus checker cost. Side effects include console output and external process spawning.
 - @param[in] argv {string[]} Raw static-check subcommand arguments.
@@ -6955,14 +6989,18 @@ import { getInstallationPath } from "./path-context.js";
 |`buildStaticCheckEntryIdentity`|fn||245-250|export function buildStaticCheckEntryIdentity(language: s...|
 |`validateStaticCheckEntry`|fn||260-271|export function validateStaticCheckEntry(entry: StaticChe...|
 |`resolveFiles`|fn||279-303|function resolveFiles(inputs: string[]): string[]|
-|`StaticCheckBase`|class||309-383|export class StaticCheckBase|
-|`StaticCheckCommand`|class||389-439|export class StaticCheckCommand extends StaticCheckBase|
-|`isExecutableFile`|fn||447-457|function isExecutableFile(candidate: string): boolean|
-|`findExecutable`|fn||465-476|export function findExecutable(cmd: string): string | und...|
-|`resolveCheckerExecutable`|fn||485-505|export function resolveCheckerExecutable(cmd: string): st...|
-|`checkDefaultCheckersAvailability`|fn||514-534|export function checkDefaultCheckersAvailability(config: ...|
-|`dispatchStaticCheckForFile`|fn||545-548|export function dispatchStaticCheckForFile(|
-|`runStaticCheck`|fn||577-601|export function runStaticCheck(argv: string[]): number|
+|`normalizeStaticCheckDirScanCommand`|fn||322-324|function normalizeStaticCheckDirScanCommand(cmd: string):...|
+|`supportsStaticCheckDirScan`|fn||333-338|export function supportsStaticCheckDirScan(cmd: string | ...|
+|`StaticCheckBase`|class||344-418|export class StaticCheckBase|
+|`StaticCheckCommand`|class||424-474|export class StaticCheckCommand extends StaticCheckBase|
+|`buildStaticCheckDirScanExclusionArgs`|fn||484-490|function buildStaticCheckDirScanExclusionArgs(cmd: string...|
+|`dispatchStaticCheckForDirectories`|fn||502-505|export function dispatchStaticCheckForDirectories(|
+|`isExecutableFile`|fn||556-566|function isExecutableFile(candidate: string): boolean|
+|`findExecutable`|fn||574-585|export function findExecutable(cmd: string): string | und...|
+|`resolveCheckerExecutable`|fn||594-614|export function resolveCheckerExecutable(cmd: string): st...|
+|`checkDefaultCheckersAvailability`|fn||623-643|export function checkDefaultCheckersAvailability(config: ...|
+|`dispatchStaticCheckForFile`|fn||654-657|export function dispatchStaticCheckForFile(|
+|`runStaticCheck`|fn||686-710|export function runStaticCheck(argv: string[]): number|
 
 
 ---
@@ -7221,7 +7259,7 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# tool-runner.ts | TypeScript | 463L | 22 symbols | 12 imports | 24 comments
+# tool-runner.ts | TypeScript | 556L | 24 symbols | 12 imports | 26 comments
 > Path: `src/core/tool-runner.ts`
 - @brief Implements the executable back-end for pi-usereq CLI analysis and static-check commands.
 - @details Centralizes project discovery, git-backed source-file collection, documentation token generation, compression, construct lookup, and static-check dispatch. Runtime depends on the selected command and may include filesystem reads, config writes, and process spawning.
@@ -7237,25 +7275,25 @@ import { countFilesMetrics, formatPackSummary } from "./token-counter.js";
 import { compressFiles } from "./compress-files.js";
 import { searchConstructsInFiles } from "./find-constructs.js";
 import { generateMarkdown } from "./generate-markdown.js";
-import { STATIC_CHECK_EXT_TO_LANG, dispatchStaticCheckForFile } from "./static-check.js";
+import {
 import { makeRelativeIfContainsProject } from "./utils.js";
 import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./source-presence.js";
 ```
 
 ## Definitions
 
-### iface `export interface ToolResult` (L30-34)
+### iface `export interface ToolResult` (L37-41)
 - @brief Represents the normalized output contract for a tool invocation.
 - @details Every tool emits stdout, stderr, and a numeric exit code so CLI and extension front-ends can handle results uniformly. The interface is compile-time only and adds no runtime cost.
 
-### fn `function ok(stdout = "", stderr = ""): ToolResult` (L54-56)
+### fn `function ok(stdout = "", stderr = ""): ToolResult` (L61-63)
 - @brief Creates a successful tool result payload.
 - @details Wraps stdout and stderr text with exit code `0`. Runtime is O(1). No side effects occur.
 - @param[in] stdout {string} Standard-output text.
 - @param[in] stderr {string} Standard-error text.
 - @return {ToolResult} Successful result object.
 
-### fn `function fail(message: string, code = 1, stdout = "", stderr = ""): never` (L68-73)
+### fn `function fail(message: string, code = 1, stdout = "", stderr = ""): never` (L75-80)
 - @brief Throws a `ReqError` populated with tool-result stream content.
 - @details Creates a structured failure object, attaches optional stdout and stderr payloads, and throws immediately. Runtime is O(1). Side effect: throws an exception.
 - @param[in] message {string} Primary failure message.
@@ -7265,14 +7303,14 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {never} This function never returns.
 - @throws {ReqError} Always throws.
 
-### fn `function runCapture(command: string[], options: { cwd?: string } = {})` (L82-87)
+### fn `function runCapture(command: string[], options: { cwd?: string } = {})` (L89-94)
 - @brief Executes a subprocess synchronously and captures its output.
 - @details Delegates to `spawnSync`, passes through an optional working directory, and forces UTF-8 decoding. Runtime is dominated by external process execution. Side effects include process spawning.
 - @param[in] command {string[]} Executable plus argument vector.
 - @param[in] options {{ cwd?: string }} Optional process-spawn settings.
 - @return {ReturnType<typeof spawnSync>} Captured subprocess result.
 
-### fn `export function collectSourceFiles(srcDirs: string[], projectBase: string): string[]` (L97-124)
+### fn `export function collectSourceFiles(srcDirs: string[], projectBase: string): string[]` (L104-131)
 - @brief Collects tracked and untracked source files from configured source directories.
 - @details Uses `git ls-files` to enumerate candidate files, filters them by configured source roots, excluded directories, and supported extensions, and returns sorted absolute paths. Runtime is O(n log n) in collected file count plus git execution cost. Side effects include process spawning.
 - @param[in] srcDirs {string[]} Configured source-directory roots.
@@ -7280,29 +7318,29 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {string[]} Sorted absolute source-file paths.
 - @throws {ReqError} Throws when `git ls-files` fails.
 
-### fn `function buildAsciiTree(paths: string[]): string` (L132-160)
+### fn `function buildAsciiTree(paths: string[]): string` (L139-167)
 - @brief Builds an ASCII tree from relative file paths.
 - @details Materializes a nested object tree and renders it using box-drawing characters for markdown display. Runtime is O(n log n) in path count due to sorting. No side effects occur.
 - @param[in] paths {string[]} Relative POSIX-style file paths.
 - @return {string} Rendered ASCII tree.
 
-### fn `const emit = (branch: Record<string, Record<string, unknown> | null>, prefix = "") =>` (L148-157)
+### fn `const emit = (branch: Record<string, Record<string, unknown> | null>, prefix = "") =>` (L155-164)
 
-### fn `function formatFilesStructureMarkdown(files: string[], projectBase: string): string` (L169-172)
+### fn `function formatFilesStructureMarkdown(files: string[], projectBase: string): string` (L176-179)
 - @brief Formats the collected file structure as markdown.
 - @details Converts absolute file paths to project-relative POSIX paths, renders an ASCII tree, and wraps the result in a fenced markdown block. Runtime is O(n log n) in file count. No side effects occur.
 - @param[in] files {string[]} Absolute file paths.
 - @param[in] projectBase {string} Absolute project root.
 - @return {string} Markdown section describing the file structure.
 
-### fn `export function resolveProjectBase(projectBase?: string): string` (L181-187)
+### fn `export function resolveProjectBase(projectBase?: string): string` (L188-194)
 - @brief Resolves and validates the project base directory.
 - @details Uses the supplied path or the current working directory, normalizes it to an absolute path, and verifies that it exists. Runtime is O(1) plus one filesystem existence check. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string | undefined} Optional project-root override.
 - @return {string} Absolute validated project root.
 - @throws {ReqError} Throws when the resolved path does not exist.
 
-### fn `export function resolveProjectSrcDirs(projectBase: string, config?: UseReqConfig): [string, string[]]` (L197-205)
+### fn `export function resolveProjectSrcDirs(projectBase: string, config?: UseReqConfig): [string, string[]]` (L204-212)
 - @brief Resolves the project base and effective source-directory list.
 - @details Loads configuration when not supplied, validates that at least one source directory exists in config, and returns both the absolute base path and source-directory array. Runtime is O(s). Side effects are limited to config reads.
 - @param[in] projectBase {string} Candidate project root.
@@ -7310,21 +7348,21 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {[string, string[]]} Tuple of absolute project base and configured source directories.
 - @throws {ReqError} Throws when no source directories are configured.
 
-### fn `export function loadAndRepairConfig(projectBase: string): UseReqConfig` (L214-219)
+### fn `export function loadAndRepairConfig(projectBase: string): UseReqConfig` (L221-226)
 - @brief Loads project configuration and persists normalized path fields.
 - @details Resolves the base path, normalizes persisted docs/tests/source directories into project-relative form, writes the normalized config back to disk, and returns the in-memory result without persisting runtime-derived path metadata. Runtime is dominated by config I/O. Side effects include config writes.
 - @param[in] projectBase {string} Candidate project root.
 - @return {UseReqConfig} Normalized effective configuration.
 - @satisfies CTN-012, REQ-146
 
-### fn `export function runFilesTokens(files: string[]): ToolResult` (L228-240)
+### fn `export function runFilesTokens(files: string[]): ToolResult` (L235-247)
 - @brief Counts tokens and characters for explicit files.
 - @details Filters missing files into stderr warnings, counts metrics for valid files, and returns a formatted summary. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] files {string[]} Explicit file paths.
 - @return {ToolResult} Tool result containing the formatted summary and warnings.
 - @throws {ReqError} Throws when no valid files are provided.
 
-### fn `export function runFilesSummarize(files: string[], cwd = process.cwd(), verbose = false): ToolResult` (L251-257)
+### fn `export function runFilesSummarize(files: string[], cwd = process.cwd(), verbose = false): ToolResult` (L258-264)
 - @brief Generates the monolithic summary markdown for explicit files.
 - @details Delegates to `generateMarkdown(...)`, keeps output paths relative to the caller cwd, and returns the Python-compatible summary markdown document through stdout. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] files {string[]} Explicit file paths.
@@ -7333,7 +7371,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {ToolResult} Successful tool result containing monolithic markdown.
 - @satisfies REQ-011, REQ-076, REQ-077, REQ-078, REQ-079
 
-### fn `export function runFilesCompress(files: string[], cwd = process.cwd(), enableLineNumbers = false, verbose = false): ToolResult` (L268-270)
+### fn `export function runFilesCompress(files: string[], cwd = process.cwd(), enableLineNumbers = false, verbose = false): ToolResult` (L275-277)
 - @brief Compresses explicit files into compact source excerpts.
 - @details Delegates to `compressFiles` using the caller working directory as the relative-output base by default. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] files {string[]} Explicit file paths.
@@ -7342,7 +7380,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
 - @return {ToolResult} Successful tool result containing compressed output.
 
-### fn `export function runFilesSearch(argsList: string[], enableLineNumbers = false, verbose = false): ToolResult` (L281-287)
+### fn `export function runFilesSearch(argsList: string[], enableLineNumbers = false, verbose = false): ToolResult` (L288-294)
 - @brief Searches named constructs in explicit files.
 - @details Expects `[TAG, PATTERN, ...FILES]`, validates minimum arity, and delegates to `searchConstructsInFiles`. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] argsList {string[]} Positional argument list containing tag filter, regex pattern, and files.
@@ -7351,7 +7389,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {ToolResult} Successful tool result containing construct markdown.
 - @throws {ReqError} Throws when required arguments are missing.
 
-### fn `export function runSummarize(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L299-310)
+### fn `export function runSummarize(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L306-317)
 - @brief Generates the monolithic summary markdown for configured source directories.
 - @details Resolves the project base, collects configured source files, prepends the repository file-structure markdown block, and returns the Python-compatible summary document through stdout. Runtime is O(F log F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
@@ -7361,7 +7399,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @throws {ReqError} Throws when no source files are found or no file can be analyzed.
 - @satisfies REQ-014, REQ-076, REQ-077, REQ-078, REQ-079
 
-### fn `export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L322-334)
+### fn `export function runReferences(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L329-341)
 - @brief Writes configured project references markdown to the canonical docs file.
 - @details Probes the configured `src-dir` git file inventory through `hasAnalyzableSourceFiles(...)` before reference extraction: when no supported source file exists, overwrites `<docs-dir>/REFERENCES.md` with the exact declared `NO_SOURCE_REFERENCES_PLACEHOLDER` payload through `writeNoSourcePlaceholderDocument(...)` and returns the status-only stdout `success` without invoking source extraction, matching the `/req-references` no-source branch; otherwise reuses `runSummarize(...)` to generate the same file-structure-plus-summary markdown, resolves `<docs-dir>/REFERENCES.md` from the effective project configuration, overwrites the target file, and returns the status-only stdout `success`. Runtime is O(F log F + S) plus one `git ls-files` probe and one file write. Side effects include subprocess creation and filesystem writes.
 - @param[in] projectBase {string} Candidate project root.
@@ -7371,7 +7409,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @throws {ReqError} Throws when the git file inventory cannot be collected, when summary generation fails for a non-empty inventory, or when the placeholder or generated file write fails.
 - @satisfies REQ-293, REQ-294, REQ-300, REQ-620, REQ-622
 
-### fn `export function runCompress(projectBase: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L346-351)
+### fn `export function runCompress(projectBase: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L353-358)
 - @brief Compresses all source files from configured source directories.
 - @details Resolves the project base, collects source files, and delegates to `compressFiles`. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
@@ -7381,7 +7419,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {ToolResult} Successful tool result containing compressed output.
 - @throws {ReqError} Throws when no source files are found.
 
-### fn `export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L365-374)
+### fn `export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L372-381)
 - @brief Searches named constructs across configured project source files.
 - @details Resolves the project base, collects source files, delegates to `searchConstructsInFiles`, and converts thrown search errors into structured `ReqError` failures. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
@@ -7393,7 +7431,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {ToolResult} Successful tool result containing construct markdown.
 - @throws {ReqError} Throws when no source files are found or the search fails.
 
-### fn `export function runTokens(projectBase: string, config?: UseReqConfig): ToolResult` (L384-393)
+### fn `export function runTokens(projectBase: string, config?: UseReqConfig): ToolResult` (L391-400)
 - @brief Counts tokens for canonical documentation files.
 - @details Loads the configured docs directory, selects `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` when present, and delegates to `runFilesTokens`. Runtime is O(F + S). Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Candidate project root.
@@ -7401,47 +7439,65 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {ToolResult} Tool result containing documentation token metrics.
 - @throws {ReqError} Throws when no canonical docs files exist.
 
-### fn `export function runFilesStaticCheck(files: string[], projectBase: string, config?: UseReqConfig): ToolResult` (L403-439)
+### fn `export function runFilesStaticCheck(files: string[], projectBase: string, config?: UseReqConfig): ToolResult` (L411-438)
 - @brief Runs configured static checks for explicit files.
 - @details Loads the effective static-check config, resolves the active checker list per file-extension language through the per-language enable flag, captures checker stdout for each dispatched entry, and aggregates stderr warnings for invalid paths. Runtime is O(F * C) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
 - @param[in] files {string[]} Explicit file paths.
 - @param[in] projectBase {string} Candidate project root.
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
 - @return {ToolResult} Aggregated static-check result.
+- @satisfies REQ-700
 
-### fn `export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult` (L449-462)
+### fn `function captureStaticCheckOutput(operation: () => void): string` (L446-459)
+- @brief Captures stdout text emitted by one static-check dispatch callback.
+- @details Temporarily replaces `process.stdout.write` with an accumulating shim so checker output joins the aggregated tool stdout without leaking to the console. Runtime is O(n) in captured output size. Side effect: temporarily mutates `process.stdout.write`.
+- @param[in] operation {() => void} Checker dispatch callback whose console output is captured.
+- @return {string} Captured stdout text.
+
+### fn `function resolveStaticCheckDirScanTargets(selectionDirs: string[], files: string[], base: string): string[]` (L469-484)
+- @brief Resolves the directory-scan target roots for project static-check execution.
+- @details Resolves every configured selection directory (`src-dir` entries plus `tests-dir`) against the project base in configured order, deduplicates absolute paths, and keeps only directories that contain at least one selected file so recursive checker invocations never target empty or unrelated roots. Runtime is O(d * f) in selection-directory and selected-file count. Side effects are limited to filesystem reads.
+- @param[in] selectionDirs {string[]} Configured selection-directory roots.
+- @param[in] files {string[]} Absolute selected file paths after fixture exclusion.
+- @param[in] base {string} Absolute project root.
+- @return {string[]} Deduplicated absolute directory-scan target paths in configured order.
+
+### fn `export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult` (L495-556)
 - @brief Runs configured static checks for project source and test directories.
-- @details Collects source and test files, excludes fixture roots, and delegates to `runFilesStaticCheck`. Runtime is O(F * C) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
+- @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, while every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Directory-scan invocations append after all per-file results in first-encountered language and checker order. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
 - @param[in] projectBase {string} Candidate project root.
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
 - @return {ToolResult} Aggregated static-check result.
 - @throws {ReqError} Throws when no source files are found.
+- @satisfies REQ-696, REQ-697, REQ-698
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`ToolResult`|iface||30-34|export interface ToolResult|
-|`ok`|fn||54-56|function ok(stdout = "", stderr = ""): ToolResult|
-|`fail`|fn||68-73|function fail(message: string, code = 1, stdout = "", std...|
-|`runCapture`|fn||82-87|function runCapture(command: string[], options: { cwd?: s...|
-|`collectSourceFiles`|fn||97-124|export function collectSourceFiles(srcDirs: string[], pro...|
-|`buildAsciiTree`|fn||132-160|function buildAsciiTree(paths: string[]): string|
-|`emit`|fn||148-157|const emit = (branch: Record<string, Record<string, unkno...|
-|`formatFilesStructureMarkdown`|fn||169-172|function formatFilesStructureMarkdown(files: string[], pr...|
-|`resolveProjectBase`|fn||181-187|export function resolveProjectBase(projectBase?: string):...|
-|`resolveProjectSrcDirs`|fn||197-205|export function resolveProjectSrcDirs(projectBase: string...|
-|`loadAndRepairConfig`|fn||214-219|export function loadAndRepairConfig(projectBase: string):...|
-|`runFilesTokens`|fn||228-240|export function runFilesTokens(files: string[]): ToolResult|
-|`runFilesSummarize`|fn||251-257|export function runFilesSummarize(files: string[], cwd = ...|
-|`runFilesCompress`|fn||268-270|export function runFilesCompress(files: string[], cwd = p...|
-|`runFilesSearch`|fn||281-287|export function runFilesSearch(argsList: string[], enable...|
-|`runSummarize`|fn||299-310|export function runSummarize(projectBase: string, config?...|
-|`runReferences`|fn||322-334|export function runReferences(projectBase: string, config...|
-|`runCompress`|fn||346-351|export function runCompress(projectBase: string, config?:...|
-|`runSearch`|fn||365-374|export function runSearch(projectBase: string, tagFilter:...|
-|`runTokens`|fn||384-393|export function runTokens(projectBase: string, config?: U...|
-|`runFilesStaticCheck`|fn||403-439|export function runFilesStaticCheck(files: string[], proj...|
-|`runProjectStaticCheck`|fn||449-462|export function runProjectStaticCheck(projectBase: string...|
+|`ToolResult`|iface||37-41|export interface ToolResult|
+|`ok`|fn||61-63|function ok(stdout = "", stderr = ""): ToolResult|
+|`fail`|fn||75-80|function fail(message: string, code = 1, stdout = "", std...|
+|`runCapture`|fn||89-94|function runCapture(command: string[], options: { cwd?: s...|
+|`collectSourceFiles`|fn||104-131|export function collectSourceFiles(srcDirs: string[], pro...|
+|`buildAsciiTree`|fn||139-167|function buildAsciiTree(paths: string[]): string|
+|`emit`|fn||155-164|const emit = (branch: Record<string, Record<string, unkno...|
+|`formatFilesStructureMarkdown`|fn||176-179|function formatFilesStructureMarkdown(files: string[], pr...|
+|`resolveProjectBase`|fn||188-194|export function resolveProjectBase(projectBase?: string):...|
+|`resolveProjectSrcDirs`|fn||204-212|export function resolveProjectSrcDirs(projectBase: string...|
+|`loadAndRepairConfig`|fn||221-226|export function loadAndRepairConfig(projectBase: string):...|
+|`runFilesTokens`|fn||235-247|export function runFilesTokens(files: string[]): ToolResult|
+|`runFilesSummarize`|fn||258-264|export function runFilesSummarize(files: string[], cwd = ...|
+|`runFilesCompress`|fn||275-277|export function runFilesCompress(files: string[], cwd = p...|
+|`runFilesSearch`|fn||288-294|export function runFilesSearch(argsList: string[], enable...|
+|`runSummarize`|fn||306-317|export function runSummarize(projectBase: string, config?...|
+|`runReferences`|fn||329-341|export function runReferences(projectBase: string, config...|
+|`runCompress`|fn||353-358|export function runCompress(projectBase: string, config?:...|
+|`runSearch`|fn||372-381|export function runSearch(projectBase: string, tagFilter:...|
+|`runTokens`|fn||391-400|export function runTokens(projectBase: string, config?: U...|
+|`runFilesStaticCheck`|fn||411-438|export function runFilesStaticCheck(files: string[], proj...|
+|`captureStaticCheckOutput`|fn||446-459|function captureStaticCheckOutput(operation: () => void):...|
+|`resolveStaticCheckDirScanTargets`|fn||469-484|function resolveStaticCheckDirScanTargets(selectionDirs: ...|
+|`runProjectStaticCheck`|fn||495-556|export function runProjectStaticCheck(projectBase: string...|
 
 
 ---

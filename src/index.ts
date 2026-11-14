@@ -4445,7 +4445,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     promptGuidelines: [
       "Input contract: no params. Scope is src-dir plus tests-dir from the cwd-derived project configuration.",
       "Output contract: monolithic text in content[0].text; details.execution preserves only exit code and residual diagnostics.",
-      "Selection contract: tests/fixtures and <tests-dir>/fixtures are excluded before checker dispatch.",
+      "Selection contract: tests/fixtures and <tests-dir>/fixtures are excluded before checker dispatch; entries with scan-by-dir TRUE run one recursive invocation over src-dir plus tests-dir.",
       "Failure contract: execution diagnostics preserve failing checker output and skipped-selection warnings.",
     ],
     renderResult: buildStructuredToolRenderResult("static-check"),

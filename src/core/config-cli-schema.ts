@@ -44,7 +44,7 @@ export type ConfigValueKind =
  */
 export interface ConfigSchemaField {
   token: string;
-  type: "string" | "string-array";
+  type: "string" | "boolean" | "string-array";
   description: string;
   constraints: string;
   required: boolean;
@@ -220,6 +220,16 @@ const STATIC_CHECK_FIELDS: ConfigSchemaField[] = [
     nonEmpty: false,
     itemNonEmpty: false,
     example: ["--check"],
+  },
+  {
+    token: "scan-by-dir",
+    type: "boolean",
+    description: "Run the checker recursively over configured source and test directories instead of per file.",
+    constraints: "Boolean",
+    required: false,
+    nonEmpty: false,
+    itemNonEmpty: false,
+    example: true,
   },
 ];
 
@@ -1310,6 +1320,12 @@ function validateFieldValue(field: ConfigSchemaField, value: unknown, pathLabel:
     validateStringArray(value, pathLabel, field.itemNonEmpty, undefined);
     return;
   }
+  if (field.type === "boolean") {
+    if (typeof value !== "boolean") {
+      throw new ReqError(`Error: invalid value for "${pathLabel}": expected a boolean.`, 1);
+    }
+    return;
+  }
   if (typeof value !== "string") {
     throw new ReqError(`Error: invalid value for "${pathLabel}": expected a string.`, 1);
   }
@@ -1518,7 +1534,7 @@ export function parseFieldInput(
   rawValue: string,
   pathLabel: string,
 ): unknown {
-  return field.type === "string-array" ? parseJsonInput(rawValue, pathLabel) : rawValue;
+  return field.type === "string" ? rawValue : parseJsonInput(rawValue, pathLabel);
 }
 
 /**

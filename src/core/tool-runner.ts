@@ -13,13 +13,20 @@ import {
   loadConfig,
   normalizeConfigPaths,
   saveConfig,
+  type StaticCheckEntry,
   type UseReqConfig,
 } from "./config.js";
 import { countFilesMetrics, formatPackSummary } from "./token-counter.js";
 import { compressFiles } from "./compress-files.js";
 import { searchConstructsInFiles } from "./find-constructs.js";
 import { generateMarkdown } from "./generate-markdown.js";
-import { STATIC_CHECK_EXT_TO_LANG, dispatchStaticCheckForFile } from "./static-check.js";
+import {
+  STATIC_CHECK_EXT_TO_LANG,
+  buildStaticCheckEntryIdentity,
+  dispatchStaticCheckForDirectories,
+  dispatchStaticCheckForFile,
+  supportsStaticCheckDirScan,
+} from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./source-presence.js";
 
@@ -399,6 +406,7 @@ export function runTokens(projectBase: string, config?: UseReqConfig): ToolResul
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @return {ToolResult} Aggregated static-check result.
+ * @satisfies REQ-700
  */
 export function runFilesStaticCheck(files: string[], projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
@@ -417,34 +425,72 @@ export function runFilesStaticCheck(files: string[], projectBase: string, config
     if (!lang) continue;
     const langConfigs = getActiveStaticCheckEntries(scConfig, lang);
     for (const langConfig of langConfigs) {
-      const previousWrite = process.stdout.write.bind(process.stdout);
-      let captured = "";
-      (process.stdout.write as unknown as (chunk: string | Uint8Array) => boolean) = ((chunk: string | Uint8Array) => {
-        captured += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-        return true;
-      }) as unknown as typeof process.stdout.write;
-      try {
+      stdout += captureStaticCheckOutput(() => {
         const rc = dispatchStaticCheckForFile(filePath, langConfig, {
           failOnly: true,
           projectBase: base,
         });
         if (rc !== 0) overall = 1;
-      } finally {
-        process.stdout.write = previousWrite;
-      }
-      stdout += captured;
+      });
     }
   }
   return { stdout, stderr, code: overall };
 }
 
 /**
+ * @brief Captures stdout text emitted by one static-check dispatch callback.
+ * @details Temporarily replaces `process.stdout.write` with an accumulating shim so checker output joins the aggregated tool stdout without leaking to the console. Runtime is O(n) in captured output size. Side effect: temporarily mutates `process.stdout.write`.
+ * @param[in] operation {() => void} Checker dispatch callback whose console output is captured.
+ * @return {string} Captured stdout text.
+ */
+function captureStaticCheckOutput(operation: () => void): string {
+  const previousWrite = process.stdout.write.bind(process.stdout);
+  let captured = "";
+  (process.stdout.write as unknown as (chunk: string | Uint8Array) => boolean) = ((chunk: string | Uint8Array) => {
+    captured += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    return true;
+  }) as unknown as typeof process.stdout.write;
+  try {
+    operation();
+  } finally {
+    process.stdout.write = previousWrite;
+  }
+  return captured;
+}
+
+/**
+ * @brief Resolves the directory-scan target roots for project static-check execution.
+ * @details Resolves every configured selection directory (`src-dir` entries plus `tests-dir`) against the project base in configured order, deduplicates absolute paths, and keeps only directories that contain at least one selected file so recursive checker invocations never target empty or unrelated roots. Runtime is O(d * f) in selection-directory and selected-file count. Side effects are limited to filesystem reads.
+ * @param[in] selectionDirs {string[]} Configured selection-directory roots.
+ * @param[in] files {string[]} Absolute selected file paths after fixture exclusion.
+ * @param[in] base {string} Absolute project root.
+ * @return {string[]} Deduplicated absolute directory-scan target paths in configured order.
+ */
+function resolveStaticCheckDirScanTargets(selectionDirs: string[], files: string[], base: string): string[] {
+  const targets: string[] = [];
+  for (const selectionDir of selectionDirs) {
+    const absoluteDir = path.resolve(base, selectionDir);
+    if (targets.includes(absoluteDir)) {
+      continue;
+    }
+    if (!fs.existsSync(absoluteDir) || !fs.statSync(absoluteDir).isDirectory()) {
+      continue;
+    }
+    if (files.some((filePath) => filePath === absoluteDir || filePath.startsWith(`${absoluteDir}${path.sep}`))) {
+      targets.push(absoluteDir);
+    }
+  }
+  return targets;
+}
+
+/**
  * @brief Runs configured static checks for project source and test directories.
- * @details Collects source and test files, excludes fixture roots, and delegates to `runFilesStaticCheck`. Runtime is O(F * C) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
+ * @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, while every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Directory-scan invocations append after all per-file results in first-encountered language and checker order. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @return {ToolResult} Aggregated static-check result.
  * @throws {ReqError} Throws when no source files are found.
+ * @satisfies REQ-696, REQ-697, REQ-698
  */
 export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
@@ -458,6 +504,53 @@ export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig
     return ![...fixtureRoots].some((fixtureRoot) => rel === fixtureRoot || rel.startsWith(`${fixtureRoot}/`));
   });
   if (files.length === 0) fail("Error: no source files found in configured directories.", 1);
-  return runFilesStaticCheck(files, base, effectiveConfig);
+  files = files.map((filePath) => path.resolve(filePath));
+  const scConfig = effectiveConfig["static-check"] ?? {};
+  const existingFixtureRoots = [...fixtureRoots].filter((fixtureRoot) => {
+    const absoluteRoot = path.join(base, fixtureRoot);
+    return fs.existsSync(absoluteRoot) && fs.statSync(absoluteRoot).isDirectory();
+  });
+  const dirScanTargets = resolveStaticCheckDirScanTargets(selectionDirs, files, base);
+  const seenDirScanIdentities = new Set<string>();
+  const dirScanEntries: StaticCheckEntry[] = [];
+  let stderr = "";
+  let overall = 0;
+  let stdout = "";
+  for (const filePath of files) {
+    const lang = STATIC_CHECK_EXT_TO_LANG[path.extname(filePath).toLowerCase()];
+    if (!lang) continue;
+    const langConfigs = getActiveStaticCheckEntries(scConfig, lang);
+    for (const langConfig of langConfigs) {
+      if (
+        langConfig["scan-by-dir"] === true
+        && supportsStaticCheckDirScan(langConfig.cmd)
+        && dirScanTargets.length > 0
+      ) {
+        const identity = buildStaticCheckEntryIdentity(lang, langConfig);
+        if (!seenDirScanIdentities.has(identity)) {
+          seenDirScanIdentities.add(identity);
+          dirScanEntries.push(langConfig);
+        }
+        continue;
+      }
+      stdout += captureStaticCheckOutput(() => {
+        const rc = dispatchStaticCheckForFile(filePath, langConfig, {
+          failOnly: true,
+          projectBase: base,
+        });
+        if (rc !== 0) overall = 1;
+      });
+    }
+  }
+  for (const langConfig of dirScanEntries) {
+    stdout += captureStaticCheckOutput(() => {
+      const rc = dispatchStaticCheckForDirectories(dirScanTargets, langConfig, {
+        failOnly: true,
+        projectBase: base,
+        excludedDirectoryPaths: existingFixtureRoots,
+      });
+      if (rc !== 0) overall = 1;
+    });
+  }
+  return { stdout, stderr, code: overall };
 }
-

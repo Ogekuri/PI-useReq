@@ -303,6 +303,41 @@ function resolveFiles(inputs: string[]): string[] {
 }
 
 /**
+ * @brief Maps directory-scan-capable command basenames to their native exclusion-argument builders.
+ * @details Each entry pairs one checker executable supporting recursive directory targets with the checker-native flag that excludes the project fixture roots from that recursive scan. The map keys define the directory-scan-capable command set. Access complexity is O(1).
+ * @satisfies REQ-695, REQ-698
+ */
+const STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS: Record<string, (root: string) => string[]> = {
+  cppcheck: (root) => ["-i", root],
+  ruff: (root) => ["--exclude", root],
+  eslint: (root) => ["--ignore-pattern", `${root}/**`],
+};
+
+/**
+ * @brief Normalizes one checker command for directory-scan capability comparison.
+ * @details Strips the `%%INSTALLATION_PATH%%` keyword, reduces the candidate to its basename, and lowercases it so explicit paths and bare command names compare identically. Runtime is O(p) in command length. No side effects occur.
+ * @param[in] cmd {string} Configured checker executable name or installation-anchored path.
+ * @return {string} Normalized command basename.
+ */
+function normalizeStaticCheckDirScanCommand(cmd: string): string {
+  return path.basename(cmd.split("%%INSTALLATION_PATH%%").join("")).toLowerCase();
+}
+
+/**
+ * @brief Tests whether one Command checker supports recursive directory-scan execution.
+ * @details Accepts exactly the checkers that natively accept recursive directory targets and expose a CLI exclusion flag for the project fixture roots: `cppcheck`, `ruff`, and `eslint`. Runtime is O(p) in command length. No side effects occur.
+ * @param[in] cmd {string} Configured checker executable name, explicit path, or `%%INSTALLATION_PATH%%`-anchored path.
+ * @return {boolean} `true` when the command is directory-scan capable.
+ * @satisfies REQ-695
+ */
+export function supportsStaticCheckDirScan(cmd: string | undefined): boolean {
+  if (typeof cmd !== "string" || cmd.trim() === "") {
+    return false;
+  }
+  return normalizeStaticCheckDirScanCommand(cmd) in STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS;
+}
+
+/**
  * @brief Provides the shared and debug-capable base implementation for file-oriented static checks.
  * @details Resolves input files once, emits standardized headers, implements the debug `Dummy` checker behavior, and defines overridable `checkFile` plus `emitLine` hooks used by concrete analyzers. Runtime is O(f) plus subclass checker cost. Side effects include console output.
  */
@@ -436,6 +471,80 @@ export class StaticCheckCommand extends StaticCheckBase {
     this.emitLine(`${result.stdout ?? ""}${result.stderr ?? ""}`.trimEnd());
     return 1;
   }
+}
+
+/**
+ * @brief Builds checker-native exclusion arguments for one directory-scan-capable command.
+ * @details Maps the normalized command basename onto its native exclusion flag so directory-scan invocations honor the project fixture-root exclusion contract: `cppcheck -i <root>`, `ruff --exclude <root>`, and `eslint --ignore-pattern <root>/**`. Commands without a native exclusion flag produce no arguments. Runtime is O(r) in exclusion-root count. No side effects occur.
+ * @param[in] cmd {string} Configured checker executable name or installation-anchored path.
+ * @param[in] excludedDirectoryPaths {string[]} Project-relative fixture-root directories excluded from directory-scan execution.
+ * @return {string[]} Ordered exclusion argument tokens appended before directory targets.
+ * @satisfies REQ-698
+ */
+function buildStaticCheckDirScanExclusionArgs(cmd: string, excludedDirectoryPaths: string[]): string[] {
+  const builder = STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS[normalizeStaticCheckDirScanCommand(cmd)];
+  if (!builder) {
+    return [];
+  }
+  return excludedDirectoryPaths.flatMap((root) => builder(root));
+}
+
+/**
+ * @brief Dispatches one configured static checker over directory roots as a single recursive invocation.
+ * @details Resolves the Command executable, appends checker-native exclusion arguments for the supplied fixture roots, and executes one process with `[..., params, ...exclusionArgs, ...directoryPaths]` from the project base so checker-native recursive discovery replaces per-file dispatch. Emits the standardized `# Static-Check(Command[<cmd>] (scan-by-dir))` header with OK/FAIL result and captured evidence. Runtime is dominated by one external command execution. Side effects include PATH probing, process spawning, and console output.
+ * @param[in] directoryPaths {string[]} Absolute directory roots passed to the checker.
+ * @param[in] langConfig {StaticCheckEntry} Normalized static-check configuration entry carrying `scan-by-dir: true`.
+ * @param[in] options {{ failOnly?: boolean; projectBase?: string; excludedDirectoryPaths?: string[] }} Optional execution controls.
+ * @return {number} Checker exit status where `0` means success and non-zero means failure.
+ * @throws {ReqError} Throws for non-Command modules, missing `cmd`, missing directories, or unresolvable executables.
+ * @satisfies REQ-697, REQ-698
+ */
+export function dispatchStaticCheckForDirectories(
+  directoryPaths: string[],
+  langConfig: StaticCheckEntry,
+  options: { failOnly?: boolean; projectBase?: string; excludedDirectoryPaths?: string[] } = {},
+): number {
+  const moduleName = String(langConfig.module ?? "");
+  if (moduleName.toLowerCase() !== "command") {
+    throw new ReqError(`Error: static-check module '${moduleName}' does not support scan-by-dir execution.`, 1);
+  }
+  const cmd = typeof langConfig.cmd === "string" ? langConfig.cmd : undefined;
+  if (!cmd) {
+    throw new ReqError("Error: Command module requires 'cmd' in static-check config for scan-by-dir execution.", 1);
+  }
+  const targets = directoryPaths.filter((dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory());
+  if (targets.length === 0) {
+    throw new ReqError("Error: no directories resolved for scan-by-dir static check.", 1);
+  }
+  const resolvedCmd = resolveCheckerExecutable(cmd);
+  if (!resolvedCmd) {
+    throw new ReqError(`Error: external command '${cmd}' not found on PATH.`, 1);
+  }
+  const params = Array.isArray(langConfig.params) ? langConfig.params.map(String) : [];
+  const excludedDirectoryPaths = (options.excludedDirectoryPaths ?? []).filter((value) => value.trim().length > 0);
+  const args = [...params, ...buildStaticCheckDirScanExclusionArgs(cmd, excludedDirectoryPaths), ...targets];
+  const failOnly = options.failOnly ?? false;
+  const header = `# Static-Check(Command[${cmd}] (scan-by-dir)): ${targets.join(" ")}`;
+  const result = spawnSync(resolvedCmd, args, { encoding: "utf8", cwd: options.projectBase });
+  if (result.error) {
+    console.log(header);
+    console.log("Result: FAIL");
+    console.log("Evidence:");
+    console.log(`  command '${cmd}' not found on PATH`);
+    return 1;
+  }
+  if (result.status === 0) {
+    if (!failOnly) {
+      console.log(header);
+      console.log("Result: OK");
+    }
+    return 0;
+  }
+  console.log(header);
+  console.log("Result: FAIL");
+  console.log("Evidence:");
+  console.log(`${result.stdout ?? ""}${result.stderr ?? ""}`.trimEnd());
+  return 1;
 }
 
 /**

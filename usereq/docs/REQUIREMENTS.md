@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.158"
+version: "0.0.159"
 date: "2026-11-14"
 author: "OpenAI Codex"
 scope:
@@ -774,6 +774,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-691**: MUST preserve every persisted parameter value, unknown persisted key, and existing file permission during `--write-config`.
 - **REQ-692**: MUST emit no stdout on successful `--write-config` and one English stderr diagnostic with non-zero exit code on failure.
 - **REQ-693**: MUST NOT add absent parameter values to an existing persisted configuration file during `--set` or `--unset` unless the requested operation changes that parameter value.
+- **REQ-694**: MUST expose optional boolean `scan-by-dir` on every static-check Command entry selecting recursive directory-scan execution over per-file execution.
+- **REQ-695**: MUST resolve effective `scan-by-dir` from the persisted boolean, defaulting TRUE only for directory-scan-capable commands `cppcheck`, `ruff`, and `eslint`, FALSE otherwise.
+- **REQ-696**: MUST dispatch project static-check per file for checker entries whose effective `scan-by-dir` is FALSE or whose command is not directory-scan-capable.
+- **REQ-697**: When effective `scan-by-dir` is TRUE, MUST execute each directory-scan-capable Command checker entry once over every configured `src-dir` directory plus `tests-dir`.
+- **REQ-698**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from directory-scan invocations through checker-native exclusion arguments for capable commands.
+- **REQ-699**: MUST default shipped `cppcheck`, `ruff`, and `eslint` checker entries to `scan-by-dir` TRUE and every other shipped entry to FALSE.
+- **REQ-700**: MUST keep `files-static-check` per-file dispatch independent of `scan-by-dir`.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1008,7 +1015,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/tool-runner.ts` orchestrates project file collection, markdown generation, compression, construct search, and static-check execution.
 - `src/core/source-analyzer.ts` defines `SourceElement`, language specs, extraction heuristics, Doxygen attachment, and Markdown rendering support.
 - `src/core/generate-markdown.ts`, `src/core/compress.ts`, and `src/core/find-constructs.ts` share analyzer and compressor logic to produce reusable Markdown outputs.
-- `src/core/static-check.ts` maps languages/extensions, parses Command-only enable specs, preserves debug `Dummy` handling, resolves inputs, and dispatches modular checker classes.
+- `src/core/static-check.ts` maps languages/extensions, parses Command-only enable specs, preserves debug `Dummy` handling, resolves inputs, dispatches modular checker classes per file, and dispatches recursive directory-scan invocations for `scan-by-dir` Command entries.
 - `src/core/config.ts`, `src/core/resources.ts`, `src/core/prompts.ts`, and `src/core/req-references-command.ts` provide config persistence, installation-owned bundled-resource resolution, bundled-prompt rendering, and direct `req-references` slash-command orchestration.
 - `src/core/agent-final-output.ts` parses the terminal agent output as one validated final-output JSON object, renders its markdown report sections, and stores the process-scoped captured report consumed by the final context-retention notification.
 - `src/core/next-workflow.ts` provides Next-Workflow command capture from the parsed final-output JSON `next_commands` array, process-scoped Next-Workflow array storage, numbered-list rendering plus `/req-continue-list` full-entry list rendering, ordinal selection, and `/req-continue` handler dispatch helpers.
@@ -1392,6 +1399,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-691 | `src/core/config-cli-schema.ts` :: `mergeScopeAbsentDefaults` :: clone the raw payload and fill only absent chains; `src/core/config-cli.ts` :: `atomicWriteJsonPayload` :: preserve permissions during the atomic replace. |
 | REQ-692 | `src/core/config-cli.ts` :: `runWriteConfigCommand` and `runConfigCli` :: emit no stdout on success and one English stderr diagnostic with non-zero exit code on failure. |
 | REQ-693 | `src/core/config-cli.ts` :: `persistScopeMutation`; `src/core/config-cli-schema.ts` :: `buildScopeMutationWritePayload` :: write only raw-present chains plus operation-changed chains into the owning scope file. |
+| REQ-694 | `src/core/config.ts` :: `StaticCheckEntry` :: optional `scan-by-dir` boolean field on every Command entry. |
+| REQ-695 | `src/core/config.ts` :: `normalizeStaticCheckEntries`; `src/core/static-check.ts` :: `supportsStaticCheckDirScan` :: persisted boolean wins, capability default TRUE for `cppcheck`/`ruff`/`eslint`. |
+| REQ-696 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` per-file loop :: per-file `dispatchStaticCheckForFile` for FALSE entries. |
+| REQ-697 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` directory-scan loop; `src/core/static-check.ts` :: `dispatchStaticCheckForDirectories` :: one invocation per entry over selection directories. |
+| REQ-698 | `src/core/static-check.ts` :: `buildStaticCheckDirScanExclusionArgs` :: `cppcheck -i`, `ruff --exclude`, `eslint --ignore-pattern` fixture-root exclusion. |
+| REQ-699 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: `scan-by-dir: true` on `cppcheck`, `ruff`, `eslint` defaults. |
+| REQ-700 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: explicit-file dispatch without directory-scan branching. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1478,4 +1492,4 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-228 | `tests/config-cli-write-config.test.ts` :: `--set` plus `--unset` absence-preservation coverage :: absent parameters stay absent while requested mutations and effective reads persist. |
 
 ## 9. Performance Notes
-No explicit performance optimizations identified.
+- Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

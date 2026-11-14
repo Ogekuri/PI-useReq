@@ -8069,6 +8069,7 @@ test("default configuration applies the documented static-check, debug, notify, 
         "--enable=warning,style,performance,portability",
         "--std=c11",
       ],
+      "scan-by-dir": true,
     },
     {
       module: "Command",
@@ -8085,6 +8086,7 @@ test("default configuration applies the documented static-check, debug, notify, 
         "--enable=warning,style,performance,portability",
         "--std=c++20",
       ],
+      "scan-by-dir": true,
     },
     {
       module: "Command",
@@ -8094,13 +8096,13 @@ test("default configuration applies the documented static-check, debug, notify, 
   ], "enable"));
   assert.deepEqual(config["static-check"].Python, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
-    { module: "Command", cmd: "ruff", params: ["check"] },
+    { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
   ], "enable"));
   assert.deepEqual(config["static-check"].JavaScript, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "node", params: ["--check"] },
   ], "enable"));
   assert.deepEqual(config["static-check"].TypeScript, createStaticCheckLanguageConfig([
-    { module: "Command", cmd: "eslint", params: [] },
+    { module: "Command", cmd: "eslint", params: [], "scan-by-dir": true },
   ], "enable"));
   assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([], "disable"));
   assert.equal(config.DEBUG_ENABLED, "disable");
@@ -8132,7 +8134,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.equal(localConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
-    { module: "Command", cmd: "ruff", params: ["check"] },
+    { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
   ]);
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Ruby.checkers, []);
   assert.equal(globalConfig.AUTO_GIT_COMMIT, "enable");
@@ -9477,7 +9479,7 @@ test("configuration menu can toggle per-language static-check enablement", async
   assert.equal((localConfig["static-check"] as Record<string, any>).Python.enabled, "disable");
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
-    { module: "Command", cmd: "ruff", params: ["check"] },
+    { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
   ]);
 });
 

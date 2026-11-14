@@ -54,16 +54,19 @@ import {
   type DebugToolCommandsEnabled,
 } from "./debug-runtime.js";
 import { normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
+import { supportsStaticCheckDirScan } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 
 /**
  * @brief Describes one static-check module configuration entry.
- * @details Each record identifies the checker module and optional command or parameter list used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
+ * @details Each record identifies the checker module, optional command or parameter list, and the optional `scan-by-dir` flag selecting recursive directory-scan execution over per-file execution used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
+ * @satisfies REQ-694
  */
 export interface StaticCheckEntry {
   module: string;
   cmd?: string;
   params?: string[];
+  "scan-by-dir"?: boolean;
 }
 
 /**
@@ -267,8 +270,8 @@ export const DEFAULT_STATIC_CHECK_LANGUAGES = [
 
 /**
  * @brief Defines the default static-check entries per language.
- * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Access complexity is O(1).
- * @satisfies REQ-250, REQ-251, REQ-252
+ * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; every other shipped entry defaults to `false`. Access complexity is O(1).
+ * @satisfies REQ-250, REQ-251, REQ-252, REQ-699
  */
 const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
   C: [
@@ -280,6 +283,7 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
         "--enable=warning,style,performance,portability",
         "--std=c11",
       ],
+      "scan-by-dir": true,
     },
     {
       module: "Command",
@@ -296,6 +300,7 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
         "--enable=warning,style,performance,portability",
         "--std=c++20",
       ],
+      "scan-by-dir": true,
     },
     {
       module: "Command",
@@ -313,6 +318,7 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       module: "Command",
       cmd: "ruff",
       params: ["check"],
+      "scan-by-dir": true,
     },
   ],
   JavaScript: [
@@ -327,6 +333,7 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       module: "Command",
       cmd: "eslint",
       params: [],
+      "scan-by-dir": true,
     },
   ],
 };
@@ -345,6 +352,7 @@ function cloneStaticCheckEntry(entry: StaticCheckEntry): StaticCheckEntry {
     module: String(entry.module ?? ""),
     ...(typeof entry.cmd === "string" && entry.cmd.trim() ? { cmd: entry.cmd.trim() } : {}),
     ...(params.length > 0 ? { params } : {}),
+    ...(typeof entry["scan-by-dir"] === "boolean" ? { "scan-by-dir": entry["scan-by-dir"] } : {}),
   };
 }
 
@@ -748,9 +756,10 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
 
 /**
  * @brief Normalizes one raw checker-entry array from persisted config.
- * @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
+ * @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, preserves an explicit persisted `scan-by-dir` boolean, defaults absent flags to `true` for directory-scan-capable commands (`cppcheck`, `ruff`, `eslint`) and `false` otherwise, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
  * @param[in] value {unknown} Candidate persisted checker array.
  * @return {StaticCheckEntry[]} Normalized checker-entry vector.
+ * @satisfies REQ-694, REQ-695
  */
 function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[] {
   if (!Array.isArray(value)) {
@@ -769,6 +778,11 @@ function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[] {
       module: entry.module,
       ...(typeof entry.cmd === "string" ? { cmd: entry.cmd } : {}),
       ...(Array.isArray(entry.params) ? { params: entry.params.map(String) } : {}),
+      ...(typeof entry["scan-by-dir"] === "boolean"
+        ? { "scan-by-dir": entry["scan-by-dir"] }
+        : (supportsStaticCheckDirScan(typeof entry.cmd === "string" ? entry.cmd : undefined)
+          ? { "scan-by-dir": true }
+          : {})),
     }));
   }
   return entries;
