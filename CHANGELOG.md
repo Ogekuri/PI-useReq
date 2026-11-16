@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.10](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.10) - 2026-11-14
+## [0.109.11](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.11) - 2026-11-16
 ### ⛰️  Features
 - Update prompt with json validator.
 - Add json-validator agent tool with native TypeScript validation [useReq] *(json-validator)*
@@ -61,6 +61,12 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- box report titles and render next-workflow command table *(notify)*
+  Render ANSI report section titles as rounded box frames sized from the label length, keeping intense-yellow styling (REQ-720, REQ-721).; Render the captured Next-Workflow commands as a dynamically sized rounded table with N./Command/Text columns, zero-padded ordinals, uppercase prefix-free commands, N/A placeholders, double-line header separator, and row separators (REQ-722, REQ-723, REQ-725).; Condense over-limit table texts with the ' .. ' separator via condenseNextWorkflowTableInputText (REQ-724).; Append the table to the ANSI report notification for every outcome (REQ-722).; SRS v0.0.164 adds REQ-720..REQ-725; WORKFLOW.md call traces and REFERENCES.md refreshed.
+- color retention line and print terminal diagnostics last in red *(notify)*
+  Render the complete Context retained. sentence with the percentage segment in intense white with the percentage in intense yellow ANSI (REQ-716, REQ-717).; Emit every terminal error/warning orchestration diagnostic in intense red through notifyTerminalOrchestrationDiagnostic (REQ-718).; Order terminal diagnostics after the report printout, the Next-Workflow list, and the context-percentage line; move the stash warning after the retention reminder (REQ-719).; Centralize ANSI SGR styling in the new src/core/ansi-style.ts module consumed by the report renderer.; SRS v0.0.163 adds REQ-716..REQ-719; WORKFLOW.md call traces and REFERENCES.md refreshed.
+- print ANSI-colored final-output report for every prompt outcome *(agent-final-output)*
+  Render markdown report notifications with ANSI escapes: intense-yellow ## **<Label>** headings plus colored links, fences, inline code, bold, italic, and underline elements (REQ-713..REQ-715).; Emit the report notification for every terminal outcome with a parsed final-output report, including result error gate closures at agent_end and agent_settled (REQ-712).; Persist pendingFinalizationReport so settle-time result error closures print the terminal run's report.; SRS v0.0.162 adds REQ-712..REQ-715; WORKFLOW.md call traces and REFERENCES.md refreshed.
 - extract embedded final-output JSON at prompt closure [useReq] *(agent-final-output)*
   SRS 0.0.161: REQ-584 extracts one embedded JSON object; REQ-710/REQ-711 added.
   REQ-678 validates the extracted object; TST-225 covers wrapped and fenced cases.
@@ -1579,7 +1585,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.10\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.10
+- \[0.109.11\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.11
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1688,4 +1694,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.10]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.10
+[0.109.11]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.11
