@@ -1,7 +1,8 @@
 # Changelog
 
-## [0.109.14](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.14) - 2026-11-16
+## [0.109.15](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.15) - 2026-11-16
 ### ⛰️  Features
+- Update prompts.
 - Update prompts.
 - Update prompts.
 - Update prompt with json validator.
@@ -85,6 +86,17 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- document default-enabled custom-tool inventory [useReq] *(core)*
+  Add REQ-742: every configurable custom tool stays enabled by default until a persisted enabled-tools selection explicitly overrides the default. Bump SRS version 0.0.167 to 0.0.168 and append the REQ-742 evidence row. Link REQ-742 from the PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES and normalizeEnabledPiUsereqTools Doxygen contracts in src/core/pi-usereq-tools.ts. Regenerate REFERENCES.md from the updated source.
+- require ordinal parameter and print Next-Workflow table without one [useReq] *(req-continue)*
+  REQUIREMENTS.md: req-continue dispatch requires one integer ordinal
+  (REQ-660..REQ-662); parameter-less invocation prints the Next-Workflow
+  section table into the editor from every workflow state with no side
+  effects (REQ-738..REQ-741, TST-235, TST-236).
+  src: resolveNextWorkflowEntryIndex mandates the ordinal; the continue
+  handler gains the parameter-less editor print branch (575 tests pass).
+  tests: ordinal, registration, and delegation suites updated; new
+  print-branch test added. WORKFLOW.md and REFERENCES.md regenerated.
 - BREAKING CHANGE: Rename all agent tools with the req- prefix [useReq] *(tools)*
   Rename the twelve configurable agent tools (compress -> req-compress,
   references -> req-references, search -> req-search, static-check ->
@@ -1628,7 +1640,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.14\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.14
+- \[0.109.15\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.15
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1737,4 +1749,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.14]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.14
+[0.109.15]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.15
