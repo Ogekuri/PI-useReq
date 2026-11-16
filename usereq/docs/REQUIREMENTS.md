@@ -512,9 +512,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-395**: MUST write the resolved latest release version into both `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt` after successful synchronization.
 - **REQ-396**: MUST read the stored PI-Prompts version from `src/resources/pi-prompts-version.txt` and MUST treat a missing or empty file as `unknown`.
 - **REQ-397**: MUST print the resolved latest PI-Prompts release version and the stored version to stdout before the synchronization gate decision.
-- **REQ-398**: MUST synchronize automatically without user confirmation when the stored version is `unknown` or the resolved latest version is equal to or greater than the stored version under version-sorted comparison.
+- **REQ-398**: MUST synchronize automatically without user confirmation when the stored version is `unknown` or the resolved latest version is greater than the stored version under version-sorted comparison.
 - **REQ-399**: MUST write the resolved latest release version into `src/resources/pi-prompts-version.txt` after successful synchronization.
-- **REQ-751**: MUST terminate with exit code 0 without modifying any repository content when the resolved latest version is lower than the stored version.
+- **REQ-751**: MUST terminate with exit code 0 without modifying any repository content when the resolved latest version is lower than or equal to the stored version.
 - **REQ-752**: MUST abort with a diagnostic when the repository root is not inside a git work tree before any synchronization modification.
 - **REQ-753**: MUST stage only the synchronized directories plus the version marker and MUST create exactly one commit on the current branch after successful synchronization.
 - **REQ-754**: MUST use the commit subject `Update bundled prompts from <stored> to <resolved>` in the synchronization commit, naming both version numbers.

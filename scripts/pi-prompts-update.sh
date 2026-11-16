@@ -13,12 +13,13 @@
 #     a git work tree, prints the resolved latest PI-Prompts release version
 #     and the stored version read from `src/resources/pi-prompts-version.txt`
 #     (missing or empty files report `unknown`), and applies a deterministic
-#     version gate without user confirmation: synchronization proceeds when the
-#     stored version is `unknown` or the resolved version is equal to or
-#     greater than the stored version under version-sorted comparison, while a
-#     resolved version older than the stored version terminates with exit code
-#     0 and no repository modification. After successful synchronization the
-#     resolved version is written into `src/resources/pi-prompts-version.txt`,
+#     version gate without user confirmation: synchronization proceeds only
+#     when the stored version is `unknown` or the resolved version is greater
+#     than the stored version under version-sorted comparison, while a
+#     resolved version equal to or older than the stored version terminates
+#     with exit code 0 and no repository modification. After successful
+#     synchronization the resolved version is written into
+#     `src/resources/pi-prompts-version.txt`,
 #     only the synchronized target directories plus the version marker are
 #     staged, and exactly one commit with subject `change(prompts): Update
 #     bundled prompts from <stored> to <resolved> [useReq]` is created on the
@@ -154,22 +155,26 @@ resolve_release_version() {
 
 ## @brief Decides update eligibility by comparing the stored and resolved versions.
 ## @details Returns success when the stored version is `unknown` or the resolved
-##     latest version is equal to or greater than the stored version under GNU
-##     `sort -V` ordering, implemented as a sortedness check of the two-line
-##     `stored` then `latest` sequence. Performs no I/O mutation. Runtime is
-##     O(1) plus one `sort` subprocess. Invoked only inside `if` conditions, so
-##     a failure exit status never terminates the caller under `set -e`.
+##     latest version is strictly greater than the stored version under GNU
+##     `sort -V` ordering, implemented as a strict string-inequality guard
+##     followed by a sortedness check of the two-line `stored` then `latest`
+##     sequence. Performs no I/O mutation. Runtime is O(1) plus one `sort`
+##     subprocess. Invoked only inside `if` conditions, so a failure exit
+##     status never terminates the caller under `set -e`.
 ## @pre Both versions are single-line strings without surrounding whitespace.
 ## @param[in] stored_version {string} Stored version or `unknown`.
 ## @param[in] latest_version {string} Resolved upstream release version.
 ## @return {integer} `0` when synchronization is eligible; `1` when the resolved
-##     version is older than the stored version.
+##     version is equal to or older than the stored version.
 ## @satisfies REQ-398, REQ-751
 is_update_eligible() {
   local stored_version="$1"
   local latest_version="$2"
   if [ "${stored_version}" = "unknown" ]; then
     return 0
+  fi
+  if [ "${stored_version}" = "${latest_version}" ]; then
+    return 1
   fi
   printf '%s\n' "${stored_version}" "${latest_version}" | sort -Vc 2>/dev/null
 }
@@ -325,7 +330,7 @@ sync_directory() {
 ##     master branch, resolves the newest release ref plus its release version,
 ##     prints the resolved plus stored versions, applies the deterministic
 ##     version gate without user confirmation and returns unchanged when the
-##     resolved version is older than the stored version, checks out the
+##     resolved version is not newer than the stored version, checks out the
 ##     resolved release ref, synchronizes every ordered pair declared in
 ##     `SYNC_SPECS`, writes the resolved version into the version marker file,
 ##     and commits the synchronized content on the current branch. Runtime is
@@ -371,7 +376,7 @@ main() {
   log "Stored version (${PROMPTS_VERSION_REL}): ${prompts_version}"
 
   if ! is_update_eligible "${prompts_version}" "${release_version}"; then
-    log "Resolved version ${release_version} is older than the stored version ${prompts_version}; no synchronization performed."
+    log "Resolved version ${release_version} is not newer than the stored version ${prompts_version}; no synchronization performed."
     return 0
   fi
 
