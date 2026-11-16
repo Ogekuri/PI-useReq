@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.169"
+version: "0.0.170"
 date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
@@ -73,7 +73,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-017**: MUST NOT modify any path under `pi.dev-src/` in any way, because those pi CLI client sources are permanently read-only.
 - **CTN-019**: MUST persist local `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
 - **CTN-020**: MUST declare `tsx` as a runtime `package.json` dependency so `node --import tsx` package scripts, the `postinstall` checker installer, and the `.ts` extension entry resolve on clean consumer installs.
-- **CTN-021**: MUST declare a `files` allowlist in `package.json` restricted to runtime-required `src/` and `scripts/` so npm consumer installs exclude the `tests/` directory.
+- **CTN-021**: MUST declare a `files` allowlist in `package.json` restricted to runtime-required `src/`, `scripts/`, and the pi CLI boot-changelog `CHANGELOG.md` so npm consumer installs exclude the `tests/` directory.
 - **CTN-022**: MUST NOT persist the selected model provider, model identifier, or thinking level in local or global pi-usereq configuration files.
 - **CTN-023**: MUST use the read-only pi CLI client sources under `pi.dev-src/` as reference material during analysis, implementation, verification, and bug fixing.
 - **CTN-024**: MUST treat the read-only pi CLI client sources under `pi.dev-src/` as the source-of-truth for new implementations, source-code modifications, and bug fixes.
@@ -130,6 +130,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-042**: MUST implement final-output JSON parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture in one dedicated `src/core/` module outside `src/index.ts` business logic.
 - **DES-043**: MUST implement `--write-config` absent-default materialization plus absence-preserving `--set`/`--unset` write pruning in `src/core/config-cli.ts` reusing schema-projected defaults from `src/core/config-cli-schema.ts`.
 - **DES-044**: MUST implement JSON parsing, verdict rendering, and file-based validation in one dedicated `src/core/result-json-validator.ts` module outside `src/index.ts` business logic.
+- **DES-045**: MUST implement the pi CLI `extensionChangelogVersions` key migration helper in `src/core/package-manager.ts` with injectable settings readers and writers outside `src/cli.ts` dispatch logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -817,6 +818,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-740**: MUST allow parameter-less `req-continue` execution from every workflow state without applying the startability gate.
 - **REQ-741**: MUST print the empty Next-Workflow list placeholder into the editor for parameter-less `req-continue` when the Next-Workflow array is empty.
 - **REQ-742**: MUST enable every configurable custom tool by default until a persisted `enabled-tools` selection explicitly overrides the default.
+- **REQ-743**: MUST ship `CHANGELOG.md` in every npm-published pi-usereq tarball through the `package.json` `files` allowlist so the pi CLI boot-time extension changelog show resolves the package changelog.
+- **REQ-744**: MUST migrate, after every successful develop-channel `--upgrade` install child, the recorded pi CLI `extensionChangelogVersions` value from the previous same-identity git settings key to the `git:github.com/Ogekuri/PI-useReq@<tag>` key.
+- **REQ-745**: MUST collect migration source values from every `extensionChangelogVersions` key whose git source shares the target repository identity ignoring ref, select the greatest ordered version, and copy it without removing existing entries.
+- **REQ-746**: MUST perform the extension-changelog version-key migration best-effort and MUST NOT change the `--upgrade` exit code or completion summary when reading or writing pi CLI settings fails.
+- **REQ-747**: MUST resolve the pi CLI global settings file as `<agent-dir>/settings.json` honoring `PI_CODING_AGENT_DIR` and MUST preserve every other settings field and entry during migration writes.
+- **REQ-748**: MUST restrict the extension-changelog version-key migration to develop-channel `--upgrade` runs and MUST NOT read or write pi CLI settings during default-channel `--upgrade` runs.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1047,6 +1054,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-234**: MUST verify extension activation registers exactly the twelve `req-`-prefixed configurable agent tools and exposes no un-prefixed legacy tool name.
 - **TST-235**: MUST verify parameter-less `req-continue` prints the Next-Workflow command table into the editor from every workflow state without dispatch, notification, workflow-state transition, or array mutation.
 - **TST-236**: MUST verify parameter-less `req-continue` prints the empty-list placeholder into the editor when the Next-Workflow array is empty.
+- **TST-237**: MUST verify the npm `files` allowlist ships `CHANGELOG.md` so the published tarball exposes the changelog at the package root for pi CLI boot detection.
+- **TST-238**: MUST verify develop-channel `--upgrade` migrates the recorded extension-changelog version from the previous same-identity git-tagged key to the new tagged key, performs no migration without a recorded version, and preserves old entries.
+- **TST-239**: MUST verify migration read or write failures leave the `--upgrade` exit code and summary unchanged and preserve every other `<agent-dir>/settings.json` field.
+- **TST-240**: MUST verify default-channel `--upgrade` reads and writes no pi CLI settings and develop-channel source-switch runs perform the changelog-key migration.
 
 ## 5. Observed Component Model
 

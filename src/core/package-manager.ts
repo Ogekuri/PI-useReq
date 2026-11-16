@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Implements pi-usereq package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`).
- * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI package update through the documented `pi update npm:pi-usereq` form on the default `--upgrade` channel, tag-pinned `pi install git:github.com/Ogekuri/PI-useReq@<tag>` reconciliation on the develop channel after the GitHub latest-release probe, forced runs that only skip the default-channel already-latest registry gate because the pi CLI `--force` option affects the self-update path only, source-aware reconciliation that identifies the installed npm-managed or git-managed package and runs `pi remove <identified-source>` plus `pi install <target-source>` when the channel target differs from the installed source, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Upgrade completion summaries resolve the updated version through the pi-managed-first installed-version rule and warn when a non-forced child leaves it unchanged. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
+ * @details Provides the dependency-injected handlers dispatched by `src/cli.ts` before standard flag parsing: offline help-screen rendering for `--help`, concurrent npm-registry plus GitHub-releases version probing for `--ver`/`--version`, pi-CLI package update through the documented `pi update npm:pi-usereq` form on the default `--upgrade` channel, tag-pinned `pi install git:github.com/Ogekuri/PI-useReq@<tag>` reconciliation on the develop channel after the GitHub latest-release probe, forced runs that only skip the default-channel already-latest registry gate because the pi CLI `--force` option affects the self-update path only, source-aware reconciliation that identifies the installed npm-managed or git-managed package and runs `pi remove <identified-source>` plus `pi install <target-source>` when the channel target differs from the installed source, and global package removal for `--uninstall`. Every network probe is bounded by a hard timeout deadline, every package-manager child process runs with inherited stdio from the user home, and every diagnostic is stderr-only. Upgrade completion summaries resolve the updated version through the pi-managed-first installed-version rule and warn when a non-forced child leaves it unchanged. Develop-channel children best-effort migrate the pi CLI recorded `extensionChangelogVersions` value onto the new tag-pinned settings key so the boot-time extension changelog show survives release-tag key rotation. Runtime is dominated by one or two HTTP round-trips or child-process executions per invocation. Side effects include outbound HTTPS requests and package-manager child processes.
  */
 
 import fs from "node:fs";
@@ -220,6 +220,14 @@ export interface PackageManagerCommandDeps {
   removeUserBinLauncher?: () => boolean;
   /** Agent-bin launcher repair invoked after every successful upgrade child so a completed upgrade never leaves the `pi-usereq` command dangling. Default: gated runtime-installation launcher deployment. */
   repairLauncher?: () => void;
+  /** pi agent directory override forwarded to the extension-changelog version-key migration. Default: `PI_CODING_AGENT_DIR`-aware agent-directory resolution. */
+  piAgentDirOverride?: string;
+  /** User-home resolver forwarded to the extension-changelog version-key migration. Default: `node:os` `homedir`. */
+  homeDirImpl?: () => string;
+  /** pi CLI settings-file reader forwarded to the extension-changelog version-key migration. Default: best-effort `readFileSync`. */
+  readSettingsFile?: (settingsPath: string) => string | undefined;
+  /** pi CLI settings-file writer forwarded to the extension-changelog version-key migration. Default: `writeFileSync`. */
+  writeSettingsFile?: (settingsPath: string, payloadText: string) => void;
 }
 
 /** Default stderr-only diagnostic sink used when no logger is injected. */
@@ -954,6 +962,206 @@ function runPackageManagerChildCommand(
   }
 }
 
+/** File name of the pi CLI global settings document holding the `extensionChangelogVersions` boot-changelog tracking state. */
+export const PACKAGE_MANAGER_PI_SETTINGS_FILE_NAME = "settings.json";
+
+/** pi CLI global settings field mapping extension changelog keys to the last recorded package version. */
+export const PACKAGE_MANAGER_EXTENSION_CHANGELOG_VERSIONS_FIELD = "extensionChangelogVersions";
+
+/** pi CLI scope token recorded inside every extension-changelog settings key. */
+export type PackageManagerChangelogScope = "user" | "project";
+
+/** Outcome facts of one best-effort extension-changelog version-key migration. */
+export interface PackageManagerChangelogMigrationResult {
+  /** `true` when a recorded version was copied under the new tag-pinned key. */
+  migrated: boolean;
+  /** Recorded version copied onto the new key; `undefined` when no migration occurred. */
+  previousVersion?: string;
+  /** Deterministic English reason describing why no migration occurred; `undefined` on success. */
+  reason?: string;
+}
+
+/** Injectable settings-file surface consumed by the extension-changelog version-key migration. */
+export interface PackageManagerChangelogMigrationDeps {
+  /** pi agent directory override; `undefined` resolves the default `PI_CODING_AGENT_DIR`-aware agent directory. */
+  piAgentDirOverride?: string;
+  /** User-home resolver backing the default pi agent-directory resolution. Default: `node:os` `homedir`. */
+  homeDirImpl?: () => string;
+  /** Settings-file reader returning UTF-8 text or `undefined` when the file is missing. Default: best-effort `readFileSync`. */
+  readSettingsFile?: (settingsPath: string) => string | undefined;
+  /** Settings-file writer persisting the migrated JSON text. Default: `writeFileSync`. */
+  writeSettingsFile?: (settingsPath: string, payloadText: string) => void;
+}
+
+/**
+ * @brief Parses one pi package git source token into its repository identity plus optional ref.
+ * @details Accepts only `git:`-prefixed tokens carrying a host slash, splits the optional `@<ref>` suffix at the last `@` after the first `/`, and composes the ref-agnostic identity `git:<host>/<path>` consumed by same-identity changelog-key matching. Runtime is O(n) in source length. Pure; no side effects.
+ * @param[in] source {string} pi package git source token, such as `git:github.com/Ogekuri/PI-useReq@v1.2.3`.
+ * @return {{ identity: string; ref?: string } | undefined} Repository identity plus optional ref, or `undefined` for non-git or malformed tokens.
+ * @note Complexity: O(n) in source length. Pure; no side effects.
+ * @satisfies REQ-745
+ */
+export function parsePackageManagerGitSourceIdentity(source: string): { identity: string; ref?: string } | undefined {
+  if (!source.startsWith("git:")) {
+    return undefined;
+  }
+  const body = source.slice("git:".length);
+  const slashIndex = body.indexOf("/");
+  if (slashIndex <= 0) {
+    return undefined;
+  }
+  const atIndex = body.lastIndexOf("@");
+  if (atIndex > slashIndex) {
+    const ref = body.slice(atIndex + 1);
+    if (ref === "") {
+      return undefined;
+    }
+    return { identity: `git:${body.slice(0, atIndex)}`, ref };
+  }
+  return { identity: `git:${body}` };
+}
+
+/**
+ * @brief Composes the pi CLI extension-changelog settings key for one package source and scope.
+ * @details Emits `JSON.stringify({ source, scope })` matching the pi CLI `getSourcePackageKey(...)` property order so migrated keys stay byte-identical to the keys pi CLI records during boot-time changelog processing. Runtime is O(n) in source length. Pure; no side effects.
+ * @param[in] source {string} pi package source token recorded in pi CLI settings.
+ * @param[in] scope {PackageManagerChangelogScope} pi CLI scope token of the owning package entry.
+ * @return {string} pi CLI extension-changelog settings key.
+ * @note Complexity: O(n) in source length. Pure; no side effects.
+ * @satisfies REQ-744, REQ-747
+ */
+export function buildPackageManagerExtensionChangelogKey(source: string, scope: PackageManagerChangelogScope): string {
+  return JSON.stringify({ source, scope });
+}
+
+/**
+ * @brief Parses one pi CLI extension-changelog settings key into its source and scope record.
+ * @details Accepts only JSON objects carrying string `source` plus `scope` fields so malformed or foreign keys never feed same-identity matching. Runtime is O(n) in key length. Pure; no side effects.
+ * @param[in] key {string} Raw extension-changelog settings key candidate.
+ * @return {{ source: string; scope: string } | undefined} Parsed key record, or `undefined` for malformed keys.
+ * @note Complexity: O(n) in key length. Pure; no side effects.
+ */
+function parseExtensionChangelogKeyCandidate(key: string): { source: string; scope: string } | undefined {
+  try {
+    const parsed = JSON.parse(key) as unknown;
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.source !== "string" || typeof record.scope !== "string") {
+      return undefined;
+    }
+    return { source: record.source, scope: record.scope };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Default best-effort settings-file reader returning `undefined` for missing or unreadable files. */
+function defaultReadPackageManagerSettingsFile(settingsPath: string): string | undefined {
+  try {
+    return fs.readFileSync(settingsPath, "utf-8");
+  } catch {
+    return undefined;
+  }
+}
+
+/** Default settings-file writer delegating to `writeFileSync`. */
+function defaultWritePackageManagerSettingsFile(settingsPath: string, payloadText: string): void {
+  fs.writeFileSync(settingsPath, payloadText, "utf-8");
+}
+
+/**
+ * @brief Best-effort migrates the pi CLI recorded extension-changelog version onto the new develop-channel tag-pinned key.
+ * @details Resolves the pi CLI global settings file `<agent-dir>/settings.json` through the `PI_CODING_AGENT_DIR`-aware agent-directory rule, reads the `extensionChangelogVersions` map, collects every key whose parsed git source shares the target repository identity ignoring ref and whose scope matches, excludes the target key itself, skips when the target key is already recorded, selects the greatest ordered recorded version through `comparePackageManagerVersionOrder(...)` when multiple candidates exist, and copies that value under the key composed for the tag-pinned target source while preserving every other settings field and entry. Skips with a deterministic reason when the target source is not git-shaped, when the settings file or field is missing or unreadable, when the target version is already recorded, and when no previous same-identity version exists. Every failure returns a no-migration result without throwing so callers keep the `--upgrade` exit-code and summary contracts intact. Runtime is O(k * n) in recorded key count and key length. Side effects include one conditional pi CLI settings-file write.
+ * @param[in] options {PackageManagerChangelogMigrationDeps & { targetSource: string; scope?: PackageManagerChangelogScope }} Tag-pinned target source, owning scope, and injectable settings overrides.
+ * @return {PackageManagerChangelogMigrationResult} Migration outcome facts; never throws.
+ * @note Complexity: O(k * n) in recorded key count and key length.
+ * @satisfies REQ-744, REQ-745, REQ-746, REQ-747, DES-045
+ */
+export function migratePackageManagerExtensionChangelogVersion(
+  options: PackageManagerChangelogMigrationDeps & {
+    targetSource: string;
+    scope?: PackageManagerChangelogScope;
+  },
+): PackageManagerChangelogMigrationResult {
+  try {
+    const scope = options.scope ?? "user";
+    const identity = parsePackageManagerGitSourceIdentity(options.targetSource);
+    if (identity === undefined) {
+      return { migrated: false, reason: "target source is not a git package source" };
+    }
+    const agentDir = options.piAgentDirOverride ?? resolvePiAgentDir(options.homeDirImpl);
+    const settingsPath = path.join(agentDir, PACKAGE_MANAGER_PI_SETTINGS_FILE_NAME);
+    const readSettingsFile = options.readSettingsFile ?? defaultReadPackageManagerSettingsFile;
+    const raw = readSettingsFile(settingsPath);
+    if (raw === undefined) {
+      return { migrated: false, reason: `pi CLI settings file not found: ${settingsPath}` };
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return { migrated: false, reason: "pi CLI settings file is not valid JSON" };
+    }
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+      return { migrated: false, reason: "pi CLI settings payload is not a JSON object" };
+    }
+    const settings = payload as Record<string, unknown>;
+    const recorded = settings[PACKAGE_MANAGER_EXTENSION_CHANGELOG_VERSIONS_FIELD];
+    if (recorded === null || typeof recorded !== "object" || Array.isArray(recorded)) {
+      return { migrated: false, reason: "no recorded extension changelog versions" };
+    }
+    const versions: Record<string, unknown> = { ...(recorded as Record<string, unknown>) };
+    const targetKey = buildPackageManagerExtensionChangelogKey(options.targetSource, scope);
+    const recordedTarget = versions[targetKey];
+    if (typeof recordedTarget === "string" && recordedTarget.trim() !== "") {
+      return { migrated: false, reason: "target changelog version already recorded" };
+    }
+    const candidates: string[] = [];
+    for (const [key, value] of Object.entries(versions)) {
+      if (key === targetKey || typeof value !== "string" || value.trim() === "") {
+        continue;
+      }
+      const parsedKey = parseExtensionChangelogKeyCandidate(key);
+      if (parsedKey === undefined || parsedKey.scope !== scope) {
+        continue;
+      }
+      const parsedSource = parsePackageManagerGitSourceIdentity(parsedKey.source);
+      if (parsedSource !== undefined && parsedSource.identity === identity.identity) {
+        candidates.push(value);
+      }
+    }
+    if (candidates.length === 0) {
+      return { migrated: false, reason: "no previous same-identity recorded version" };
+    }
+    const previousVersion =
+      candidates.length === 1
+        ? candidates[0]
+        : [...candidates].sort((left, right) => comparePackageManagerVersionOrder(right, left))[0];
+    versions[targetKey] = previousVersion;
+    const nextPayload = { ...settings, [PACKAGE_MANAGER_EXTENSION_CHANGELOG_VERSIONS_FIELD]: versions };
+    const writeSettingsFile = options.writeSettingsFile ?? defaultWritePackageManagerSettingsFile;
+    writeSettingsFile(settingsPath, `${JSON.stringify(nextPayload, null, 2)}\n`);
+    return { migrated: true, previousVersion };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { migrated: false, reason: message };
+  }
+}
+
+/** Builds the migration dependency subset forwarded by the develop-channel upgrade branches. */
+function buildPackageManagerChangelogMigrationDeps(
+  deps: PackageManagerCommandDeps,
+): PackageManagerChangelogMigrationDeps {
+  return {
+    piAgentDirOverride: deps.piAgentDirOverride,
+    homeDirImpl: deps.homeDirImpl,
+    readSettingsFile: deps.readSettingsFile,
+    writeSettingsFile: deps.writeSettingsFile,
+  };
+}
+
 /**
  * @brief Handles `--ver`/`--version`: dual online probe plus three-line aligned version report.
  * @details Runs the npm-registry probe and the GitHub-releases probe concurrently, bypassing every persisted cache, then writes exactly three stdout lines — `Current Installed : <installed>`, `Latest @ NPMjs    : <npmjs>`, `Latest @ GitHub   : <github>` — with labels right-padded to the fixed 18-character column so `:` separators and version numbers align, and returns `0`. Undeterminable versions print as `unknown`, and a failed GitHub probe carrying a captured upstream failure reason prints `Latest @ GitHub   : unknown (<reason>)` reflecting the actual error such as an API rate-limit response.
@@ -1062,12 +1270,12 @@ function isPackageManagerUpgradeNecessary(status: PackageManagerRegistryProbe["s
 
 /**
  * @brief Handles `--upgrade`: installed-source identification, optional source-switch removal plus installation, force mode, pi-CLI package reinstall, then stdout summary.
- * @details Identifies the installed package source before any child process. When the identified source resolves to a different kind than the channel target source, the handler runs `pi remove <identified-source>` followed by `pi install <target-source>`, propagating a non-zero removal or installation exit code without printing a summary; after a successful switch it re-deploys the agent-bin `pi-usereq` launcher onto the channel target installation root and resolves the completion `<updated>` version from that target root, because the removal child already deleted the installation that owned the running process. The develop channel (`--dev`/`--develop`) first resolves `<tag>` through `probeLatestGitHubRelease(...)` and aborts with exit code `1` plus one stderr diagnostic without spawning any child when that probe fails; a successful probe then runs the tag-pinned `buildPackageManagerInstallCommand(buildPackageManagerDevelopSource(<tag>))` (`pi install git:github.com/Ogekuri/PI-useReq@<tag>`) with inherited stdio, because `pi install` rewrites the same-identity `packages` settings entry and resets the existing pi-managed checkout to the resolved tag commit, so the tag is reconciled even when the configured entry is unpinned and `pi update` would only follow the configured upstream. The default npm channel keeps one forced npmjs package-manifest probe bypassing every cache unless `--force` was supplied, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and every other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. `--force` therefore only skips the default-channel already-latest gate and never appends a pi CLI `--force` token, because that option affects only the pi CLI self-update path and provides no forced-reinstall semantics for extensions. Every same-source successful child repairs the deployed agent-bin `pi-usereq` launcher against the executing installation before reporting completion, because package children rewrite the managed dependency tree and a completed upgrade MUST NOT leave the management CLI dangling behind a stale foreign shim. Every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` through the pi-managed-first installed-version rule, or from the post-switch target installation root after a source switch, and warns when a non-forced run leaves the installed version unchanged.
+ * @details Identifies the installed package source before any child process. When the identified source resolves to a different kind than the channel target source, the handler runs `pi remove <identified-source>` followed by `pi install <target-source>`, propagating a non-zero removal or installation exit code without printing a summary; after a successful switch it re-deploys the agent-bin `pi-usereq` launcher onto the channel target installation root and resolves the completion `<updated>` version from that target root, because the removal child already deleted the installation that owned the running process. The develop channel (`--dev`/`--develop`) first resolves `<tag>` through `probeLatestGitHubRelease(...)` and aborts with exit code `1` plus one stderr diagnostic without spawning any child when that probe fails; a successful probe then runs the tag-pinned `buildPackageManagerInstallCommand(buildPackageManagerDevelopSource(<tag>))` (`pi install git:github.com/Ogekuri/PI-useReq@<tag>`) with inherited stdio, because `pi install` rewrites the same-identity `packages` settings entry and resets the existing pi-managed checkout to the resolved tag commit, so the tag is reconciled even when the configured entry is unpinned and `pi update` would only follow the configured upstream. The default npm channel keeps one forced npmjs package-manifest probe bypassing every cache unless `--force` was supplied, where `current` writes the already-latest stdout line carrying the manifest latest version and returns `0` without spawning any child, and every other outcome runs `PACKAGE_UPGRADE_COMMAND` (`pi update npm:pi-usereq`) with inherited stdio so the already-installed managed package advances beyond its saved dependency range. `--force` therefore only skips the default-channel already-latest gate and never appends a pi CLI `--force` token, because that option affects only the pi CLI self-update path and provides no forced-reinstall semantics for extensions. Every same-source successful child repairs the deployed agent-bin `pi-usereq` launcher against the executing installation before reporting completion, because package children rewrite the managed dependency tree and a completed upgrade MUST NOT leave the management CLI dangling behind a stale foreign shim. Every successful child reports completion through `reportPackageManagerUpgradeCompletion(...)`, which resolves `<updated>` through the pi-managed-first installed-version rule, or from the post-switch target installation root after a source switch, and warns when a non-forced run leaves the installed version unchanged. Successful develop-channel children additionally best-effort migrate the pi CLI `extensionChangelogVersions` value from the previous same-identity git-tagged key onto the new tag-pinned key without reading or writing settings on the default channel.
  * @param[in] options {PackageManagerCommandOptions} Options carrying the installed version, channel, and force mode.
  * @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger/registry/GitHub/stdout/source-resolver overrides.
  * @return {Promise<number>} `0` when the non-forced same-source installed version is already the latest available or after a successful source switch; `1` when the develop-channel release probe fails; otherwise the propagated child exit code.
  * @note Complexity: zero to two HTTP round-trips plus at most two child process executions.
- * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, REQ-504, REQ-526, REQ-527, REQ-528, REQ-531, REQ-613, REQ-614, REQ-615, REQ-616, REQ-617, REQ-618, REQ-639, REQ-640, REQ-641, REQ-644, REQ-645, REQ-646, DES-026, DES-037
+ * @satisfies REQ-480, REQ-481, REQ-482, REQ-484, REQ-485, REQ-504, REQ-526, REQ-527, REQ-528, REQ-531, REQ-613, REQ-614, REQ-615, REQ-616, REQ-617, REQ-618, REQ-639, REQ-640, REQ-641, REQ-644, REQ-645, REQ-646, REQ-744, REQ-745, REQ-746, REQ-747, REQ-748, DES-026, DES-037, DES-045
  */
 export async function runPackageManagerUpgradeCommand(
   options: PackageManagerCommandOptions,
@@ -1099,6 +1307,12 @@ export async function runPackageManagerUpgradeCommand(
     if (switched !== 0) {
       return switched;
     }
+    if (channel === "develop" && developTag !== undefined) {
+      migratePackageManagerExtensionChangelogVersion({
+        targetSource: buildPackageManagerDevelopSource(developTag),
+        ...buildPackageManagerChangelogMigrationDeps(deps),
+      });
+    }
     const targetInstallationRoot = resolvePackageManagerChannelInstallRoot(channel);
     deployPiUsereqLauncher({ installationPath: targetInstallationRoot });
     reportPackageManagerUpgradeCompletion(options, deps, targetInstallationRoot);
@@ -1112,6 +1326,10 @@ export async function runPackageManagerUpgradeCommand(
     if (upgraded !== 0) {
       return upgraded;
     }
+    migratePackageManagerExtensionChangelogVersion({
+      targetSource: buildPackageManagerDevelopSource(developTag),
+      ...buildPackageManagerChangelogMigrationDeps(deps),
+    });
     (deps.repairLauncher ?? defaultRepairPackageManagerLauncher)();
     reportPackageManagerUpgradeCompletion(options, deps);
     return 0;

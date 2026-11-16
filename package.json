@@ -29,6 +29,7 @@
     "pi-usereq": "scripts/pi-usereq.js"
   },
   "files": [
+    "CHANGELOG.md",
     "src",
     "!src/resources/pi-prompts-version.txt",
     "scripts/pi-usereq.js",
