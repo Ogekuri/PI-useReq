@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   captureAgentFinalOutputReport,
+  colorizeAgentFinalOutputMarkdownText,
   getCapturedAgentFinalOutputReport,
   parseAgentFinalOutput,
   renderAgentFinalOutputMarkdownReport,
   resetAgentFinalOutputStateForTests,
 } from "../src/core/agent-final-output.js";
+import { ANSI_CODE, ANSI_ITALIC } from "../src/core/ansi-style.js";
 import { getDefaultConfig } from "../src/core/config.js";
 import {
   runPiNotifyEffectsForOutcome,
@@ -371,4 +373,39 @@ test("notification output substitution keeps the raw output for unparseable comp
   } finally {
     recorder.restore();
   }
+});
+
+/**
+ * @brief Verifies the ANSI colorizer colors every inline code span even when emphasis-lookalike asterisks surround it.
+ * @details Colorizes the report-section line shape observed in the defect where the glob asterisk of `prompts/*.md` and the trailing asterisk of `req-*` sit on one physical line enclosing four inline code spans, then asserts all six code spans carry the code escape pair, no italic styling swallows the enclosed code, and every source character survives the ANSI substitution. Runtime is O(n) in line length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when any inline code span stays uncolored, an italic span consumes the code region, or the plain text is mutated.
+ * @satisfies REQ-715
+ */
+test("ANSI colorizer colors every inline code span despite emphasis-lookalike asterisks on the same line", () => {
+  const line = "src/resources/prompts/*.md (15 file): token `search`/`files-search`/`static-check`/`result-json-validator` → req-*, `references-generation` → `req-references`, \"static-check output\" → \"req-static-check output\".";
+  const colored = colorizeAgentFinalOutputMarkdownText(line);
+  const codeSpanTexts = ["`search`", "`files-search`", "`static-check`", "`result-json-validator`", "`references-generation`", "`req-references`"];
+  for (const codeSpan of codeSpanTexts) {
+    assert.ok(colored.includes(`\u001b[${ANSI_CODE}m${codeSpan}\u001b[0m`), `inline code span ${codeSpan} must carry the code escape pair`);
+  }
+  assert.equal((colored.match(/\u001b\[36m/g) ?? []).length, codeSpanTexts.length, "exactly the six inline code spans must be styled as code");
+  assert.ok(!colored.includes(`\u001b[${ANSI_ITALIC}m`), "emphasis-lookalike asterisks must not style the enclosed code region as italic");
+  assert.equal(colored.replace(/\u001b\[[0-9;]*m/g, ""), line, "every source character outside escape sequences must survive the coloring");
+});
+
+/**
+ * @brief Verifies the ANSI colorizer keeps coloring non-code markdown elements outside inline code spans.
+ * @details Asserts bold, italic, and link elements still carry their escape pairs on a plain line and that an italic-lookalike asterisk pair enclosing an inline code span never prevents the code span coloring, pinning inline-code atomicity over emphasis matching. Runtime is O(n) in line length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when any non-code element loses its styling or an enclosed code span stays uncolored.
+ * @satisfies REQ-715
+ */
+test("ANSI colorizer keeps coloring bold, italic, links, and code spans enclosed by emphasis-lookalike asterisks", () => {
+  const colored = colorizeAgentFinalOutputMarkdownText("**bold** and *italic* plus [text](url) plus `code` and *a `deep` b* end");
+  assert.ok(colored.includes(`\u001b[1m**bold**\u001b[0m`), "bold element must carry the bold escape pair");
+  assert.ok(colored.includes(`\u001b[${ANSI_ITALIC}m*italic*\u001b[0m`), "italic element must carry the italic escape pair");
+  assert.ok(colored.includes(`\u001b[4;96m[text](url)\u001b[0m`), "link element must carry the link escape pair");
+  assert.ok(colored.includes(`\u001b[${ANSI_CODE}m\`code\`\u001b[0m`), "plain inline code span must carry the code escape pair");
+  assert.ok(colored.includes(`\u001b[${ANSI_CODE}m\`deep\`\u001b[0m`), "inline code span enclosed by emphasis-lookalike asterisks must carry the code escape pair");
 });

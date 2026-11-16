@@ -310,12 +310,19 @@ export function renderAgentFinalOutputMarkdownReport(report: AgentFinalOutputRep
 }
 
 /**
- * @brief Matches the inline markdown elements colored by the ANSI report renderer.
- * @details Alternation priority is inline code, link, bold `**`, bold `__`, `<u>` underline, italic `*`, and italic `_`; lookarounds keep intraword underscores and list-marker asterisks unstyled. The global flag serves `String.replace` only. Access complexity is O(1).
+ * @brief Matches the inline-code spans colored atomically by the ANSI report renderer.
+ * @details Matches one non-empty backtick-delimited span without backticks or newlines. The capture group keeps the span inside `String.split` results at odd indices so the code span coloring takes absolute precedence over the emphasis alternatives. Access complexity is O(1).
+ * @satisfies REQ-715
+ */
+const AGENT_FINAL_OUTPUT_ANSI_CODE_SPAN_PATTERN = /(`[^`\n]+`)/;
+
+/**
+ * @brief Matches the non-code inline markdown elements colored by the ANSI report renderer.
+ * @details Alternation priority is link, bold `**`, bold `__`, `<u>` underline, italic `*`, and italic `_`; lookarounds keep intraword underscores and list-marker asterisks unstyled. The pattern never matches inline code because `colorizeAgentFinalOutputInlineLine(...)` segments code spans out first, so emphasis matching can no longer consume enclosed inline code. The global flag serves `String.replace` only. Access complexity is O(1).
  * @satisfies REQ-715
  */
 const AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN =
-  /(`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(<u>[^<\n]+<\/u>)|((?<![\w*])\*(?![\s*])[^*\n]+?(?<![\s*])\*(?![\w*]))|((?<![\w_])_(?![\s_])[^_\n]+?(?<![\s_])_(?![\w_]))/g;
+  /(\[[^\]\n]+\]\([^)\n]+\))|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(<u>[^<\n]+<\/u>)|((?<![\w*])\*(?![\s*])[^*\n]+?(?<![\s*])\*(?![\w*]))|((?<![\w_])_(?![\s_])[^_\n]+?(?<![\s_])_(?![\w_]))/g;
 
 /**
  * @brief Replaces one matched inline markdown element with its ANSI-colored rendering.
@@ -354,8 +361,26 @@ function renderAgentFinalOutputSectionTitleBox(label: string): string[] {
 }
 
 /**
+ * @brief Colorizes one non-fence, non-heading markdown line with inline code spans treated as atomic tokens.
+ * @details Splits the line on the inline-code-span pattern, styles every code-span segment through the shared inline dispatcher so each backtick span always carries the code escape pair, and applies the non-code inline alternatives only to the remaining segments so emphasis matching can never consume an enclosed inline code span. Runtime is O(n) in line length. No external state is mutated.
+ * @param[in] line {string} Plain markdown line outside fenced code blocks and section headings.
+ * @return {string} ANSI-colored line.
+ * @satisfies REQ-715
+ */
+function colorizeAgentFinalOutputInlineLine(line: string): string {
+  return line
+    .split(AGENT_FINAL_OUTPUT_ANSI_CODE_SPAN_PATTERN)
+    .map((segment, segmentIndex) =>
+      segmentIndex % 2 === 1
+        ? replaceAgentFinalOutputAnsiInline(segment)
+        : segment.replace(AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN, replaceAgentFinalOutputAnsiInline),
+    )
+    .join("");
+}
+
+/**
  * @brief Converts one rendered markdown report or table into ANSI-colored text.
- * @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm. Runtime is O(n) in text length. No external state is mutated.
+ * @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line through `colorizeAgentFinalOutputInlineLine(...)` so inline code spans color atomically and every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] text {string} Plain markdown report or plain table text produced by the fixed-order renderer or the Next-Workflow table builder.
  * @return {string} ANSI-colored text.
  * @satisfies REQ-713, REQ-714, REQ-715, REQ-732
@@ -380,7 +405,7 @@ export function colorizeAgentFinalOutputMarkdownText(text: string): string {
       }
       continue;
     }
-    renderedLines.push(line.replace(AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN, replaceAgentFinalOutputAnsiInline));
+    renderedLines.push(colorizeAgentFinalOutputInlineLine(line));
   }
   return renderedLines.join("\n");
 }

@@ -138,7 +138,7 @@ import {
 
 ---
 
-# agent-final-output.ts | TypeScript | 455L | 21 symbols | 2 imports | 40 comments
+# agent-final-output.ts | TypeScript | 480L | 22 symbols | 2 imports | 42 comments
 > Path: `src/core/agent-final-output.ts`
 - @brief Implements final-output JSON extraction, parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture.
 - @details Extracts the one embedded JSON object from the terminal assistant text of one completed agentic prompt run, parses it as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, converts that block into ANSI-colored text with intense-yellow `## **<Label>**` headings plus colored markdown links, fenced code, inline code, bold, italic, and underlined elements, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
@@ -195,7 +195,7 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 - @return {AgentFinalOutputCommandEntry[]} Normalized command entries in payload order.
 - @satisfies REQ-688
 
-### fn `function extractFinalOutputJsonObject(agentOutputText: string): string` (L160-456)
+### fn `function extractFinalOutputJsonObject(agentOutputText: string): string` (L160-459)
 - @brief Extracts the single embedded final-output JSON object from one terminal agent output.
 - @details Scans the trimmed text for every balanced top-level brace pair using string-literal-aware matching, validates each candidate through the native JSON parser plus `isPlainJsonObject`, and returns the sole candidate when exactly one valid JSON object exists; every other outcome returns the original trimmed text unchanged so `JSON.parse` fails with the existing JSON-contract diagnostic. The scan strips surrounding non-JSON prose and optional markdown code fences around the first balanced top-level JSON object without mutating the source text. Runtime is O(n) in output length. No external state is mutated.
 - @param[in] agentOutputText {string} Concatenated text content blocks of the final assistant message.
@@ -216,14 +216,14 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 - @return {string} Newline-delimited markdown sections, or the empty string when no report is captured.
 - @satisfies REQ-681, REQ-682, REQ-683, REQ-684
 
-### fn `function replaceAgentFinalOutputAnsiInline(match: string): string` (L327-341)
+### fn `function replaceAgentFinalOutputAnsiInline(match: string): string` (L334-348)
 - @brief Replaces one matched inline markdown element with its ANSI-colored rendering.
 - @details Dispatches on the matched prefix: backtick spans style as code, `[text](url)` links style as colored links, `**`/`__` spans style bold, `<u>` spans strip their tags and style the inner text underlined, and every remaining match styles italic. Runtime is O(n) in match length. No external state is mutated.
 - @param[in] match {string} Matched inline markdown element.
 - @return {string} ANSI-colored rendering of the matched element.
 - @satisfies REQ-715
 
-### fn `function renderAgentFinalOutputSectionTitleBox(label: string): string[]` (L351-354)
+### fn `function renderAgentFinalOutputSectionTitleBox(label: string): string[]` (L358-361)
 - @brief Renders one report section label as a rounded box frame sized from the label length.
 - @details Emits three lines framing the label with one leading and one trailing space: `╭` plus a dash run plus `╮`, `│` plus the padded label plus `│`, and `╰` plus the dash run plus `╯`, where the dash run equals the label display width plus two and every character comes from the mandated rounded box-drawing set. Runtime is O(n) in label length. No external state is mutated.
 - @param[in] label {string} Report section label rendered inside the frame.
@@ -231,45 +231,52 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 - @note Complexity: O(n) in label length. Pure; no side effects.
 - @satisfies REQ-720, REQ-721
 
-### fn `export function colorizeAgentFinalOutputMarkdownText(text: string): string` (L363-386)
+### fn `function colorizeAgentFinalOutputInlineLine(line: string): string` (L370-379)
+- @brief Colorizes one non-fence, non-heading markdown line with inline code spans treated as atomic tokens.
+- @details Splits the line on the inline-code-span pattern, styles every code-span segment through the shared inline dispatcher so each backtick span always carries the code escape pair, and applies the non-code inline alternatives only to the remaining segments so emphasis matching can never consume an enclosed inline code span. Runtime is O(n) in line length. No external state is mutated.
+- @param[in] line {string} Plain markdown line outside fenced code blocks and section headings.
+- @return {string} ANSI-colored line.
+- @satisfies REQ-715
+
+### fn `export function colorizeAgentFinalOutputMarkdownText(text: string): string` (L388-411)
 - @brief Converts one rendered markdown report or table into ANSI-colored text.
-- @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm. Runtime is O(n) in text length. No external state is mutated.
+- @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line through `colorizeAgentFinalOutputInlineLine(...)` so inline code spans color atomically and every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] text {string} Plain markdown report or plain table text produced by the fixed-order renderer or the Next-Workflow table builder.
 - @return {string} ANSI-colored text.
 - @satisfies REQ-713, REQ-714, REQ-715, REQ-732
 
-### fn `export function renderAgentFinalOutputAnsiReport(report: AgentFinalOutputReport | undefined): string` (L395-397)
+### fn `export function renderAgentFinalOutputAnsiReport(report: AgentFinalOutputReport | undefined): string` (L420-422)
 - @brief Renders the captured report fields as the fixed-order ANSI-colored markdown section block.
 - @details Renders the plain fixed-order report through `renderAgentFinalOutputMarkdownReport(...)` and converts it through the ANSI markdown colorizer so every section heading prints in intense yellow and links, fences, inline code, bold, italic, and underlined elements print colored; `undefined` reports render the empty string. Runtime is O(n) in aggregate field length. No external state is mutated.
 - @param[in] report {AgentFinalOutputReport | undefined} Captured final-output report; `undefined` renders the empty string.
 - @return {string} ANSI-colored newline-delimited markdown sections, or the empty string when no report is captured.
 - @satisfies REQ-713, REQ-714, REQ-715
 
-### iface `interface ProcessScopedAgentFinalOutputStore` (L404-407)
+### iface `interface ProcessScopedAgentFinalOutputStore` (L429-432)
 - @brief Stores the process-scoped captured final-output report persisted across extension rebinds.
 - @details Holds the latest parsed report on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` while the hosting process persists, so the retention notification of the successor session renders the report of the completed flow. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-681
 
-- type `type GlobalAgentFinalOutputStore = typeof globalThis & {` (L409)
-### fn `function getProcessScopedAgentFinalOutputStore(): ProcessScopedAgentFinalOutputStore` (L418-424)
+- type `type GlobalAgentFinalOutputStore = typeof globalThis & {` (L434)
+### fn `function getProcessScopedAgentFinalOutputStore(): ProcessScopedAgentFinalOutputStore` (L443-449)
 - @brief Returns the process-scoped captured final-output report store.
 - @details Lazily initializes one `globalThis` record so session rebinds reuse the captured report instead of resetting it. Runtime is O(1). Side effect: initializes process-scoped state on first access.
 - @return {ProcessScopedAgentFinalOutputStore} Mutable process-scoped report store.
 
-### fn `export function captureAgentFinalOutputReport(finalOutput: AgentFinalOutputParse): void` (L433-435)
+### fn `export function captureAgentFinalOutputReport(finalOutput: AgentFinalOutputParse): void` (L458-460)
 - @brief Captures the final-output report of one completed agentic run into the process-scoped store.
 - @details Stores the validated report so the final context-retention notification renders its markdown sections, and stores `undefined` for one invalid parse so a terminal output that violates the JSON contract never feeds stale report sections to the retention notification. Runtime is O(1). Side effect: mutates process-scoped capture state.
 - @param[in] finalOutput {AgentFinalOutputParse} Parse result of the terminal completed output.
 - @return {void} No return value.
 - @satisfies REQ-681
 
-### fn `export function getCapturedAgentFinalOutputReport(): AgentFinalOutputReport | undefined` (L443-446)
+### fn `export function getCapturedAgentFinalOutputReport(): AgentFinalOutputReport | undefined` (L468-471)
 - @brief Returns a detached snapshot of the captured final-output report.
 - @details Copies the captured report so callers render or inspect it without mutating the stored state. Runtime is O(n) in report size. No external state is mutated.
 - @return {AgentFinalOutputReport | undefined} Captured report snapshot, or `undefined` when the last capture was invalid or none exists.
 - @satisfies REQ-681
 
-### fn `export function resetAgentFinalOutputStateForTests(): void` (L453-455)
+### fn `export function resetAgentFinalOutputStateForTests(): void` (L478-480)
 - @brief Resets the process-scoped final-output capture state for deterministic tests.
 - @details Clears the captured report so one test can simulate independent pi host processes without leaking the report of a previous flow into later retention assertions. Runtime is O(1). Side effect: mutates process-scoped state.
 - @return {void} No return value.
@@ -285,19 +292,20 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 |`AgentFinalOutputReportField`|iface||92-97|interface AgentFinalOutputReportField|
 |`isPlainJsonObject`|fn||122-124|function isPlainJsonObject(value: unknown): value is Reco...|
 |`normalizeAgentFinalOutputCommands`|fn||133-151|function normalizeAgentFinalOutputCommands(value: unknown...|
-|`extractFinalOutputJsonObject`|fn||160-456|function extractFinalOutputJsonObject(agentOutputText: st...|
+|`extractFinalOutputJsonObject`|fn||160-459|function extractFinalOutputJsonObject(agentOutputText: st...|
 |`parseAgentFinalOutput`|fn||247-289|export function parseAgentFinalOutput(agentOutputText: st...|
 |`renderAgentFinalOutputMarkdownReport`|fn||298-310|export function renderAgentFinalOutputMarkdownReport(repo...|
-|`replaceAgentFinalOutputAnsiInline`|fn||327-341|function replaceAgentFinalOutputAnsiInline(match: string)...|
-|`renderAgentFinalOutputSectionTitleBox`|fn||351-354|function renderAgentFinalOutputSectionTitleBox(label: str...|
-|`colorizeAgentFinalOutputMarkdownText`|fn||363-386|export function colorizeAgentFinalOutputMarkdownText(text...|
-|`renderAgentFinalOutputAnsiReport`|fn||395-397|export function renderAgentFinalOutputAnsiReport(report: ...|
-|`ProcessScopedAgentFinalOutputStore`|iface||404-407|interface ProcessScopedAgentFinalOutputStore|
-|`GlobalAgentFinalOutputStore`|type||409||
-|`getProcessScopedAgentFinalOutputStore`|fn||418-424|function getProcessScopedAgentFinalOutputStore(): Process...|
-|`captureAgentFinalOutputReport`|fn||433-435|export function captureAgentFinalOutputReport(finalOutput...|
-|`getCapturedAgentFinalOutputReport`|fn||443-446|export function getCapturedAgentFinalOutputReport(): Agen...|
-|`resetAgentFinalOutputStateForTests`|fn||453-455|export function resetAgentFinalOutputStateForTests(): void|
+|`replaceAgentFinalOutputAnsiInline`|fn||334-348|function replaceAgentFinalOutputAnsiInline(match: string)...|
+|`renderAgentFinalOutputSectionTitleBox`|fn||358-361|function renderAgentFinalOutputSectionTitleBox(label: str...|
+|`colorizeAgentFinalOutputInlineLine`|fn||370-379|function colorizeAgentFinalOutputInlineLine(line: string)...|
+|`colorizeAgentFinalOutputMarkdownText`|fn||388-411|export function colorizeAgentFinalOutputMarkdownText(text...|
+|`renderAgentFinalOutputAnsiReport`|fn||420-422|export function renderAgentFinalOutputAnsiReport(report: ...|
+|`ProcessScopedAgentFinalOutputStore`|iface||429-432|interface ProcessScopedAgentFinalOutputStore|
+|`GlobalAgentFinalOutputStore`|type||434||
+|`getProcessScopedAgentFinalOutputStore`|fn||443-449|function getProcessScopedAgentFinalOutputStore(): Process...|
+|`captureAgentFinalOutputReport`|fn||458-460|export function captureAgentFinalOutputReport(finalOutput...|
+|`getCapturedAgentFinalOutputReport`|fn||468-471|export function getCapturedAgentFinalOutputReport(): Agen...|
+|`resetAgentFinalOutputStateForTests`|fn||478-480|export function resetAgentFinalOutputStateForTests(): void|
 
 
 ---
