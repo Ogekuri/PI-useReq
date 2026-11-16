@@ -238,9 +238,9 @@ function buildStaticCheckFileRecord(
 }
 
 /**
- * @brief Builds the structured payload returned by `files-static-check` or `static-check`.
+ * @brief Builds the structured payload returned by `req-files-static-check` or `req-static-check`.
  * @details Exposes configured checker coverage, per-file selection facts, and normalized execution diagnostics while omitting request echoes whose semantics already live in registration metadata. Runtime is O(F + C). Side effects are limited to filesystem reads.
- * @param[in] toolName {"files-static-check" | "static-check"} Target tool name.
+ * @param[in] toolName {"req-files-static-check" | "req-static-check"} Target tool name.
  * @param[in] scope {"explicit-files" | "configured-source-and-test-directories"} Selection scope label.
  * @param[in] projectBasePath {string} Resolved project base path.
  * @param[in] requestedPaths {string[]} Explicit or discovered file paths.
@@ -251,7 +251,7 @@ function buildStaticCheckFileRecord(
  * @return {StaticCheckToolPayload} Structured static-check payload.
  */
 export function buildStaticCheckToolPayload(
-  toolName: "files-static-check" | "static-check",
+  toolName: "req-files-static-check" | "req-static-check",
   scope: "explicit-files" | "configured-source-and-test-directories",
   projectBasePath: string,
   requestedPaths: string[],

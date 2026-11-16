@@ -158,7 +158,7 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 - @satisfies REQ-678
 ### fn `export function isAgentFinalOutputResult(value: unknown): value is AgentFinalOutputResult` (L32-34)
 - @brief Tests whether one candidate value is one valid final-output terminal result.
-- @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Exported so the `result-json-validator` final-output contract evaluator reuses the identical domain source instead of duplicating it. Runtime is O(1). No external state is mutated.
+- @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Exported so the `req-result-json-validator` final-output contract evaluator reuses the identical domain source instead of duplicating it. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate parsed `result` payload.
 - @return {boolean} `true` when the value is exactly `ok` or `error`.
 - @satisfies REQ-678, REQ-726
@@ -393,9 +393,9 @@ import type { ToolResult } from "./tool-runner.js";
 - @return {StaticCheckFileRecord} Structured file-selection record.
 
 ### fn `export function buildStaticCheckToolPayload(` (L253-284)
-- @brief Builds the structured payload returned by `files-static-check` or `static-check`.
+- @brief Builds the structured payload returned by `req-files-static-check` or `req-static-check`.
 - @details Exposes configured checker coverage, per-file selection facts, and normalized execution diagnostics while omitting request echoes whose semantics already live in registration metadata. Runtime is O(F + C). Side effects are limited to filesystem reads.
-- @param[in] toolName {"files-static-check" | "static-check"} Target tool name.
+- @param[in] toolName {"req-files-static-check" | "req-static-check"} Target tool name.
 - @param[in] scope {"explicit-files" | "configured-source-and-test-directories"} Selection scope label.
 - @param[in] projectBasePath {string} Resolved project base path.
 - @param[in] requestedPaths {string[]} Explicit or discovered file paths.
@@ -6152,7 +6152,7 @@ import { runReferences } from "./tool-runner.js";
 
 ### fn `export function executeReqReferencesCommandExecution(` (L212-254)
 - @brief Executes the specialized `req-references` direct-write workflow and reports per-operation outcome facts.
-- @details Snapshots the pre-run `REFERENCES.md` content, inspects the configured `src-dir` git file inventory, then either regenerates the document through the same source-summary path used by the `references` tool or writes the documented no-source placeholder payload when no supported source file exists, compares the produced content against the pre-run snapshot, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out, and returns whether the references content changed and whether the commit was created or skipped so callers can emit outcome-conformant notifications. Runtime is dominated by source-inventory probing plus summary generation and two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
+- @details Snapshots the pre-run `REFERENCES.md` content, inspects the configured `src-dir` git file inventory, then either regenerates the document through the same source-summary path used by the `req-references` tool or writes the documented no-source placeholder payload when no supported source file exists, compares the produced content against the pre-run snapshot, stages only the target file, creates the fixed-message commit through the guarded commit helper whenever a staged difference exists, verifies that no residual git-status rows remain after ignored extension-owned debug artifacts are filtered out, and returns whether the references content changed and whether the commit was created or skipped so callers can emit outcome-conformant notifications. Runtime is dominated by source-inventory probing plus summary generation and two to four git subprocesses. Side effects include documentation writes, index mutation, conditional commit creation, and subprocess creation.
 - @param[in] plan {ReqReferencesCommandPlan} Prepared direct-write execution plan.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {ReqReferencesCommandExecutionResult} Per-operation outcome facts including `referencesChanged` and `commitCreated`.
@@ -6527,7 +6527,7 @@ import { getInstallationPath, RESOURCE_ROOT_DIRNAME } from "./path-context.js";
 
 # result-json-validator.ts | TypeScript | 489L | 16 symbols | 6 imports | 43 comments
 > Path: `src/core/result-json-validator.ts`
-- @brief Implements final-output JSON contract validation for the `result-json-validator` agent tool.
+- @brief Implements final-output JSON contract validation for the `req-result-json-validator` agent tool.
 - @details Validates caller-supplied inline JSON text and explicit file paths through the native
 `JSON.parse` runtime, computes deterministic parser error line and column diagnostics, summarizes
 valid roots with structural counts plus character and `cl100k_base` token size facts, evaluates
@@ -6580,7 +6580,7 @@ compile-time only and introduces no runtime cost.
 - @satisfies REQ-703, REQ-704, REQ-705, REQ-707, REQ-726, REQ-727, REQ-728
 
 ### iface `export interface ResultJsonValidatorRequest` (L109-114)
-- @brief Describes the accepted `result-json-validator` request parameters.
+- @brief Describes the accepted `req-result-json-validator` request parameters.
 - @brief Raw JSON text to validate inline; omitted when file paths are supplied.
 - @brief Explicit file paths read as UTF-8 text and validated as JSON, in caller order.
 - @details Mirrors the optional `content` string and optional `files` path array of the agent-tool
@@ -6702,7 +6702,7 @@ state is mutated.
 - @satisfies REQ-703
 
 ### fn `export function runResultJsonValidator(params: ResultJsonValidatorRequest): ToolResult` (L464-489)
-- @brief Executes one `result-json-validator` request and returns the monolithic verdict tool result.
+- @brief Executes one `req-result-json-validator` request and returns the monolithic verdict tool result.
 - @details Type-checks the loosely-typed parameters, rejects requests supplying neither non-blank
 `content` nor non-empty `files` with one deterministic diagnostic, validates the inline content
 record first followed by every file entry in caller order, renders the monolithic verdict
@@ -7478,7 +7478,7 @@ import { ReqError } from "./errors.js";
 
 ### fn `function resolveTokenCounterEncoding(encodingName: string): TokenCounterEncoding` (L227-236)
 - @brief Resolves one shared tokenizer encoding for a `TokenCounter` construction.
-- @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the process-scoped encoding cache on first resolution per encoding name.
+- @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `req-files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the process-scoped encoding cache on first resolution per encoding name.
 - @param[in] encodingName {string} `js-tiktoken` encoding identifier.
 - @return {TokenCounterEncoding} Cached or newly constructed tokenizer encoding.
 - @throws {ReqError} Propagates the deterministic unavailable-dependency failure when `js-tiktoken` cannot be loaded.
@@ -7572,7 +7572,7 @@ import { ReqError } from "./errors.js";
 
 ### iface `interface ProcessScopedFileMetricsStore` (L521-523)
 - @brief Describes the process-scoped per-file metrics state persisted across extension rebinds.
-- @details Stores the stat-signed full-metric records on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, while the hosting process persists across those operations, so repeated `files-tokens` and canonical-doc `tokens` invocations reuse already encoded documents instead of re-encoding unchanged content. The interface is compile-time only and introduces no runtime cost.
+- @details Stores the stat-signed full-metric records on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, while the hosting process persists across those operations, so repeated `req-files-tokens` and canonical-doc `req-tokens` invocations reuse already encoded documents instead of re-encoding unchanged content. The interface is compile-time only and introduces no runtime cost.
 
 ### fn `function getProcessScopedFileMetricsStore(): ProcessScopedFileMetricsStore` (L530-536)
 - @brief Returns the process-scoped per-file metrics cache.

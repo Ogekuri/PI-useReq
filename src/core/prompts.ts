@@ -32,12 +32,12 @@ import type { PiUsereqWorkflowState } from "./extension-status.js";
  * @details The ordered replacement table converts historical `req --...` references into names exposed by the extension runtime. Application cost is O(p*r) where p is pattern count and r is prompt length.
  */
 const TOOL_REFERENCE_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/`req --find`/g, "`search` tool"],
-  [/`req --files-find`/g, "`files-search` tool"],
-  [/`req --compress`/g, "`compress` tool"],
-  [/`req --tokens`/g, "`tokens` tool"],
-  [/`req --static-check`/g, "`static-check` tool"],
-  [/`req --files-static-check`/g, "`files-static-check` tool"],
+  [/`req --find`/g, "`req-search` tool"],
+  [/`req --files-find`/g, "`req-files-search` tool"],
+  [/`req --compress`/g, "`req-compress` tool"],
+  [/`req --tokens`/g, "`req-tokens` tool"],
+  [/`req --static-check`/g, "`req-static-check` tool"],
+  [/`req --files-static-check`/g, "`req-files-static-check` tool"],
   [/\breq --find\b/g, "search tool"],
   [/\breq --files-find\b/g, "files-search tool"],
   [/\breq --compress\b/g, "compress tool"],

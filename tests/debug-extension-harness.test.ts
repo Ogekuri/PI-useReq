@@ -143,7 +143,7 @@ test("inspectExtension records commands, tools, events, and manual examples", as
     const report = await inspectExtension(projectBase);
 
     assert.ok(report.commands.some((command) => command.name === "req-analyze"));
-    assert.ok(report.tools.some((tool) => tool.name === "tokens"));
+    assert.ok(report.tools.some((tool) => tool.name === "req-tokens"));
     assert.deepEqual(report.eventHandlers, [...PI_USEREQ_STATUS_HOOK_NAMES]);
 
     for (const command of report.commands.filter((entry) => entry.name.startsWith("req-"))) {
@@ -159,14 +159,14 @@ test("inspectExtension records commands, tools, events, and manual examples", as
   }
 });
 
-test("inspectExtension surfaces agent-oriented search tool descriptions and schema details", async () => {
+test("inspectExtension surfaces agent-oriented req-search tool descriptions and schema details", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     const report = await inspectExtension(projectBase);
-    const filesSearch = report.tools.find((tool) => tool.name === "files-search");
-    const search = report.tools.find((tool) => tool.name === "search");
+    const filesSearch = report.tools.find((tool) => tool.name === "req-files-search");
+    const search = report.tools.find((tool) => tool.name === "req-search");
 
-    assert.ok(filesSearch, "missing files-search tool");
+    assert.ok(filesSearch, "missing req-files-search tool");
     assert.ok(search, "missing search tool");
     assert.match(filesSearch.description ?? "", /monolithic construct-search markdown report/);
     assert.ok(filesSearch.promptGuidelines?.some((line) => line.includes("Supported tags [Typescript]:")));
@@ -183,10 +183,10 @@ test("inspectExtension surfaces agent-oriented compression tool descriptions and
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     const report = await inspectExtension(projectBase);
-    const filesCompress = report.tools.find((tool) => tool.name === "files-compress");
-    const compress = report.tools.find((tool) => tool.name === "compress");
+    const filesCompress = report.tools.find((tool) => tool.name === "req-files-compress");
+    const compress = report.tools.find((tool) => tool.name === "req-compress");
 
-    assert.ok(filesCompress, "missing files-compress tool");
+    assert.ok(filesCompress, "missing req-files-compress tool");
     assert.ok(compress, "missing compress tool");
     assert.match(filesCompress.description ?? "", /monolithic compression markdown report/);
     assert.ok(filesCompress.promptGuidelines?.some((line) => line.includes("Line-number behavior:")));
@@ -199,14 +199,14 @@ test("inspectExtension surfaces agent-oriented compression tool descriptions and
   }
 });
 
-test("inspectExtension surfaces static-check tool descriptions and schema details", async () => {
+test("inspectExtension surfaces req-static-check tool descriptions and schema details", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     const report = await inspectExtension(projectBase);
-    const filesStaticCheck = report.tools.find((tool) => tool.name === "files-static-check");
-    const staticCheck = report.tools.find((tool) => tool.name === "static-check");
+    const filesStaticCheck = report.tools.find((tool) => tool.name === "req-files-static-check");
+    const staticCheck = report.tools.find((tool) => tool.name === "req-static-check");
 
-    assert.ok(filesStaticCheck, "missing files-static-check tool");
+    assert.ok(filesStaticCheck, "missing req-files-static-check tool");
     assert.ok(staticCheck, "missing static-check tool");
 
     assert.match(filesStaticCheck.description ?? "", /monolithic static-check report/);
@@ -224,7 +224,7 @@ test("inspectExtension surfaces static-check tool descriptions and schema detail
 test("replaySessionStart captures active tools, statuses, and cwd semantics", async () => {
   const { projectBase } = initFixtureRepo();
   try {
-    persistSessionStartFixtureConfig(projectBase, ["files-tokens", "static-check"]);
+    persistSessionStartFixtureConfig(projectBase, ["req-files-tokens", "req-static-check"]);
     const report = await replaySessionStart(projectBase);
     const status = report.ui.statuses["pi-usereq"] ?? "";
 
@@ -234,7 +234,7 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     }).stdout.trim() || "unknown";
     const escapedBranch = expectedBranch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    assert.deepEqual([...report.activeTools].sort(), ["files-tokens", "static-check"]);
+    assert.deepEqual([...report.activeTools].sort(), ["req-files-tokens", "req-static-check"]);
     assert.equal(report.effectiveCtxCwd, projectBase);
     assert.equal(report.effectiveProcessCwd, projectBase);
     assert.match(status, /<accent>status:<\/accent><warning>idle<\/warning>/);
@@ -316,7 +316,7 @@ test("replayCommand captures interactive UI side effects", async () => {
 test("replayTool captures tool results and cwd semantics", async () => {
   const { projectBase } = initFixtureRepo();
   try {
-    const report = await replayTool("tokens", {}, projectBase);
+    const report = await replayTool("req-tokens", {}, projectBase);
     const toolResult = report.toolResult as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
@@ -333,7 +333,7 @@ test("replayTool captures tool results and cwd semantics", async () => {
   }
 });
 
-test("pi-usereq-debug tool forwards --params unchanged for files-search", () => {
+test("pi-usereq-debug tool forwards --params unchanged for req-files-search", () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     fs.writeFileSync(path.join(projectBase, "src", "find_target.py"), "def foo():\n    return 1\n", "utf8");
@@ -344,7 +344,7 @@ test("pi-usereq-debug tool forwards --params unchanged for files-search", () => 
       enableLineNumbers: true,
     };
     const result = runPiUsereqDebug(
-      ["tool", "files-search", "--params", JSON.stringify(expectedParams), "--format", "json"],
+      ["tool", "req-files-search", "--params", JSON.stringify(expectedParams), "--format", "json"],
       projectBase,
     );
 
@@ -369,7 +369,7 @@ test("pi-usereq-debug tool converts --args text into forwarded params JSON", () 
     const result = runPiUsereqDebug(
       [
         "tool",
-        "files-search",
+        "req-files-search",
         "--args",
         "FUNCTION ^foo$ src/find_target.py --enable-line-numbers",
         "--format",

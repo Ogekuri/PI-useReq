@@ -2345,7 +2345,7 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         label: "Enable debug commands for tools",
         value: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED),
         values: ["enable", "disable"],
-        description: "Enable or disable slash-command wrappers for `compress`, `references`, `static-check`, `summarize`, and `tokens`.",
+        description: "Enable or disable slash-command wrappers for `req-compress`, `req-references`, `req-static-check`, `req-summarize`, and `req-tokens`.",
       },
       debugEnabled,
     ),
@@ -4207,8 +4207,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "files-tokens",
-    label: "files-tokens",
+    name: "req-files-tokens",
+    label: "req-files-tokens",
     description: "Scope: explicit files. Return the monolithic token pack summary in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic token summary for caller-selected files.",
     promptGuidelines: [
@@ -4216,7 +4216,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Output contract: monolithic pack-summary text in content[0].text; details.execution preserves only exit code and residual diagnostics.",
       "Behavior contract: missing or non-file inputs surface through details.execution diagnostics; the tool fails when no processable files remain.",
     ],
-    renderResult: buildStructuredToolRenderResult("files-tokens"),
+    renderResult: buildStructuredToolRenderResult("req-files-tokens"),
     parameters: filesTokensSchema,
     async execute(_toolCallId, params) {
       return executeMonolithicTool(() => runFilesTokens(params.files));
@@ -4224,8 +4224,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "files-summarize",
-    label: "files-summarize",
+    name: "req-files-summarize",
+    label: "req-files-summarize",
     description: "Scope: explicit source files. Return the monolithic summary markdown report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic summary markdown report for caller-selected source files.",
     promptGuidelines: [
@@ -4234,7 +4234,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Formatting contract: content matches the Python summary renderer used by `generate_markdown.py`.",
       "Behavior contract: missing inputs, non-file inputs, unsupported extensions, and analysis failures surface through details.execution diagnostics.",
     ],
-    renderResult: buildStructuredToolRenderResult("files-summarize"),
+    renderResult: buildStructuredToolRenderResult("req-files-summarize"),
     parameters: filesSummarizeSchema,
     async execute(_toolCallId, params) {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4256,8 +4256,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "files-compress",
-    label: "files-compress",
+    name: "req-files-compress",
+    label: "req-files-compress",
     description: "Scope: explicit files. Return the monolithic compression markdown report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic compression markdown report for caller-selected source files.",
     promptGuidelines: [
@@ -4266,7 +4266,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Formatting contract: output uses `@@@ <path> | <language>` headers, `> Lines:` metadata, and fenced code blocks matching `compress_files.py`.",
       "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
     ],
-    renderResult: buildStructuredToolRenderResult("files-compress"),
+    renderResult: buildStructuredToolRenderResult("req-files-compress"),
     parameters: filesCompressSchema,
     async execute(_toolCallId, params) {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4294,12 +4294,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "files-search",
-    label: "files-search",
+    name: "req-files-search",
+    label: "req-files-search",
     description: "Scope: explicit source files. Return the monolithic construct-search markdown report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic construct-search markdown report for caller-selected source files.",
     promptGuidelines: buildSearchToolPromptGuidelines("explicit-files"),
-    renderResult: buildStructuredToolRenderResult("files-search"),
+    renderResult: buildStructuredToolRenderResult("req-files-search"),
     parameters: filesSearchSchema,
     async execute(_toolCallId, params) {
       return executeMonolithicTool(() => runFilesSearch(
@@ -4329,8 +4329,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "summarize",
-    label: "summarize",
+    name: "req-summarize",
+    label: "req-summarize",
     description: "Scope: configured project source directories. Return the monolithic summary markdown report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic project summary markdown report from the configured source directories.",
     promptGuidelines: [
@@ -4339,7 +4339,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Formatting contract: content prepends the file-structure markdown block before the per-file markdown produced by `generate_markdown.py`.",
       "Configuration contract: output changes with cwd-derived project config and src-dir values; the tool does not accept explicit file overrides.",
     ],
-    renderResult: buildStructuredToolRenderResult("summarize"),
+    renderResult: buildStructuredToolRenderResult("req-summarize"),
     parameters: summarizeSchema,
     async execute() {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4350,18 +4350,18 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "references",
-    label: "references",
+    name: "req-references",
+    label: "req-references",
     description: "Scope: configured project source directories and configured docs-dir. Overwrite REFERENCES.md and return only success or error in content[0].text while keeping execution metadata in details.execution.",
     promptSnippet: "Generate REFERENCES.md from the configured source directories without returning the generated markdown.",
     promptGuidelines: [
       "Scope: no params; resolve src-dir and docs-dir from the current project configuration and current working directory.",
-      "Behavior contract: generate the same file-structure-plus-summary markdown as `summarize` and overwrite `<docs-dir>/REFERENCES.md`.",
+      "Behavior contract: generate the same file-structure-plus-summary markdown as `req-summarize` and overwrite `<docs-dir>/REFERENCES.md`.",
       "Output contract: `content[0].text` is `success` on success or `error: <diagnostic>` on failure; generated markdown is never returned to the LLM.",
       "Failure contract: source discovery, markdown generation, and file-write errors surface through the status text plus details.execution diagnostics.",
       "No-source contract: when the configured src-dir git inventory holds no supported source file, overwrite `<docs-dir>/REFERENCES.md` with the exact `NO_SOURCE_REFERENCES_PLACEHOLDER` payload from `src/core/source-presence.ts` and still return `success`, matching `/req-references`.",
     ],
-    renderResult: buildStructuredToolRenderResult("references"),
+    renderResult: buildStructuredToolRenderResult("req-references"),
     parameters: referencesSchema,
     async execute() {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4381,8 +4381,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "compress",
-    label: "compress",
+    name: "req-compress",
+    label: "req-compress",
     description: "Scope: configured project source directories. Return the monolithic compression markdown report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic project compression markdown report from the configured source directories.",
     promptGuidelines: [
@@ -4391,7 +4391,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Formatting contract: output uses `@@@ <path> | <language>` headers, `> Lines:` metadata, and fenced code blocks matching `compress_files.py`.",
       "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
     ],
-    renderResult: buildStructuredToolRenderResult("compress"),
+    renderResult: buildStructuredToolRenderResult("req-compress"),
     parameters: compressSchema,
     async execute(_toolCallId, params) {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4417,12 +4417,12 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "search",
-    label: "search",
+    name: "req-search",
+    label: "req-search",
     description: "Scope: configured project source directories. Return the monolithic construct-search markdown report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic construct-search markdown report from the configured source directories.",
     promptGuidelines: buildSearchToolPromptGuidelines("configured-source-directories"),
-    renderResult: buildStructuredToolRenderResult("search"),
+    renderResult: buildStructuredToolRenderResult("req-search"),
     parameters: searchSchema,
     async execute(_toolCallId, params) {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4439,8 +4439,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "tokens",
-    label: "tokens",
+    name: "req-tokens",
+    label: "req-tokens",
     description: "Scope: canonical docs from the configured docs-dir. Return the monolithic token pack summary in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic token summary for canonical documentation files.",
     promptGuidelines: [
@@ -4448,7 +4448,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Output contract: monolithic pack-summary text in content[0].text; details.execution preserves only exit code and residual diagnostics.",
       "Behavior contract: missing canonical docs surface through details.execution diagnostics; the tool fails when no processable canonical docs remain.",
     ],
-    renderResult: buildStructuredToolRenderResult("tokens"),
+    renderResult: buildStructuredToolRenderResult("req-tokens"),
     parameters: tokensSchema,
     async execute() {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4459,8 +4459,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "files-static-check",
-    label: "files-static-check",
+    name: "req-files-static-check",
+    label: "req-files-static-check",
     description: "Scope: explicit files. Return the monolithic static-check report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic explicit-file static-check report for the current project configuration.",
     promptGuidelines: [
@@ -4469,7 +4469,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Configuration contract: checker selection is derived from the cwd-resolved static-check configuration and file extensions only.",
       "Failure contract: execution diagnostics preserve failing checker output and skipped-input warnings.",
     ],
-    renderResult: buildStructuredToolRenderResult("files-static-check"),
+    renderResult: buildStructuredToolRenderResult("req-files-static-check"),
     parameters: multiFileSchema,
     async execute(_toolCallId, params) {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4486,8 +4486,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   );
   pi.registerTool({
-    name: "static-check",
-    label: "static-check",
+    name: "req-static-check",
+    label: "req-static-check",
     description: "Scope: configured source and test directories. Return the monolithic static-check report in content[0].text and keep only execution metadata in details.execution.",
     promptSnippet: "Return the monolithic project static-check report for the current configuration.",
     promptGuidelines: [
@@ -4496,7 +4496,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Selection contract: tests/fixtures and <tests-dir>/fixtures are excluded before checker dispatch; entries with scan-by-dir TRUE run one recursive invocation over src-dir plus tests-dir.",
       "Failure contract: execution diagnostics preserve failing checker output and skipped-selection warnings.",
     ],
-    renderResult: buildStructuredToolRenderResult("static-check"),
+    renderResult: buildStructuredToolRenderResult("req-static-check"),
     parameters: staticCheckSchema,
     async execute() {
       const contextPath = getRuntimeContextPath(process.cwd());
@@ -4522,8 +4522,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "result-json-validator",
-    label: "result-json-validator",
+    name: "req-result-json-validator",
+    label: "req-result-json-validator",
     description: "Scope: the agent's final output JSON message (the single JSON object emitted as the complete final response/result). Validate its JSON syntax AND the final-output mandatory-field contract (result exactly \"ok\" or \"error\", summary string, next_commands array); return the monolithic markdown verdict in content[0].text and keep only execution metadata in details.execution. This tool is NOT a generic JSON validator: it imposes mandatory content constraints, so syntactically valid JSON without the mandatory fields is reported contract-invalid. Use it ONLY on the final output JSON object immediately before emitting it; NEVER use it to validate arbitrary JSON files, configuration payloads, or intermediate data.",
     promptSnippet: "Return the monolithic final-output JSON contract verdict for the caller-supplied final response JSON.",
     promptGuidelines: [
@@ -4533,7 +4533,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Content contract: every parsed record is validated against the orchestration final-output mandatory fields — result exactly \"ok\" or \"error\", summary string, next_commands array — so valid JSON lacking these fields is reported contract-invalid; absent optional report fields are tolerated.",
       "Usage contract: use this tool ONLY to validate the complete final output JSON message immediately before emitting it. Do NOT use it for generic JSON validation: it imposes mandatory-field content constraints beyond syntax, so arbitrary JSON documents, configuration payloads, fixtures, and intermediate data fail the contract even when syntactically valid.",
     ],
-    renderResult: buildStructuredToolRenderResult("result-json-validator"),
+    renderResult: buildStructuredToolRenderResult("req-result-json-validator"),
     parameters: resultJsonValidatorSchema,
     async execute(_toolCallId, params) {
       return executeMonolithicTool(() => runResultJsonValidator(params));

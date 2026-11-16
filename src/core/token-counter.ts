@@ -219,7 +219,7 @@ function getProcessScopedTokenCounterStore(): ProcessScopedTokenCounterStore {
 
 /**
  * @brief Resolves one shared tokenizer encoding for a `TokenCounter` construction.
- * @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the process-scoped encoding cache on first resolution per encoding name.
+ * @details Checks the process-scoped per-encoding cache first and constructs the `js-tiktoken` encoding only on the first request per encoding name, so repeated `TokenCounter` construction across the `req-files-tokens` runner, canonical-doc counting, and context-file measurement reuses one parsed encoder instead of re-parsing the bundled BPE ranks each time. Runtime is O(1) after the first construction for the encoding and dominated by the single deferred `getEncoding` construction otherwise. Side effect: mutates the process-scoped encoding cache on first resolution per encoding name.
  * @param[in] encodingName {string} `js-tiktoken` encoding identifier.
  * @return {TokenCounterEncoding} Cached or newly constructed tokenizer encoding.
  * @throws {ReqError} Propagates the deterministic unavailable-dependency failure when `js-tiktoken` cannot be loaded.
@@ -516,7 +516,7 @@ const FILE_METRICS_CACHE_LIMIT = 128;
 
 /**
  * @brief Describes the process-scoped per-file metrics state persisted across extension rebinds.
- * @details Stores the stat-signed full-metric records on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, while the hosting process persists across those operations, so repeated `files-tokens` and canonical-doc `tokens` invocations reuse already encoded documents instead of re-encoding unchanged content. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the stat-signed full-metric records on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, while the hosting process persists across those operations, so repeated `req-files-tokens` and canonical-doc `req-tokens` invocations reuse already encoded documents instead of re-encoding unchanged content. The interface is compile-time only and introduces no runtime cost.
  */
 interface ProcessScopedFileMetricsStore {
   readonly statSignedMetrics: Map<string, FileMetricsCacheEntry>;

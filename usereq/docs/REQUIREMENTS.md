@@ -142,13 +142,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-211**: MUST replace `%%PROMPT%%` with the current prompt name without the `req-` prefix when rendering bundled prompts and bundled commit instructions.
 - **REQ-213**: MUST replace prompt token `%%COMMIT%%` with rendered `<installation-path>/resources/instructions/git_commit.md` when `AUTO_GIT_COMMIT=enable`, and with rendered `<installation-path>/resources/instructions/git_read-only.md` when `AUTO_GIT_COMMIT=disable`.
 - **REQ-214**: MUST preprocess bundled `git_commit.md` and `git_read-only.md` with the same runtime token-replacement rules used for prompts before injecting them through `%%COMMIT%%`.
-- **REQ-005**: MUST expose `files-tokens`, `files-summarize`, `files-compress`, and `files-search` only through agent-tool registration.
-- **REQ-044**: MUST expose `summarize`, `references`, `compress`, `search`, `tokens`, `files-static-check`, and `static-check` only through agent-tool registration.
-- **REQ-293**: MUST make `references` scan configured `src-dir` files, generate the same file-structure-plus-summary markdown as `summarize`, and overwrite `<base-path>/<docs-dir>/REFERENCES.md`.
-- **REQ-294**: MUST make `references` return `success` through `content[0].text` after `REFERENCES.md` is overwritten and MUST NOT return generated reference markdown to the LLM.
-- **REQ-295**: MUST make `references` return `error: <diagnostic>` through `content[0].text` when source discovery, markdown generation, or `REFERENCES.md` writing fails.
-- **REQ-296**: MUST preserve `references` `details` as `execution` metadata only, with numeric `code` and optional normalized residual diagnostics.
-- **REQ-297**: MUST register `references` with machine-oriented descriptions describing configured `src-dir` plus `docs-dir` scope, overwrite behavior, status-only text contract, and stable failure conditions.
+- **REQ-005**: MUST expose `req-files-tokens`, `req-files-summarize`, `req-files-compress`, and `req-files-search` only through agent-tool registration.
+- **REQ-044**: MUST expose `req-summarize`, `req-references`, `req-compress`, `req-search`, `req-tokens`, `req-files-static-check`, and `req-static-check` only through agent-tool registration.
+- **REQ-293**: MUST make `req-references` scan configured `src-dir` files, generate the same file-structure-plus-summary markdown as `req-summarize`, and overwrite `<base-path>/<docs-dir>/REFERENCES.md`.
+- **REQ-294**: MUST make `req-references` return `success` through `content[0].text` after `REFERENCES.md` is overwritten and MUST NOT return generated reference markdown to the LLM.
+- **REQ-295**: MUST make `req-references` return `error: <diagnostic>` through `content[0].text` when source discovery, markdown generation, or `REFERENCES.md` writing fails.
+- **REQ-296**: MUST preserve `req-references` `details` as `execution` metadata only, with numeric `code` and optional normalized residual diagnostics.
+- **REQ-297**: MUST register `req-references` with machine-oriented descriptions describing configured `src-dir` plus `docs-dir` scope, overwrite behavior, status-only text contract, and stable failure conditions.
+- **REQ-735**: MUST prefix every extension-owned agent-tool name with `req-` so registered tool names stay unique and collision-free against embedded and third-party pi CLI tools.
+- **REQ-736**: MUST register the configurable custom-tool inventory as exactly `req-files-tokens`, `req-files-summarize`, `req-files-compress`, `req-files-search`, `req-summarize`, `req-references`, `req-compress`, `req-search`, `req-tokens`, `req-files-static-check`, `req-static-check`, and `req-result-json-validator`.
+- **REQ-737**: MUST keep the `req-references` agent tool and the dedicated `req-references` slash command as distinct registrations that share the name across separate command and tool registries.
 - **REQ-046**: MUST implement a recording extension API supporting `registerCommand`, `registerTool`, `on`, `getAllTools`, `getActiveTools`, `setActiveTools`, and `sendUserMessage`, and preserve stable registration order in serialized snapshots.
 - **REQ-047**: MUST implement a recording command context UI supporting `select`, `input`, `notify`, `setStatus`, and `setEditorText`, and serialize queued inputs plus emitted UI side effects.
 - **REQ-048**: MUST load the target extension via its default export, invoke it as a black box, and execute offline replays only through registered `session_start`, command, and tool handlers.
@@ -193,10 +196,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-247**: MUST log selected debug entries only when `DEBUG_LOG_ON_STATUS` equals the current workflow state, or when `DEBUG_LOG_ON_STATUS=any`.
 - **REQ-007**: MUST provide an `Enable tools` submenu with enable-all, disable-all, reset-defaults, and grouped per-tool toggles ordered as custom tools first and embedded pi CLI tools second.
 - **REQ-315**: MUST persist every `Enable tools` menu flag only in global configuration.
-- **REQ-231**: MUST order non-`files-*` custom-tool toggles alphabetically, append `files-*` custom-tool toggles alphabetically, and place default-disabled custom-tool toggles after default-enabled custom-tool toggles inside each custom subgroup.
+- **REQ-231**: MUST order non-`req-files-*` custom-tool toggles alphabetically, append `req-files-*` custom-tool toggles alphabetically, and place default-disabled custom-tool toggles after default-enabled custom-tool toggles inside each custom subgroup.
 - **REQ-232**: MUST order embedded-tool toggles alphabetically and place default-disabled embedded-tool toggles after default-enabled embedded-tool toggles.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls`.
-- **REQ-064**: MUST default `files-tokens`, `files-summarize`, `files-compress`, `files-search`, `summarize`, `references`, `compress`, `search`, `tokens`, `files-static-check`, `static-check`, `result-json-validator`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
+- **REQ-064**: MUST default `req-files-tokens`, `req-files-summarize`, `req-files-compress`, `req-files-search`, `req-summarize`, `req-references`, `req-compress`, `req-search`, `req-tokens`, `req-files-static-check`, `req-static-check`, `req-result-json-validator`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted local and global configuration.
 - **REQ-067**: MUST send every bundled prompt-backed `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that sends bundled prompt-backed `req-<prompt>` payloads through the forked execution session by using only the replacement-session context for post-switch session-bound operations.
@@ -309,7 +312,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during bundled prompt-backed `req-<prompt>` preflight.
 - **REQ-227**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `running` only after required-doc checks, worktree preparation, worktree verification, and prompt-session handoff succeed.
 - **REQ-299**: MUST make `req-references`, after passing the workflow startability gate, transition workflow state to `checking`, validate slash-command-owned git state, and transition directly to `running` without worktree creation, session switching, or LLM-session initialization.
-- **REQ-300**: MUST make `req-references` execute the same reference-generation and overwrite logic as `references`, writing configured-source reference markdown to `<base-path>/<docs-dir>/REFERENCES.md`.
+- **REQ-300**: MUST make the `req-references` command execute the same reference-generation and overwrite logic as the `req-references` agent tool, writing configured-source reference markdown to `<base-path>/<docs-dir>/REFERENCES.md`.
 - **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]` whenever the staged file differs from `HEAD`.
 - **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `done` before the command handler returns.
 - **REQ-303**: MUST make failing `req-references` execution notify pi CLI, transition workflow state to `error`, and surface git or reference-generation failures without LLM-session initialization.
@@ -336,44 +339,44 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-159**: MUST increase `Σ` by each normally completed prompt duration and MUST NOT change `Σ` on escape-triggered cancellation.
 - **REQ-217**: MUST reset `⚑` plus `⌛︎` only during `session_start` with reason `startup` or `reload`.
 - **REQ-173**: MUST optimize every affected agent-tool response by reusing Python-compatible monolithic renderer structure, preserving source-leading tabs in source-derived text, and omitting mirrored JSON bodies, duplicate facts, and caller-known request echoes.
-- **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `files-tokens` return the Python-compatible pack-summary text through `content[0].text`.
-- **REQ-011**: MUST make `files-summarize` analyze supported source files and return the Python-compatible summary markdown through `content[0].text`.
+- **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `req-files-tokens` return the Python-compatible pack-summary text through `content[0].text`.
+- **REQ-011**: MUST make `req-files-summarize` analyze supported source files and return the Python-compatible summary markdown through `content[0].text`.
 - **REQ-012**: MUST compress supported source files by removing comments and blank lines, preserving full indentation for Python, Haskell, and Elixir, preserving leading-tab indentation for other languages, and optionally preserving original line numbers.
 - **REQ-013**: MUST search explicit files by tag filter and name regex, then return Python-compatible markdown matches with signatures, line ranges, Doxygen bullets, and stripped code excerpts.
-- **REQ-014**: MUST make `summarize` scan configured `src-dir` files and return the Python-compatible file-structure-plus-summary markdown through `content[0].text`.
+- **REQ-014**: MUST make `req-summarize` scan configured `src-dir` files and return the Python-compatible file-structure-plus-summary markdown through `content[0].text`.
 - **REQ-015**: MUST make CLI project-scope compression scan configured `src-dir` files and emit Python-compatible compressed markdown blocks for every supported file.
 - **REQ-016**: MUST make `find` scan configured `src-dir` files using the requested tag filter and regular expression, then emit Python-compatible markdown matches.
-- **REQ-017**: MUST make `tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the `files-tokens` pack-summary text contract, and fail when none exist.
-- **REQ-069**: MUST make `files-tokens` and `tokens` pass exactly one monolithic pack-summary text block to the LLM through `content[0].text`.
+- **REQ-017**: MUST make `req-tokens` count only existing canonical docs `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md`, reuse the `req-files-tokens` pack-summary text contract, and fail when none exist.
+- **REQ-069**: MUST make `req-files-tokens` and `req-tokens` pass exactly one monolithic pack-summary text block to the LLM through `content[0].text`.
 - **REQ-070**: MUST keep affected tool `details` limited to `execution` metadata with numeric `code` and optional `stdout_lines` plus `stderr_lines`.
-- **REQ-071**: MUST keep `files-tokens` and `tokens` content text identical in ordering and headings to the Python pack-summary formatter.
-- **REQ-072**: MUST register `files-tokens` and `tokens` with machine-oriented descriptions describing scope, monolithic text contract, and stable failure conditions.
-- **REQ-073**: MUST omit caller-known request echoes, mirrored file tables, and duplicate metrics from `files-tokens` and `tokens` runtime payloads.
-- **REQ-074**: MUST reserve `files-tokens` and `tokens` `details` for execution metadata and MUST NOT mirror content text or derived guidance there.
-- **REQ-075**: MUST surface `files-tokens` and `tokens` skip or read-error observations through `details.execution` diagnostics instead of structured runtime file entries.
-- **REQ-076**: MUST make `files-summarize` and `summarize` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
-- **REQ-077**: MUST keep `files-summarize` markdown aligned to the Python summary renderer in section ordering and non-source formatting while preserving leading tabs in source-derived lines.
-- **REQ-078**: MUST prepend project-scope `summarize` output with the file-structure markdown block before the per-file summary markdown.
-- **REQ-079**: MUST omit mirrored JSON structures and request echoes from `files-summarize` and `summarize` runtime payloads.
-- **REQ-080**: MUST register `files-summarize` and `summarize` with machine-oriented descriptions describing scope, monolithic markdown contract, and stable failure conditions.
-- **REQ-081**: MUST make `files-compress` and `compress` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
-- **REQ-082**: MUST keep `files-compress` and `compress` content aligned to the Python compression renderer in headers, line-range metadata, code fences, and file ordering while preserving leading tabs in retained source lines.
-- **REQ-083**: MUST make `enableLineNumbers` for `files-compress` and `compress` toggle original source line prefixes inside emitted fenced code blocks without changing header or line-range formatting.
-- **REQ-084**: MUST omit mirrored JSON structures, symbol tables, and duplicate excerpt copies from `files-compress` and `compress` runtime payloads.
-- **REQ-085**: MUST register `files-compress` and `compress` with machine-oriented descriptions describing scope, line-number behavior, monolithic markdown contract, and stable failure conditions.
-- **REQ-086**: MUST preserve `files-compress` and `compress` execution diagnostics only when the underlying compression runner emits residual stderr output.
-- **REQ-087**: MUST keep `files-compress` and `compress` runtime payloads free of structured file-entry mirrors for skips, unsupported extensions, and failures.
+- **REQ-071**: MUST keep `req-files-tokens` and `req-tokens` content text identical in ordering and headings to the Python pack-summary formatter.
+- **REQ-072**: MUST register `req-files-tokens` and `req-tokens` with machine-oriented descriptions describing scope, monolithic text contract, and stable failure conditions.
+- **REQ-073**: MUST omit caller-known request echoes, mirrored file tables, and duplicate metrics from `req-files-tokens` and `req-tokens` runtime payloads.
+- **REQ-074**: MUST reserve `req-files-tokens` and `req-tokens` `details` for execution metadata and MUST NOT mirror content text or derived guidance there.
+- **REQ-075**: MUST surface `req-files-tokens` and `req-tokens` skip or read-error observations through `details.execution` diagnostics instead of structured runtime file entries.
+- **REQ-076**: MUST make `req-files-summarize` and `req-summarize` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
+- **REQ-077**: MUST keep `req-files-summarize` markdown aligned to the Python summary renderer in section ordering and non-source formatting while preserving leading tabs in source-derived lines.
+- **REQ-078**: MUST prepend project-scope `req-summarize` output with the file-structure markdown block before the per-file summary markdown.
+- **REQ-079**: MUST omit mirrored JSON structures and request echoes from `req-files-summarize` and `req-summarize` runtime payloads.
+- **REQ-080**: MUST register `req-files-summarize` and `req-summarize` with machine-oriented descriptions describing scope, monolithic markdown contract, and stable failure conditions.
+- **REQ-081**: MUST make `req-files-compress` and `req-compress` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
+- **REQ-082**: MUST keep `req-files-compress` and `req-compress` content aligned to the Python compression renderer in headers, line-range metadata, code fences, and file ordering while preserving leading tabs in retained source lines.
+- **REQ-083**: MUST make `enableLineNumbers` for `req-files-compress` and `req-compress` toggle original source line prefixes inside emitted fenced code blocks without changing header or line-range formatting.
+- **REQ-084**: MUST omit mirrored JSON structures, symbol tables, and duplicate excerpt copies from `req-files-compress` and `req-compress` runtime payloads.
+- **REQ-085**: MUST register `req-files-compress` and `req-compress` with machine-oriented descriptions describing scope, line-number behavior, monolithic markdown contract, and stable failure conditions.
+- **REQ-086**: MUST preserve `req-files-compress` and `req-compress` execution diagnostics only when the underlying compression runner emits residual stderr output.
+- **REQ-087**: MUST keep `req-files-compress` and `req-compress` runtime payloads free of structured file-entry mirrors for skips, unsupported extensions, and failures.
 - **REQ-088**: MUST NOT mirror compression markdown or diagnostics into additional JSON payload fields beyond `content[0].text` and `details.execution`.
-- **REQ-089**: MUST make `files-search` and `search` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
-- **REQ-090**: MUST keep `files-search` and `search` content aligned to the Python search renderer in construct headings, line-range lines, Doxygen bullets, and fenced stripped-code excerpts while preserving leading tabs in source-derived lines.
-- **REQ-091**: MUST keep `files-search` and `search` request-scope, regex, tag, and supported-tag facts in registration metadata instead of runtime payload fields.
-- **REQ-092**: MUST make `enableLineNumbers` for `files-search` and `search` toggle original source line prefixes inside emitted fenced code blocks.
-- **REQ-093**: MUST omit mirrored JSON structures, duplicate source excerpts, and request echoes from `files-search` and `search` runtime payloads.
-- **REQ-094**: MUST register `files-search` and `search` with machine-oriented descriptions describing scope, regex semantics, supported tags, monolithic markdown contract, and stable failure conditions.
+- **REQ-089**: MUST make `req-files-search` and `req-search` pass exactly one monolithic markdown document to the LLM through `content[0].text`.
+- **REQ-090**: MUST keep `req-files-search` and `req-search` content aligned to the Python search renderer in construct headings, line-range lines, Doxygen bullets, and fenced stripped-code excerpts while preserving leading tabs in source-derived lines.
+- **REQ-091**: MUST keep `req-files-search` and `req-search` request-scope, regex, tag, and supported-tag facts in registration metadata instead of runtime payload fields.
+- **REQ-092**: MUST make `enableLineNumbers` for `req-files-search` and `req-search` toggle original source line prefixes inside emitted fenced code blocks.
+- **REQ-093**: MUST omit mirrored JSON structures, duplicate source excerpts, and request echoes from `req-files-search` and `req-search` runtime payloads.
+- **REQ-094**: MUST register `req-files-search` and `req-search` with machine-oriented descriptions describing scope, regex semantics, supported tags, monolithic markdown contract, and stable failure conditions.
 - **REQ-095**: MUST preserve search execution diagnostics only when the underlying search runner emits residual stderr output.
 - **REQ-096**: MUST deliver search failure diagnostics through `details.execution` when no markdown match block is available.
-- **REQ-097**: MUST make `files-static-check` and `static-check` pass the monolithic static-check report through `content[0].text`.
-- **REQ-098**: MUST keep `files-static-check` and `static-check` `details` limited to `execution` metadata and MUST NOT mirror selection tables or request echoes there.
+- **REQ-097**: MUST make `req-files-static-check` and `req-static-check` pass the monolithic static-check report through `content[0].text`.
+- **REQ-098**: MUST keep `req-files-static-check` and `req-static-check` `details` limited to `execution` metadata and MUST NOT mirror selection tables or request echoes there.
 - **REQ-099**: MUST make every affected agent-tool response use `content[0].text` as the sole LLM-facing payload channel.
 - **REQ-100**: MUST keep every affected agent-tool runtime payload free of mirrored JSON conversion logic and free of duplicate content copies across `content` and `details`.
 - **REQ-101**: MUST register every affected agent tool with machine-oriented metadata describing parameters, monolithic text output, minimal `details.execution` metadata, and stable failure conditions.
@@ -441,7 +444,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-321**: MUST render `Enable debug commands for tools` in `Debug` after `Debug`, before `Log file`, and before `Log on status`.
 - **REQ-322**: MUST persist `DEBUG_TOOL_COMMANDS_ENABLED` through the `Debug` submenu with immediate-save, reset, and focus-preserving re-render behavior.
 - **REQ-323**: MUST register `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
-- **REQ-324**: MUST make `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` reuse the `compress`, `references`, `static-check`, `summarize`, and `tokens` runner outputs and write `content[0].text` to the editor.
+- **REQ-324**: MUST make `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` reuse the `req-compress`, `req-references`, `req-static-check`, `req-summarize`, and `req-tokens` runner outputs and write `content[0].text` to the editor.
 - **REQ-325**: MUST reject `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` execution when `DEBUG_TOOL_COMMANDS_ENABLED=disable`.
 - **REQ-326**: MUST add a top-level `Context Files` row to the `pi-usereq` menu between `Unit tests directory` and `Auto git commit`.
 - **REQ-327**: MUST expose a `Context Files` submenu with separate enable toggles for `REQUIREMENTS.md`, `REFERENCES.md`, and `WORKFLOW.md` in that order.
@@ -781,16 +784,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-697**: When effective `scan-by-dir` is TRUE, MUST execute each directory-scan-capable Command checker entry once over every configured `src-dir` directory plus `tests-dir`.
 - **REQ-698**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from directory-scan invocations through checker-native exclusion arguments for capable commands.
 - **REQ-699**: MUST default shipped `cppcheck`, `ruff`, and `eslint` checker entries to `scan-by-dir` TRUE and every other shipped entry to FALSE.
-- **REQ-700**: MUST keep `files-static-check` per-file dispatch independent of `scan-by-dir`.
-- **REQ-701**: MUST expose `result-json-validator` only through agent-tool registration.
+- **REQ-700**: MUST keep `req-files-static-check` per-file dispatch independent of `scan-by-dir`.
+- **REQ-701**: MUST expose `req-result-json-validator` only through agent-tool registration.
 - **REQ-702**: MUST validate JSON formatting through native TypeScript parsing and MUST NOT declare a JSON-validation runtime dependency in `package.json`.
-- **REQ-703**: MUST make `result-json-validator` pass exactly one monolithic markdown verdict document to the LLM through `content[0].text`.
+- **REQ-703**: MUST make `req-result-json-validator` pass exactly one monolithic markdown verdict document to the LLM through `content[0].text`.
 - **REQ-704**: MUST report one valid parse with root type, structural counts, and character plus `cl100k_base` token size facts inside the monolithic verdict.
 - **REQ-705**: MUST report one invalid parse with the parser error message plus computed line and column diagnostics inside the monolithic verdict and MUST NOT throw for invalid JSON.
-- **REQ-706**: MUST make `result-json-validator` accept optional `content` and `files` parameters and MUST reject requests supplying neither with a deterministic diagnostic.
+- **REQ-706**: MUST make `req-result-json-validator` accept optional `content` and `files` parameters and MUST reject requests supplying neither with a deterministic diagnostic.
 - **REQ-707**: MUST validate every supplied `files` entry as UTF-8 text and MUST report unreadable file entries as failed records without aborting remaining entries.
-- **REQ-708**: MUST keep `result-json-validator` `details` limited to `execution` metadata and MUST NOT mirror request echoes or verdict content there.
-- **REQ-709**: MUST register `result-json-validator` with a machine-oriented description declaring it the sole validator of the final output JSON message and prohibiting generic JSON format validation.
+- **REQ-708**: MUST keep `req-result-json-validator` `details` limited to `execution` metadata and MUST NOT mirror request echoes or verdict content there.
+- **REQ-709**: MUST register `req-result-json-validator` with a machine-oriented description declaring it the sole validator of the final output JSON message and prohibiting generic JSON format validation.
 - **REQ-710**: MUST perform the final-output extraction deterministically by stripping surrounding non-JSON text and optional markdown code fences around the first balanced top-level JSON object.
 - **REQ-711**: MUST reject final agent outputs containing no JSON object or more than one JSON object with the existing final-output JSON-contract diagnostic.
 - **REQ-712**: MUST emit one markdown report notification for every terminal agentic prompt-run outcome with a parsed final-output report, including `result` `error` outcomes and `warning` terminal outcomes.
@@ -819,7 +822,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
-- **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands, `test-static-check`, and the removed standalone config-viewer command.
+- **TST-001**: MUST verify extension activation registers every documented prompt command, agent tool, and configuration command while omitting tool-name slash commands (except the documented `req-references` shared name), `test-static-check`, and the removed standalone config-viewer command.
 - **TST-002**: MUST verify installed bundled prompt, commit-instruction, template, and guideline resources remain readable from `installation-path`.
 - **TST-060**: MUST verify prompt rendering replaces `%%PROMPT%%` and expands `%%COMMIT%%` from rendered `git_commit.md` or `git_read-only.md` according to `AUTO_GIT_COMMIT`, excluding the verbatim `%%CONTEXT_FILES%%` block from placeholder-absence assertions.
 - **TST-003**: MUST verify standalone `files-tokens` outputs match committed expected-result fixtures, `--test-static-check` dummy or command outputs match archived fixtures, and `files-summarize`, `files-compress`, plus `files-find` preserve leading source tabs.
@@ -831,7 +834,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-078**: MUST verify default configuration stores documented per-language `enabled` flags locally and checker lists globally for `C`, `C++`, `Python`, `JavaScript`, and `TypeScript`.
 - **TST-108**: MUST verify guided static-check entry addition updates global checker lists and sets the targeted local enable flag to `enable`, and guided removal updates global checker lists.
 - **TST-112**: MUST verify `--enable-static-check` stores checker commands in global configuration and preserves local enablement according to the documented defaulting rules.
-- **TST-079**: MUST verify `files-static-check` and `static-check` execute zero checkers and expose empty configured-checker lists when the target language `enabled=disable`.
+- **TST-079**: MUST verify `req-files-static-check` and `req-static-check` execute zero checkers and expose empty configured-checker lists when the target language `enabled=disable`.
 - **TST-006**: MUST verify `session_start` activates configured startup tools, resets workflow state to `idle` for `startup|reload`, restores persisted terminal state for `new`, and updates the single-line `pi-usereq` status bar.
 - **TST-031**: MUST verify the status bar renders runtime `<extension>:v<version>` before `status`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
@@ -873,23 +876,23 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-019**: MUST verify offline harness command and tool replay invoke registered handlers, preserve requested cwd semantics, and capture prompt payloads, tool results, and UI side effects.
 - **TST-020**: MUST verify SDK parity comparison reports aligned inventories as clean, reports requested mismatch categories, validates the 0.80.4+ `createAgentSession` options plus new event surface, and `package.json` declares the `debug:ext*` harness scripts.
 - **TST-021**: MUST verify `scripts/pi-usereq-debug.sh tool` forwards `--params` unchanged and converts `--args` text into the JSON object forwarded through `--params`.
-- **TST-022**: MUST verify `files-summarize` and `summarize` agent-tool outputs place monolithic summary markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
-- **TST-023**: MUST verify harness inspection surfaces `files-summarize` and `summarize` descriptions covering scope, monolithic markdown output, and failure details.
-- **TST-099**: MUST verify extension activation and tool menus include `references` with the documented agent-tool-only registration and default-enabled ordering.
-- **TST-100**: MUST verify `references` overwrites configured `docs-dir`/`REFERENCES.md`, returns only `success` in `content[0].text`, and restricts `details` to execution metadata.
-- **TST-101**: MUST verify `references` returns `error: <diagnostic>` plus failing execution metadata when source discovery, markdown generation, or `REFERENCES.md` writing fails.
+- **TST-022**: MUST verify `req-files-summarize` and `req-summarize` agent-tool outputs place monolithic summary markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
+- **TST-023**: MUST verify harness inspection surfaces `req-files-summarize` and `req-summarize` descriptions covering scope, monolithic markdown output, and failure details.
+- **TST-099**: MUST verify extension activation and tool menus include `req-references` with the documented agent-tool-only registration and default-enabled ordering.
+- **TST-100**: MUST verify `req-references` overwrites configured `docs-dir`/`REFERENCES.md`, returns only `success` in `content[0].text`, and restricts `details` to execution metadata.
+- **TST-101**: MUST verify `req-references` returns `error: <diagnostic>` plus failing execution metadata when source discovery, markdown generation, or `REFERENCES.md` writing fails.
 - **TST-102**: MUST verify `req-references` registers outside the bundled prompt inventory and retains description `Write a REFERENCES.md using the project's source code`.
 - **TST-103**: MUST verify successful `req-references` runs create no worktree or LLM message, overwrite configured `REFERENCES.md`, stage only that file, commit exact message, notify success, and restore workflow state `done`.
 - **TST-104**: MUST verify failing `req-references` runs transition workflow state to `error`, notify pi CLI, create no worktree or LLM message, and surface git or reference-generation failures.
 - **TST-105**: MUST verify extension activation registers `req-reset` outside the bundled prompt inventory with its dedicated fixed description.
 - **TST-106**: MUST verify successful `req-reset` accepts non-`idle` workflow state, preserves execution transcript, restores `base-path`, removes matching generated worktrees plus branches, and returns workflow state `idle` without LLM messages.
 - **TST-107**: MUST verify failing `req-reset` surfaces restoration or cleanup failures, transitions workflow state to `error`, and starts no worktree or LLM session.
-- **TST-024**: MUST verify `files-search` and `search` agent-tool outputs place monolithic search markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
-- **TST-025**: MUST verify harness inspection surfaces `files-search` and `search` descriptions covering parameters, regex semantics, supported tags, monolithic markdown output, and failure details.
-- **TST-026**: MUST verify `files-compress` and `compress` agent-tool outputs place monolithic compression markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
-- **TST-027**: MUST verify harness inspection surfaces `files-compress` and `compress` descriptions covering parameters, line-number behavior, monolithic markdown output, and failure details.
-- **TST-028**: MUST verify `files-static-check` and `static-check` agent-tool outputs place the monolithic static-check report in `content[0].text` and restrict `details` to execution metadata.
-- **TST-029**: MUST verify harness inspection surfaces `files-static-check` and `static-check` descriptions covering parameters, monolithic output, selection rules, and failure details.
+- **TST-024**: MUST verify `req-files-search` and `req-search` agent-tool outputs place monolithic search markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
+- **TST-025**: MUST verify harness inspection surfaces `req-files-search` and `req-search` descriptions covering parameters, regex semantics, supported tags, monolithic markdown output, and failure details.
+- **TST-026**: MUST verify `req-files-compress` and `req-compress` agent-tool outputs place monolithic compression markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
+- **TST-027**: MUST verify harness inspection surfaces `req-files-compress` and `req-compress` descriptions covering parameters, line-number behavior, monolithic markdown output, and failure details.
+- **TST-028**: MUST verify `req-files-static-check` and `req-static-check` agent-tool outputs place the monolithic static-check report in `content[0].text` and restrict `details` to execution metadata.
+- **TST-029**: MUST verify harness inspection surfaces `req-files-static-check` and `req-static-check` descriptions covering parameters, monolithic output, selection rules, and failure details.
 - **TST-039**: MUST verify `.github/workflows/release-npm.yml` parses as YAML using a declared Node dependency, keeps the tag filter, gates npm publication on `origin/master`, and uses Node.js `24.15.0`.
 - **TST-042**: MUST verify `package.json` keeps `name` equal to `pi-usereq` so npm publication resolves to `https://www.npmjs.com/package/pi-usereq`.
 - **TST-044**: MUST verify `package.json` keeps npm provenance metadata aligned to the canonical GitHub repository, issues URL, and README homepage.
@@ -933,7 +936,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-113**: MUST verify default local configuration persists `DEBUG_TOOL_COMMANDS_ENABLED=disable`, and the `Debug` submenu renders `Enable debug commands for tools` before `Log file`.
 - **TST-114**: MUST verify the `Debug` submenu persists `DEBUG_TOOL_COMMANDS_ENABLED` through immediate-save, reset, and focus-preserving re-render flows.
 - **TST-115**: MUST verify extension activation registers `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
-- **TST-116**: MUST verify `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` write the same `content[0].text` as `compress`, `references`, `static-check`, `summarize`, and `tokens`, and reject execution when disabled.
+- **TST-116**: MUST verify `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` write the same `content[0].text` as `req-compress`, `req-references`, `req-static-check`, `req-summarize`, and `req-tokens`, and reject execution when disabled.
 - **TST-117**: MUST verify the `pi-usereq` menu renders `Context Files` between `Unit tests directory` and `Auto git commit`.
 - **TST-118**: MUST verify the `Context Files` submenu persists the three context-file flags in local configuration with immediate-save, reset, and focus-preserving re-render behavior.
 - **TST-119**: MUST verify `%%CONTEXT_FILES%%` replacement emits one section per enabled existing file in the documented order and omits disabled or missing files.
@@ -1041,11 +1044,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-226**: MUST verify notification `%%OUTPUT%%` resolution uses the final-output JSON `summary` for completed outcomes and keeps the raw output for unparseable completed outputs.
 - **TST-227**: MUST verify `--write-config` materializes only absent schema defaults into both scopes while preserving every persisted value, emits no stdout on success, and fails with one stderr diagnostic.
 - **TST-228**: MUST verify `--set` and `--unset` keep absent parameters absent in persisted configuration files while persisting requested mutations and preserving effective reads.
-- **TST-229**: MUST verify extension activation registers `result-json-validator` outside slash-command surfaces with default-enabled configurable-tool configuration and documented custom-tool ordering.
-- **TST-230**: MUST verify `result-json-validator` places one monolithic markdown verdict in `content[0].text` for valid inline content, invalid inline content with line and column diagnostics, and file-path inputs while restricting `details` to execution metadata.
-- **TST-231**: MUST verify `result-json-validator` rejects requests supplying neither `content` nor `files` with one deterministic diagnostic without throwing.
-- **TST-232**: MUST verify `result-json-validator` verdict records report final-output contract validity, per-field violation diagnostics, and non-object-root diagnostics while preserving JSON-format verdicts.
-- **TST-233**: MUST verify the `result-json-validator` registration description declares exclusive final-output JSON validation and prohibits generic JSON validation.
+- **TST-229**: MUST verify extension activation registers `req-result-json-validator` outside slash-command surfaces with default-enabled configurable-tool configuration and documented custom-tool ordering.
+- **TST-230**: MUST verify `req-result-json-validator` places one monolithic markdown verdict in `content[0].text` for valid inline content, invalid inline content with line and column diagnostics, and file-path inputs while restricting `details` to execution metadata.
+- **TST-231**: MUST verify `req-result-json-validator` rejects requests supplying neither `content` nor `files` with one deterministic diagnostic without throwing.
+- **TST-232**: MUST verify `req-result-json-validator` verdict records report final-output contract validity, per-field violation diagnostics, and non-object-root diagnostics while preserving JSON-format verdicts.
+- **TST-233**: MUST verify the `req-result-json-validator` registration description declares exclusive final-output JSON validation and prohibits generic JSON validation.
+- **TST-234**: MUST verify extension activation registers exactly the twelve `req-`-prefixed configurable agent tools and exposes no un-prefixed legacy tool name.
 
 ## 5. Observed Component Model
 
@@ -1146,8 +1150,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── .github/
 │   ├── workflows/
 │   │   └── release-npm.yml
-│   └── skills/{req-analyze,req-change,req-check,req-cover,req-create,req-fix,req-flowchart,req-implement,req-new,req-readme,req-recreate,req-references,req-refactor,req-renumber,req-workflow,req-write}/SKILL.md
-├── .pi/prompts/{req-analyze.prompt.md,req-change.prompt.md,req-check.prompt.md,req-cover.prompt.md,req-create.prompt.md,req-fix.prompt.md,req-flowchart.prompt.md,req-implement.prompt.md,req-new.prompt.md,req-readme.prompt.md,req-recreate.prompt.md,req-references.prompt.md,req-refactor.prompt.md,req-renumber.prompt.md,req-workflow.prompt.md,req-write.prompt.md}
+│   └── skills/{req-analyze,req-change,req-check,req-cover,req-create,req-fix,req-flowchart,req-implement,req-new,req-readme,req-recreate,`req-references`,req-refactor,req-renumber,req-workflow,req-write}/SKILL.md
+├── .pi/prompts/{req-analyze.prompt.md,req-change.prompt.md,req-check.prompt.md,req-cover.prompt.md,req-create.prompt.md,req-fix.prompt.md,req-flowchart.prompt.md,req-implement.prompt.md,req-new.prompt.md,req-readme.prompt.md,req-recreate.prompt.md,`req-references`.prompt.md,req-refactor.prompt.md,req-renumber.prompt.md,req-workflow.prompt.md,req-write.prompt.md}
 ├── .req/docs/{Requirements_Template.md,HDT_Test_Authoring_Guide.md,Document_Source_Code_in_Doxygen_Style.md}
 ├── .claude/commands/req/*.md
 ├── .codex/skills/req-*/SKILL.md
@@ -1175,7 +1179,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | ID | Evidence |
 | --- | --- |
 | PRJ-001 | `src/index.ts` :: `registerPromptCommands` plus `registerReqReferencesCommand` :: registers bundled prompt-backed commands and the dedicated `req-references` command; `src/core/prompts.ts` :: `renderPrompt` :: adapts bundled prompt payloads. |
-| PRJ-002 | `src/index.ts` :: `registerAgentTools` :: tool names include `files-tokens`, `summarize`, `compress`, `search`, `files-static-check`, and `static-check`. |
+| PRJ-002 | `src/index.ts` :: `registerAgentTools` :: tool names include `req-files-tokens`, `req-summarize`, `req-compress`, `req-search`, `req-files-static-check`, and `req-static-check`. |
 | PRJ-003 | `src/index.ts` :: `buildPiUsereqMenuChoices`, `configurePiUsereq`, and `configureDebugMenu` :: expose project paths, git automation, static-check, startup tools, notifications, and debug logging controls. |
 | PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` and `executeReqReferencesCommandExecution` :: keep git orchestration internal to slash-command execution. |
 | PRJ-005 | `src/core/resources.ts` :: `ensureBundledResourcesAccessible` :: validates installation-owned `resources/{prompts,instructions,templates,guidelines}` directories; bundled tree exists under `src/resources/{prompts,instructions,templates,guidelines}`. |
@@ -1473,10 +1477,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-006 | `tests/extension-registration.test.ts` :: `session_start applies configured pi-usereq startup tools`. |
 | TST-009 | `package.json` :: `"type": "module"`, `"pi": { "extensions": ["./src/index.ts"] }`, and `"scripts"` entries for `test`, `test:watch`, and `cli`. |
 | TST-010 | `tsconfig.json` :: `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"strict": true`, `"noEmit": true`, and `"include": ["src/**/*.ts", "tests/**/*.ts"]`. |
-| TST-022 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-summarize` and `summarize` monolithic-output tests. |
+| TST-022 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `req-files-summarize` and `req-summarize` monolithic-output tests. |
 | TST-023 | `tests/extension-registration.test.ts` :: `summary tools register agent-oriented descriptions and schema details`. |
-| TST-024 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-search` and `search` monolithic-output tests. |
-| TST-026 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `files-compress` and `compress` monolithic-output tests. |
+| TST-024 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `req-files-search` and `req-search` monolithic-output tests. |
+| TST-026 | `tests/extension-registration.test.ts` :: `source-extraction agent tools preserve leading tabs in emitted content` plus the explicit `req-files-compress` and `req-compress` monolithic-output tests. |
 | TST-039 | `tests/release-workflow.test.ts` :: mandatory Node YAML parsing plus tag-filter, `origin/master` gate, and Node.js `24.15.0` assertions. |
 | TST-133 | `tests/extension-registration.test.ts` :: `req-references` direct-commit workflow coverage verifies the guarded commit path against staged-change presence. |
 | TST-158 | `tests/extension-registration.test.ts` :: `prompt-end pushover requests honor global enable, event toggles, credentials, priority, and templates` verifies the superseded legacy default pushes the final assistant output while a distinct user-configured template is delivered unchanged. |
@@ -1532,6 +1536,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-226 | `tests/agent-final-output.test.ts` :: summary-resolution tests plus `src/core/pi-notify.ts` :: `resolvePiNotifyAgentOutput` :: completed outcomes resolve `%%OUTPUT%%` from the JSON `summary` with raw-output fallback. |
 | TST-227 | `tests/config-cli-write-config.test.ts` :: `--write-config` coverage :: absent-default materialization in both scopes, persisted-value and unknown-key preservation, silent success, and failure diagnostics. |
 | TST-228 | `tests/config-cli-write-config.test.ts` :: `--set` plus `--unset` absence-preservation coverage :: absent parameters stay absent while requested mutations and effective reads persist. |
+| REQ-735 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_CUSTOM_TOOL_NAMES` plus `PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES`; `src/index.ts` :: `registerAgentTools` :: every configurable custom tool registers under its `req-`-prefixed canonical name. |
+| REQ-736 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_CUSTOM_TOOL_NAMES` :: declares exactly the twelve `req-`-prefixed configurable custom-tool names. |
+| REQ-737 | `src/index.ts` :: `registerAgentTools` plus `registerReqReferencesCommand` :: `req-references` exists once as agent tool and once as slash command in separate registries. |
+| TST-234 | `tests/extension-registration.test.ts` :: `extension registers prompt and config commands while exposing tool capabilities only as tools` validates the `req-`-prefixed tool registration set and the absence of un-prefixed legacy tool names. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

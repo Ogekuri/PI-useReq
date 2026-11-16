@@ -9,18 +9,18 @@
  * @details The tuple is the single source of truth for custom tool-name validation, default enablement, and active-tool filtering. Membership checks become O(1) when projected through `PI_USEREQ_CUSTOM_TOOL_SET`.
  */
 export const PI_USEREQ_CUSTOM_TOOL_NAMES = [
-  "files-tokens",
-  "files-summarize",
-  "files-compress",
-  "files-search",
-  "summarize",
-  "references",
-  "compress",
-  "result-json-validator",
-  "search",
-  "tokens",
-  "files-static-check",
-  "static-check",
+  "req-files-tokens",
+  "req-files-summarize",
+  "req-files-compress",
+  "req-files-search",
+  "req-summarize",
+  "req-references",
+  "req-compress",
+  "req-result-json-validator",
+  "req-search",
+  "req-tokens",
+  "req-files-static-check",
+  "req-static-check",
 ] as const;
 
 /**
@@ -52,18 +52,18 @@ export const PI_USEREQ_STARTUP_TOOL_NAMES = [
  * @satisfies REQ-064
  */
 export const PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES = [
-  "files-tokens",
-  "files-summarize",
-  "files-compress",
-  "files-search",
-  "summarize",
-  "references",
-  "compress",
-  "result-json-validator",
-  "search",
-  "tokens",
-  "files-static-check",
-  "static-check",
+  "req-files-tokens",
+  "req-files-summarize",
+  "req-files-compress",
+  "req-files-search",
+  "req-summarize",
+  "req-references",
+  "req-compress",
+  "req-result-json-validator",
+  "req-search",
+  "req-tokens",
+  "req-files-static-check",
+  "req-static-check",
   ...PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES,
 ] as const;
 
@@ -151,7 +151,7 @@ function buildPiUsereqStartupToolSortKey(
 ): [number, number, number, string] {
   const isCustomTool = PI_USEREQ_CUSTOM_TOOL_SET.has(name);
   const groupRank = isCustomTool ? 0 : 1;
-  const subgroupRank = isCustomTool && name.startsWith("files-") ? 1 : 0;
+  const subgroupRank = isCustomTool && name.startsWith("req-files-") ? 1 : 0;
   const defaultStateRank = PI_USEREQ_DEFAULT_ENABLED_TOOL_SET.has(name) ? 0 : 1;
   return [groupRank, subgroupRank, defaultStateRank, name];
 }

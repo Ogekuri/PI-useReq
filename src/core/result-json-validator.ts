@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief Implements final-output JSON contract validation for the `result-json-validator` agent tool.
+ * @brief Implements final-output JSON contract validation for the `req-result-json-validator` agent tool.
  * @details Validates caller-supplied inline JSON text and explicit file paths through the native
  * `JSON.parse` runtime, computes deterministic parser error line and column diagnostics, summarizes
  * valid roots with structural counts plus character and `cl100k_base` token size facts, evaluates
@@ -100,7 +100,7 @@ export interface ResultJsonValidatorEntry {
 }
 
 /**
- * @brief Describes the accepted `result-json-validator` request parameters.
+ * @brief Describes the accepted `req-result-json-validator` request parameters.
  * @details Mirrors the optional `content` string and optional `files` path array of the agent-tool
  * schema; unknown callers may forward loosely-typed payloads because runtime type validation is
  * performed by `runResultJsonValidator`. The interface is compile-time only and introduces no runtime cost.
@@ -445,7 +445,7 @@ export function renderResultJsonValidationMarkdown(entries: readonly ResultJsonV
 }
 
 /**
- * @brief Executes one `result-json-validator` request and returns the monolithic verdict tool result.
+ * @brief Executes one `req-result-json-validator` request and returns the monolithic verdict tool result.
  * @details Type-checks the loosely-typed parameters, rejects requests supplying neither non-blank
  * `content` nor non-empty `files` with one deterministic diagnostic, validates the inline content
  * record first followed by every file entry in caller order, renders the monolithic verdict

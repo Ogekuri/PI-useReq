@@ -97,40 +97,40 @@ function takeBooleanFlag(tokens: string[], flag: string): { tokens: string[]; pr
 export function buildToolParamsFromArgsText(toolName: string, argsText: string): Record<string, unknown> {
   const tokens = shellSplit(argsText);
   switch (toolName) {
-    case "summarize":
-    case "tokens":
-    case "static-check":
+    case "req-summarize":
+    case "req-tokens":
+    case "req-static-check":
       if (tokens.length !== 0) {
         throw new ReqError(`Error: tool ${toolName} does not accept --args values.`, 1);
       }
       return {};
-    case "files-tokens":
-    case "files-summarize":
-    case "files-static-check":
+    case "req-files-tokens":
+    case "req-files-summarize":
+    case "req-files-static-check":
       return { files: tokens };
-    case "files-compress": {
+    case "req-files-compress": {
       const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
       return present ? { files: remaining, enableLineNumbers: true } : { files: remaining };
     }
-    case "files-search": {
+    case "req-files-search": {
       const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
       if (remaining.length < 3) {
-        throw new ReqError("Error: tool files-search requires <tag> <pattern> <file...> in --args text.", 1);
+        throw new ReqError("Error: tool req-files-search requires <tag> <pattern> <file...> in --args text.", 1);
       }
       const [tag, pattern, ...files] = remaining;
       return present ? { tag, pattern, files, enableLineNumbers: true } : { tag, pattern, files };
     }
-    case "compress": {
+    case "req-compress": {
       const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
       if (remaining.length !== 0) {
-        throw new ReqError("Error: tool compress accepts only --enable-line-numbers in --args text.", 1);
+        throw new ReqError("Error: tool req-compress accepts only --enable-line-numbers in --args text.", 1);
       }
       return present ? { enableLineNumbers: true } : {};
     }
-    case "search": {
+    case "req-search": {
       const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
       if (remaining.length !== 2) {
-        throw new ReqError("Error: tool search requires <tag> <pattern> in --args text.", 1);
+        throw new ReqError("Error: tool req-search requires <tag> <pattern> in --args text.", 1);
       }
       const [tag, pattern] = remaining;
       return present ? { tag, pattern, enableLineNumbers: true } : { tag, pattern };

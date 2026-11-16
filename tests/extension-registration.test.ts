@@ -990,17 +990,16 @@ test("extension registers prompt and config commands while exposing tool capabil
   assert.equal(pi.commands.get("req-analyze")?.description, "Produce an analysis report");
 
   for (const name of [
-    "files-tokens",
-    "files-summarize",
-    "files-compress",
-    "files-search",
-    "summarize",
-    "references",
-    "compress",
-    "search",
-    "tokens",
-    "files-static-check",
-    "static-check",
+    "req-files-tokens",
+    "req-files-summarize",
+    "req-files-compress",
+    "req-files-search",
+    "req-summarize",
+    "req-compress",
+    "req-search",
+    "req-tokens",
+    "req-files-static-check",
+    "req-static-check",
     "debug-compress",
     "debug-references",
     "debug-static-check",
@@ -1013,6 +1012,22 @@ test("extension registers prompt and config commands while exposing tool capabil
   }
 
   const toolNames = pi.tools.map((tool: RegisteredTool) => tool.name).sort();
+  for (const name of [
+    "req-files-tokens",
+    "req-files-summarize",
+    "req-files-compress",
+    "req-files-search",
+    "req-summarize",
+    "req-references",
+    "req-compress",
+    "req-result-json-validator",
+    "req-search",
+    "req-tokens",
+    "req-files-static-check",
+    "req-static-check",
+  ]) {
+    assert.ok(toolNames.includes(name), `missing tool ${name}`);
+  }
   for (const name of [
     "files-tokens",
     "files-summarize",
@@ -1027,7 +1042,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "files-static-check",
     "static-check",
   ]) {
-    assert.ok(toolNames.includes(name), `missing tool ${name}`);
+    assert.ok(!toolNames.includes(name), `unexpected legacy tool ${name}`);
   }
 });
 
@@ -1144,10 +1159,10 @@ test("token tools register agent-oriented descriptions and schema details", () =
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  const filesTokens = pi.tools.find((tool: RegisteredTool) => tool.name === "files-tokens");
-  const tokens = pi.tools.find((tool: RegisteredTool) => tool.name === "tokens");
-  assert.ok(filesTokens, "missing files-tokens tool");
-  assert.ok(tokens, "missing tokens tool");
+  const filesTokens = pi.tools.find((tool: RegisteredTool) => tool.name === "req-files-tokens");
+  const tokens = pi.tools.find((tool: RegisteredTool) => tool.name === "req-tokens");
+  assert.ok(filesTokens, "missing req-files-tokens tool");
+  assert.ok(tokens, "missing req-tokens tool");
 
   assert.match(filesTokens.description ?? "", /monolithic token pack summary/);
   assert.ok(filesTokens.promptGuidelines?.some((line: string) => line.includes("monolithic pack-summary text")));
@@ -1162,10 +1177,10 @@ test("summary tools register agent-oriented descriptions and schema details", ()
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  const filesSummarize = pi.tools.find((tool: RegisteredTool) => tool.name === "files-summarize");
-  const summarize = pi.tools.find((tool: RegisteredTool) => tool.name === "summarize");
-  assert.ok(filesSummarize, "missing files-summarize tool");
-  assert.ok(summarize, "missing summarize tool");
+  const filesSummarize = pi.tools.find((tool: RegisteredTool) => tool.name === "req-files-summarize");
+  const summarize = pi.tools.find((tool: RegisteredTool) => tool.name === "req-summarize");
+  assert.ok(filesSummarize, "missing req-files-summarize tool");
+  assert.ok(summarize, "missing req-summarize tool");
 
   assert.match(filesSummarize.description ?? "", /monolithic summary markdown report/);
   assert.ok(filesSummarize.promptGuidelines?.some((line: string) => line.includes("monolithic markdown")));
@@ -1178,11 +1193,11 @@ test("summary tools register agent-oriented descriptions and schema details", ()
   assert.match(String((summarize.parameters as { description?: string } | undefined)?.description ?? ""), /monolithic markdown/);
 });
 
-test("references tool registers agent-oriented descriptions and schema details", () => {
+test("req-references tool registers agent-oriented descriptions and schema details", () => {
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  const references = pi.tools.find((tool: RegisteredTool) => tool.name === "references");
+  const references = pi.tools.find((tool: RegisteredTool) => tool.name === "req-references");
   assert.ok(references, "missing references tool");
 
   assert.match(references.description ?? "", /configured project source directories and configured docs-dir/);
@@ -1191,14 +1206,14 @@ test("references tool registers agent-oriented descriptions and schema details",
   assert.match(String((references.parameters as { description?: string } | undefined)?.description ?? ""), /content\[0\]\.text returns only `success` or `error: <diagnostic>`/);
 });
 
-test("search tools register agent-oriented descriptions and schema details", () => {
+test("req-search tools register agent-oriented descriptions and schema details", () => {
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  const filesSearch = pi.tools.find((tool: RegisteredTool) => tool.name === "files-search");
-  const search = pi.tools.find((tool: RegisteredTool) => tool.name === "search");
-  assert.ok(filesSearch, "missing files-search tool");
-  assert.ok(search, "missing search tool");
+  const filesSearch = pi.tools.find((tool: RegisteredTool) => tool.name === "req-files-search");
+  const search = pi.tools.find((tool: RegisteredTool) => tool.name === "req-search");
+  assert.ok(filesSearch, "missing req-files-search tool");
+  assert.ok(search, "missing req-search tool");
 
   assert.match(filesSearch.description ?? "", /monolithic construct-search markdown report/);
   assert.ok(filesSearch.promptGuidelines?.some((line: string) => line.includes("Regex rule:")));
@@ -1216,10 +1231,10 @@ test("compression tools register agent-oriented descriptions and schema details"
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  const filesCompress = pi.tools.find((tool: RegisteredTool) => tool.name === "files-compress");
-  const compress = pi.tools.find((tool: RegisteredTool) => tool.name === "compress");
-  assert.ok(filesCompress, "missing files-compress tool");
-  assert.ok(compress, "missing compress tool");
+  const filesCompress = pi.tools.find((tool: RegisteredTool) => tool.name === "req-files-compress");
+  const compress = pi.tools.find((tool: RegisteredTool) => tool.name === "req-compress");
+  assert.ok(filesCompress, "missing req-files-compress tool");
+  assert.ok(compress, "missing req-compress tool");
 
   assert.match(filesCompress.description ?? "", /monolithic compression markdown report/);
   assert.ok(filesCompress.promptGuidelines?.some((line: string) => line.includes("Line-number behavior:")));
@@ -1238,18 +1253,18 @@ test("agent tools define custom renderResult with compact and expanded structure
     const pi = createFakePi();
     piUsereqExtension(pi);
     const toolNames = [
-      "files-tokens",
-      "files-summarize",
-      "files-compress",
-      "files-search",
-      "summarize",
-      "references",
-      "compress",
-      "result-json-validator",
-      "search",
-      "tokens",
-      "files-static-check",
-      "static-check",
+      "req-files-tokens",
+      "req-files-summarize",
+      "req-files-compress",
+      "req-files-search",
+      "req-summarize",
+      "req-references",
+      "req-compress",
+      "req-result-json-validator",
+      "req-search",
+      "req-tokens",
+      "req-files-static-check",
+      "req-static-check",
     ];
     for (const toolName of toolNames) {
       const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === toolName);
@@ -1258,15 +1273,15 @@ test("agent tools define custom renderResult with compact and expanded structure
     }
 
     fs.writeFileSync(path.join(projectBase, "src", "render_result_target.ts"), "export function alpha(): number {\n  return 1;\n}\n", "utf8");
-    const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "files-search");
-    assert.ok(tool?.renderResult, "missing renderResult for files-search");
+    const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "req-files-search");
+    assert.ok(tool?.renderResult, "missing renderResult for req-files-search");
     const params = {
       tag: "FUNCTION",
       pattern: "^alpha$",
       files: ["src/render_result_target.ts"],
       enableLineNumbers: true,
     };
-    const result = await executeRegisteredTool(pi, "files-search", projectBase, params);
+    const result = await executeRegisteredTool(pi, "req-files-search", projectBase, params);
     const theme: FakeThemeAdapter = {
       fg: (color: string, text: string) => formatFakeThemeForeground(color, text),
       bgFromFg: (color: string, text: string) => formatFakeThemeBackgroundFromForeground(color, text),
@@ -1274,7 +1289,7 @@ test("agent tools define custom renderResult with compact and expanded structure
     };
     const compact = tool.renderResult(result, { expanded: false, isPartial: false }, theme, { args: params }).render(120).join("\n");
     const expanded = tool.renderResult(result, { expanded: true, isPartial: false }, theme, { args: params }).render(120).join("\n");
-    assert.match(compact, /files-search/);
+    assert.match(compact, /req-files-search/);
     assert.match(compact, /tag="FUNCTION"/);
     assert.match(compact, /pattern="\^alpha\$"/);
     assert.match(compact, /files=\["src\/render_result_target\.ts"\]/);
@@ -1285,7 +1300,7 @@ test("agent tools define custom renderResult with compact and expanded structure
   }
 });
 
-test("files-tokens returns monolithic token summary text with execution diagnostics", async () => {
+test("req-files-tokens returns monolithic token summary text with execution diagnostics", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
     docs: {
@@ -1297,7 +1312,7 @@ test("files-tokens returns monolithic token summary text with execution diagnost
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "files-tokens", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-files-tokens", projectBase, {
       files: [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`, `${DEFAULT_DOCS_DIR}/MISSING.md`],
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1314,7 +1329,7 @@ test("files-tokens returns monolithic token summary text with execution diagnost
   }
 });
 
-test("files-tokens defers js-tiktoken loading until execution and returns monolithic dependency failures", async () => {
+test("req-files-tokens defers js-tiktoken loading until execution and returns monolithic dependency failures", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const missingModuleError = new Error("Cannot find module 'js-tiktoken'");
   setJsTiktokenModuleLoaderForTests(() => {
@@ -1323,7 +1338,7 @@ test("files-tokens defers js-tiktoken loading until execution and returns monoli
   try {
     const pi = createFakePi();
     assert.doesNotThrow(() => piUsereqExtension(pi));
-    const result = await executeRegisteredTool(pi, "files-tokens", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-files-tokens", projectBase, {
       files: [`${DEFAULT_DOCS_DIR}/REQUIREMENTS.md`],
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1340,7 +1355,7 @@ test("files-tokens defers js-tiktoken loading until execution and returns monoli
 });
 
 /**
- * @brief Verifies result-json-validator registers as a default-enabled agent tool outside slash commands.
+ * @brief Verifies req-result-json-validator registers as a default-enabled agent tool outside slash commands.
  * @details Activates the extension once, asserts the tool registers with a custom renderer, a
  * machine-oriented description binding the tool exclusively to final-output JSON contract
  * validation while prohibiting generic JSON validation, a schema describing the monolithic verdict
@@ -1349,18 +1364,18 @@ test("files-tokens defers js-tiktoken loading until execution and returns monoli
  * the same name exists. Runtime is O(1) plus extension registration. Side effects are limited to
  * in-memory registration state. No filesystem or network access occurs.
  * @return {void} No return value.
- * @throws {AssertionError} Throws when result-json-validator registration, description, or default
+ * @throws {AssertionError} Throws when req-result-json-validator registration, description, or default
  * enablement deviates from the documented contract.
  * @satisfies TST-229, TST-233, REQ-701, REQ-709
  */
-test("result-json-validator registers as a default-enabled agent tool outside slash commands", () => {
+test("req-result-json-validator registers as a default-enabled agent tool outside slash commands", () => {
   const pi = createFakePi();
   piUsereqExtension(pi);
 
-  assert.ok(![...pi.commands.keys()].includes("result-json-validator"), "result-json-validator must not register as a slash command");
-  const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "result-json-validator");
-  assert.ok(tool, "missing result-json-validator tool");
-  assert.equal(typeof tool?.renderResult, "function", "missing renderResult for result-json-validator");
+  assert.ok(![...pi.commands.keys()].includes("req-result-json-validator"), "req-result-json-validator must not register as a slash command");
+  const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "req-result-json-validator");
+  assert.ok(tool, "missing req-result-json-validator tool");
+  assert.equal(typeof tool?.renderResult, "function", "missing renderResult for req-result-json-validator");
   assert.match(tool?.description ?? "", /final output JSON message/i);
   assert.match(tool?.description ?? "", /NOT a generic JSON validator/);
   assert.match(tool?.description ?? "", /ONLY on the final output JSON object/);
@@ -1374,13 +1389,13 @@ test("result-json-validator registers as a default-enabled agent tool outside sl
   );
   assert.ok(tool?.promptGuidelines?.some((line: string) => line.includes("ONLY to validate the complete final output JSON message")));
   assert.ok(tool?.promptGuidelines?.some((line: string) => line.includes("Do NOT use it for generic JSON validation")));
-  assert.ok((PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES as readonly string[]).includes("result-json-validator"));
+  assert.ok((PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES as readonly string[]).includes("req-result-json-validator"));
   const sortedCustomTools = [...PI_USEREQ_CUSTOM_TOOL_NAMES].sort(comparePiUsereqStartupToolNames);
-  assert.equal(sortedCustomTools.indexOf("result-json-validator"), sortedCustomTools.indexOf("references") + 1);
+  assert.equal(sortedCustomTools.indexOf("req-result-json-validator"), sortedCustomTools.indexOf("req-references") + 1);
 });
 
 /**
- * @brief Verifies result-json-validator returns monolithic verdict documents with execution diagnostics.
+ * @brief Verifies req-result-json-validator returns monolithic verdict documents with execution diagnostics.
  * @details Writes one valid and one invalid JSON file next to one missing file, executes the
  * registered tool with inline content plus the three file paths, and asserts one monolithic verdict
  * document in content[0].text carrying a record per input in request order, valid and invalid
@@ -1394,14 +1409,14 @@ test("result-json-validator registers as a default-enabled agent tool outside sl
  * deviates from the documented contract.
  * @satisfies TST-230, REQ-703, REQ-704, REQ-705, REQ-707, REQ-708, REQ-726, REQ-727
  */
-test("result-json-validator returns monolithic verdict markdown with execution diagnostics", async () => {
+test("req-result-json-validator returns monolithic verdict markdown with execution diagnostics", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     fs.writeFileSync(path.join(projectBase, "valid.json"), '{"alpha": 1, "beta": [true, null]}', "utf8");
     fs.writeFileSync(path.join(projectBase, "invalid.json"), '{\n  "alpha": 1,\n}\n', "utf8");
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "result-json-validator", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-result-json-validator", projectBase, {
       content: '{"alpha": 1}',
       files: ["valid.json", "invalid.json", "missing.json"],
     }) as {
@@ -1435,7 +1450,7 @@ test("result-json-validator returns monolithic verdict markdown with execution d
   }
 });
 
-test("files-summarize returns monolithic summary markdown", async () => {
+test("req-files-summarize returns monolithic summary markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
   fs.writeFileSync(samplePath, `/**
@@ -1456,7 +1471,7 @@ export function buildSample(input: string): string {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "files-summarize", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-files-summarize", projectBase, {
       files: ["src/sample.ts", "src/missing.ts"],
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1475,7 +1490,7 @@ export function buildSample(input: string): string {
   }
 });
 
-test("summarize returns monolithic project summary markdown", async () => {
+test("req-summarize returns monolithic project summary markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
   fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
@@ -1483,7 +1498,7 @@ test("summarize returns monolithic project summary markdown", async () => {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+    const result = await executeRegisteredTool(pi, "req-summarize", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
     };
@@ -1501,7 +1516,7 @@ test("summarize returns monolithic project summary markdown", async () => {
   }
 });
 
-test("references overwrites the configured REFERENCES.md and returns status-only success", async () => {
+test("req-references overwrites the configured REFERENCES.md and returns status-only success", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(path.join(projectBase, "src", "alpha.ts"), "export const ALPHA = 1;\n", "utf8");
   fs.mkdirSync(path.join(projectBase, "src", "nested"), { recursive: true });
@@ -1517,11 +1532,11 @@ test("references overwrites the configured REFERENCES.md and returns status-only
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const referencesResult = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+    const referencesResult = await executeRegisteredTool(pi, "req-references", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
     };
-    const summarizeResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+    const summarizeResult = await executeRegisteredTool(pi, "req-summarize", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
     };
 
@@ -1545,12 +1560,12 @@ test("references overwrites the configured REFERENCES.md and returns status-only
  * @throws {AssertionError} Throws when the placeholder content diverges, the tool reports an error payload, or execution metadata leaks stdout diagnostics.
  * @satisfies REQ-293, REQ-294, REQ-296, REQ-300, REQ-620, REQ-622, TST-100, TST-204
  */
-test("references tool writes the no-source REFERENCES.md placeholder like req-references", async () => {
+test("req-references tool writes the no-source REFERENCES.md placeholder like req-references", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+    const result = await executeRegisteredTool(pi, "req-references", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
     };
@@ -1566,13 +1581,13 @@ test("references tool writes the no-source REFERENCES.md placeholder like req-re
   }
 });
 
-test("references returns status-only errors for source-discovery and write failures", async () => {
+test("req-references returns status-only errors for source-discovery and write failures", async () => {
   const sourceFailure = initFixtureRepo({ fixtures: [] });
   fs.rmSync(path.join(sourceFailure.projectBase, ".git"), { recursive: true, force: true });
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "references", sourceFailure.projectBase, {}) as {
+    const result = await executeRegisteredTool(pi, "req-references", sourceFailure.projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
     };
@@ -1595,7 +1610,7 @@ test("references returns status-only errors for source-discovery and write failu
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "references", writeFailure.projectBase, {}) as {
+    const result = await executeRegisteredTool(pi, "req-references", writeFailure.projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[]; stdout_lines?: string[] } };
     };
@@ -1609,7 +1624,7 @@ test("references returns status-only errors for source-discovery and write failu
   }
 });
 
-test("files-compress returns monolithic compression markdown", async () => {
+test("req-files-compress returns monolithic compression markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
   fs.writeFileSync(samplePath, `/**
@@ -1630,7 +1645,7 @@ export function buildSample(input: string): string {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "files-compress", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-files-compress", projectBase, {
       files: ["src/sample.ts", "src/missing.ts"],
       enableLineNumbers: true,
     }) as {
@@ -1649,7 +1664,7 @@ export function buildSample(input: string): string {
   }
 });
 
-test("compress returns monolithic repository-scoped compression markdown", async () => {
+test("req-compress returns monolithic repository-scoped compression markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(
     path.join(projectBase, "src", "alpha.ts"),
@@ -1665,7 +1680,7 @@ test("compress returns monolithic repository-scoped compression markdown", async
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "compress", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-compress", projectBase, {
       enableLineNumbers: false,
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1683,7 +1698,7 @@ test("compress returns monolithic repository-scoped compression markdown", async
   }
 });
 
-test("files-search returns monolithic search markdown", async () => {
+test("req-files-search returns monolithic req-search markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const samplePath = path.join(projectBase, "src", "sample.ts");
   fs.writeFileSync(samplePath, `/**
@@ -1704,7 +1719,7 @@ export function buildSample(input: string): string {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "files-search", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-files-search", projectBase, {
       tag: "FUNCTION",
       pattern: "^buildSample$",
       files: ["src/sample.ts", "src/missing.ts"],
@@ -1726,7 +1741,7 @@ export function buildSample(input: string): string {
   }
 });
 
-test("search returns monolithic repository-scoped construct-search markdown", async () => {
+test("req-search returns monolithic repository-scoped construct-search markdown", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   fs.writeFileSync(
     path.join(projectBase, "src", "alpha.ts"),
@@ -1749,7 +1764,7 @@ export function buildAlpha(): number {
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "search", projectBase, {
+    const result = await executeRegisteredTool(pi, "req-search", projectBase, {
       tag: "FUNCTION",
       pattern: "^build",
       enableLineNumbers: false,
@@ -1796,7 +1811,7 @@ func (s *Server) Start(ctx context.Context) error {
     const pi = createFakePi();
     piUsereqExtension(pi);
 
-    const filesSummarizeResult = await executeRegisteredTool(pi, "files-summarize", projectBase, {
+    const filesSummarizeResult = await executeRegisteredTool(pi, "req-files-summarize", projectBase, {
       files: ["src/sample.go"],
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1805,14 +1820,14 @@ func (s *Server) Start(ctx context.Context) error {
     assert.match(filesSummarizeResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
     assert.equal(filesSummarizeResult.details?.execution.code, 0);
 
-    const summarizeResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+    const summarizeResult = await executeRegisteredTool(pi, "req-summarize", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number } };
     };
     assert.match(summarizeResult.content?.[0]?.text ?? "", /\tvar buffer bytes\.Buffer/);
     assert.equal(summarizeResult.details?.execution.code, 0);
 
-    const filesCompressResult = await executeRegisteredTool(pi, "files-compress", projectBase, {
+    const filesCompressResult = await executeRegisteredTool(pi, "req-files-compress", projectBase, {
       files: ["src/sample.go"],
       enableLineNumbers: true,
     }) as {
@@ -1822,7 +1837,7 @@ func (s *Server) Start(ctx context.Context) error {
     assert.match(filesCompressResult.content?.[0]?.text ?? "", /\d+: \t"context"/);
     assert.equal(filesCompressResult.details?.execution.code, 0);
 
-    const compressResult = await executeRegisteredTool(pi, "compress", projectBase, {
+    const compressResult = await executeRegisteredTool(pi, "req-compress", projectBase, {
       enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1831,7 +1846,7 @@ func (s *Server) Start(ctx context.Context) error {
     assert.match(compressResult.content?.[0]?.text ?? "", /\d+: \t"context"/);
     assert.equal(compressResult.details?.execution.code, 0);
 
-    const filesSearchResult = await executeRegisteredTool(pi, "files-search", projectBase, {
+    const filesSearchResult = await executeRegisteredTool(pi, "req-files-search", projectBase, {
       tag: "METHOD|FUNCTION",
       pattern: "^Start$",
       files: ["src/sample.go"],
@@ -1843,7 +1858,7 @@ func (s *Server) Start(ctx context.Context) error {
     assert.match(filesSearchResult.content?.[0]?.text ?? "", /\d+: \tfmt\.Println\("start", buffer\.Len\(\)\)/);
     assert.equal(filesSearchResult.details?.execution.code, 0);
 
-    const searchResult = await executeRegisteredTool(pi, "search", projectBase, {
+    const searchResult = await executeRegisteredTool(pi, "req-search", projectBase, {
       tag: "METHOD|FUNCTION",
       pattern: "^Start$",
       enableLineNumbers: true,
@@ -1858,7 +1873,7 @@ func (s *Server) Start(ctx context.Context) error {
   }
 });
 
-test("static-check tools return monolithic text payloads with minimal execution details", async () => {
+test("req-static-check tools return monolithic text payloads with minimal execution details", async () => {
   const { projectBase } = initFixtureRepo({
     fixtures: [],
     staticCheck: {
@@ -1874,7 +1889,7 @@ test("static-check tools return monolithic text payloads with minimal execution 
     const pi = createFakePi();
     piUsereqExtension(pi);
 
-    const filesStaticCheckResult = await executeRegisteredTool(pi, "files-static-check", projectBase, {
+    const filesStaticCheckResult = await executeRegisteredTool(pi, "req-files-static-check", projectBase, {
       files: ["src/check.ts", "src/missing.ts"],
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1884,7 +1899,7 @@ test("static-check tools return monolithic text payloads with minimal execution 
     assert.equal(filesStaticCheckResult.details?.execution.code, 0);
     assert.ok(filesStaticCheckResult.details?.execution.stderr_lines?.some((line) => /src\/missing\.ts/.test(line)));
 
-    const staticCheckResult = await executeRegisteredTool(pi, "static-check", projectBase) as {
+    const staticCheckResult = await executeRegisteredTool(pi, "req-static-check", projectBase) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
     };
@@ -1901,7 +1916,7 @@ test("static-check tools return monolithic text payloads with minimal execution 
         TypeScript: createStaticCheckLanguageConfig([{ module: "Dummy" }], "disable"),
       },
     });
-    const disabledFilesStaticCheckResult = await executeRegisteredTool(pi, "files-static-check", projectBase, {
+    const disabledFilesStaticCheckResult = await executeRegisteredTool(pi, "req-files-static-check", projectBase, {
       files: ["src/check.ts"],
     }) as {
       content?: Array<{ type: string; text?: string }>;
@@ -1945,19 +1960,19 @@ test("debug tool wrapper commands mirror tool content and reject when disabled",
     const pi = createFakePi();
     piUsereqExtension(pi);
 
-    const compressToolResult = await executeRegisteredTool(pi, "compress", projectBase, {}) as {
+    const compressToolResult = await executeRegisteredTool(pi, "req-compress", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
     };
-    const referencesToolResult = await executeRegisteredTool(pi, "references", projectBase, {}) as {
+    const referencesToolResult = await executeRegisteredTool(pi, "req-references", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
     };
-    const staticCheckToolResult = await executeRegisteredTool(pi, "static-check", projectBase) as {
+    const staticCheckToolResult = await executeRegisteredTool(pi, "req-static-check", projectBase) as {
       content?: Array<{ type: string; text?: string }>;
     };
-    const summarizeToolResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+    const summarizeToolResult = await executeRegisteredTool(pi, "req-summarize", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
     };
-    const tokensToolResult = await executeRegisteredTool(pi, "tokens", projectBase, {}) as {
+    const tokensToolResult = await executeRegisteredTool(pi, "req-tokens", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
     };
 
@@ -2254,14 +2269,14 @@ test("descendant configuration menus end with Reset defaults only", async () => 
 
   assert.deepEqual(getTerminalRows("Enable sound (boot value)", "high"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Pushover priority", "High"), ["Reset defaults"]);
-  assert.deepEqual(getTerminalRows("Enable tools", "static-check"), ["Reset defaults"]);
+  assert.deepEqual(getTerminalRows("Enable tools", "req-static-check"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Debug", "Log on status"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("static-check language", "Python"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Remove static code checker"), ["Reset defaults"]);
   assert.deepEqual(getTerminalRows("Remove source-code directory", "src"), ["Reset defaults"]);
   assert.doesNotMatch(getRenderedMenu("Enable sound (boot value)", "high"), /Reset defaults.*none/);
   assert.doesNotMatch(getRenderedMenu("Pushover priority", "High"), /Reset defaults.*Normal/);
-  assert.doesNotMatch(getRenderedMenu("Enable tools", "static-check"), /Reset defaults.*defaults/);
+  assert.doesNotMatch(getRenderedMenu("Enable tools", "req-static-check"), /Reset defaults.*defaults/);
   assert.doesNotMatch(getRenderedMenu("Debug", "Log on status"), /Reset defaults.*running/);
   assert.doesNotMatch(getRenderedMenu("Remove source-code directory", "src"), /Reset defaults.*src/);
 });
@@ -2283,7 +2298,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
       "any",
       "Status changes",
       "Workflow events",
-      "files-tokens",
+      "req-files-tokens",
       "req-analyze",
       "Save and close",
       "Save and close",
@@ -2305,7 +2320,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.match(renderedInitialDebugMenu, /<dim>Log on status/);
   assert.match(renderedInitialDebugMenu, /<dim>Status changes/);
   assert.match(renderedInitialDebugMenu, /<dim>Workflow events/);
-  assert.match(renderedInitialDebugMenu, /<dim>compress/);
+  assert.match(renderedInitialDebugMenu, /<dim>req-compress/);
   assert.equal(persistedConfig.DEBUG_ENABLED, undefined);
   assert.equal(persistedConfig.DEBUG_LOG_FILE, "logs/debug-output.json");
   assert.equal(persistedConfig.DEBUG_TOOL_COMMANDS_ENABLED, "enable");
@@ -2317,7 +2332,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.ok(pi.commands.get("debug-static-check"));
   assert.ok(pi.commands.get("debug-summarize"));
   assert.ok(pi.commands.get("debug-tokens"));
-  assert.deepEqual(persistedConfig.DEBUG_ENABLED_TOOLS, ["files-tokens"]);
+  assert.deepEqual(persistedConfig.DEBUG_ENABLED_TOOLS, ["req-files-tokens"]);
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_PROMPTS, ["req-analyze"]);
   assert.equal(debugCalls[1]?.selectedChoiceId, "debug-enabled");
   assert.equal(debugCalls[2]?.selectedChoiceId, "debug-log-file");
@@ -2325,7 +2340,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.equal(debugCalls[4]?.selectedChoiceId, "debug-log-on-status");
   assert.equal(debugCalls[5]?.selectedChoiceId, "debug-status-changes");
   assert.equal(debugCalls[6]?.selectedChoiceId, "debug-workflow-events");
-  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-tool:files-tokens");
+  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-tool:req-files-tokens");
   assert.equal(debugCalls[8]?.selectedChoiceId, "debug-prompt:req-analyze");
 
   const resetCtx = createFakeCtx(cwd, {
@@ -2417,14 +2432,14 @@ test("tool debug logging honors global enablement and workflow-status filters", 
     GIT_WORKTREE_ENABLED: "disable",
     DEBUG_LOG_FILE: "tool-debug.json",
     DEBUG_LOG_ON_STATUS: "running",
-    DEBUG_ENABLED_TOOLS: ["files-tokens"],
+    DEBUG_ENABLED_TOOLS: ["req-files-tokens"],
   });
   const runningPi = createFakePi();
   piUsereqExtension(runningPi);
   const runningCtx = createFakeCtx(runningFixture.projectBase);
   await runningPi.emit("session_start", { reason: "startup" }, runningCtx);
   await runningPi.emit("tool_result", {
-    toolName: "files-tokens",
+    toolName: "req-files-tokens",
     input: { files: ["src/fixture_python.py"] },
     content: [{ type: "text", text: "idle" }],
     details: { summary: { counted_file_count: 1 } },
@@ -2435,7 +2450,7 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   assert.ok(runningCommand);
   await runningCommand!.handler("debug tools", runningCtx);
   await runningPi.emit("tool_result", {
-    toolName: "files-tokens",
+    toolName: "req-files-tokens",
     input: { files: ["src/fixture_python.py"] },
     content: [{ type: "text", text: "running" }],
     details: { summary: { counted_file_count: 1 } },
@@ -2444,7 +2459,7 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   const runningLog = JSON.parse(fs.readFileSync(path.join(runningFixture.projectBase, "tool-debug.json"), "utf8"));
   assert.equal(runningLog.length, 1);
   assert.equal(runningLog[0].workflow_state, "running");
-  assert.equal(runningLog[0].name, "files-tokens");
+  assert.equal(runningLog[0].name, "req-files-tokens");
 
   const disabledBase = createTempDir("pi-usereq-tool-debug-disabled-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(disabledBase)), { recursive: true });
@@ -3665,7 +3680,7 @@ test("req-references updates REFERENCES.md with a direct commit workflow and no 
     await pi.emit("session_start", { reason: "startup" }, ctx);
     await pi.commands.get("req-references")!.handler("", ctx);
 
-    const summarizeResult = await executeRegisteredTool(pi, "summarize", projectBase, {}) as {
+    const summarizeResult = await executeRegisteredTool(pi, "req-summarize", projectBase, {}) as {
       content?: Array<{ type?: string; text?: string }>;
     };
     const referencesPath = path.join(docsDir, "REFERENCES.md");
@@ -5164,8 +5179,8 @@ test("worktree-enabled prompt commands merge successful runs, restore base-path,
 
     await pi.emit("before_agent_start", {}, ctx);
     assert.equal(process.cwd(), executionBasePath);
-    const filesTokensTool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "files-tokens");
-    assert.ok(filesTokensTool?.execute, "missing files-tokens execute handler");
+    const filesTokensTool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "req-files-tokens");
+    assert.ok(filesTokensTool?.execute, "missing req-files-tokens execute handler");
     fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
     fs.writeFileSync(path.join(executionBasePath, "src", "tool-relative.ts"), "export const TOOL_RELATIVE = 1;\n", "utf8");
     const toolResult = await filesTokensTool.execute!("tool-call-id", { files: ["src/tool-relative.ts"] }, undefined, undefined, ctx) as {
@@ -7656,7 +7671,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   saveFixtureConfigs(cwd, {
     ...getDefaultConfig(cwd),
     "src-dir": ["src", "foobar"],
-    "enabled-tools": ["files-tokens", "static-check"],
+    "enabled-tools": ["req-files-tokens", "req-static-check"],
   });
 
   const pi = createFakePi();
@@ -7665,7 +7680,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
   await pi.emit("session_start", { reason: "startup" }, ctx);
 
   const activeTools = new Set(pi.getActiveTools());
-  assert.deepEqual([...activeTools].sort(), ["files-tokens", "static-check"]);
+  assert.deepEqual([...activeTools].sort(), ["req-files-tokens", "req-static-check"]);
   assert.equal(
     ctx.__state.statuses.get("pi-usereq"),
     buildExpectedFakeStatusText({
@@ -8163,8 +8178,8 @@ test("session_start enables default custom tools and default embedded tools only
   for (const toolName of PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES) {
     assert.ok(activeTools.has(toolName), `missing default active tool ${toolName}`);
   }
-  assert.equal(activeTools.has("search"), true);
-  assert.equal(activeTools.has("files-search"), true);
+  assert.equal(activeTools.has("req-search"), true);
+  assert.equal(activeTools.has("req-files-search"), true);
   assert.equal(activeTools.has("find"), false);
   assert.equal(activeTools.has("grep"), false);
   assert.equal(activeTools.has("ls"), false);
@@ -8276,18 +8291,18 @@ test("configuration menu orders tool toggles and can enable embedded builtin too
 
   const config = readGlobalConfigJson();
   assert.deepEqual(ctx.__state.selectCalls[2]?.items ?? [], [
-    "compress",
-    "references",
-    "result-json-validator",
-    "search",
-    "static-check",
-    "summarize",
-    "tokens",
-    "files-compress",
-    "files-search",
-    "files-static-check",
-    "files-summarize",
-    "files-tokens",
+    "req-compress",
+    "req-references",
+    "req-result-json-validator",
+    "req-search",
+    "req-static-check",
+    "req-summarize",
+    "req-tokens",
+    "req-files-compress",
+    "req-files-search",
+    "req-files-static-check",
+    "req-files-summarize",
+    "req-files-tokens",
     "bash",
     "edit",
     "read",

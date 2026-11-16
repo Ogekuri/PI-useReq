@@ -4,7 +4,7 @@
 Provide an evidence-backed compliance audit by running static analysis and mapping every requirement in the SRS (`%%DOC_PATH%%/REQUIREMENTS.md`) to concrete implementation evidence, so downstream LLM Agents MUST decide whether coverage work is required and where to apply it.
 
 ## Scope
-In scope: read `%%DOC_PATH%%/REQUIREMENTS.md` (and related docs), run static-analysis evidence with the `static-check` tool, mark ALL requirements as OK/FAIL with proof, and (only when FAILs exist) produce an implementation-only, patch-oriented technical report. Out of scope: any file modification (requirements/code/tests/docs) or applying fixes.
+In scope: read `%%DOC_PATH%%/REQUIREMENTS.md` (and related docs), run static-analysis evidence with the `req-static-check` tool, mark ALL requirements as OK/FAIL with proof, and (only when FAILs exist) produce an implementation-only, patch-oriented technical report. Out of scope: any file modification (requirements/code/tests/docs) or applying fixes.
 
 
 ## Professional Personas
@@ -20,14 +20,14 @@ In scope: read `%%DOC_PATH%%/REQUIREMENTS.md` (and related docs), run static-ana
 - **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected context under the `## Context Files` section or already read in the current session; reuse prior tool-output evidence instead.
 - **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
 - **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
-- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `search`/`files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `req-search`/`req-files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
 - **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
 - **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
 - **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
 
 
 ## Absolute Rules, Non-Negotiable
-- **CRITICAL**: The final response, including every early termination, MUST be exactly one valid JSON object without surrounding text or fences. Set `result` to `ok` on success and `error` on failure, blockage, or no-change termination. Include only the fields described below. All fields except `next_commands` MUST be human-readable strings in the user request language; preserve exact diagnostic literals, commands, identifiers, and Unicode. Escape quotation marks, backslashes, control characters, and newlines as JSON requires. `result-json-validator` validates only the final structured result JSON; it MUST NOT be used to validate generic JSON artifacts. Before emitting the final response, execute the `result-json-validator` tool on the complete JSON object to validate its structure; do not presume structural correctness without executing the tool, and while `result-json-validator` reports an invalid structure, correct the JSON object, re-run `result-json-validator`, and only then emit the validated response.
+- **CRITICAL**: The final response, including every early termination, MUST be exactly one valid JSON object without surrounding text or fences. Set `result` to `ok` on success and `error` on failure, blockage, or no-change termination. Include only the fields described below. All fields except `next_commands` MUST be human-readable strings in the user request language; preserve exact diagnostic literals, commands, identifiers, and Unicode. Escape quotation marks, backslashes, control characters, and newlines as JSON requires. `req-result-json-validator` validates only the final structured result JSON; it MUST NOT be used to validate generic JSON artifacts. Before emitting the final response, execute the `req-result-json-validator` tool on the complete JSON object to validate its structure; do not presume structural correctness without executing the tool, and while `req-result-json-validator` reports an invalid structure, correct the JSON object, re-run `req-result-json-validator`, and only then emit the validated response.
   - `summary`: Summarize the entire final response in at most 1010 Unicode characters.
   - `outcome`: Report the workflow outcome and required exact diagnostics, including partial results on failure.
   - `implementation_delta`: Report the implementation changes or plan in the workflow's specified format and trace them to requirements.
@@ -87,9 +87,9 @@ Structured index of all source-defined symbols (functions, classes, structs, obj
 
 Use to: identify candidate symbols by name, description, or `@satisfies` link; obtain exact file paths and line ranges; understand function signatures and contracts before extracting code. Cross-reference with WORKFLOW.md call-traces to narrow scope.
 
-### 3. Code Extraction: `search` / `files-search` tools
+### 3. Code Extraction: `req-search` / `req-files-search` tools
 Use after pillars 1-2 to extract only the targeted named constructs identified during analysis.
-- Prefer the `search` tool for project-wide named-symbol, declaration, and construct scans, and the `files-search` tool when target files are already known.
+- Prefer the `req-search` tool for project-wide named-symbol, declaration, and construct scans, and the `req-files-search` tool when target files are already known.
 - Use these tools as the default discovery path for named-symbol, declaration, construct, and known-file lookup; use `rg`/`grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
 - Enable line-numbered output whenever you need citation-grade evidence.
 - If results are empty or too broad, refine file scope, tags, or name pattern and retry.
@@ -102,8 +102,8 @@ Use for: string/pattern searches inside code bodies, cross-file references, conf
 ### Recommended Analysis Workflow
 1. **Read `%%DOC_PATH%%/WORKFLOW.md`** (full read) → identify execution units, call-trace paths, and function names relevant to the task.
 2. **Read `%%DOC_PATH%%/REFERENCES.md`** (full read or targeted search) → locate candidate symbols by name/description/`@satisfies`, obtain file paths and line ranges, understand function contracts.
-3. **Extract code** via the `search` or `files-search` tool → use symbol names from steps 1-2 as `NAME_REGEX`, file paths as `files-search` targets, and enable line numbers when citing evidence.
-4. **Search code bodies** via `rg`/`grep` → after `search`/`files-search`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
+3. **Extract code** via the `req-search` or `req-files-search` tool → use symbol names from steps 1-2 as `NAME_REGEX`, file paths as `req-files-search` targets, and enable line numbers when citing evidence.
+4. **Search code bodies** via `rg`/`grep` → after `req-search`/`req-files-search`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
 
 
 ## Execution Protocol (Global vs Local)
@@ -132,8 +132,8 @@ During the execution flow you MUST follow these directives:
 ## Steps
 Create internally a *check-list* for the **Global Roadmap** including all the numbered steps below: `1..2`, and start following the roadmap at the same time, executing the instructions of Step 1. If a tool call is required in Step 1, invoke it immediately; otherwise proceed to Step 1 without additional commentary. Do not add extra intent-adjustment checks unless explicitly listed in the Steps section.
 1. Run static analysis, check requirements coverage and generate **Implementation Delta**
-   - Run the `static-check` tool to verify the current state. Do not modify repository files during this check. Record the static-check result as evidence for the final analysis report. If output is exactly `Error: no source files found in configured directories.`, treat it as successful no-source completion and continue.
-   - Read `%%DOC_PATH%%/REQUIREMENTS.md` and cross-reference with the source code from %%SRC_PATHS%%, %%TEST_PATH%% to check ALL requirements, but use progressive disclosure: provide full evidence only for `FAIL` items and a compact pointer-only index for `OK` items. For each requirement, prefer the `search` and `files-search` tools to locate named symbols, declarations, constructs, and already-known files used as evidence. Use `rg` / `grep` only for supplementary free-text/body-content searches, fallback cases that construct extraction cannot express, or confirmation inside already targeted files. Read only the identified files to verify compliance and do not assume compliance without locating the specific code implementation.
+   - Run the `req-static-check` tool to verify the current state. Do not modify repository files during this check. Record the static-check result as evidence for the final analysis report. If output is exactly `Error: no source files found in configured directories.`, treat it as successful no-source completion and continue.
+   - Read `%%DOC_PATH%%/REQUIREMENTS.md` and cross-reference with the source code from %%SRC_PATHS%%, %%TEST_PATH%% to check ALL requirements, but use progressive disclosure: provide full evidence only for `FAIL` items and a compact pointer-only index for `OK` items. For each requirement, prefer the `req-search` and `req-files-search` tools to locate named symbols, declarations, constructs, and already-known files used as evidence. Use `rg` / `grep` only for supplementary free-text/body-content searches, fallback cases that construct extraction cannot express, or confirmation inside already targeted files. Read only the identified files to verify compliance and do not assume compliance without locating the specific code implementation.
       - For each requirement, report `OK` if satisfied or `FAIL` if not.
       - Do not mark a requirement as `OK` without code evidence; for `OK` items provide only a compact pointer (file path + symbol + line range). For each requirement, provide a concise evidence pointer (file path + symbol + line range) excerpts only for `FAIL` requirements or when requirement is architectural, structural, or negative (e.g., "MUST NOT ..."). For such high-level requirements, cite the specific file paths or directory structures that prove compliance. Line ranges MUST be obtained from tooling output (e.g., `nl -ba` / `sed -n`) and MUST NOT be estimated. If evidence is missing, you MUST report `FAIL`. Do not assume implicit behavior.
       - For every `FAIL`, provide evidence with a short explanation. Provide file path(s) and line numbers where possible.
@@ -149,13 +149,13 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Set `result` to `ok` for success or `error` for failure, blockage, or no-change termination. All fields except `next_commands` are human-readable strings; retain exact diagnostic literals and commands. Use the user request language for human-readable values; keep repository artifacts in English. Limit `summary` to 1010 Unicode characters.
    - Populate the report fields with all applicable results, diagnostics, evidence and partial work; use a clear not-applicable description when a section has no content. Preserve required paths, line numbers, conflict tables and exact diagnostic strings inside the appropriate strings.
    - Set `next_commands` to an array of objects containing only string fields `command` and `text`. Include only commands mandated by the outcome, never optional commands; use the exact slash command and its required input text, or an empty `text` if input is unnecessary. Use `[]` when none are mandated. Describe the same next actions in `next_workflow`, or state that none are required.
-   - Serialize the object as JSON, using valid JSON escaping for quotation marks, backslashes, control characters and newlines in string values; preserve Unicode. Do not interpolate unescaped content. Execute the `result-json-validator` tool on the serialized JSON object to validate its structure, do not presume it correct without that validation, and emit the final response only after `result-json-validator` reports a valid structure. Apply this complete contract to early terminations as well as normal completion.
+   - Serialize the object as JSON, using valid JSON escaping for quotation marks, backslashes, control characters and newlines in string values; preserve Unicode. Do not interpolate unescaped content. Execute the `req-result-json-validator` tool on the serialized JSON object to validate its structure, do not presume it correct without that validation, and emit the final response only after `req-result-json-validator` reports a valid structure. Apply this complete contract to early terminations as well as normal completion.
 
 <h2 id="users-request">User's Request</h2>
 %%ARGS%%
 
 
 ## Context Files
-The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `search`, `files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `req-search`, `req-files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
 
 %%CONTEXT_FILES%%
