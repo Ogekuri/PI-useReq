@@ -1,7 +1,8 @@
 # Changelog
 
-## [0.109.13](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.13) - 2026-11-16
+## [0.109.14](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.14) - 2026-11-16
 ### ⛰️  Features
+- Update prompts.
 - Update prompts.
 - Update prompt with json validator.
 - Add json-validator agent tool with native TypeScript validation [useReq] *(json-validator)*
@@ -1627,7 +1628,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.13\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.13
+- \[0.109.14\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.14
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1736,4 +1737,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.13]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.13
+[0.109.14]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.14
