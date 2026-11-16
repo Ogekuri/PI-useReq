@@ -9,18 +9,27 @@
 #     present file and removes every file that no longer exists upstream by
 #     replacing each target directory with a freshly staged copy. Upstream file
 #     access and modification timestamps are preserved through `cp -p`. Before
-#     any modification, the updater prints the resolved latest PI-Prompts
-#     release version and the stored version read from
-#     `src/resources/pi-prompts-version.txt` (missing or empty files report
-#     `unknown`), then requires an explicit `Y` confirmation; any other input
-#     aborts without modifications. On success, the resolved version is written
-#     into `src/resources/pi-prompts-version.txt`. Runtime is dominated by one
-#     git clone plus one ref checkout and per-file copies. Side effects include
-#     temporary-directory creation, git subprocesses, one optional GitHub
-#     Releases API request, replacement of the three target resource
-#     directories, and overwrite of the one version marker file. No other
-#     repository content is modified.
-# @satisfies DES-022, REQ-379, REQ-380, REQ-381, REQ-382, REQ-383, REQ-384, REQ-396, REQ-397, REQ-398, REQ-399
+#     any modification, the updater verifies that the repository root is inside
+#     a git work tree, prints the resolved latest PI-Prompts release version
+#     and the stored version read from `src/resources/pi-prompts-version.txt`
+#     (missing or empty files report `unknown`), and applies a deterministic
+#     version gate without user confirmation: synchronization proceeds when the
+#     stored version is `unknown` or the resolved version is equal to or
+#     greater than the stored version under version-sorted comparison, while a
+#     resolved version older than the stored version terminates with exit code
+#     0 and no repository modification. After successful synchronization the
+#     resolved version is written into `src/resources/pi-prompts-version.txt`,
+#     only the synchronized target directories plus the version marker are
+#     staged, and exactly one commit with subject `Update bundled prompts from
+#     <stored> to <resolved>` is created on the current branch; an empty staged
+#     diff skips commit creation, and commit failure aborts with a diagnostic.
+#     Runtime is dominated by one git clone plus one ref checkout and per-file
+#     copies. Side effects include temporary-directory creation, git
+#     subprocesses, one optional GitHub Releases API request, replacement of
+#     the three target resource directories, overwrite of the one version
+#     marker file, and one git staging plus commit operation on the current
+#     branch. No other repository content is modified.
+# @satisfies DES-022, REQ-379, REQ-380, REQ-381, REQ-382, REQ-383, REQ-384, REQ-396, REQ-397, REQ-398, REQ-399, REQ-751, REQ-752, REQ-753, REQ-754, REQ-755, REQ-756
 
 set -euo pipefail
 
@@ -142,28 +151,63 @@ resolve_release_version() {
   esac
 }
 
-## @brief Requests explicit user confirmation before any modification.
-## @details Prints the resolved latest PI-Prompts release version plus the stored
-##     version and one English confirmation sentence, reads one line from
-##     `stdin`, and returns success only when the confirmation input is exactly
-##     `Y`; any other input, including end-of-stream input, returns failure so
-##     callers abort without modifications. Runtime is O(1) plus one user
-##     interaction. Side effects include `stdout` and `stderr` writes.
+## @brief Decides update eligibility by comparing the stored and resolved versions.
+## @details Returns success when the stored version is `unknown` or the resolved
+##     latest version is equal to or greater than the stored version under GNU
+##     `sort -V` ordering, implemented as a sortedness check of the two-line
+##     `stored` then `latest` sequence. Performs no I/O mutation. Runtime is
+##     O(1) plus one `sort` subprocess. Invoked only inside `if` conditions, so
+##     a failure exit status never terminates the caller under `set -e`.
+## @pre Both versions are single-line strings without surrounding whitespace.
+## @param[in] stored_version {string} Stored version or `unknown`.
 ## @param[in] latest_version {string} Resolved upstream release version.
-## @param[in] stored_version {string} Stored version of `${PROMPTS_VERSION_REL}`.
-## @return {integer} `0` when the user confirmed with exactly `Y`; `1` otherwise.
-## @satisfies REQ-397, REQ-398
-confirm_update() {
-  local latest_version="$1"
-  local stored_version="$2"
-  local answer=""
+## @return {integer} `0` when synchronization is eligible; `1` when the resolved
+##     version is older than the stored version.
+## @satisfies REQ-398, REQ-751
+is_update_eligible() {
+  local stored_version="$1"
+  local latest_version="$2"
+  if [ "${stored_version}" = "unknown" ]; then
+    return 0
+  fi
+  printf '%s\n' "${stored_version}" "${latest_version}" | sort -Vc 2>/dev/null
+}
 
-  log "Latest PI-Prompts release : ${latest_version}"
-  log "Stored version (${PROMPTS_VERSION_REL}): ${stored_version}"
-  log "This update replaces the bundled prompt resources in src/resources/instructions, src/resources/prompts, and src/resources/templates with the content of the latest PI-Prompts release."
-  printf 'Proceed with the update? [Y/n] '
-  read -r answer || answer=""
-  [ "${answer}" = "Y" ]
+## @brief Commits the synchronized bundled prompt resources on the current branch.
+## @details Stages only the synchronized target directories declared in
+##     `SYNC_SPECS` plus the version marker file, skips commit creation with a
+##     progress line when the staged diff is empty, and otherwise creates
+##     exactly one commit with subject `Update bundled prompts from <stored> to
+##     <resolved>` on the current branch. Runtime is dominated by git
+##     subprocess execution. Side effects include git index mutation, one git
+##     commit object, and one current-branch head advance; paths outside the
+##     synchronization scope are never staged by this function.
+## @pre `${REPO_ROOT}` is inside a git work tree with a resolvable `HEAD`.
+## @param[in] stored_version {string} Stored version before synchronization.
+## @param[in] latest_version {string} Resolved upstream release version.
+## @return {void} No return value.
+## @throws Exits through `fail(...)` when staging or commit creation fails.
+## @satisfies REQ-753, REQ-754, REQ-755, REQ-756
+commit_update() {
+  local stored_version="$1"
+  local latest_version="$2"
+
+  local spec target_paths=()
+  for spec in "${SYNC_SPECS[@]}"; do
+    target_paths+=("${REPO_ROOT}/${spec#*:}")
+  done
+  target_paths+=("${REPO_ROOT}/${PROMPTS_VERSION_REL}")
+
+  git -C "${REPO_ROOT}" add -- "${target_paths[@]}" \
+    || fail "Unable to stage the synchronized prompt resources."
+  if git -C "${REPO_ROOT}" diff --cached --quiet; then
+    log "No synchronized content changed; skipping the prompt-resource commit."
+    return 0
+  fi
+  git -C "${REPO_ROOT}" commit --quiet \
+    -m "Update bundled prompts from ${stored_version} to ${latest_version}" \
+    || fail "Unable to commit the synchronized prompt resources."
+  log "Committed: Update bundled prompts from ${stored_version} to ${latest_version}."
 }
 
 ## @brief Clones the upstream PI-Prompts master branch into one target directory.
@@ -273,26 +317,34 @@ sync_directory() {
 }
 
 ## @brief Executes one full bundled-resource update run.
-## @details Validates required tools, reads the stored PI-Prompts version marker,
+## @details Validates required tools, verifies that the repository root is
+##     inside a git work tree, reads the stored PI-Prompts version marker,
 ##     allocates the temporary upstream working tree, clones the PI-Prompts
 ##     master branch, resolves the newest release ref plus its release version,
-##     prints the resolved plus stored versions and requires an explicit `Y`
-##     confirmation, checks out the resolved release ref, synchronizes every
-##     ordered pair declared in `SYNC_SPECS`, and writes the resolved version
-##     into the version marker file. Runtime is dominated by the upstream clone
-##     plus the three directory synchronizations. Side effects include
-##     temporary-directory creation and removal, git subprocesses, one optional
-##     GitHub Releases API request, replacement of the three bundled target
-##     directories, and overwrite of the version marker file.
+##     prints the resolved plus stored versions, applies the deterministic
+##     version gate without user confirmation and returns unchanged when the
+##     resolved version is older than the stored version, checks out the
+##     resolved release ref, synchronizes every ordered pair declared in
+##     `SYNC_SPECS`, writes the resolved version into the version marker file,
+##     and commits the synchronized content on the current branch. Runtime is
+##     dominated by the upstream clone plus the three directory
+##     synchronizations. Side effects include temporary-directory creation and
+##     removal, git subprocesses, one optional GitHub Releases API request,
+##     replacement of the three bundled target directories, overwrite of the
+##     version marker file, and one git staging plus commit operation.
 ## @return {void} No return value.
-## @throws Exits through `fail(...)` when any required tool, clone, checkout, or
-##     synchronization step fails.
-## @satisfies REQ-396, REQ-397, REQ-398, REQ-399
+## @throws Exits through `fail(...)` when any required tool, work-tree probe,
+##     clone, checkout, synchronization, staging, or commit step fails.
+## @satisfies REQ-396, REQ-397, REQ-398, REQ-399, REQ-751, REQ-752, REQ-753, REQ-756
 main() {
   require_tool git
+  require_tool sort
   require_tool find
   require_tool mkdir
   require_tool cp
+
+  [ "$(git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ] \
+    || fail "Repository root is not inside a git work tree: ${REPO_ROOT}"
 
   local prompts_version
   prompts_version="$(read_version_file "${REPO_ROOT}/${PROMPTS_VERSION_REL}")"
@@ -313,8 +365,11 @@ main() {
   local release_version
   release_version="$(resolve_release_version "${release_ref}")"
 
-  if ! confirm_update "${release_version}" "${prompts_version}"; then
-    log "Update aborted; no repository content was modified."
+  log "Latest PI-Prompts release : ${release_version}"
+  log "Stored version (${PROMPTS_VERSION_REL}): ${prompts_version}"
+
+  if ! is_update_eligible "${prompts_version}" "${release_version}"; then
+    log "Resolved version ${release_version} is older than the stored version ${prompts_version}; no synchronization performed."
     return 0
   fi
 
@@ -330,6 +385,8 @@ main() {
   done
 
   printf '%s\n' "${release_version}" > "${REPO_ROOT}/${PROMPTS_VERSION_REL}"
+
+  commit_update "${prompts_version}" "${release_version}"
 
   log "Bundled prompt resources updated to ${release_version}."
 }

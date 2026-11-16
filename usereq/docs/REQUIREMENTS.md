@@ -511,9 +511,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-394**: MUST synchronize `docs/pi.dev/durable-docs` from `pi.dev-src/pi/packages/durable/docs`, overwriting existing files and removing files absent upstream.
 - **REQ-395**: MUST write the resolved latest release version into both `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt` after successful synchronization.
 - **REQ-396**: MUST read the stored PI-Prompts version from `src/resources/pi-prompts-version.txt` and MUST treat a missing or empty file as `unknown`.
-- **REQ-397**: MUST print the resolved latest PI-Prompts release version and the stored version to stdout before requesting update confirmation.
-- **REQ-398**: MUST request update confirmation with an English message accepting `Y` and MUST synchronize only when the confirmation input is exactly `Y`, otherwise aborting without modifications.
+- **REQ-397**: MUST print the resolved latest PI-Prompts release version and the stored version to stdout before the synchronization gate decision.
+- **REQ-398**: MUST synchronize automatically without user confirmation when the stored version is `unknown` or the resolved latest version is equal to or greater than the stored version under version-sorted comparison.
 - **REQ-399**: MUST write the resolved latest release version into `src/resources/pi-prompts-version.txt` after successful synchronization.
+- **REQ-751**: MUST terminate with exit code 0 without modifying any repository content when the resolved latest version is lower than the stored version.
+- **REQ-752**: MUST abort with a diagnostic when the repository root is not inside a git work tree before any synchronization modification.
+- **REQ-753**: MUST stage only the synchronized directories plus the version marker and MUST create exactly one commit on the current branch after successful synchronization.
+- **REQ-754**: MUST use the commit subject `Update bundled prompts from <stored> to <resolved>` in the synchronization commit, naming both version numbers.
+- **REQ-755**: MUST NOT create a commit when the staged synchronization diff is empty and MUST log the no-change outcome instead.
+- **REQ-756**: MUST abort with a non-zero exit code and a diagnostic when the synchronization commit fails.
 - **REQ-400**: MUST expose reusable context-occupancy helpers in `src/core/context-file-size.ts` that sum enabled existing context-file `cl100k_base` tokens and compute the occupancy percentage against the selected model max input context tokens.
 - **REQ-401**: MUST treat the selected model max input context as the normalized context-usage `contextWindow` value and as unknown whenever that value is missing, non-numeric, or non-positive.
 - **REQ-402**: MUST render the occupancy percentage with one decimal place and a removed trailing `.0`, yielding labels such as `36%`, `0.4%`, and `0%`.
