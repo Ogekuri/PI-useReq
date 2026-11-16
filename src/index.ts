@@ -142,10 +142,12 @@ import {
   type ReqResetCommandPlan,
 } from "./core/req-reset-command.js";
 import {
+  NEXT_WORKFLOW_EMPTY_LIST_TEXT,
   REQ_CONTINUE_COMMAND_DESCRIPTION,
   REQ_CONTINUE_LIST_COMMAND_DESCRIPTION,
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
+  formatNextWorkflowCommandTable,
   formatNextWorkflowFullList,
   getNextWorkflowCommands,
   registerNextWorkflowCommandHandler,
@@ -3888,17 +3890,37 @@ function registerReqReferencesCommand(
 
 /**
  * @brief Registers the specialized `req-continue` slash command.
- * @details Registers the dedicated chain-continuation command that accepts any startable workflow state including the `idle` bootstrap state whenever the Next-Workflow array holds at least one command (REQ-660): a stale idle replacement runtime first resynchronizes from the persisted terminal workflow state so the completed flow that exists in context is observed, non-startable workflow states are rejected through the shared busy-state rejection, an empty Next-Workflow array terminates with a deterministic error without any operation and without transitioning the workflow state, a missing numeric ordinal selects the first captured entry, a numeric ordinal selects the one-based entry, and the selected pi-usereq command is executed through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every workflow-state transition, so `/req-continue` itself never terminates with the `continue` to `done` transition. Runtime is O(1) for registration; handler cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
+ * @details Registers the dedicated chain-continuation command with two argument modes (REQ-659). A parameter-less invocation performs only the printing operation (REQ-738, REQ-739): it snapshots the captured Next-Workflow array, writes the Next-Workflow section table rendered by `formatNextWorkflowCommandTable(...)` into the editor, or the documented empty-list placeholder for an empty array (REQ-741), runs from every workflow state without applying the startability gate or transitioning workflow state, emits no notification, and never mutates the captured array (REQ-740); stale replacement-session editor rejections are suppressed. A parameterized invocation requires one integer ordinal (REQ-662), resynchronizes a stale idle replacement runtime from the persisted terminal workflow state before gating so the completed flow that exists in context is observed, rejects non-startable workflow states through the shared busy-state rejection, terminates with a deterministic error without any operation and without transitioning the workflow state on an empty Next-Workflow array, selects the one-based ordinal entry, and delegates the selected pi-usereq command through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every workflow-state transition, so `/req-continue` itself never terminates with the `continue` to `done` transition. Runtime is O(n) in aggregate captured entry length for the print branch and O(1) for registration; dispatch cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, editor-text mutation for the print branch, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies DES-040, REQ-656, REQ-659, REQ-660, REQ-661, REQ-662, REQ-663, REQ-664, REQ-670, REQ-224
+ * @satisfies DES-040, REQ-656, REQ-659, REQ-660, REQ-661, REQ-662, REQ-663, REQ-664, REQ-670, REQ-738, REQ-739, REQ-740, REQ-741, REQ-224
  */
 function registerReqContinueCommand(
   pi: ExtensionAPI,
   statusController: PiUsereqStatusController,
 ): void {
   const continueCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+    const entries = getNextWorkflowCommands();
+    // REQ-738..REQ-741: a parameter-less invocation performs only the printing operation
+    // and stays runnable from every workflow state: the Next-Workflow section table
+    // syntax goes into the editor, an empty array prints the documented placeholder, and
+    // no dispatch, startability gate, workflow-state transition, notification, or array
+    // mutation occurs.
+    if (args.trim() === "") {
+      const printText =
+        entries.length === 0
+          ? NEXT_WORKFLOW_EMPTY_LIST_TEXT
+          : formatNextWorkflowCommandTable(entries);
+      try {
+        ctx.ui.setEditorText(printText);
+      } catch (error: unknown) {
+        if (!isStaleExtensionContextError(error)) {
+          throw error;
+        }
+      }
+      return;
+    }
     // A replacement extension runtime bound by the closure's base-session restoration can
     // stay parked on the bootstrap `idle` state when its `session_start` fired while the
     // persisted state was still in flight; resynchronize from the authoritative
@@ -3908,7 +3930,6 @@ function registerReqContinueCommand(
     if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
       rejectNonIdleReqCommand(statusController, ctx);
     }
-    const entries = getNextWorkflowCommands();
     if (entries.length === 0) {
       const message = "ERROR: /req-continue found no captured Next-Workflow command from the previous agentic workflow.";
       notifyContextSafely(ctx, message, "error");

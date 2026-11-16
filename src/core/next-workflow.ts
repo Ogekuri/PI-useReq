@@ -383,23 +383,26 @@ export function formatNextWorkflowFullList(entries: readonly NextWorkflowCommand
 }
 
 /**
- * @brief Resolves the zero-based entry index selected by one `/req-continue` argument.
- * @details Maps the empty argument to the first entry, requires a non-negative decimal integer for any other argument, throws a deterministic diagnostic for non-numeric arguments, and throws a range diagnostic when the one-based ordinal exceeds the captured entry count. Runtime is O(n) in argument length. No external state is mutated.
+ * @brief Resolves the zero-based entry index selected by one mandatory `/req-continue` ordinal argument.
+ * @details Requires one non-empty decimal integer argument identifying the one-based Next-Workflow array ordinal, throws the mandatory-parameter diagnostic for an empty argument because parameter-less `/req-continue` invocations print the Next-Workflow table before reaching this selector, throws a deterministic diagnostic for non-numeric arguments, and throws a range diagnostic when the one-based ordinal exceeds the captured entry count. Runtime is O(n) in argument length. No external state is mutated.
  * @param[in] rawArgs {string} Raw `/req-continue` argument string.
  * @param[in] entryCount {number} Captured Next-Workflow entry count.
  * @return {number} Zero-based selected entry index.
- * @throws {ReqError} Throws when the argument is non-numeric or the ordinal is outside `1..entryCount`.
+ * @throws {ReqError} Throws when the argument is missing or non-numeric or the ordinal is outside `1..entryCount`.
  * @satisfies REQ-661, REQ-662
  * @note Complexity: O(n) in argument length. Pure aside from thrown diagnostics.
  */
 export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: number): number {
   const trimmedArgs = rawArgs.trim();
   if (trimmedArgs === "") {
-    return 0;
+    throw new ReqError(
+      "ERROR: /req-continue requires a numeric ordinal argument selecting one captured Next-Workflow entry.",
+      1,
+    );
   }
   if (!/^\d+$/.test(trimmedArgs)) {
     throw new ReqError(
-      `ERROR: /req-continue expects an optional numeric ordinal; received "${trimmedArgs}".`,
+      `ERROR: /req-continue requires a numeric ordinal; received "${trimmedArgs}".`,
       1,
     );
   }

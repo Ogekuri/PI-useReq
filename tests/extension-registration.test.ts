@@ -52,6 +52,7 @@ import {
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
   condenseNextWorkflowTableInputText,
+  formatNextWorkflowCommandTable,
   formatNextWorkflowFullList,
   getNextWorkflowCommands,
   NEXT_WORKFLOW_EMPTY_LIST_TEXT,
@@ -10058,13 +10059,13 @@ test("status-marker closure inspects only the final assistant message of the ter
 });
 
 /**
- * @brief Verifies `req-continue` registers outside the bundled prompt inventory, runs from `idle` and `done` whenever the Next-Workflow array holds commands, and rejects empty arrays and invalid ordinals without state transitions.
- * @details Activates the extension on a no-source fixture, asserts the dedicated registration description, dispatches the first captured entry from the `idle` bootstrap state through a recording spy while the workflow state stays `idle` (REQ-660), rejects the empty-array invocation with a deterministic error plus no operation and no workflow-state transition, reaches `done` through the no-source `req-workflow` placeholder path, and rejects out-of-range and non-numeric ordinals while preserving `done`. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @brief Verifies `req-continue` registers outside the bundled prompt inventory, dispatches from `idle` and `done` with a numeric ordinal whenever the Next-Workflow array holds commands, and rejects empty arrays and invalid ordinals without state transitions.
+ * @details Activates the extension on a no-source fixture, asserts the dedicated registration description, dispatches the first captured entry from the `idle` bootstrap state through a recording spy using the mandatory `1` ordinal while the workflow state stays `idle` (REQ-660, REQ-662), rejects the empty-array parameterized invocation with a deterministic error plus no operation and no workflow-state transition, reaches `done` through the no-source `req-workflow` placeholder path, and rejects the empty array plus out-of-range and non-numeric ordinals while preserving `done`. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after delegation and rejection-path assertions complete.
- * @throws {AssertionError} Throws when `req-continue` fails to dispatch from `idle` with a captured array, mutates the workflow state on a validation error, or accepts an invalid ordinal.
+ * @throws {AssertionError} Throws when `req-continue` fails to dispatch from `idle` with a captured array and ordinal, mutates the workflow state on a validation error, or accepts an invalid ordinal.
  * @satisfies REQ-659, REQ-660, REQ-661, REQ-662, TST-218
  */
-test("req-continue registers as a dedicated command, runs from idle with captured commands, and rejects empty arrays and invalid ordinals", async () => {
+test("req-continue registers as a dedicated command, dispatches from idle with an ordinal, and rejects empty arrays and invalid ordinals", async () => {
   resetNextWorkflowStateForTests();
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
@@ -10088,7 +10089,7 @@ test("req-continue registers as a dedicated command, runs from idle with capture
     registerNextWorkflowCommandHandler("req-check", async (args) => {
       idleDelegationArgs.push(args);
     });
-    await continueCommand!.handler("", ctx);
+    await continueCommand!.handler("1", ctx);
     assert.deepEqual(idleDelegationArgs, [""]);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
@@ -10098,7 +10099,7 @@ test("req-continue registers as a dedicated command, runs from idle with capture
 
     clearNextWorkflowCommands();
     await assert.rejects(
-      continueCommand!.handler("", ctx),
+      continueCommand!.handler("1", ctx),
       /found no captured Next-Workflow command/,
     );
     assert.match(
@@ -10118,7 +10119,7 @@ test("req-continue registers as a dedicated command, runs from idle with capture
 
     clearNextWorkflowCommands();
     await assert.rejects(
-      continueCommand!.handler("", ctx),
+      continueCommand!.handler("1", ctx),
       /found no captured Next-Workflow command/,
     );
     assert.match(
@@ -10136,7 +10137,7 @@ test("req-continue registers as a dedicated command, runs from idle with capture
     );
     await assert.rejects(
       continueCommand!.handler("abc", ctx),
-      /optional numeric ordinal/,
+      /requires a numeric ordinal/,
     );
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
@@ -10151,13 +10152,13 @@ test("req-continue registers as a dedicated command, runs from idle with capture
 });
 
 /**
- * @brief Verifies `req-continue` delegates the first and the one-based ordinal entry through the registered handler with the captured input text.
- * @details Reaches `done` through the no-source `req-workflow` placeholder path, captures two Next-Workflow entries, replaces the `req-check` and `req-fix` registry handlers with recording spies, and asserts the parameter-less invocation dispatches the first entry, the ordinal invocation dispatches the second entry with the exact captured input text, and the shared workflow state stays untouched because the delegated command owns every transition. Runtime is dominated by temporary project setup plus spy dispatch. Side effects are limited to temporary filesystem mutation and in-memory spy records.
+ * @brief Verifies `req-continue` delegates the one-based ordinal-selected entry through the registered handler with the captured input text.
+ * @details Reaches `done` through the no-source `req-workflow` placeholder path, captures two Next-Workflow entries, replaces the `req-check` and `req-fix` registry handlers with recording spies, and asserts the mandatory `1` ordinal dispatches the first entry, the `2` ordinal dispatches the second entry with the exact captured input text, and the shared workflow state stays untouched because the delegated command owns every transition. Runtime is dominated by temporary project setup plus spy dispatch. Side effects are limited to temporary filesystem mutation and in-memory spy records.
  * @return {Promise<void>} Promise resolved after delegation assertions complete.
  * @throws {AssertionError} Throws when selection order, forwarded arguments, or forwarded context deviate from a manual user invocation.
  * @satisfies REQ-662, REQ-663, REQ-664, TST-217
  */
-test("req-continue delegates the selected first or ordinal entry through the registered handler", async () => {
+test("req-continue delegates the ordinal-selected entry through the registered handler", async () => {
   resetNextWorkflowStateForTests();
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
@@ -10181,7 +10182,7 @@ test("req-continue delegates the selected first or ordinal entry through the reg
       fixCalls.push({ args, ctx: delegatedCtx });
     });
 
-    await pi.commands.get("req-continue")!.handler("", ctx);
+    await pi.commands.get("req-continue")!.handler("1", ctx);
     assert.deepEqual(checkCalls.map((call) => call.args), [""]);
     assert.equal(checkCalls[0]?.ctx, ctx);
     assert.equal(fixCalls.length, 0);
@@ -10195,6 +10196,107 @@ test("req-continue delegates the selected first or ordinal entry through the reg
       /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
     );
     assert.equal(pi.sentUserMessages.length, 0);
+  } finally {
+    resetNextWorkflowStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies parameter-less `req-continue` prints the Next-Workflow table from every workflow state without side effects.
+ * @details Activates the extension on a no-source fixture, asserts the empty-array parameter-less invocation prints the documented placeholder into the editor from `idle` with no new notification and no state change, captures two entries whose long input text stays untruncated in the full-text table, asserts the parameter-less invocation prints the exact `N.`, `Next Workflow`, and `Text` rounded table into the editor from `idle` with no dispatch and no sent user message, reaches `done` through the no-source `req-workflow` placeholder path and prints the same table from `done` without new notifications or state change, parks the workflow state in `error` through a dirty `req-references` validation and prints the same table from `error` without new notifications, state change, or array mutation. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation, fake editor-text mutation, and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after print and state-preservation assertions complete.
+ * @throws {AssertionError} Throws when the parameter-less print dispatches a workflow, truncates or reorders table cells, emits a new notification, mutates the workflow state, or mutates the captured Next-Workflow array.
+ * @satisfies REQ-738, REQ-739, REQ-740, REQ-741, TST-235, TST-236
+ */
+test("req-continue prints the Next-Workflow table without a parameter from every workflow state", async () => {
+  resetNextWorkflowStateForTests();
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const notificationsAfterStartup = ctx.__state.notifications.length;
+    const continueCommand = pi.commands.get("req-continue");
+    assert.ok(continueCommand, "missing req-continue registration");
+
+    // REQ-741: the empty array prints the documented placeholder through the editor only.
+    await continueCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, NEXT_WORKFLOW_EMPTY_LIST_TEXT);
+    assert.equal(ctx.__state.notifications.length, notificationsAfterStartup);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
+    );
+
+    const fullInputText = "Fix the flaky retry path in the orchestrator loop and verify every regression suite stays green";
+    const captureParse = parseAgentFinalOutput(buildFinalOutputText("Test summary.", [
+      { command: "/req-fix", text: fullInputText },
+      { command: "/req-check" },
+    ]));
+    captureNextWorkflowCommands(captureParse);
+    const expectedTable = formatNextWorkflowCommandTable([
+      { command: "req-fix", inputText: fullInputText },
+      { command: "req-check", inputText: "" },
+    ]);
+    assert.ok(expectedTable.includes(fullInputText.slice(0, 20)), "the printed table keeps the untruncated head of the input text");
+    assert.ok(!expectedTable.includes(" .. "), "the printed table keeps the full text instead of the condensed citation");
+    assert.notEqual(ctx.__state.editorText, expectedTable);
+
+    // REQ-738, REQ-739, REQ-740: the parameter-less print runs from `idle` and only
+    // writes the Next-Workflow section table syntax into the editor.
+    await continueCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, expectedTable);
+    assert.equal(ctx.__state.notifications.length, notificationsAfterStartup);
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
+    );
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-fix", "req-check"],
+    );
+
+    // REQ-740: runnable from the `done` terminal state without transitions.
+    await pi.commands.get("req-workflow")!.handler("", ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+    captureNextWorkflowCommands(captureParse);
+    const notificationsBeforeDonePrint = ctx.__state.notifications.length;
+    await continueCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, expectedTable);
+    assert.equal(ctx.__state.notifications.length, notificationsBeforeDonePrint);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+
+    // REQ-740: runnable from the `error` state without transitions; the captured array
+    // survives the failing `req-references` git validation unchanged (REQ-739).
+    fs.writeFileSync(path.join(projectBase, "dirty.txt"), "dirty\n");
+    await assert.rejects(
+      pi.commands.get("req-references")!.handler("", ctx),
+      /Git status unclear/,
+    );
+    const notificationsAfterError = ctx.__state.notifications.length;
+    assert.ok(notificationsAfterError > notificationsBeforeDonePrint);
+    await continueCommand!.handler("", ctx);
+    assert.equal(ctx.__state.editorText, expectedTable);
+    assert.equal(ctx.__state.notifications.length, notificationsAfterError);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>\u001b\[5mreferences ➔ error\u001b\[25m<\/error>/,
+    );
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-fix", "req-check"],
+    );
   } finally {
     resetNextWorkflowStateForTests();
     process.chdir(previousCwd);

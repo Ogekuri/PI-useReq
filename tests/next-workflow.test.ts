@@ -199,17 +199,18 @@ test("next-workflow full list rendering prints complete input text for req-conti
 });
 
 /**
- * @brief Verifies the one-based ordinal selection contract including error branches.
- * @details Asserts the empty argument selects the first entry, a decimal ordinal selects the one-based entry, a non-numeric argument and an out-of-range ordinal throw deterministic `ReqError` diagnostics. Runtime is O(n) in argument length. No external state is mutated.
+ * @brief Verifies the mandatory-ordinal selection contract including error branches.
+ * @details Asserts a decimal ordinal selects the one-based entry, the empty argument throws the mandatory-parameter diagnostic because `/req-continue` dispatch requires the integer ordinal, and a non-numeric argument plus an out-of-range ordinal throw deterministic `ReqError` diagnostics. Runtime is O(n) in argument length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when selection or rejection deviates from the documented contract.
  * @satisfies REQ-661, REQ-662, TST-217, TST-218
  */
-test("next-workflow ordinal selection maps empty to first and validates numeric ordinals", () => {
-  assert.equal(resolveNextWorkflowEntryIndex("", 2), 0);
+test("next-workflow ordinal selection requires a numeric ordinal and validates one-based entries", () => {
+  assert.equal(resolveNextWorkflowEntryIndex("1", 2), 0);
   assert.equal(resolveNextWorkflowEntryIndex(" 2 ", 2), 1);
+  assert.throws(() => resolveNextWorkflowEntryIndex("", 2), /requires a numeric ordinal/);
   assert.throws(() => resolveNextWorkflowEntryIndex("3", 2), /outside the captured Next-Workflow range 1\.\.2/);
-  assert.throws(() => resolveNextWorkflowEntryIndex("abc", 2), /optional numeric ordinal/);
+  assert.throws(() => resolveNextWorkflowEntryIndex("abc", 2), /requires a numeric ordinal/);
 });
 
 /**

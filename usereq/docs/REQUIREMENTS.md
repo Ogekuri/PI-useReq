@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.166"
+version: "0.0.167"
 date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
@@ -744,9 +744,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-657**: MUST render the `/req-continue` command table after the `Context retained.` retention line, separated from it by exactly one blank line.
 - **REQ-658**: MUST quote each `/req-continue` table input text as its first 20 characters, then ` .. `, then its last 10 characters, keeping texts of 30 characters or fewer verbatim.
 - **REQ-659**: MUST register `req-continue` as a dedicated extension command with description `Continue the previous agentic workflow with a captured Next-Workflow command` and MUST NOT depend on a bundled prompt Markdown file.
-- **REQ-660**: MUST allow `req-continue` from any startable workflow state, including `idle`, whenever the Next-Workflow array holds at least one command.
-- **REQ-661**: MUST reject `req-continue` with an error when the Next-Workflow array is empty or the requested ordinal is invalid, preserving the current workflow state.
-- **REQ-662**: MUST select the first Next-Workflow entry without a parameter and the one-based ordinal entry with a numeric parameter.
+- **REQ-660**: MUST gate parameterized `req-continue` dispatch on any startable workflow state, including `idle`, whenever the Next-Workflow array holds at least one command.
+- **REQ-661**: MUST reject parameterized `req-continue` with an error when the Next-Workflow array is empty or the ordinal is invalid, preserving the current workflow state.
+- **REQ-662**: MUST require one integer `req-continue` parameter identifying the one-based ordinal of the Next-Workflow array entry to dispatch.
 - **REQ-663**: MUST execute the selected pi-usereq command through its registered handler with the captured input text, behaving exactly like a manual user invocation.
 - **REQ-664**: MUST let the delegated pi-usereq command own every workflow-state transition so `req-continue` itself never terminates with the `continue` to `done` transition.
 - **REQ-665**: MUST re-point the pi CLI active session, process cwd, and context cwd to the retained worktree before terminating orchestration when the fast-forward merge fails during worktree-backed closure.
@@ -819,6 +819,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-732**: MUST apply the same ANSI markdown colorizer used for the report sections to the rendered Next-Workflow command table text.
 - **REQ-733**: MUST render the `/req-continue` command table with `Continue comand`, `Workflow`, and `Text` columns, one row per captured entry in capture order, framed like the Next-Workflow table.
 - **REQ-734**: MUST render each `/req-continue` table row with the `/req-continue <ordinal>` command, the uppercase workflow name without the `req-` prefix, and `N/A` for absent input text.
+- **REQ-738**: MUST print the captured Next-Workflow command table rendered with the Next-Workflow section table syntax into the editor when `req-continue` runs without a parameter.
+- **REQ-739**: MUST make parameter-less `req-continue` execute only the printing operation without workflow dispatch, workflow-state transition, notification, or Next-Workflow array mutation.
+- **REQ-740**: MUST allow parameter-less `req-continue` execution from every workflow state without applying the startability gate.
+- **REQ-741**: MUST print the empty Next-Workflow list placeholder into the editor for parameter-less `req-continue` when the Next-Workflow array is empty.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1050,6 +1054,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-232**: MUST verify `req-result-json-validator` verdict records report final-output contract validity, per-field violation diagnostics, and non-object-root diagnostics while preserving JSON-format verdicts.
 - **TST-233**: MUST verify the `req-result-json-validator` registration description declares exclusive final-output JSON validation and prohibits generic JSON validation.
 - **TST-234**: MUST verify extension activation registers exactly the twelve `req-`-prefixed configurable agent tools and exposes no un-prefixed legacy tool name.
+- **TST-235**: MUST verify parameter-less `req-continue` prints the Next-Workflow command table into the editor from every workflow state without dispatch, notification, workflow-state transition, or array mutation.
+- **TST-236**: MUST verify parameter-less `req-continue` prints the empty-list placeholder into the editor when the Next-Workflow array is empty.
 
 ## 5. Observed Component Model
 
@@ -1409,9 +1415,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-657 | `src/index.ts` :: `notifyContextRetentionReminder` (L1292-1311) :: appends the numbered list after the retention line; `src/core/next-workflow.ts` :: `formatNextWorkflowList` (L292-300) :: one command per line. |
 | REQ-658 | `src/core/next-workflow.ts` :: `condenseNextWorkflowInputText` (L274-285) :: first 20 characters plus `...` plus last 10 characters, omitted without input text. |
 | REQ-659 | `src/index.ts` :: `registerReqContinueCommand` (L3827-3863) registers `req-continue` with `REQ_CONTINUE_COMMAND_DESCRIPTION`; `src/core/next-workflow.ts` :: `REQ_CONTINUE_COMMAND_DESCRIPTION` (L51-53) :: dedicated registration outside the bundled prompt inventory. |
-| REQ-660 | `src/index.ts` :: `continueCommandHandler` startability gate plus empty-array check (L3837-3846) :: `idle` dispatches whenever the captured array holds commands. |
-| REQ-661 | `src/index.ts` :: empty-array branch (L3825-3830); `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` throws (L312-333) :: deterministic errors preserving the current workflow state. |
-| REQ-662 | `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` (L312-333); `src/index.ts` :: entry selection (L3831) :: first entry without a parameter, one-based ordinal entry with a numeric parameter. |
+| REQ-660 | `src/index.ts` :: `continueCommandHandler` parameterized-dispatch startability gate :: `idle` dispatches with an ordinal whenever the captured array holds commands; parameter-less printing bypasses the gate per REQ-740. |
+| REQ-661 | `src/index.ts` :: parameterized empty-array branch; `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` range and format diagnostics :: deterministic errors preserving the current workflow state. |
+| REQ-662 | `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` :: mandatory integer ordinal selecting the one-based entry; empty arguments throw the mandatory-parameter diagnostic. |
+| REQ-738 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: editor delivery of the `formatNextWorkflowCommandTable(...)` output from `src/core/next-workflow.ts`. |
+| REQ-739 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: print-only path with no dispatch, workflow-state transition, notification, or array mutation. |
+| REQ-740 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch precedes terminal-state resynchronization plus the startability gate. |
+| REQ-741 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: `NEXT_WORKFLOW_EMPTY_LIST_TEXT` from `src/core/next-workflow.ts` for an empty array. |
 | REQ-663 | `src/index.ts` :: handler registrations (L3724, L3798, L3848, L4040) plus delegation (L3832-3842); `src/core/next-workflow.ts` :: `registerNextWorkflowCommandHandler` (L242-250) plus `resolveNextWorkflowCommandHandler` (L257-261) :: manual-invocation-equivalent dispatch. |
 | REQ-664 | `src/index.ts` :: `registerReqContinueCommand` delegation comment (L3854-3857) plus `await delegatedHandler(entry.inputText, ctx)` (L3858) :: delegated command owns every workflow-state transition. |
 | REQ-665 | `src/core/prompt-command-runtime.ts` :: `redirectPromptCommandExecutionToRetainedWorktree` (L1938-1980) invoked by the `finalizePromptCommandExecution` merge-failure branch (L2103-2120) :: switches back to the retained execution session, aligns `process.cwd()`, and restores worktree path facts before termination. |
@@ -1524,8 +1534,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-213 | `tests/package-manager.test.ts` :: pi-managed-first resolution coverage asserts the git root, then npm root, then executing-manifest ordering. |
 | TST-215 | `tests/next-workflow.test.ts` :: parser, purge, and capture-store tests :: `next_commands` JSON mapping, `/req-continue` exception, orchestration-command purge, and entry order. |
 | TST-216 | `tests/next-workflow.test.ts` :: condensation plus table-rendering tests; `tests/extension-registration.test.ts` :: `completed prompt run captures next-workflow commands and renders the report plus retention tables` :: markdown report plus full-text table before the retention line and `/req-continue` table after it with the first-20/last-10 quotation. |
-| TST-217 | `tests/extension-registration.test.ts` :: `req-continue delegates the selected first or ordinal entry through the registered handler` (L9875-9933); `tests/next-workflow.test.ts` :: ordinal-selection and handler-registry tests (L133-145, L177-191) :: first and one-based ordinal delegation with the captured input text. |
-| TST-218 | `tests/extension-registration.test.ts` :: `req-continue registers as a dedicated command, runs from idle with captured commands, and rejects empty arrays and invalid ordinals` (L9855) :: idle delegation plus error rejections without workflow-state transitions. |
+| TST-217 | `tests/extension-registration.test.ts` :: `req-continue delegates the ordinal-selected entry through the registered handler`; `tests/next-workflow.test.ts` :: ordinal-selection and handler-registry tests :: one-based ordinal delegation with the captured input text. |
+| TST-218 | `tests/extension-registration.test.ts` :: `req-continue registers as a dedicated command, dispatches from idle with an ordinal, and rejects empty arrays and invalid ordinals` :: ordinal delegation plus error rejections without workflow-state transitions. |
+| TST-235 | `tests/extension-registration.test.ts` :: `req-continue prints the Next-Workflow table without a parameter from every workflow state` :: editor-only table printing with no dispatch, notification, transition, or array mutation. |
+| TST-236 | `tests/extension-registration.test.ts` :: parameter-less `req-continue` empty-array coverage inside the every-workflow-state print test :: `NEXT_WORKFLOW_EMPTY_LIST_TEXT` editor payload. |
 | TST-219 | `tests/extension-registration.test.ts` :: `worktree-backed finalization transitions through merging, error, and idle when merge fails` (L5260) :: worktree re-point, retention-before-error ordering, hardcoded `ERROR:` last line, and preserved Next-Workflow array. |
 | TST-220 | `tests/extension-registration.test.ts` :: `req-reset accepts non-idle workflow state, preserves transcript, and removes generated worktrees` (L3936) plus `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206) :: array preserved across `/req-reset` recovery. |
 | TST-221 | `tests/extension-registration.test.ts` :: `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206) :: failed pre-checks preserve the array and the dispatch-time sample observes the post-wipe empty array. |
