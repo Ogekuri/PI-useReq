@@ -738,8 +738,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-654**: MUST capture each `next_commands` entry naming a pi-usereq slash command into one process-scoped Next-Workflow array as command plus input-text pairs in entry order.
 - **REQ-655**: MUST purge every non-pi-usereq orchestration command from the Next-Workflow array while keeping the `/req-continue` exception.
 - **REQ-656**: MUST preserve the Next-Workflow array across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` recovery so `/req-continue` consumes the last completed flow's commands.
-- **REQ-657**: MUST render the numbered Next-Workflow list after the "Context retained." retention line, printing one command per line.
-- **REQ-658**: MUST quote each listed input text as its first 20 characters, then `...`, then its last 10 characters, omitting the quotation when the command carries no input text.
+- **REQ-657**: MUST render the `/req-continue` command table after the `Context retained.` retention line, separated from it by exactly one blank line.
+- **REQ-658**: MUST quote each `/req-continue` table input text as its first 20 characters, then ` .. `, then its last 10 characters, keeping texts of 30 characters or fewer verbatim.
 - **REQ-659**: MUST register `req-continue` as a dedicated extension command with description `Continue the previous agentic workflow with a captured Next-Workflow command` and MUST NOT depend on a bundled prompt Markdown file.
 - **REQ-660**: MUST allow `req-continue` from any startable workflow state, including `idle`, whenever the Next-Workflow array holds at least one command.
 - **REQ-661**: MUST reject `req-continue` with an error when the Next-Workflow array is empty or the requested ordinal is invalid, preserving the current workflow state.
@@ -747,7 +747,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-663**: MUST execute the selected pi-usereq command through its registered handler with the captured input text, behaving exactly like a manual user invocation.
 - **REQ-664**: MUST let the delegated pi-usereq command own every workflow-state transition so `req-continue` itself never terminates with the `continue` to `done` transition.
 - **REQ-665**: MUST re-point the pi CLI active session, process cwd, and context cwd to the retained worktree before terminating orchestration when the fast-forward merge fails during worktree-backed closure.
-- **REQ-666**: MUST emit the final context-retention notification with the numbered Next-Workflow list before the error output when the fast-forward merge fails during worktree-backed closure.
+- **REQ-666**: MUST emit the final context-retention notification with the `/req-continue` command table before the error output when the fast-forward merge fails during worktree-backed closure.
 - **REQ-667**: MUST surface one identical hardcoded message beginning with `ERROR: ` that warns the fast-forward merge failed and the worktree changes require a manual merge as the last merge-failure output line.
 - **REQ-668**: MUST retain the captured Next-Workflow array unchanged when the fast-forward merge fails during worktree-backed closure.
 - **REQ-669**: MUST clear the captured Next-Workflow array immediately before prompt dispatch of a `new` agentic flow, after every slash-command pre-check has succeeded.
@@ -800,16 +800,22 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-716**: MUST render the `Context retained.` retention sentence with intense-white ANSI color whenever the context-usage percentage segment is present.
 - **REQ-717**: MUST render the appended context-usage percentage segment with intense-yellow ANSI color.
 - **REQ-718**: MUST render every notification reporting an `error` or `warning` prompt-orchestration termination with intense-red ANSI color.
-- **REQ-719**: MUST emit every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout, the numbered Next-Workflow list, and the context-usage percentage line.
+- **REQ-719**: MUST emit every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout, the Next-Workflow command table, the `/req-continue` command table, and the context-usage percentage line.
 - **REQ-720**: MUST render each report section heading of the ANSI-colored report notification as a rounded box frame sized from the label length.
 - **REQ-721**: MUST wrap every box line of a section heading with the intense-yellow ANSI color.
-- **REQ-722**: MUST render the captured Next-Workflow commands as a dynamically sized rounded table with `N.`, `Command`, and `Text` columns in the ANSI-colored report notification.
-- **REQ-723**: MUST render each table row with a zero-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and `N/A` for absent input text.
-- **REQ-724**: MUST condense table input text longer than 30 characters into its first 20 characters, the ` .. ` separator, and its last 10 characters.
+- **REQ-722**: MUST render the captured Next-Workflow commands as a dynamically sized rounded table with `N.`, `Next Workflow`, and `Text` columns in the ANSI-colored report notification.
+- **REQ-723**: MUST render each table row with a right-aligned one-based ordinal, the command name without the `req-` prefix in uppercase, and `N/A` for absent input text.
+- **REQ-724**: MUST render each Next-Workflow table `Text` cell with the full untruncated input text, collapsing every whitespace run into one space.
 - **REQ-725**: MUST frame the table with `╭╮╰╯│─┬┴`, the double-line header separator `╞══╪══╡`, and `├──┼──┤` row separators.
 - **REQ-726**: MUST validate every parsed JSON object against the orchestration final-output mandatory-field contract: `result` exactly `ok` or `error`, `summary` string, and `next_commands` array.
 - **REQ-727**: MUST mark each verdict record with a final-output contract verdict and list every mandatory-field violation with the violated field name and expected domain.
 - **REQ-728**: MUST classify every parsed JSON root that is not an object as final-output contract invalid with one root-type issue in the verdict record.
+- **REQ-729**: MUST wrap each Next-Workflow table `Text` cell at whitespace boundaries into lines of at most 35 display columns, widening the column to fit any longer unbreakable word.
+- **REQ-730**: MUST render every wrapped `Text` cell line as one physical table row whose remaining cells stay empty.
+- **REQ-731**: MUST compute every Next-Workflow and `/req-continue` table column width from the maximum display width over the header and all rendered cell lines.
+- **REQ-732**: MUST apply the same ANSI markdown colorizer used for the report sections to the rendered Next-Workflow command table text.
+- **REQ-733**: MUST render the `/req-continue` command table with `Continue comand`, `Workflow`, and `Text` columns, one row per captured entry in capture order, framed like the Next-Workflow table.
+- **REQ-734**: MUST render each `/req-continue` table row with the `/req-continue <ordinal>` command, the uppercase workflow name without the `req-` prefix, and `N/A` for absent input text.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1022,10 +1028,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-212**: MUST verify installed-version resolution returns the pi-managed installation version when the executing installation is a source checkout.
 - **TST-213**: MUST verify pi-managed-first installed-version resolution prefers the git installation root, then the npm installation root, then the executing manifest.
 - **TST-215**: MUST verify Next-Workflow capture maps `next_commands` entries from the final-output JSON, keeps pi-usereq commands plus `/req-continue`, purges other orchestration commands, and preserves entry order.
-- **TST-216**: MUST verify the final context-retention notification renders the markdown report sections before the retention line and the numbered Next-Workflow list after it with the first-20/last-10 quotation.
+- **TST-216**: MUST verify the final context-retention notification renders the markdown report sections and the full-text Next-Workflow command table before the retention line and the `/req-continue` command table with the first-20/last-10 quotation after it.
 - **TST-217**: MUST verify `req-continue` registers outside the bundled prompt inventory and delegates the selected first or one-based ordinal entry through the registered handler with the captured input text.
 - **TST-218**: MUST verify `req-continue` registers outside the bundled prompt inventory, executes from `idle` and `done` whenever the Next-Workflow array holds commands, and rejects empty arrays and invalid ordinals with an error and no workflow-state transition.
-- **TST-219**: MUST verify fast-forward merge-failure closure re-points the pi CLI to the retained worktree, emits the retention notification plus numbered list before the error, ends the error output with the hardcoded uniform `ERROR: ` message, and preserves the Next-Workflow array.
+- **TST-219**: MUST verify fast-forward merge-failure closure re-points the pi CLI to the retained worktree, emits the retention notification plus `/req-continue` command table before the error, ends the error output with the hardcoded uniform `ERROR: ` message, and preserves the Next-Workflow array.
 - **TST-220**: MUST verify `/req-reset` preserves the captured Next-Workflow array so `/req-continue` stays executable from `idle` after recovery.
 - **TST-221**: MUST verify the Next-Workflow array is cleared immediately before prompt dispatch of a `new` agentic flow and preserved when slash-command pre-checks fail.
 - **TST-222**: MUST verify `req-continue-list` registers outside the bundled prompt inventory with its dedicated description.
@@ -1513,7 +1519,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-212 | `tests/package-manager.test.ts` :: source-checkout installed-version coverage asserts the pi-managed installation version instead of the executing manifest version. |
 | TST-213 | `tests/package-manager.test.ts` :: pi-managed-first resolution coverage asserts the git root, then npm root, then executing-manifest ordering. |
 | TST-215 | `tests/next-workflow.test.ts` :: parser, purge, and capture-store tests :: `next_commands` JSON mapping, `/req-continue` exception, orchestration-command purge, and entry order. |
-| TST-216 | `tests/next-workflow.test.ts` :: condensation plus list-rendering tests; `tests/extension-registration.test.ts` :: `completed prompt run captures next-workflow commands and renders the report plus numbered retention list` :: markdown report before the retention line and numbered list after it with the first-20/last-10 quotation. |
+| TST-216 | `tests/next-workflow.test.ts` :: condensation plus table-rendering tests; `tests/extension-registration.test.ts` :: `completed prompt run captures next-workflow commands and renders the report plus retention tables` :: markdown report plus full-text table before the retention line and `/req-continue` table after it with the first-20/last-10 quotation. |
 | TST-217 | `tests/extension-registration.test.ts` :: `req-continue delegates the selected first or ordinal entry through the registered handler` (L9875-9933); `tests/next-workflow.test.ts` :: ordinal-selection and handler-registry tests (L133-145, L177-191) :: first and one-based ordinal delegation with the captured input text. |
 | TST-218 | `tests/extension-registration.test.ts` :: `req-continue registers as a dedicated command, runs from idle with captured commands, and rejects empty arrays and invalid ordinals` (L9855) :: idle delegation plus error rejections without workflow-state transitions. |
 | TST-219 | `tests/extension-registration.test.ts` :: `worktree-backed finalization transitions through merging, error, and idle when merge fails` (L5260) :: worktree re-point, retention-before-error ordering, hardcoded `ERROR:` last line, and preserved Next-Workflow array. |

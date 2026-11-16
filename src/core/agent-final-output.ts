@@ -354,13 +354,13 @@ function renderAgentFinalOutputSectionTitleBox(label: string): string[] {
 }
 
 /**
- * @brief Converts one rendered markdown report into ANSI-colored text.
- * @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character outside the replaced headings stays present. Runtime is O(n) in text length. No external state is mutated.
- * @param[in] text {string} Plain markdown report text produced by the fixed-order renderer.
- * @return {string} ANSI-colored report text.
- * @satisfies REQ-713, REQ-714, REQ-715
+ * @brief Converts one rendered markdown report or table into ANSI-colored text.
+ * @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm. Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] text {string} Plain markdown report or plain table text produced by the fixed-order renderer or the Next-Workflow table builder.
+ * @return {string} ANSI-colored text.
+ * @satisfies REQ-713, REQ-714, REQ-715, REQ-732
  */
-function colorizeAgentFinalOutputMarkdownText(text: string): string {
+export function colorizeAgentFinalOutputMarkdownText(text: string): string {
   const renderedLines: string[] = [];
   let insideFence = false;
   for (const line of text.split("\n")) {

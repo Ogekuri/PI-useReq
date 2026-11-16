@@ -1336,11 +1336,11 @@ function notifyTerminalOrchestrationDiagnostic(
 
 /**
  * @brief Emits the single merged final context-retention notification for a completed `/req-*` orchestration.
- * @details Builds exactly one info-level message through `buildContextRetentionNotificationMessage(...)` — the ANSI-colored report printout with rounded section-title boxes, the dynamically sized rounded Next-Workflow command table, the intense-white `Context retained.` retention sentence carrying the intense-yellow percentage segment when a normalized snapshot exists, and the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow — and delivers it through one `notifyContextSafely(...)` call so the pi TUI back-to-back info-notification collapse can never overwrite the ANSI report printout with a subsequent status line; the report appears exactly once because no plain-markdown duplicate is emitted. Performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is one user notification delivery when the supplied context is still active.
+ * @details Builds exactly one info-level message through `buildContextRetentionNotificationMessage(...)` — the ANSI-colored report printout with rounded section-title boxes, the ANSI-styled full-text Next-Workflow command table, the intense-white `Context retained.` retention sentence carrying the intense-yellow percentage segment when a normalized snapshot exists, and the `/req-continue` command table carrying only the condensed citations, rendered from the process-scoped capture of the last completed agentic flow — and delivers it through one `notifyContextSafely(...)` call so the pi TUI back-to-back info-notification collapse can never overwrite the ANSI report printout with a subsequent status line; the report appears exactly once because no plain-markdown duplicate is emitted. Performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is one user notification delivery when the supplied context is still active.
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @return {void} No return value.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-732, REQ-733, REQ-734
  */
 function notifyContextRetentionReminder(
   statusController: PiUsereqStatusController,
@@ -1474,7 +1474,7 @@ function isPiAgentSettledEventSupported(
 
 /**
  * @brief Finalizes a matched successful worktree-backed prompt at the current lifecycle point.
- * @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications in intense red, emits the final context-retention notification with the numbered Next-Workflow list before the error output when the fast-forward merge fails and terminates that error output with the hardcoded uniform merge-failure message, emits the warning-only closure notification after the retention reminder so terminal error and warning diagnostics print last, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
+ * @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications in intense red, emits the final context-retention notification with the `/req-continue` command table before the error output when the fast-forward merge fails and terminates that error output with the hardcoded uniform merge-failure message, emits the warning-only closure notification after the retention reminder so terminal error and warning diagnostics print last, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
  * @param[in] pi {ExtensionAPI} Active extension API instance supplying the model re-apply appliers.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller whose pending and active prompt state is cleared.
  * @param[in] promptRequest {PiUsereqPromptRequest} Matched successful worktree-backed prompt execution plan.
@@ -1553,7 +1553,7 @@ async function finalizeMatchedPromptSuccess(
   ) {
     const mergeFailed = finalization.mergeAttempted && !finalization.mergeSucceeded;
     if (mergeFailed) {
-      // REQ-666: the retained-context reminder with the numbered Next-Workflow list
+      // REQ-666: the retained-context reminder with the `/req-continue` command table
       // prints before the error output, so the queued `/req-continue <n>` commands stay
       // visible and the captured array is preserved for recovery (REQ-668).
       notifyContextRetentionReminder(statusController, promptContext);
@@ -1834,7 +1834,7 @@ async function handleExtensionStatusEvent(
         // Stage A (REQ-653/REQ-654/REQ-655/REQ-681): capture the final-output report and
         // the Next-Workflow commands from the terminal output of every completed agentic
         // run carrying `result` `ok`, before the final retention notification renders the
-        // markdown report sections plus the numbered list; blocked runs never feed the
+        // markdown report sections plus the command tables; blocked runs never feed the
         // capture so retained-worktree failures cannot pollute it.
         captureAgentFinalOutputReport(finalOutputParse);
         captureNextWorkflowCommands(finalOutputParse);

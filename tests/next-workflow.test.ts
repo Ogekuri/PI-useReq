@@ -4,12 +4,14 @@ import { parseAgentFinalOutput, type AgentFinalOutputCommandEntry } from "../src
 import {
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
-  condenseNextWorkflowInputText,
+  condenseNextWorkflowTableInputText,
+  formatNextWorkflowCommandTable,
+  formatNextWorkflowContinueCommandTable,
   formatNextWorkflowFullList,
-  formatNextWorkflowList,
   getNextWorkflowCommands,
   NEXT_WORKFLOW_COMMAND_NAMES,
   NEXT_WORKFLOW_EMPTY_LIST_TEXT,
+  NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH,
   parseNextWorkflowCommandEntries,
   registerNextWorkflowCommandHandler,
   REQ_CONTINUE_COMMAND_DESCRIPTION,
@@ -81,35 +83,96 @@ test("next-workflow mapping skips malformed entries and yields none for invalid 
 });
 
 /**
- * @brief Verifies the input-text condensation contract for long, short, and whitespace-heavy inputs.
- * @details Asserts inputs longer than the verbatim limit render as the first 20 characters followed by `...` followed by the last 10 characters, shorter inputs render verbatim, every whitespace run including newlines collapses to one space, and empty inputs render empty. Runtime is O(n) in input length. No external state is mutated.
+ * @brief Verifies the input-text table condensation contract for long, short, and whitespace-heavy inputs.
+ * @details Asserts inputs longer than the verbatim limit render as the first 20 characters followed by ` .. ` followed by the last 10 characters, shorter inputs render verbatim, every whitespace run including newlines collapses to one space, and empty inputs render empty. Runtime is O(n) in input length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when the condensed quotation does not match the documented first-20/last-10 contract.
- * @satisfies REQ-657, REQ-658, TST-216
+ * @satisfies REQ-658, TST-216
  */
-test("next-workflow input condensation renders first-20 plus ellipsis plus last-10", () => {
-  assert.equal(condenseNextWorkflowInputText("Fix the flaky retry path in the orchestrator loop"), "Fix the flaky retry ...rator loop");
-  assert.equal(condenseNextWorkflowInputText("short text"), "short text");
-  assert.equal(condenseNextWorkflowInputText("123456789012345678901234567890"), "123456789012345678901234567890");
-  assert.equal(condenseNextWorkflowInputText("1234567890123456789012345678901"), "12345678901234567890...2345678901");
-  assert.equal(condenseNextWorkflowInputText("multi\nline   input\ttext"), "multi line input text");
-  assert.equal(condenseNextWorkflowInputText("   "), "");
+test("next-workflow table condensation renders first-20 plus separator plus last-10", () => {
+  assert.equal(condenseNextWorkflowTableInputText("Fix the flaky retry path in the orchestrator loop"), "Fix the flaky retry  .. rator loop");
+  assert.equal(condenseNextWorkflowTableInputText("short text"), "short text");
+  assert.equal(condenseNextWorkflowTableInputText("123456789012345678901234567890"), "123456789012345678901234567890");
+  assert.equal(condenseNextWorkflowTableInputText("1234567890123456789012345678901"), "12345678901234567890 .. 2345678901");
+  assert.equal(condenseNextWorkflowTableInputText("multi\nline   input\ttext"), "multi line input text");
+  assert.equal(condenseNextWorkflowTableInputText("   "), "");
 });
 
 /**
- * @brief Verifies the numbered list rendering contract for quoted and bare commands.
- * @details Asserts the list numbers entries from one, quotes condensed input text in double quotes, renders commands without input text as bare slash commands, and returns the empty string for an empty entry array. Runtime is O(n) in entry length. No external state is mutated.
+ * @brief Verifies the full-text Next-Workflow table rendering contract.
+ * @details Asserts the table headers `N.`, `Next Workflow`, and `Text`, right-aligned space-padded one-based ordinals, prefix-free uppercase commands, full untruncated input text wrapped at whitespace boundaries into at most 35-display-column lines rendered as continuation physical rows with empty sibling cells, the `N/A` placeholder for absent input text, and the empty string for an empty entry array. Runtime is O(n) in entry length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
- * @throws {AssertionError} Throws when the rendered list breaks the one-command-per-line contract.
- * @satisfies REQ-657, REQ-658, TST-216
+ * @throws {AssertionError} Throws when the rendered table truncates input text, breaks the wrapping, alignment, continuation-row, or empty-array contract.
+ * @satisfies REQ-722, REQ-723, REQ-724, REQ-729, REQ-730, REQ-731
  */
-test("next-workflow list rendering prints one numbered command per line", () => {
-  const rendered = formatNextWorkflowList([
+test("next-workflow command table renders full wrapped text with right-aligned ordinals", () => {
+  const rendered = formatNextWorkflowCommandTable([
     { command: "req-fix", inputText: "Fix the flaky retry path in the orchestrator loop" },
     { command: "req-check", inputText: "" },
   ]);
-  assert.equal(rendered, "1. /req-fix \"Fix the flaky retry ...rator loop\"\n2. /req-check");
-  assert.equal(formatNextWorkflowList([]), "");
+  assert.equal(
+    rendered,
+    [
+      "╭────┬───────────────┬─────────────────────────────────╮",
+      "│ N. │ Next Workflow │ Text                            │",
+      "╞════╪═══════════════╪═════════════════════════════════╡",
+      "│  1 │ FIX           │ Fix the flaky retry path in the │",
+      "│    │               │ orchestrator loop               │",
+      "├────┼───────────────┼─────────────────────────────────┤",
+      "│  2 │ CHECK         │ N/A                             │",
+      "╰────┴───────────────┴─────────────────────────────────╯",
+    ].join("\n"),
+  );
+  assert.equal(formatNextWorkflowCommandTable([]), "");
+  assert.equal(NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH, 35);
+});
+
+/**
+ * @brief Verifies the wrap-boundary contract of the Next-Workflow table `Text` cell.
+ * @details Asserts one unbreakable word longer than the 35-display-column bound occupies its own oversized physical row so the column widens, the following word starts the next line, and every non-unbreakable wrapped line stays within the bound. Runtime is O(n) in entry length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when the unbreakable word is split, the column fails to widen, or the continuation row leaks sibling cell content.
+ * @satisfies REQ-729, REQ-730, REQ-731
+ */
+test("next-workflow command table widens the column for unbreakable words", () => {
+  const longWord = "a".repeat(40);
+  const rendered = formatNextWorkflowCommandTable([
+    { command: "req-fix", inputText: `${longWord} tail` },
+  ]);
+  const dataLines = rendered.split("\n").filter((line) => line.startsWith("│") && !line.includes("N."));
+  assert.ok(dataLines.some((line) => line.split("│")[3].trim() === longWord), "unbreakable word must own one widened physical row");
+  assert.ok(dataLines.some((line) => line.split("│")[3].trim() === "tail"), "following word must start the next physical row");
+  for (const line of dataLines) {
+    const textCell = line.split("│")[3].trim();
+    assert.ok(textCell.length <= NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH || textCell === longWord);
+  }
+});
+
+/**
+ * @brief Verifies the `/req-continue` command table rendering contract backing the retention notification.
+ * @details Asserts the table headers `Continue comand`, `Workflow`, and `Text`, one capture-order row per entry carrying the directly invokable `/req-continue <ordinal>` command, the prefix-free uppercase workflow name, and the condensed first-20/` .. `/last-10 input-text citation with `N/A` for absent input text, plus the empty string for an empty entry array. Runtime is O(n) in entry length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when the rendered table breaks the row, citation, or empty-array contract.
+ * @satisfies REQ-657, REQ-658, REQ-731, REQ-733, REQ-734, TST-216
+ */
+test("next-workflow continue command table prints one invokable command row per entry", () => {
+  const rendered = formatNextWorkflowContinueCommandTable([
+    { command: "req-fix", inputText: "Fix the flaky retry path in the orchestrator loop" },
+    { command: "req-check", inputText: "" },
+  ]);
+  assert.equal(
+    rendered,
+    [
+      "╭─────────────────┬──────────┬────────────────────────────────────╮",
+      "│ Continue comand │ Workflow │ Text                               │",
+      "╞═════════════════╪══════════╪════════════════════════════════════╡",
+      "│ /req-continue 1 │ FIX      │ Fix the flaky retry  .. rator loop │",
+      "├─────────────────┼──────────┼────────────────────────────────────┤",
+      "│ /req-continue 2 │ CHECK    │ N/A                                │",
+      "╰─────────────────┴──────────┴────────────────────────────────────╯",
+    ].join("\n"),
+  );
+  assert.equal(formatNextWorkflowContinueCommandTable([]), "");
 });
 
 /**
@@ -121,7 +184,7 @@ test("next-workflow list rendering prints one numbered command per line", () => 
  */
 test("next-workflow full list rendering prints complete input text for req-continue-list", () => {
   const longInputText = "Fix the flaky retry path in the orchestrator loop and verify every regression suite stays green";
-  assert.notEqual(condenseNextWorkflowInputText(longInputText), longInputText);
+  assert.notEqual(condenseNextWorkflowTableInputText(longInputText), longInputText);
   const rendered = formatNextWorkflowFullList([
     { command: "req-fix", inputText: longInputText },
     { command: "req-check", inputText: "" },

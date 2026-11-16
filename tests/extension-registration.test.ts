@@ -51,9 +51,8 @@ import { PROMPT_COMMAND_NAMES } from "../src/core/prompt-command-catalog.js";
 import {
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
-  condenseNextWorkflowInputText,
+  condenseNextWorkflowTableInputText,
   formatNextWorkflowFullList,
-  formatNextWorkflowList,
   getNextWorkflowCommands,
   NEXT_WORKFLOW_EMPTY_LIST_TEXT,
   parseNextWorkflowCommandEntries,
@@ -5430,7 +5429,7 @@ test("prompt-command bootstrap ignores stale deleted-worktree session metadata o
 
 /**
  * @brief Verifies worktree merge-failure closure re-points the pi CLI to the retained worktree and renders the uniform merge-failure output.
- * @details Runs one worktree-backed `req-change` orchestration whose terminal output is one final-output JSON carrying `result` `ok` plus two Next-Workflow commands, diverges `base-path` with a root commit plus a worktree commit so the `--ff-only` merge fails, and asserts the closure retains the worktree and branch, re-points `process.cwd()` and the context cwd mirror to the retained worktree execution path, emits the context-retention notification with the markdown report sections plus the numbered Next-Workflow list before the error notification, terminates the error output with the hardcoded uniform merge-failure message, preserves the captured Next-Workflow array, and parks the workflow state in `error`. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @details Runs one worktree-backed `req-change` orchestration whose terminal output is one final-output JSON carrying `result` `ok` plus two Next-Workflow commands, diverges `base-path` with a root commit plus a worktree commit so the `--ff-only` merge fails, and asserts the closure retains the worktree and branch, re-points `process.cwd()` and the context cwd mirror to the retained worktree execution path, emits the context-retention notification with the markdown report sections plus the full-text Next-Workflow table and the `/req-continue` command table before the error notification, terminates the error output with the hardcoded uniform merge-failure message, preserves the captured Next-Workflow array, and parks the workflow state in `error`. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after merge-failure closure assertions complete.
  * @throws {AssertionError} Throws when the closure deletes the worktree, leaves the pi CLI on `base-path`, drops the captured Next-Workflow array, or misrenders the retention or merge-failure error output.
  * @satisfies REQ-208, REQ-665, REQ-666, REQ-667, REQ-668, TST-083, TST-219
@@ -5524,17 +5523,24 @@ test("worktree-backed finalization transitions through merging, error, and idle 
         "\u001b[93m╰───────────────╯\u001b[0m",
         "Continue with the captured commands.",
         "",
-        "╭────┬─────────┬────────────────────────────────────╮",
-        "│ N. │ Command │ Text                               │",
-        "╞════╪═════════╪════════════════════════════════════╡",
-        "│ 01 │ FIX     │ Fix the flaky retry  .. rator loop │",
-        "├────┼─────────┼────────────────────────────────────┤",
-        "│ 02 │ CHECK   │ N/A                                │",
-        "╰────┴─────────┴────────────────────────────────────╯",
+        "╭────┬───────────────┬─────────────────────────────────╮",
+        "│ N. │ Next Workflow │ Text                            │",
+        "╞════╪═══════════════╪═════════════════════════════════╡",
+        "│  1 │ FIX           │ Fix the flaky retry path in the │",
+        "│    │               │ orchestrator loop               │",
+        "├────┼───────────────┼─────────────────────────────────┤",
+        "│  2 │ CHECK         │ N/A                             │",
+        "╰────┴───────────────┴─────────────────────────────────╯",
         "",
         "Context retained. Start a new session with a clean context (/new) before the next /req-* command.",
-        "1. /req-fix \"Fix the flaky retry ...rator loop\"",
-        "2. /req-check",
+        "",
+        "╭─────────────────┬──────────┬────────────────────────────────────╮",
+        "│ Continue comand │ Workflow │ Text                               │",
+        "╞═════════════════╪══════════╪════════════════════════════════════╡",
+        "│ /req-continue 1 │ FIX      │ Fix the flaky retry  .. rator loop │",
+        "├─────────────────┼──────────┼────────────────────────────────────┤",
+        "│ /req-continue 2 │ CHECK    │ N/A                                │",
+        "╰─────────────────┴──────────┴────────────────────────────────────╯",
       ].join("\n"),
     );
     assert.ok(!retentionNotifications[0]?.message.includes("## **"));
@@ -10221,8 +10227,8 @@ test("req-continue-list prints the full captured list from every workflow state 
     const expectedList = `1. /req-fix "${fullInputText}"\n2. /req-check`;
 
     // REQ-672: full untruncated input text in capture order; the condensed retention
-    // quotation would render `Fix the flaky retry ... stays green` instead.
-    assert.notEqual(condenseNextWorkflowInputText(fullInputText), fullInputText);
+    // table citation would render `Fix the flaky retry  ..  stays green` instead.
+    assert.notEqual(condenseNextWorkflowTableInputText(fullInputText), fullInputText);
     await listCommand!.handler("", ctx);
     assert.equal(ctx.__state.editorText, expectedList);
     assert.equal(ctx.__state.notifications.length, notificationsAfterStartup);
@@ -10281,13 +10287,13 @@ test("req-continue-list prints the full captured list from every workflow state 
 });
 
 /**
- * @brief Verifies a completed prompt run captures the Next-Workflow commands and renders the report plus numbered list inside the final retention notification.
- * @details Runs one no-worktree `req-change` orchestration until workflow state becomes `running`, emits `agent_end` whose final assistant text is one final-output JSON whose `next_commands` array carries a purged `/new` entry plus two pi-usereq command entries, and asserts the terminal `done` state, the markdown report sections rendered before the `Context retained.` retention line, the numbered list rendered one command per line after the retention line with the first-20/last-10 quotation, and the subsequent `/req-continue` ordinal delegation carrying the exact captured input text. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @brief Verifies a completed prompt run captures the Next-Workflow commands and renders the report plus retention tables inside the final retention notification.
+ * @details Runs one no-worktree `req-change` orchestration until workflow state becomes `running`, emits `agent_end` whose final assistant text is one final-output JSON whose `next_commands` array carries a purged `/new` entry plus two pi-usereq command entries, and asserts the terminal `done` state, the markdown report sections plus the full-text Next-Workflow command table rendered before the `Context retained.` retention line, the `/req-continue` command table carrying only the condensed citations rendered one blank line after the retention line, and the subsequent `/req-continue` ordinal delegation carrying the exact captured input text. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after capture and retention assertions complete.
  * @throws {AssertionError} Throws when the capture skips the terminal output, the retention notification omits or misrenders the report or the list, or the ordinal delegation forwards the wrong input text.
  * @satisfies REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, TST-216
  */
-test("completed prompt run captures next-workflow commands and renders the report plus numbered retention list", async () => {
+test("completed prompt run captures next-workflow commands and renders the report plus retention tables", async () => {
   resetNextWorkflowStateForTests();
   const { projectBase } = initFixtureRepo();
   const previousCwd = process.cwd();
@@ -10358,17 +10364,24 @@ test("completed prompt run captures next-workflow commands and renders the repor
         "\u001b[93m╰───────────────╯\u001b[0m",
         "Continue with the captured commands.",
         "",
-        "╭────┬─────────┬────────────────────────────────────╮",
-        "│ N. │ Command │ Text                               │",
-        "╞════╪═════════╪════════════════════════════════════╡",
-        "│ 01 │ FIX     │ Fix the flaky retry  .. rator loop │",
-        "├────┼─────────┼────────────────────────────────────┤",
-        "│ 02 │ CHECK   │ N/A                                │",
-        "╰────┴─────────┴────────────────────────────────────╯",
+        "╭────┬───────────────┬─────────────────────────────────╮",
+        "│ N. │ Next Workflow │ Text                            │",
+        "╞════╪═══════════════╪═════════════════════════════════╡",
+        "│  1 │ FIX           │ Fix the flaky retry path in the │",
+        "│    │               │ orchestrator loop               │",
+        "├────┼───────────────┼─────────────────────────────────┤",
+        "│  2 │ CHECK         │ N/A                             │",
+        "╰────┴───────────────┴─────────────────────────────────╯",
         "",
         "Context retained. Start a new session with a clean context (/new) before the next /req-* command.",
-        "1. /req-fix \"Fix the flaky retry ...rator loop\"",
-        "2. /req-check",
+        "",
+        "╭─────────────────┬──────────┬────────────────────────────────────╮",
+        "│ Continue comand │ Workflow │ Text                               │",
+        "╞═════════════════╪══════════╪════════════════════════════════════╡",
+        "│ /req-continue 1 │ FIX      │ Fix the flaky retry  .. rator loop │",
+        "├─────────────────┼──────────┼────────────────────────────────────┤",
+        "│ /req-continue 2 │ CHECK    │ N/A                                │",
+        "╰─────────────────┴──────────┴────────────────────────────────────╯",
       ].join("\n"),
     );
     assert.ok(!retentionNotifications[0]?.message.includes("3. /new"));

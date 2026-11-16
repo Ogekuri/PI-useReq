@@ -1,8 +1,8 @@
 /**
  * @file
- * @brief Implements Next-Workflow command capture, process-scoped storage, list rendering, `/req-continue` selection, and `/req-continue-list` printing helpers.
- * @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the numbered list appended after the final context-retention notification, resolves one-based ordinal selection, and stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
- * @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-672, REQ-676
+ * @brief Implements Next-Workflow command capture, process-scoped storage, rounded-table rendering, `/req-continue` selection, and `/req-continue-list` printing helpers.
+ * @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the captured commands as the dynamically sized full-text Next-Workflow table printed inside the ANSI report notification and as the `/req-continue` command table appended after the final context-retention line, resolves one-based ordinal selection, and stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+ * @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-672, REQ-676, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-733, REQ-734
  */
 
 import { type AgentFinalOutputCommandEntry, type AgentFinalOutputParse, resetAgentFinalOutputStateForTests } from "./agent-final-output.js";
@@ -210,47 +210,50 @@ const NEXT_WORKFLOW_CONDENSED_VERBATIM_LIMIT =
   NEXT_WORKFLOW_CONDENSED_PREFIX_LENGTH + NEXT_WORKFLOW_CONDENSED_SUFFIX_LENGTH;
 
 /**
- * @brief Condenses one captured input text for single-line list rendering.
- * @details Collapses every whitespace run, including newlines, into one space so the numbered list keeps one command per line, then renders inputs longer than the 30-character verbatim limit as the first 20 characters followed by `...` followed by the last 10 characters and shorter inputs verbatim. Runtime is O(n) in input length. No external state is mutated.
+ * @brief Stores the maximum display width of one wrapped Next-Workflow table `Text` cell line.
+ * @details Bounds every wrapped `Text` cell line so the full untruncated input text renders across multiple physical table rows instead of one oversized line; an unbreakable word longer than the bound occupies its own oversized line so the column-width computation widens the column. Access complexity is O(1).
+ * @satisfies REQ-729
+ */
+export const NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH = 35;
+
+/**
+ * @brief Wraps one captured input text into `Text` cell lines bounded by the maximum display width.
+ * @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, an unbreakable word longer than `maxWidth` occupies its own oversized line so column-width computation widens the column, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
  * @param[in] inputText {string} Captured input text.
- * @return {string} Single-line condensed quotation text.
- * @satisfies REQ-657, REQ-658
+ * @param[in] maxWidth {number} Maximum display width per produced line.
+ * @return {string[]} Wrapped cell lines in reading order; never empty.
+ * @satisfies REQ-724, REQ-729
  * @note Complexity: O(n) in input length. Pure; no side effects.
  */
-export function condenseNextWorkflowInputText(inputText: string): string {
+function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[] {
   const normalized = inputText.replace(/\s+/g, " ").trim();
-  if (normalized.length <= NEXT_WORKFLOW_CONDENSED_VERBATIM_LIMIT) {
-    return normalized;
+  if (normalized === "") {
+    return [""];
   }
-  return `${normalized.slice(0, NEXT_WORKFLOW_CONDENSED_PREFIX_LENGTH)}...${normalized.slice(
-    -NEXT_WORKFLOW_CONDENSED_SUFFIX_LENGTH,
-  )}`;
+  const lines: string[] = [];
+  let current = "";
+  for (const word of normalized.split(" ")) {
+    if (current === "") {
+      current = word;
+    } else if (measureDisplayWidth(current) + 1 + measureDisplayWidth(word) <= maxWidth) {
+      current = `${current} ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current !== "") {
+    lines.push(current);
+  }
+  return lines;
 }
 
 /**
- * @brief Renders the numbered Next-Workflow list appended after the retention line.
- * @details Emits one numbered line per captured entry in capture order, formatting commands without input text as the bare slash command and commands with input text as the slash command plus one double-quoted condensed quotation. Runtime is O(n) in aggregate entry length. No external state is mutated.
- * @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
- * @return {string} Newline-delimited numbered list, or the empty string when no entry exists.
- * @satisfies REQ-657, REQ-658
- * @note Complexity: O(n) in aggregate entry length. Pure; no side effects.
- */
-export function formatNextWorkflowList(entries: readonly NextWorkflowCommandEntry[]): string {
-  return entries
-    .map((entry, index) => {
-      const commandText = `/${entry.command}`;
-      const inputText = condenseNextWorkflowInputText(entry.inputText);
-      return inputText === "" ? `${index + 1}. ${commandText}` : `${index + 1}. ${commandText} "${inputText}"`;
-    })
-    .join("\n");
-}
-
-/**
- * @brief Condenses one captured input text for Next-Workflow table cell rendering.
+ * @brief Condenses one captured input text for Next-Workflow and `/req-continue` table cell rendering.
  * @details Collapses every whitespace run, including newlines, into one space, then renders inputs longer than the 30-character verbatim limit as the first 20 characters followed by the ` .. ` table separator followed by the last 10 characters and shorter inputs verbatim; the empty string stays empty so the table builder renders the `N/A` placeholder. Runtime is O(n) in input length. No external state is mutated.
  * @param[in] inputText {string} Captured input text.
  * @return {string} Single-line condensed table cell text.
- * @satisfies REQ-724
+ * @satisfies REQ-658
  * @note Complexity: O(n) in input length. Pure; no side effects.
  */
 export function condenseNextWorkflowTableInputText(inputText: string): string {
@@ -264,25 +267,20 @@ export function condenseNextWorkflowTableInputText(inputText: string): string {
 }
 
 /**
- * @brief Renders the captured Next-Workflow commands as the dynamically sized rounded table printout.
- * @details Computes every column width from the longest header or cell, renders the ordinal column as zero-padded one-based ordinals, renders commands without the `req-` prefix in uppercase, renders absent input texts as `N/A`, and frames the table with the rounded box-drawing characters using the double-line header separator plus single-line row separators; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
- * @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
- * @return {string} Complete rounded table printout, or the empty string when no entry exists.
- * @satisfies REQ-722, REQ-723, REQ-724, REQ-725
- * @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
+ * @brief Renders headers plus per-cell line arrays as one dynamically sized rounded table printout.
+ * @details Computes every column width from the maximum display width over the header and every rendered cell line, renders each cell line as one physical row that pads cells to the column width with spaces, repeats empty cells for the continuation lines of multi-line cells, and frames the table with the rounded box-drawing characters using the double-line header separator plus single-line row separators between logical rows. Runtime is O(n) in aggregate cell line length. No external state is mutated.
+ * @param[in] headers {readonly string[]} Column header labels.
+ * @param[in] rows {readonly string[][][]} One entry per logical row; each row holds one line array per cell.
+ * @return {string} Complete rounded table printout.
+ * @satisfies REQ-725, REQ-730, REQ-731
+ * @note Complexity: O(n) in aggregate cell line length. Pure; no side effects.
  */
-export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCommandEntry[]): string {
-  if (entries.length === 0) {
-    return "";
-  }
-  const headers = ["N.", "Command", "Text"] as const;
-  const rows = entries.map((entry, index) => [
-    String(index + 1).padStart(Math.max(2, String(entries.length).length), "0"),
-    entry.command.replace(/^req-/, "").toUpperCase(),
-    entry.inputText === "" ? "N/A" : condenseNextWorkflowTableInputText(entry.inputText),
-  ]);
+function renderNextWorkflowRoundedTable(headers: readonly string[], rows: readonly string[][][]): string {
   const widths = headers.map((header, column) =>
-    Math.max(measureDisplayWidth(header), ...rows.map((row) => measureDisplayWidth(row[column]))),
+    Math.max(
+      measureDisplayWidth(header),
+      ...rows.flatMap((row) => row[column]).map((line) => measureDisplayWidth(line)),
+    ),
   );
   const border = (left: string, fill: string, middle: string, right: string): string =>
     left + widths.map((width) => fill.repeat(width + 2)).join(middle) + right;
@@ -293,10 +291,65 @@ export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCom
     if (index > 0) {
       lines.push(border("├", "─", "┼", "┤"));
     }
-    lines.push(dataRow(row));
+    const lineCount = Math.max(...row.map((cell) => cell.length));
+    const paddedCells = row.map((cell) => {
+      const cellLines = [...cell];
+      while (cellLines.length < lineCount) {
+        cellLines.push("");
+      }
+      return cellLines;
+    });
+    for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
+      lines.push(dataRow(paddedCells.map((cellLines) => cellLines[lineIndex])));
+    }
   });
   lines.push(border("╰", "─", "┴", "╯"));
   return lines.join("\n");
+}
+
+/**
+ * @brief Renders the captured Next-Workflow commands as the dynamically sized full-text rounded table printout.
+ * @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `N.`, `Next Workflow`, and `Text` columns, renders each row with one right-aligned space-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and the full untruncated input text wrapped at whitespace boundaries into at most 35-display-column lines with `N/A` for absent input text, and frames the table with the rounded box-drawing characters; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
+ * @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
+ * @return {string} Complete rounded table printout, or the empty string when no entry exists.
+ * @satisfies REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731
+ * @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
+ */
+export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCommandEntry[]): string {
+  if (entries.length === 0) {
+    return "";
+  }
+  const ordinalWidth = Math.max(2, String(entries.length).length);
+  const headers = ["N.", "Next Workflow", "Text"];
+  const rows = entries.map((entry, index) => [
+    [String(index + 1).padStart(ordinalWidth)],
+    [entry.command.replace(/^req-/, "").toUpperCase()],
+    entry.inputText === ""
+      ? ["N/A"]
+      : wrapNextWorkflowTableCellText(entry.inputText, NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH),
+  ]);
+  return renderNextWorkflowRoundedTable(headers, rows);
+}
+
+/**
+ * @brief Renders the captured Next-Workflow commands as the `/req-continue` command table appended after the retention line.
+ * @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `Continue comand`, `Workflow`, and `Text` columns, renders each capture-order row with the directly invokable `/req-continue <one-based-ordinal>` command, the command name without the `req-` prefix in uppercase, and the condensed input-text quotation collapsing inputs longer than 30 characters into the first 20 characters, the ` .. ` separator, and the last 10 characters with `N/A` for absent input text, and frames the table like the Next-Workflow table; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
+ * @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
+ * @return {string} Complete rounded table printout, or the empty string when no entry exists.
+ * @satisfies REQ-657, REQ-658, REQ-731, REQ-733, REQ-734
+ * @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
+ */
+export function formatNextWorkflowContinueCommandTable(entries: readonly NextWorkflowCommandEntry[]): string {
+  if (entries.length === 0) {
+    return "";
+  }
+  const headers = ["Continue comand", "Workflow", "Text"];
+  const rows = entries.map((entry, index) => [
+    [`/req-continue ${index + 1}`],
+    [entry.command.replace(/^req-/, "").toUpperCase()],
+    entry.inputText === "" ? ["N/A"] : [condenseNextWorkflowTableInputText(entry.inputText)],
+  ]);
+  return renderNextWorkflowRoundedTable(headers, rows);
 }
 
 /**
@@ -313,7 +366,7 @@ export const NEXT_WORKFLOW_EMPTY_LIST_TEXT = "No captured Next-Workflow commands
  * @return {string} Newline-delimited numbered list with full input text, or `NEXT_WORKFLOW_EMPTY_LIST_TEXT` when no entry exists.
  * @satisfies REQ-672, REQ-676
  * @note Complexity: O(n) in aggregate entry length. Pure; no side effects.
- * @see formatNextWorkflowList
+ * @see formatNextWorkflowContinueCommandTable
  */
 export function formatNextWorkflowFullList(entries: readonly NextWorkflowCommandEntry[]): string {
   if (entries.length === 0) {

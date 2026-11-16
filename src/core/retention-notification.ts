@@ -1,13 +1,13 @@
 /**
  * @file
- * @brief Composes the single merged context-retention notification message: ANSI report printout, Next-Workflow command table, styled retention sentence, and numbered list.
- * @details Builds one process-independent message string for the final context-retention notification so every workflow prints exactly one info notification per completed orchestration; composing the ANSI-rendered final-output report, the dynamically sized Next-Workflow command table, the intense-white retention sentence with the intense-yellow percentage segment, and the numbered Next-Workflow list into one message avoids the pi TUI back-to-back info-notification collapse that overwrites consecutive status lines. Runtime is O(n) in aggregate report and entry length. The module is pure and performs no I/O.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725
+ * @brief Composes the single merged context-retention notification message: ANSI report printout, ANSI-styled Next-Workflow command table, styled retention sentence, and `/req-continue` command table.
+ * @details Builds one process-independent message string for the final context-retention notification so every workflow prints exactly one info notification per completed orchestration; composing the ANSI-rendered final-output report, the ANSI-styled full-text Next-Workflow command table, the intense-white retention sentence with the intense-yellow percentage segment, and the `/req-continue` command table carrying only the condensed citations into one message avoids the pi TUI back-to-back info-notification collapse that overwrites consecutive status lines. Runtime is O(n) in aggregate report and entry length. The module is pure and performs no I/O.
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-732, REQ-733, REQ-734
  */
 
-import { renderAgentFinalOutputAnsiReport, type AgentFinalOutputReport } from "./agent-final-output.js";
+import { colorizeAgentFinalOutputMarkdownText, renderAgentFinalOutputAnsiReport, type AgentFinalOutputReport } from "./agent-final-output.js";
 import { ANSI_INTENSE_WHITE, ANSI_INTENSE_YELLOW, wrapAnsiStyle } from "./ansi-style.js";
-import { formatNextWorkflowCommandTable, formatNextWorkflowList, type NextWorkflowCommandEntry } from "./next-workflow.js";
+import { formatNextWorkflowCommandTable, formatNextWorkflowContinueCommandTable, type NextWorkflowCommandEntry } from "./next-workflow.js";
 
 /**
  * @brief Stores the fixed retention-sentence prefix preceding the percentage segment.
@@ -49,12 +49,12 @@ export function buildContextRetentionLine(percent: number | null | undefined): s
 }
 
 /**
- * @brief Builds the ANSI final-output printout composed of the boxed report sections plus the Next-Workflow command table.
- * @details Renders the captured report through `renderAgentFinalOutputAnsiReport(...)` and the captured Next-Workflow entries through `formatNextWorkflowCommandTable(...)`, then joins both payloads with one blank line while omitting either empty payload; both empty inputs return the empty string so callers skip emission. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
+ * @brief Builds the ANSI final-output printout composed of the boxed report sections plus the ANSI-styled Next-Workflow command table.
+ * @details Renders the captured report through `renderAgentFinalOutputAnsiReport(...)` and the captured Next-Workflow entries through `formatNextWorkflowCommandTable(...)` converted by the same `colorizeAgentFinalOutputMarkdownText(...)` algorithm used for the report sections so the table text carries the identical markdown coloring, then joins both payloads with one blank line while omitting either empty payload; both empty inputs return the empty string so callers skip emission. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
  * @param[in] report {AgentFinalOutputReport | undefined} Captured final-output report; `undefined` contributes no sections.
  * @param[in] nextWorkflowEntries {readonly NextWorkflowCommandEntry[]} Captured Next-Workflow command entries; an empty array renders no table.
  * @return {string} ANSI-colored printout, or the empty string when both payloads are empty.
- * @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725
+ * @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-732
  * @note Complexity: O(n) in aggregate report and entry length. Pure; no side effects.
  */
 export function buildAgentFinalOutputAnsiPrintout(
@@ -62,7 +62,7 @@ export function buildAgentFinalOutputAnsiPrintout(
   nextWorkflowEntries: readonly NextWorkflowCommandEntry[],
 ): string {
   const reportText = renderAgentFinalOutputAnsiReport(report);
-  const commandTable = formatNextWorkflowCommandTable(nextWorkflowEntries);
+  const commandTable = colorizeAgentFinalOutputMarkdownText(formatNextWorkflowCommandTable(nextWorkflowEntries));
   if (commandTable === "") {
     return reportText;
   }
@@ -74,12 +74,12 @@ export function buildAgentFinalOutputAnsiPrintout(
 
 /**
  * @brief Builds the single merged context-retention notification message for every workflow outcome.
- * @details Composes, in fixed order, the ANSI final-output printout (boxed report sections plus the Next-Workflow command table), one blank line, the ANSI-styled or plain retention sentence, and the numbered Next-Workflow list so the complete terminal summary is delivered as exactly one info notification and never collapses a preceding status line in the pi TUI; a report present in the printout appears exactly once because no plain-markdown duplicate is rendered. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
+ * @details Composes, in fixed order, the ANSI final-output printout (boxed report sections plus the ANSI-styled full-text Next-Workflow command table), one blank line, the ANSI-styled or plain retention sentence, and one further blank line plus the `/req-continue` command table carrying only the condensed citations so the complete terminal summary is delivered as exactly one info notification and never collapses a preceding status line in the pi TUI; a report present in the printout appears exactly once because no plain-markdown duplicate is rendered. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
  * @param[in] percent {number | null | undefined} Context-usage percentage from the normalized status snapshot; `null` and `undefined` render the plain sentence.
  * @param[in] report {AgentFinalOutputReport | undefined} Captured final-output report; `undefined` contributes no sections.
- * @param[in] nextWorkflowEntries {readonly NextWorkflowCommandEntry[]} Captured Next-Workflow command entries; an empty array renders no table and no list.
+ * @param[in] nextWorkflowEntries {readonly NextWorkflowCommandEntry[]} Captured Next-Workflow command entries; an empty array renders no table.
  * @return {string} One merged notification message; never empty because the retention sentence is always present.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-716, REQ-717, REQ-719, REQ-722
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-716, REQ-717, REQ-719, REQ-722, REQ-733, REQ-734
  * @note Complexity: O(n) in aggregate report and entry length. Pure; no side effects.
  * @see buildAgentFinalOutputAnsiPrintout
  * @see buildContextRetentionLine
@@ -90,10 +90,10 @@ export function buildContextRetentionNotificationMessage(
   nextWorkflowEntries: readonly NextWorkflowCommandEntry[],
 ): string {
   const printout = buildAgentFinalOutputAnsiPrintout(report, nextWorkflowEntries);
-  const nextWorkflowList = formatNextWorkflowList(nextWorkflowEntries);
+  const continueCommandTable = formatNextWorkflowContinueCommandTable(nextWorkflowEntries);
   const retentionLine = buildContextRetentionLine(percent);
-  const retentionWithList = nextWorkflowList === ""
+  const retentionWithTable = continueCommandTable === ""
     ? retentionLine
-    : `${retentionLine}\n${nextWorkflowList}`;
-  return printout === "" ? retentionWithList : `${printout}\n\n${retentionWithList}`;
+    : `${retentionLine}\n\n${continueCommandTable}`;
+  return printout === "" ? retentionWithTable : `${printout}\n\n${retentionWithTable}`;
 }

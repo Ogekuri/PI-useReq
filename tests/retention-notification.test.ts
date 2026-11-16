@@ -24,7 +24,7 @@ function buildReportFixture(): AgentFinalOutputReport {
 
 /**
  * @brief Builds one synthetic Next-Workflow entry fixture with one input-text case and one empty case.
- * @details Returns two entries in deterministic order: one command without input text and one command with a short input text below the condensation limit, so list and table rendering exercise both cell shapes. Runtime is O(1). No external state is mutated.
+ * @details Returns two entries in deterministic order: one command without input text and one command with a short input text below the condensation limit, so both table renderings exercise both cell shapes. Runtime is O(1). No external state is mutated.
  * @return {{command: string; inputText: string}[]} Deterministic entry fixtures.
  */
 function buildEntryFixtures(): { command: string; inputText: string }[] {
@@ -67,10 +67,10 @@ test("retention line without a finite percentage stays plain", () => {
 
 /**
  * @brief Verifies the ANSI printout composes the boxed report and the Next-Workflow command table.
- * @details Asserts the printout contains the rounded section-title box with intense-yellow wrapping, the rounded table with the double-line header separator, zero-padded ordinals, prefix-free uppercase commands, and the `N/A` placeholder, in report-before-table order. Runtime is O(n) in printout length. No external state is mutated.
+ * @details Asserts the printout contains the rounded section-title box with intense-yellow wrapping, the rounded table with the double-line header separator, right-aligned ordinals, prefix-free uppercase commands, and the `N/A` placeholder, in report-before-table order. Runtime is O(n) in printout length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when the box, the table, or their order is missing.
- * @satisfies REQ-712, REQ-713, REQ-714, REQ-720, REQ-722, REQ-723
+ * @satisfies REQ-712, REQ-713, REQ-714, REQ-720, REQ-722, REQ-723, REQ-724
  */
 test("ANSI printout composes boxed report sections and the next-workflow command table", () => {
   const printout = buildAgentFinalOutputAnsiPrintout(buildReportFixture(), buildEntryFixtures());
@@ -78,8 +78,8 @@ test("ANSI printout composes boxed report sections and the next-workflow command
   const tableIndex = printout.search(/╞═+╪═+╪═+╡/);
   assert.ok(printout.includes(`\u001b[${ANSI_INTENSE_YELLOW}m╭`), "box lines must print in intense yellow");
   assert.ok(printout.includes(`│ Summary │`), "summary heading must render as a box line");
-  assert.ok(printout.includes("│ 01 │ WORKFLOW │ N/A        │"), "ordinal, uppercase prefix-free command, and N/A cell must render");
-  assert.ok(printout.includes("│ 02 │ FIX      │ short text │"), "input-text cell must render");
+  assert.ok(printout.includes("│  1 │ WORKFLOW      │ N/A        │"), "right-aligned ordinal, uppercase prefix-free command, and N/A cell must render");
+  assert.ok(printout.includes("│  2 │ FIX           │ short text │"), "full input-text cell must render");
   assert.ok(boxIndex !== -1 && tableIndex !== -1 && boxIndex < tableIndex, "report must precede the table");
   assert.ok(!printout.includes("## **"), "plain markdown headings must never survive ANSI rendering");
 });
@@ -100,13 +100,13 @@ test("ANSI printout degenerates to the sole available payload", () => {
 });
 
 /**
- * @brief Verifies the merged retention notification carries report, table, colored retention line, and numbered list in one message.
- * @details Asserts one message contains the boxed ANSI report, the command table, the exact styled retention line, and the numbered Next-Workflow list in the mandated order (report, table, retention line, list) with no plain-markdown duplicate of the report. Runtime is O(n) in message length. No external state is mutated.
+ * @brief Verifies the merged retention notification carries report, table, colored retention line, and `/req-continue` command table in one message.
+ * @details Asserts one message contains the boxed ANSI report, the full-text command table, the exact styled retention line, and the `/req-continue` command table carrying only the condensed citations in the mandated order (report, table, retention line, blank line, `/req-continue` table) with no plain-markdown duplicate of the report. Runtime is O(n) in message length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when any segment is missing, misordered, duplicated as plain markdown, or when the message is empty.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-712, REQ-713, REQ-716, REQ-717, REQ-722
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-712, REQ-713, REQ-716, REQ-717, REQ-722, REQ-733, REQ-734
  */
-test("retention notification merges report, table, retention line, and list into one message", () => {
+test("retention notification merges report, table, retention line, and continue table into one message", () => {
   const message = buildContextRetentionNotificationMessage(
     33,
     buildReportFixture(),
@@ -115,36 +115,38 @@ test("retention notification merges report, table, retention line, and list into
   const boxIndex = message.indexOf("╭");
   const tableIndex = message.search(/╞═+╪═+╪═+╡/);
   const retentionIndex = message.indexOf("Context retained.");
-  const listIndex = message.indexOf("1. /req-workflow");
+  const continueTableIndex = message.indexOf("/req-continue 1");
   assert.ok(boxIndex !== -1, "boxed report must be present");
   assert.ok(tableIndex !== -1, "command table must be present");
   assert.ok(retentionIndex !== -1, "retention sentence must be present");
-  assert.ok(listIndex !== -1, "numbered list must be present");
+  assert.ok(continueTableIndex !== -1, "/req-continue command table must be present");
   assert.ok(boxIndex < tableIndex, "report must precede the table");
   assert.ok(tableIndex < retentionIndex, "table must precede the retention line");
-  assert.ok(retentionIndex < listIndex, "numbered list must follow the retention line");
+  assert.ok(retentionIndex < continueTableIndex, "/req-continue table must follow the retention line");
   assert.ok(
     message.includes(`\u001b[${ANSI_INTENSE_YELLOW}m33%\u001b[0m`),
     "percentage segment must print in intense yellow",
   );
-  assert.ok(message.includes('2. /req-fix "short text"'), "input text must be quoted in the numbered list");
+  assert.ok(message.includes("\u001b[0m\n\n╭─────────────────┬"), "the /req-continue table must follow one blank line after the retention line");
+  assert.ok(message.includes("│ /req-continue 2 │ FIX      │ short text │"), "the citation row must carry the invokable command and workflow name");
   assert.equal(message.split("│ Summary │").length - 1, 1, "the report must appear exactly once");
   assert.ok(!message.includes("## **"), "no plain-markdown report duplicate may survive");
 });
 
 /**
  * @brief Verifies the merged retention notification degenerates to the retention payload when no report and no entries exist.
- * @details Asserts the no-capture case returns exactly the styled retention line and the no-report case with entries appends the numbered list after the retention line without a report or table payload. Runtime is O(n) in message length. No external state is mutated.
+ * @details Asserts the no-capture case returns exactly the styled retention line and the no-report case with entries renders both command tables around the retention line without any report payload. Runtime is O(n) in message length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when stale report or table content leaks into the degenerate messages.
- * @satisfies REQ-361, REQ-657, REQ-684, REQ-712
+ * @satisfies REQ-361, REQ-657, REQ-684, REQ-712, REQ-733
  */
 test("retention notification without captures prints only the retention payload", () => {
   const retentionOnly = buildContextRetentionNotificationMessage(33, undefined, []);
   assert.ok(retentionOnly.includes("Context retained.") && retentionOnly.includes("33%"));
   assert.ok(!retentionOnly.includes("╭") && !/╞═+╪═+╪═+╡/.test(retentionOnly));
-  const listOnly = buildContextRetentionNotificationMessage(undefined, undefined, buildEntryFixtures());
-  assert.ok(listOnly.startsWith("╭────┬"));
-  assert.ok(listOnly.includes("Context retained. Start a new session"));
-  assert.ok(listOnly.includes("1. /req-workflow") && !/╞═+╪═+╪═+╡/.test(listOnly.replace(/^╭[\s\S]*╯/m, "")));
+  const tablesOnly = buildContextRetentionNotificationMessage(undefined, undefined, buildEntryFixtures());
+  assert.ok(tablesOnly.startsWith("╭────┬"));
+  assert.ok(tablesOnly.includes("Context retained. Start a new session"));
+  assert.ok(tablesOnly.includes("│ /req-continue 1 │ WORKFLOW │ N/A        │"));
+  assert.ok(!tablesOnly.includes("│ Summary │"));
 });

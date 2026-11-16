@@ -231,12 +231,12 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 - @note Complexity: O(n) in label length. Pure; no side effects.
 - @satisfies REQ-720, REQ-721
 
-### fn `function colorizeAgentFinalOutputMarkdownText(text: string): string` (L363-386)
-- @brief Converts one rendered markdown report into ANSI-colored text.
-- @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character outside the replaced headings stays present. Runtime is O(n) in text length. No external state is mutated.
-- @param[in] text {string} Plain markdown report text produced by the fixed-order renderer.
-- @return {string} ANSI-colored report text.
-- @satisfies REQ-713, REQ-714, REQ-715
+### fn `export function colorizeAgentFinalOutputMarkdownText(text: string): string` (L363-386)
+- @brief Converts one rendered markdown report or table into ANSI-colored text.
+- @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm. Runtime is O(n) in text length. No external state is mutated.
+- @param[in] text {string} Plain markdown report or plain table text produced by the fixed-order renderer or the Next-Workflow table builder.
+- @return {string} ANSI-colored text.
+- @satisfies REQ-713, REQ-714, REQ-715, REQ-732
 
 ### fn `export function renderAgentFinalOutputAnsiReport(report: AgentFinalOutputReport | undefined): string` (L395-397)
 - @brief Renders the captured report fields as the fixed-order ANSI-colored markdown section block.
@@ -290,7 +290,7 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 |`renderAgentFinalOutputMarkdownReport`|fn||298-310|export function renderAgentFinalOutputMarkdownReport(repo...|
 |`replaceAgentFinalOutputAnsiInline`|fn||327-341|function replaceAgentFinalOutputAnsiInline(match: string)...|
 |`renderAgentFinalOutputSectionTitleBox`|fn||351-354|function renderAgentFinalOutputSectionTitleBox(label: str...|
-|`colorizeAgentFinalOutputMarkdownText`|fn||363-386|function colorizeAgentFinalOutputMarkdownText(text: strin...|
+|`colorizeAgentFinalOutputMarkdownText`|fn||363-386|export function colorizeAgentFinalOutputMarkdownText(text...|
 |`renderAgentFinalOutputAnsiReport`|fn||395-397|export function renderAgentFinalOutputAnsiReport(report: ...|
 |`ProcessScopedAgentFinalOutputStore`|iface||404-407|interface ProcessScopedAgentFinalOutputStore|
 |`GlobalAgentFinalOutputStore`|type||409||
@@ -3709,11 +3709,11 @@ import { SourceAnalyzer, formatMarkdown } from "./source-analyzer.js";
 
 ---
 
-# next-workflow.ts | TypeScript | 374L | 21 symbols | 4 imports | 30 comments
+# next-workflow.ts | TypeScript | 427L | 22 symbols | 4 imports | 32 comments
 > Path: `src/core/next-workflow.ts`
-- @brief Implements Next-Workflow command capture, process-scoped storage, list rendering, `/req-continue` selection, and `/req-continue-list` printing helpers.
-- @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the numbered list appended after the final context-retention notification, resolves one-based ordinal selection, and stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
-- @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-672, REQ-676
+- @brief Implements Next-Workflow command capture, process-scoped storage, rounded-table rendering, `/req-continue` selection, and `/req-continue-list` printing helpers.
+- @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the captured commands as the dynamically sized full-text Next-Workflow table printed inside the ANSI report notification and as the `/req-continue` command table appended after the final context-retention line, resolves one-based ordinal selection, and stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+- @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-672, REQ-676, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-733, REQ-734
 
 ## Imports
 ```
@@ -3802,52 +3802,62 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(1).
 - @satisfies REQ-663
 
-### fn `export function condenseNextWorkflowInputText(inputText: string): string` (L220-228)
-- @brief Condenses one captured input text for single-line list rendering.
-- @details Collapses every whitespace run, including newlines, into one space so the numbered list keeps one command per line, then renders inputs longer than the 30-character verbatim limit as the first 20 characters followed by `...` followed by the last 10 characters and shorter inputs verbatim. Runtime is O(n) in input length. No external state is mutated.
+### fn `function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[]` (L228-249)
+- @brief Wraps one captured input text into `Text` cell lines bounded by the maximum display width.
+- @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, an unbreakable word longer than `maxWidth` occupies its own oversized line so column-width computation widens the column, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] inputText {string} Captured input text.
-- @return {string} Single-line condensed quotation text.
+- @param[in] maxWidth {number} Maximum display width per produced line.
+- @return {string[]} Wrapped cell lines in reading order; never empty.
 - @note Complexity: O(n) in input length. Pure; no side effects.
-- @satisfies REQ-657, REQ-658
+- @satisfies REQ-724, REQ-729
 
-### fn `export function formatNextWorkflowList(entries: readonly NextWorkflowCommandEntry[]): string` (L238-246)
-- @brief Renders the numbered Next-Workflow list appended after the retention line.
-- @details Emits one numbered line per captured entry in capture order, formatting commands without input text as the bare slash command and commands with input text as the slash command plus one double-quoted condensed quotation. Runtime is O(n) in aggregate entry length. No external state is mutated.
-- @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
-- @return {string} Newline-delimited numbered list, or the empty string when no entry exists.
-- @note Complexity: O(n) in aggregate entry length. Pure; no side effects.
-- @satisfies REQ-657, REQ-658
-
-### fn `export function condenseNextWorkflowTableInputText(inputText: string): string` (L256-264)
-- @brief Condenses one captured input text for Next-Workflow table cell rendering.
+### fn `export function condenseNextWorkflowTableInputText(inputText: string): string` (L259-267)
+- @brief Condenses one captured input text for Next-Workflow and `/req-continue` table cell rendering.
 - @details Collapses every whitespace run, including newlines, into one space, then renders inputs longer than the 30-character verbatim limit as the first 20 characters followed by the ` .. ` table separator followed by the last 10 characters and shorter inputs verbatim; the empty string stays empty so the table builder renders the `N/A` placeholder. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] inputText {string} Captured input text.
 - @return {string} Single-line condensed table cell text.
 - @note Complexity: O(n) in input length. Pure; no side effects.
-- @satisfies REQ-724
+- @satisfies REQ-658
 
-### fn `export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L274-300)
-- @brief Renders the captured Next-Workflow commands as the dynamically sized rounded table printout.
-- @details Computes every column width from the longest header or cell, renders the ordinal column as zero-padded one-based ordinals, renders commands without the `req-` prefix in uppercase, renders absent input texts as `N/A`, and frames the table with the rounded box-drawing characters using the double-line header separator plus single-line row separators; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
+### fn `function renderNextWorkflowRoundedTable(headers: readonly string[], rows: readonly string[][][]): string` (L278-308)
+- @brief Renders headers plus per-cell line arrays as one dynamically sized rounded table printout.
+- @details Computes every column width from the maximum display width over the header and every rendered cell line, renders each cell line as one physical row that pads cells to the column width with spaces, repeats empty cells for the continuation lines of multi-line cells, and frames the table with the rounded box-drawing characters using the double-line header separator plus single-line row separators between logical rows. Runtime is O(n) in aggregate cell line length. No external state is mutated.
+- @param[in] headers {readonly string[]} Column header labels.
+- @param[in] rows {readonly string[][][]} One entry per logical row; each row holds one line array per cell.
+- @return {string} Complete rounded table printout.
+- @note Complexity: O(n) in aggregate cell line length. Pure; no side effects.
+- @satisfies REQ-725, REQ-730, REQ-731
+
+### fn `const border = (left: string, fill: string, middle: string, right: string): string =>` (L285-288)
+
+### fn `const dataRow = (cells: readonly string[]): string =>` (L287-288)
+
+### fn `export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L318-332)
+- @brief Renders the captured Next-Workflow commands as the dynamically sized full-text rounded table printout.
+- @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `N.`, `Next Workflow`, and `Text` columns, renders each row with one right-aligned space-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and the full untruncated input text wrapped at whitespace boundaries into at most 35-display-column lines with `N/A` for absent input text, and frames the table with the rounded box-drawing characters; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
 - @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
 - @return {string} Complete rounded table printout, or the empty string when no entry exists.
 - @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
-- @satisfies REQ-722, REQ-723, REQ-724, REQ-725
+- @satisfies REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731
 
-### fn `const border = (left: string, fill: string, middle: string, right: string): string =>` (L287-290)
+### fn `export function formatNextWorkflowContinueCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L342-353)
+- @brief Renders the captured Next-Workflow commands as the `/req-continue` command table appended after the retention line.
+- @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `Continue comand`, `Workflow`, and `Text` columns, renders each capture-order row with the directly invokable `/req-continue <one-based-ordinal>` command, the command name without the `req-` prefix in uppercase, and the condensed input-text quotation collapsing inputs longer than 30 characters into the first 20 characters, the ` .. ` separator, and the last 10 characters with `N/A` for absent input text, and frames the table like the Next-Workflow table; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
+- @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
+- @return {string} Complete rounded table printout, or the empty string when no entry exists.
+- @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
+- @satisfies REQ-657, REQ-658, REQ-731, REQ-733, REQ-734
 
-### fn `const dataRow = (cells: readonly string[]): string =>` (L289-290)
-
-### fn `export function formatNextWorkflowFullList(entries: readonly NextWorkflowCommandEntry[]): string` (L318-330)
+### fn `export function formatNextWorkflowFullList(entries: readonly NextWorkflowCommandEntry[]): string` (L371-383)
 - @brief Renders the complete numbered Next-Workflow entry list with full input text for `/req-continue-list`.
 - @details Emits one numbered line per captured entry in capture order, formatting commands without input text as the bare slash command and commands with input text as the slash command plus one double-quoted input text rendered verbatim without truncation or whitespace collapsing, so the printed list exposes the exact argument text that `/req-continue` delegates to the selected command. Returns `NEXT_WORKFLOW_EMPTY_LIST_TEXT` when no entry is captured. Runtime is O(n) in aggregate entry length. No external state is mutated.
 - @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
 - @return {string} Newline-delimited numbered list with full input text, or `NEXT_WORKFLOW_EMPTY_LIST_TEXT` when no entry exists.
 - @note Complexity: O(n) in aggregate entry length. Pure; no side effects.
-- @see formatNextWorkflowList
+- @see formatNextWorkflowContinueCommandTable
 - @satisfies REQ-672, REQ-676
 
-### fn `export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: number): number` (L342-361)
+### fn `export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: number): number` (L395-414)
 - @brief Resolves the zero-based entry index selected by one `/req-continue` argument.
 - @details Maps the empty argument to the first entry, requires a non-negative decimal integer for any other argument, throws a deterministic diagnostic for non-numeric arguments, and throws a range diagnostic when the one-based ordinal exceeds the captured entry count. Runtime is O(n) in argument length. No external state is mutated.
 - @param[in] rawArgs {string} Raw `/req-continue` argument string.
@@ -3857,7 +3867,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in argument length. Pure aside from thrown diagnostics.
 - @satisfies REQ-661, REQ-662
 
-### fn `export function resetNextWorkflowStateForTests(): void` (L369-374)
+### fn `export function resetNextWorkflowStateForTests(): void` (L422-427)
 - @brief Resets the process-scoped Next-Workflow state for deterministic tests.
 - @details Clears both the captured entries and the handler registry plus the process-scoped captured final-output report so one test can simulate independent pi host processes without leaking captured follow-up commands, stale handlers, or stale report sections into later cases. Runtime is O(1). Side effect: mutates process-scoped state.
 - @return {void} No return value.
@@ -3878,15 +3888,16 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 |`clearNextWorkflowCommands`|fn||175-177|export function clearNextWorkflowCommands(): void|
 |`registerNextWorkflowCommandHandler`|fn||188-193|export function registerNextWorkflowCommandHandler(|
 |`resolveNextWorkflowCommandHandler`|fn||203-205|export function resolveNextWorkflowCommandHandler(command...|
-|`condenseNextWorkflowInputText`|fn||220-228|export function condenseNextWorkflowInputText(inputText: ...|
-|`formatNextWorkflowList`|fn||238-246|export function formatNextWorkflowList(entries: readonly ...|
-|`condenseNextWorkflowTableInputText`|fn||256-264|export function condenseNextWorkflowTableInputText(inputT...|
-|`formatNextWorkflowCommandTable`|fn||274-300|export function formatNextWorkflowCommandTable(entries: r...|
-|`border`|fn||287-290|const border = (left: string, fill: string, middle: strin...|
-|`dataRow`|fn||289-290|const dataRow = (cells: readonly string[]): string =>|
-|`formatNextWorkflowFullList`|fn||318-330|export function formatNextWorkflowFullList(entries: reado...|
-|`resolveNextWorkflowEntryIndex`|fn||342-361|export function resolveNextWorkflowEntryIndex(rawArgs: st...|
-|`resetNextWorkflowStateForTests`|fn||369-374|export function resetNextWorkflowStateForTests(): void|
+|`wrapNextWorkflowTableCellText`|fn||228-249|function wrapNextWorkflowTableCellText(inputText: string,...|
+|`condenseNextWorkflowTableInputText`|fn||259-267|export function condenseNextWorkflowTableInputText(inputT...|
+|`renderNextWorkflowRoundedTable`|fn||278-308|function renderNextWorkflowRoundedTable(headers: readonly...|
+|`border`|fn||285-288|const border = (left: string, fill: string, middle: strin...|
+|`dataRow`|fn||287-288|const dataRow = (cells: readonly string[]): string =>|
+|`formatNextWorkflowCommandTable`|fn||318-332|export function formatNextWorkflowCommandTable(entries: r...|
+|`formatNextWorkflowContinueCommandTable`|fn||342-353|export function formatNextWorkflowContinueCommandTable(en...|
+|`formatNextWorkflowFullList`|fn||371-383|export function formatNextWorkflowFullList(entries: reado...|
+|`resolveNextWorkflowEntryIndex`|fn||395-414|export function resolveNextWorkflowEntryIndex(rawArgs: st...|
+|`resetNextWorkflowStateForTests`|fn||422-427|export function resetNextWorkflowStateForTests(): void|
 
 
 ---
@@ -6732,15 +6743,15 @@ supplying neither parameter.
 
 # retention-notification.ts | TypeScript | 99L | 3 symbols | 3 imports | 7 comments
 > Path: `src/core/retention-notification.ts`
-- @brief Composes the single merged context-retention notification message: ANSI report printout, Next-Workflow command table, styled retention sentence, and numbered list.
-- @details Builds one process-independent message string for the final context-retention notification so every workflow prints exactly one info notification per completed orchestration; composing the ANSI-rendered final-output report, the dynamically sized Next-Workflow command table, the intense-white retention sentence with the intense-yellow percentage segment, and the numbered Next-Workflow list into one message avoids the pi TUI back-to-back info-notification collapse that overwrites consecutive status lines. Runtime is O(n) in aggregate report and entry length. The module is pure and performs no I/O.
-- @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725
+- @brief Composes the single merged context-retention notification message: ANSI report printout, ANSI-styled Next-Workflow command table, styled retention sentence, and `/req-continue` command table.
+- @details Builds one process-independent message string for the final context-retention notification so every workflow prints exactly one info notification per completed orchestration; composing the ANSI-rendered final-output report, the ANSI-styled full-text Next-Workflow command table, the intense-white retention sentence with the intense-yellow percentage segment, and the `/req-continue` command table carrying only the condensed citations into one message avoids the pi TUI back-to-back info-notification collapse that overwrites consecutive status lines. Runtime is O(n) in aggregate report and entry length. The module is pure and performs no I/O.
+- @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-732, REQ-733, REQ-734
 
 ## Imports
 ```
-import { renderAgentFinalOutputAnsiReport, type AgentFinalOutputReport } from "./agent-final-output.js";
+import { colorizeAgentFinalOutputMarkdownText, renderAgentFinalOutputAnsiReport, type AgentFinalOutputReport } from "./agent-final-output.js";
 import { ANSI_INTENSE_WHITE, ANSI_INTENSE_YELLOW, wrapAnsiStyle } from "./ansi-style.js";
-import { formatNextWorkflowCommandTable, formatNextWorkflowList, type NextWorkflowCommandEntry } from "./next-workflow.js";
+import { formatNextWorkflowCommandTable, formatNextWorkflowContinueCommandTable, type NextWorkflowCommandEntry } from "./next-workflow.js";
 ```
 
 ## Definitions
@@ -6754,25 +6765,25 @@ import { formatNextWorkflowCommandTable, formatNextWorkflowList, type NextWorkfl
 - @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-716, REQ-717
 
 ### fn `export function buildAgentFinalOutputAnsiPrintout(` (L60-73)
-- @brief Builds the ANSI final-output printout composed of the boxed report sections plus the Next-Workflow command table.
-- @details Renders the captured report through `renderAgentFinalOutputAnsiReport(...)` and the captured Next-Workflow entries through `formatNextWorkflowCommandTable(...)`, then joins both payloads with one blank line while omitting either empty payload; both empty inputs return the empty string so callers skip emission. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
+- @brief Builds the ANSI final-output printout composed of the boxed report sections plus the ANSI-styled Next-Workflow command table.
+- @details Renders the captured report through `renderAgentFinalOutputAnsiReport(...)` and the captured Next-Workflow entries through `formatNextWorkflowCommandTable(...)` converted by the same `colorizeAgentFinalOutputMarkdownText(...)` algorithm used for the report sections so the table text carries the identical markdown coloring, then joins both payloads with one blank line while omitting either empty payload; both empty inputs return the empty string so callers skip emission. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
 - @param[in] report {AgentFinalOutputReport | undefined} Captured final-output report; `undefined` contributes no sections.
 - @param[in] nextWorkflowEntries {readonly NextWorkflowCommandEntry[]} Captured Next-Workflow command entries; an empty array renders no table.
 - @return {string} ANSI-colored printout, or the empty string when both payloads are empty.
 - @note Complexity: O(n) in aggregate report and entry length. Pure; no side effects.
-- @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725
+- @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-732
 
 ### fn `export function buildContextRetentionNotificationMessage(` (L87-99)
 - @brief Builds the single merged context-retention notification message for every workflow outcome.
-- @details Composes, in fixed order, the ANSI final-output printout (boxed report sections plus the Next-Workflow command table), one blank line, the ANSI-styled or plain retention sentence, and the numbered Next-Workflow list so the complete terminal summary is delivered as exactly one info notification and never collapses a preceding status line in the pi TUI; a report present in the printout appears exactly once because no plain-markdown duplicate is rendered. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
+- @details Composes, in fixed order, the ANSI final-output printout (boxed report sections plus the ANSI-styled full-text Next-Workflow command table), one blank line, the ANSI-styled or plain retention sentence, and one further blank line plus the `/req-continue` command table carrying only the condensed citations so the complete terminal summary is delivered as exactly one info notification and never collapses a preceding status line in the pi TUI; a report present in the printout appears exactly once because no plain-markdown duplicate is rendered. Runtime is O(n) in aggregate report and entry length. No external state is mutated.
 - @param[in] percent {number | null | undefined} Context-usage percentage from the normalized status snapshot; `null` and `undefined` render the plain sentence.
 - @param[in] report {AgentFinalOutputReport | undefined} Captured final-output report; `undefined` contributes no sections.
-- @param[in] nextWorkflowEntries {readonly NextWorkflowCommandEntry[]} Captured Next-Workflow command entries; an empty array renders no table and no list.
+- @param[in] nextWorkflowEntries {readonly NextWorkflowCommandEntry[]} Captured Next-Workflow command entries; an empty array renders no table.
 - @return {string} One merged notification message; never empty because the retention sentence is always present.
 - @note Complexity: O(n) in aggregate report and entry length. Pure; no side effects.
 - @see buildAgentFinalOutputAnsiPrintout
 - @see buildContextRetentionLine
-- @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-716, REQ-717, REQ-719, REQ-722
+- @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-716, REQ-717, REQ-719, REQ-722, REQ-733, REQ-734
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -8349,11 +8360,11 @@ cost.
 
 ### fn `function notifyContextRetentionReminder(` (L1345-1358)
 - @brief Emits the single merged final context-retention notification for a completed `/req-*` orchestration.
-- @details Builds exactly one info-level message through `buildContextRetentionNotificationMessage(...)` — the ANSI-colored report printout with rounded section-title boxes, the dynamically sized rounded Next-Workflow command table, the intense-white `Context retained.` retention sentence carrying the intense-yellow percentage segment when a normalized snapshot exists, and the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow — and delivers it through one `notifyContextSafely(...)` call so the pi TUI back-to-back info-notification collapse can never overwrite the ANSI report printout with a subsequent status line; the report appears exactly once because no plain-markdown duplicate is emitted. Performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is one user notification delivery when the supplied context is still active.
+- @details Builds exactly one info-level message through `buildContextRetentionNotificationMessage(...)` — the ANSI-colored report printout with rounded section-title boxes, the ANSI-styled full-text Next-Workflow command table, the intense-white `Context retained.` retention sentence carrying the intense-yellow percentage segment when a normalized snapshot exists, and the `/req-continue` command table carrying only the condensed citations, rendered from the process-scoped capture of the last completed agentic flow — and delivers it through one `notifyContextSafely(...)` call so the pi TUI back-to-back info-notification collapse can never overwrite the ANSI report printout with a subsequent status line; the report appears exactly once because no plain-markdown duplicate is emitted. Performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is one user notification delivery when the supplied context is still active.
 - @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
 - @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
 - @return {void} No return value.
-- @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725
+- @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-732, REQ-733, REQ-734
 
 ### fn `function rejectNonIdleReqCommand(` (L1370-1390)
 - @brief Rejects one non-startable req-command invocation and records the workflow error state.
@@ -8396,7 +8407,7 @@ cost.
 
 ### fn `async function finalizeMatchedPromptSuccess(` (L1485-1602)
 - @brief Finalizes a matched successful worktree-backed prompt at the current lifecycle point.
-- @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications in intense red, emits the final context-retention notification with the numbered Next-Workflow list before the error output when the fast-forward merge fails and terminates that error output with the hardcoded uniform merge-failure message, emits the warning-only closure notification after the retention reminder so terminal error and warning diagnostics print last, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
+- @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications in intense red, emits the final context-retention notification with the `/req-continue` command table before the error output when the fast-forward merge fails and terminates that error output with the hardcoded uniform merge-failure message, emits the warning-only closure notification after the retention reminder so terminal error and warning diagnostics print last, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
 - @param[in] pi {ExtensionAPI} Active extension API instance supplying the model re-apply appliers.
 - @param[in] promptRequest {PiUsereqPromptRequest} Matched successful worktree-backed prompt execution plan.
 - @param[in] ctx {ExtensionContext} Active extension context used for finalization and notifications.
