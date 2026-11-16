@@ -64,6 +64,9 @@ You must manage the execution flow using two distinct methods:
 
 ## Execution Directives (absolute rules, non-negotiable)
 During the execution flow you MUST follow these directives:
+- **CRITICAL** Mandatory Pre-Execution Tool Availability Check:
+   - Before executing any activity of this workflow, verify that the tools `req-search`, `req-files-search`, `req-static-check`, `req-references`, and `req-result-json-validator` are correctly registered and accessible in the current session.
+   - If any of these tools is not correctly registered or accessible, include the exact diagnostic "ERROR: Required tools are not registered or accessible!" in `outcome`, emit the complete JSON response with `result` set to `error`, and terminate the execution without performing any other activity.
 - **CRITICAL** Autonomous Execution:
    - Implicit Autonomy: Execute all tasks with full autonomy. Do not request permission, confirmation, or feedback. Make executive decisions based on logic and technical best practices.
    - Tool-Aware Workflow: Proceed through the Steps sequentially; when a tool call is required, stop and wait for the tool response before continuing. Never fabricate tool outputs or tool results. Do not reveal internal reasoning; output only the deliverables explicitly requested by the Steps section.
