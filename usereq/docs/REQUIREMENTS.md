@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.163"
+version: "0.0.164"
 date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
@@ -801,6 +801,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-717**: MUST render the appended context-usage percentage segment with intense-yellow ANSI color.
 - **REQ-718**: MUST render every notification reporting an `error` or `warning` prompt-orchestration termination with intense-red ANSI color.
 - **REQ-719**: MUST emit every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout, the numbered Next-Workflow list, and the context-usage percentage line.
+- **REQ-720**: MUST render each report section heading of the ANSI-colored report notification as a rounded box frame sized from the label length.
+- **REQ-721**: MUST wrap every box line of a section heading with the intense-yellow ANSI color.
+- **REQ-722**: MUST render the captured Next-Workflow commands as a dynamically sized rounded table with `N.`, `Command`, and `Text` columns in the ANSI-colored report notification.
+- **REQ-723**: MUST render each table row with a zero-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and `N/A` for absent input text.
+- **REQ-724**: MUST condense table input text longer than 30 characters into its first 20 characters, the ` .. ` separator, and its last 10 characters.
+- **REQ-725**: MUST frame the table with `╭╮╰╯│─┬┴`, the double-line header separator `╞══╪══╡`, and `├──┼──┤` row separators.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.

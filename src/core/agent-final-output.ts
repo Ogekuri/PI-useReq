@@ -2,10 +2,11 @@
  * @file
  * @brief Implements final-output JSON extraction, parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture.
  * @details Extracts the one embedded JSON object from the terminal assistant text of one completed agentic prompt run, parses it as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, converts that block into ANSI-colored text with intense-yellow `## **<Label>**` headings plus colored markdown links, fenced code, inline code, bold, italic, and underlined elements, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
- * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711, REQ-713, REQ-714, REQ-715
+ * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721
  */
 
 import { ANSI_BOLD, ANSI_CODE, ANSI_INTENSE_YELLOW, ANSI_ITALIC, ANSI_LINK, ANSI_UNDERLINE, wrapAnsiStyle } from "./ansi-style.js";
+import { measureDisplayWidth } from "./config-cli-render.js";
 
 /**
  * @brief Lists the only allowed values of the mandatory `result` field.
@@ -340,8 +341,21 @@ function replaceAgentFinalOutputAnsiInline(match: string): string {
 }
 
 /**
+ * @brief Renders one report section label as a rounded box frame sized from the label length.
+ * @details Emits three lines framing the label with one leading and one trailing space: `╭` plus a dash run plus `╮`, `│` plus the padded label plus `│`, and `╰` plus the dash run plus `╯`, where the dash run equals the label display width plus two and every character comes from the mandated rounded box-drawing set. Runtime is O(n) in label length. No external state is mutated.
+ * @param[in] label {string} Report section label rendered inside the frame.
+ * @return {string[]} Three box lines in top, middle, and bottom order.
+ * @satisfies REQ-720, REQ-721
+ * @note Complexity: O(n) in label length. Pure; no side effects.
+ */
+function renderAgentFinalOutputSectionTitleBox(label: string): string[] {
+  const dashes = "─".repeat(measureDisplayWidth(label) + 2);
+  return [`╭${dashes}╮`, `│ ${label} │`, `╰${dashes}╯`];
+}
+
+/**
  * @brief Converts one rendered markdown report into ANSI-colored text.
- * @details Colors every `## **<Label>**` heading with intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character of the plain rendering stays present. Runtime is O(n) in text length. No external state is mutated.
+ * @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character outside the replaced headings stays present. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] text {string} Plain markdown report text produced by the fixed-order renderer.
  * @return {string} ANSI-colored report text.
  * @satisfies REQ-713, REQ-714, REQ-715
@@ -359,8 +373,11 @@ function colorizeAgentFinalOutputMarkdownText(text: string): string {
       renderedLines.push(wrapAnsiStyle(line, ANSI_CODE));
       continue;
     }
-    if (/^##\s+\*\*[^*]+\*\*$/.test(line)) {
-      renderedLines.push(wrapAnsiStyle(line, ANSI_INTENSE_YELLOW));
+    if (/^##\s+\*\*([^*]+)\*\*$/.test(line)) {
+      const headingLabel = line.replace(/^##\s+\*\*/, "").replace(/\*\*$/, "");
+      for (const boxLine of renderAgentFinalOutputSectionTitleBox(headingLabel)) {
+        renderedLines.push(wrapAnsiStyle(boxLine, ANSI_INTENSE_YELLOW));
+      }
       continue;
     }
     renderedLines.push(line.replace(AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN, replaceAgentFinalOutputAnsiInline));

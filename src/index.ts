@@ -144,6 +144,7 @@ import {
   REQ_CONTINUE_LIST_COMMAND_DESCRIPTION,
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
+  formatNextWorkflowCommandTable,
   formatNextWorkflowFullList,
   formatNextWorkflowList,
   getNextWorkflowCommands,
@@ -1296,13 +1297,13 @@ function notifyContextSafely(
 }
 
 /**
- * @brief Emits one ANSI-rendered final-output markdown report notification when a parsed report exists.
- * @details Renders the supplied final-output report through `renderAgentFinalOutputAnsiReport(...)`, skips emission for `undefined` reports so contract-violating terminal outputs print no stale sections, and delivers the colored printout through `notifyContextSafely(...)` so stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in report length. Side effect is user notification delivery when the supplied context is still active.
+ * @brief Emits one ANSI-rendered final-output markdown report notification with the Next-Workflow command table.
+ * @details Renders the supplied final-output report through `renderAgentFinalOutputAnsiReport(...)` with rounded section-title boxes, appends the dynamically sized rounded table of the captured Next-Workflow commands rendered by `formatNextWorkflowCommandTable(...)`, skips emission when both payloads stay empty so contract-violating terminal outputs print no stale sections, and delivers the colored printout through `notifyContextSafely(...)` so stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in report and table length. Side effect is user notification delivery when the supplied context is still active.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
- * @param[in] report {AgentFinalOutputReport | undefined} Parsed final-output report to print; `undefined` emits nothing.
+ * @param[in] report {AgentFinalOutputReport | undefined} Parsed final-output report to print; `undefined` contributes no sections.
  * @param[in] level {"info" | "warning" | "error"} Notification severity of the report printout.
  * @return {void} No return value.
- * @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-439, REQ-442
+ * @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-439, REQ-442
  */
 function notifyAgentFinalOutputReport(
   ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
@@ -1310,10 +1311,14 @@ function notifyAgentFinalOutputReport(
   level: "info" | "warning" | "error",
 ): void {
   const reportText = renderAgentFinalOutputAnsiReport(report);
-  if (reportText === "") {
+  const commandTable = formatNextWorkflowCommandTable(getNextWorkflowCommands());
+  const printout = commandTable === ""
+    ? reportText
+    : reportText === "" ? commandTable : `${reportText}\n\n${commandTable}`;
+  if (printout === "") {
     return;
   }
-  notifyContextSafely(ctx, reportText, level);
+  notifyContextSafely(ctx, printout, level);
 }
 
 /**

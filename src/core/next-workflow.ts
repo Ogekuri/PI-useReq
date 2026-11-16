@@ -6,6 +6,7 @@
  */
 
 import { type AgentFinalOutputCommandEntry, type AgentFinalOutputParse, resetAgentFinalOutputStateForTests } from "./agent-final-output.js";
+import { measureDisplayWidth } from "./config-cli-render.js";
 import { ReqError } from "./errors.js";
 import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 
@@ -242,6 +243,60 @@ export function formatNextWorkflowList(entries: readonly NextWorkflowCommandEntr
       return inputText === "" ? `${index + 1}. ${commandText}` : `${index + 1}. ${commandText} "${inputText}"`;
     })
     .join("\n");
+}
+
+/**
+ * @brief Condenses one captured input text for Next-Workflow table cell rendering.
+ * @details Collapses every whitespace run, including newlines, into one space, then renders inputs longer than the 30-character verbatim limit as the first 20 characters followed by the ` .. ` table separator followed by the last 10 characters and shorter inputs verbatim; the empty string stays empty so the table builder renders the `N/A` placeholder. Runtime is O(n) in input length. No external state is mutated.
+ * @param[in] inputText {string} Captured input text.
+ * @return {string} Single-line condensed table cell text.
+ * @satisfies REQ-724
+ * @note Complexity: O(n) in input length. Pure; no side effects.
+ */
+export function condenseNextWorkflowTableInputText(inputText: string): string {
+  const normalized = inputText.replace(/\s+/g, " ").trim();
+  if (normalized.length <= NEXT_WORKFLOW_CONDENSED_VERBATIM_LIMIT) {
+    return normalized;
+  }
+  return `${normalized.slice(0, NEXT_WORKFLOW_CONDENSED_PREFIX_LENGTH)} .. ${normalized.slice(
+    -NEXT_WORKFLOW_CONDENSED_SUFFIX_LENGTH,
+  )}`;
+}
+
+/**
+ * @brief Renders the captured Next-Workflow commands as the dynamically sized rounded table printout.
+ * @details Computes every column width from the longest header or cell, renders the ordinal column as zero-padded one-based ordinals, renders commands without the `req-` prefix in uppercase, renders absent input texts as `N/A`, and frames the table with the rounded box-drawing characters using the double-line header separator plus single-line row separators; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
+ * @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
+ * @return {string} Complete rounded table printout, or the empty string when no entry exists.
+ * @satisfies REQ-722, REQ-723, REQ-724, REQ-725
+ * @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
+ */
+export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCommandEntry[]): string {
+  if (entries.length === 0) {
+    return "";
+  }
+  const headers = ["N.", "Command", "Text"] as const;
+  const rows = entries.map((entry, index) => [
+    String(index + 1).padStart(Math.max(2, String(entries.length).length), "0"),
+    entry.command.replace(/^req-/, "").toUpperCase(),
+    entry.inputText === "" ? "N/A" : condenseNextWorkflowTableInputText(entry.inputText),
+  ]);
+  const widths = headers.map((header, column) =>
+    Math.max(measureDisplayWidth(header), ...rows.map((row) => measureDisplayWidth(row[column]))),
+  );
+  const border = (left: string, fill: string, middle: string, right: string): string =>
+    left + widths.map((width) => fill.repeat(width + 2)).join(middle) + right;
+  const dataRow = (cells: readonly string[]): string =>
+    `│ ${cells.map((cell, column) => cell + " ".repeat(widths[column] - measureDisplayWidth(cell))).join(" │ ")} │`;
+  const lines: string[] = [border("╭", "─", "┬", "╮"), dataRow(headers), border("╞", "═", "╪", "╡")];
+  rows.forEach((row, index) => {
+    if (index > 0) {
+      lines.push(border("├", "─", "┼", "┤"));
+    }
+    lines.push(dataRow(row));
+  });
+  lines.push(border("╰", "─", "┴", "╯"));
+  return lines.join("\n");
 }
 
 /**
