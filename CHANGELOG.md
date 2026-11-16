@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.16](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.16) - 2026-11-16
+## [0.109.17](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.17) - 2026-11-16
 ### ⛰️  Features
 - Update prompts.
 - Update prompts.
@@ -34,6 +34,15 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- use repository commit format for sync commit [useReq] *(prompts-updater)*
+  DEFECT: the script-generated commit (89a297a) used the bare subject
+  'Update bundled prompts from v0.12.14 to v0.12.15', violating the
+  repository commit-text format rule <TYPE>(<COMPONENT>): <DESCRIPTION>
+  [useReq] documented by REQ-301's exact-message envelope pattern.
+  FIX: commit_update() now creates the commit with subject
+  'change(prompts): Update bundled prompts from <stored> to <resolved>
+  [useReq]'; the REQ-754 mandated description core and both version
+  numbers remain verbatim; Doxygen documentation updated.
 - color inline code atomically over emphasis [useReq] *(agent-final-output)*
   The ANSI markdown colorizer let the italic-emphasis alternative pair
   emphasis-lookalike asterisks (e.g. the glob in prompts/*.md with the
@@ -86,6 +95,27 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- auto-update without confirmation and commit sync [useReq] *(prompts-updater)*
+  REQUIREMENTS: REQ-397 prints versions before the gate decision; REQ-398
+  now mandates automatic synchronization without confirmation; added
+  REQ-751 (downgrade skip), REQ-752 (git work-tree probe), REQ-753
+  (single current-branch commit), REQ-754 (commit subject format),
+  REQ-755 (skip commit on empty staged diff), REQ-756 (fail on error).
+  SOURCE: scripts/pi-prompts-update.sh replaces the Y/N confirmation
+  with the sort -V version gate, adds is_update_eligible() and
+  commit_update() staging only the synchronized directories plus the
+  version marker, and updates all Doxygen documentation.
+- Adapt Next-Workflow table width to CLI terminal [useReq] *(next-workflow)*
+  Rewrite REQ-729: wrap the Text column at the effective target width and hard-break unbreakable words instead of widening the column for oversized tokens.; Add REQ-749 and REQ-750: derive the Text column wrap target from the pi CLI terminal column count (terminal minus fixed columns minus row chrome) with the fixed minimum 35-display-column fallback when stdout width is unavailable.; Implement resolveNextWorkflowTextColumnTargetWidth, readNextWorkflowTerminalColumns, display-width hard-breaking in next-workflow.ts with an optional terminalColumns parameter on formatNextWorkflowCommandTable.; Re-align tests/next-workflow.test.ts with the updated wrapping contract and add target-width plus terminal-conformance coverage.
+- ship npm CHANGELOG.md and migrate pi CLI changelog keys [useReq] *(package-manager)*
+  Add CHANGELOG.md to the npm files allowlist so the published tarball
+  exposes the parser-compatible changelog for the pi CLI boot-time
+  extension changelog show (CTN-021, REQ-743, TST-237).
+  Best-effort migrate the pi CLI extensionChangelogVersions recorded
+  value from the previous same-identity git-tagged settings key onto the
+  new tag-pinned key after successful develop-channel upgrade children,
+  preserving every other settings field and never changing the upgrade
+  exit code or summary (DES-045, REQ-744..REQ-748, TST-238..TST-240).
 - BREAKING CHANGE: remove req-continue-list slash command [useReq] *(next-workflow)*
   Remove the dedicated /req-continue-list command, its registration, description constant, and the numbered full-list renderer.
   Parameter-less /req-continue keeps printing the captured Next-Workflow table and the integer ordinal keeps dispatching the captured command (REQ-659..664, REQ-738..741).
@@ -1646,7 +1676,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.16\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.16
+- \[0.109.17\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.17
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1755,4 +1785,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.16]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.16
+[0.109.17]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.17
