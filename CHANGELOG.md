@@ -1,7 +1,8 @@
 # Changelog
 
-## [0.109.11](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.11) - 2026-11-16
+## [0.109.12](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.12) - 2026-11-16
 ### ⛰️  Features
+- Update prompts.
 - Update prompt with json validator.
 - Add json-validator agent tool with native TypeScript validation [useReq] *(json-validator)*
   Register the default-enabled configurable json-validator agent tool; Validate inline content plus UTF-8 files through native JSON.parse; Emit one monolithic markdown verdict with line/column diagnostics; Extend SRS with DES-044, REQ-701..REQ-709, TST-229..TST-231; Add core and registration test coverage; no new runtime dependency
@@ -31,6 +32,16 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- merge retention report into one ANSI notification [useReq] *(notify)*
+  Compose the boxed ANSI report, Next-Workflow command table, intense-white
+  retention sentence with intense-yellow percentage, and numbered list into
+  one message via the new src/core/retention-notification.ts builders,
+  satisfying REQ-712, REQ-713, REQ-716, REQ-717, REQ-720..REQ-725.
+  Deliver the merged message through one notifyContextSafely info call so the
+  pi TUI back-to-back status collapse can no longer overwrite the ANSI report
+  printout with the plain-markdown duplicate that REQ-713 forbids.
+  Keep result-error gate report emissions unchanged; update WORKFLOW.md call
+  traces, regenerate REFERENCES.md, add tests/retention-notification.test.ts.
 - Write no-source REFERENCES.md placeholder like req-references [useReq] *(references)*
   runReferences now probes hasAnalyzableSourceFiles before extraction and
   writes the exact NO_SOURCE_REFERENCES_PLACEHOLDER payload through
@@ -61,6 +72,11 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: rename json-validator agent tool to result-json-validator [useReq] *(result-json-validator)*
+  Renames the registered agent tool, its module (src/core/result-json-validator.ts), and its tool-scoped symbols to the new naming convention; requirements DES-044, REQ-064, REQ-701..709, TST-229..233 updated (version 0.0.166).
+  Bundled prompt resources now instruct the agent to execute result-json-validator exclusively for validating the final agentic output JSON message and never for generic JSON artifacts; alphabetical toggle-order expectations updated (REQ-231); tests renamed and updated; workflow model and references regenerated.
+- enforce final-output field contract in verdicts [useReq] *(json-validator)*
+  json-validator verdicts validate every parsed record against the orchestration final-output mandatory-field contract (result ok|error, summary string, next_commands array) and render the contract verdict with per-field issue diagnostics (REQ-726..REQ-728).; json-validator registration text binds the tool exclusively to final-output JSON message validation and prohibits generic JSON validation (REQ-709, TST-233).; Shared isAgentFinalOutputResult export keeps one contract source; requirements, workflow model, references, and tests updated.
 - box report titles and render next-workflow command table *(notify)*
   Render ANSI report section titles as rounded box frames sized from the label length, keeping intense-yellow styling (REQ-720, REQ-721).; Render the captured Next-Workflow commands as a dynamically sized rounded table with N./Command/Text columns, zero-padded ordinals, uppercase prefix-free commands, N/A placeholders, double-line header separator, and row separators (REQ-722, REQ-723, REQ-725).; Condense over-limit table texts with the ' .. ' separator via condenseNextWorkflowTableInputText (REQ-724).; Append the table to the ANSI report notification for every outcome (REQ-722).; SRS v0.0.164 adds REQ-720..REQ-725; WORKFLOW.md call traces and REFERENCES.md refreshed.
 - color retention line and print terminal diagnostics last in red *(notify)*
@@ -1585,7 +1601,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.11\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.11
+- \[0.109.12\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.12
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1694,4 +1710,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.11]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.11
+[0.109.12]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.12
