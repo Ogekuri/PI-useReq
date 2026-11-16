@@ -20,9 +20,10 @@
 #     0 and no repository modification. After successful synchronization the
 #     resolved version is written into `src/resources/pi-prompts-version.txt`,
 #     only the synchronized target directories plus the version marker are
-#     staged, and exactly one commit with subject `Update bundled prompts from
-#     <stored> to <resolved>` is created on the current branch; an empty staged
-#     diff skips commit creation, and commit failure aborts with a diagnostic.
+#     staged, and exactly one commit with subject `change(prompts): Update
+#     bundled prompts from <stored> to <resolved> [useReq]` is created on the
+#     current branch; an empty staged diff skips commit creation, and commit
+#     failure aborts with a diagnostic.
 #     Runtime is dominated by one git clone plus one ref checkout and per-file
 #     copies. Side effects include temporary-directory creation, git
 #     subprocesses, one optional GitHub Releases API request, replacement of
@@ -177,8 +178,9 @@ is_update_eligible() {
 ## @details Stages only the synchronized target directories declared in
 ##     `SYNC_SPECS` plus the version marker file, skips commit creation with a
 ##     progress line when the staged diff is empty, and otherwise creates
-##     exactly one commit with subject `Update bundled prompts from <stored> to
-##     <resolved>` on the current branch. Runtime is dominated by git
+##     exactly one commit with subject `change(prompts): Update bundled prompts
+##     from <stored> to <resolved> [useReq]` on the current branch. Runtime is
+##     dominated by git
 ##     subprocess execution. Side effects include git index mutation, one git
 ##     commit object, and one current-branch head advance; paths outside the
 ##     synchronization scope are never staged by this function.
@@ -205,9 +207,9 @@ commit_update() {
     return 0
   fi
   git -C "${REPO_ROOT}" commit --quiet \
-    -m "Update bundled prompts from ${stored_version} to ${latest_version}" \
+    -m "change(prompts): Update bundled prompts from ${stored_version} to ${latest_version} [useReq]" \
     || fail "Unable to commit the synchronized prompt resources."
-  log "Committed: Update bundled prompts from ${stored_version} to ${latest_version}."
+  log "Committed: change(prompts): Update bundled prompts from ${stored_version} to ${latest_version} [useReq]"
 }
 
 ## @brief Clones the upstream PI-Prompts master branch into one target directory.
