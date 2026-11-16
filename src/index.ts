@@ -55,6 +55,7 @@ import {
   renderAgentFinalOutputMarkdownReport,
   type AgentFinalOutputReport,
 } from "./core/agent-final-output.js";
+import { ANSI_INTENSE_RED, ANSI_INTENSE_WHITE, ANSI_INTENSE_YELLOW, openAnsiStyle, wrapAnsiStyle } from "./core/ansi-style.js";
 import {
   DEFAULT_PI_NOTIFY_CMD,
   DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
@@ -1316,12 +1317,29 @@ function notifyAgentFinalOutputReport(
 }
 
 /**
+ * @brief Notifies one terminal orchestration error or warning diagnostic in intense red.
+ * @details Prefixes the diagnostic with the intense-red ANSI escape without a trailing reset so contracts pinning the exact diagnostic tail (REQ-667) stay byte-identical, and delivers through `notifyContextSafely(...)` so stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in message length. Side effect is user notification delivery when the supplied context is still active.
+ * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
+ * @param[in] message {string} Terminal diagnostic text rendered verbatim after the color escape.
+ * @param[in] level {"info" | "warning" | "error"} Notification severity.
+ * @return {void} No return value.
+ * @satisfies REQ-718, REQ-719, REQ-439, REQ-442
+ */
+function notifyTerminalOrchestrationDiagnostic(
+  ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
+  message: string,
+  level: "info" | "warning" | "error",
+): void {
+  notifyContextSafely(ctx, `${openAnsiStyle(ANSI_INTENSE_RED)}${message}`, level);
+}
+
+/**
  * @brief Emits the final context-retention reminder info notification for a successfully completed `/req-*` orchestration.
- * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot, then appends the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow so the follow-up commands print one per line after the retention line, and prepends the markdown report sections rendered from the process-scoped captured final-output JSON so every present report field prints before the retention line; the ANSI-colored report printout from `notifyAgentFinalOutputReport(...)` is emitted first so every parsed report prints colored regardless of the orchestration outcome. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is user notification delivery only when the supplied context is still active.
+ * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot, then appends the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow so the follow-up commands print one per line after the retention line, and prepends the markdown report sections rendered from the process-scoped captured final-output JSON so every present report field prints before the retention line; the ANSI-colored report printout from `notifyAgentFinalOutputReport(...)` is emitted first so every parsed report prints colored regardless of the orchestration outcome, and the complete retention sentence carrying the percentage segment renders in intense white with the percentage in intense yellow. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is user notification delivery only when the supplied context is still active.
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @return {void} No return value.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717
  */
 function notifyContextRetentionReminder(
   statusController: PiUsereqStatusController,
@@ -1329,10 +1347,11 @@ function notifyContextRetentionReminder(
 ): void {
   notifyAgentFinalOutputReport(ctx, getCapturedAgentFinalOutputReport(), "info");
   const percent = statusController.state.contextUsage?.percent;
-  const percentText = typeof percent === "number" && Number.isFinite(percent)
-    ? ` Current context usage: ${Math.round(percent)}%.`
-    : "";
-  const retentionMessage = `Context retained.${percentText} Start a new session with a clean context (/new) before the next /req-* command.`;
+  const retentionMessage = typeof percent === "number" && Number.isFinite(percent)
+    ? wrapAnsiStyle("Context retained. Current context usage: ", ANSI_INTENSE_WHITE)
+      + wrapAnsiStyle(`${Math.round(percent)}%`, ANSI_INTENSE_YELLOW)
+      + wrapAnsiStyle(". Start a new session with a clean context (/new) before the next /req-* command.", ANSI_INTENSE_WHITE)
+    : `Context retained. Start a new session with a clean context (/new) before the next /req-* command.`;
   const reportMarkdown = renderAgentFinalOutputMarkdownReport(getCapturedAgentFinalOutputReport());
   const nextWorkflowList = formatNextWorkflowList(getNextWorkflowCommands());
   const retentionWithList = nextWorkflowList === ""
@@ -1462,13 +1481,13 @@ function isPiAgentSettledEventSupported(
 
 /**
  * @brief Finalizes a matched successful worktree-backed prompt at the current lifecycle point.
- * @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications, emits the final context-retention notification with the numbered Next-Workflow list before the error output when the fast-forward merge fails and terminates that error output with the hardcoded uniform merge-failure message, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
+ * @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications in intense red, emits the final context-retention notification with the numbered Next-Workflow list before the error output when the fast-forward merge fails and terminates that error output with the hardcoded uniform merge-failure message, emits the warning-only closure notification after the retention reminder so terminal error and warning diagnostics print last, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
  * @param[in] pi {ExtensionAPI} Active extension API instance supplying the model re-apply appliers.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller whose pending and active prompt state is cleared.
  * @param[in] promptRequest {PiUsereqPromptRequest} Matched successful worktree-backed prompt execution plan.
  * @param[in] ctx {ExtensionContext} Active extension context used for finalization and notifications.
  * @return {Promise<void>} Promise resolved when finalization and state transitions complete.
- * @satisfies REQ-208, REQ-228, REQ-229, REQ-230, REQ-282, REQ-291, REQ-292, REQ-354, REQ-355, REQ-368, REQ-370, REQ-371, REQ-372, REQ-665, REQ-666, REQ-667, REQ-668
+ * @satisfies REQ-208, REQ-228, REQ-229, REQ-230, REQ-282, REQ-291, REQ-292, REQ-354, REQ-355, REQ-368, REQ-370, REQ-371, REQ-372, REQ-665, REQ-666, REQ-667, REQ-668, REQ-718, REQ-719
  */
 async function finalizeMatchedPromptSuccess(
   pi: ExtensionAPI,
@@ -1546,21 +1565,13 @@ async function finalizeMatchedPromptSuccess(
       // visible and the captured array is preserved for recovery (REQ-668).
       notifyContextRetentionReminder(statusController, promptContext);
     }
-    notifyContextSafely(
+    notifyTerminalOrchestrationDiagnostic(
       promptContext,
       mergeFailed
         ? `${finalization.errorMessage}\n${PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE}`
         : finalization.errorMessage,
       "error",
     );
-  }
-  if (
-    finalization.warningMessage
-    && finalization.cleanupSucceeded
-    && finalization.mergeSucceeded
-    && !finalization.errorMessage
-  ) {
-    notifyContextSafely(promptContext, finalization.warningMessage, "info");
   }
   statusController.state.pendingFinalizationOutcome = undefined;
   statusController.state.pendingFinalizationStatusMarker = undefined;
@@ -1586,6 +1597,14 @@ async function finalizeMatchedPromptSuccess(
   }
   if (!finalization.errorMessage) {
     notifyContextRetentionReminder(statusController, promptContext);
+  }
+  if (
+    finalization.warningMessage
+    && finalization.cleanupSucceeded
+    && finalization.mergeSucceeded
+    && !finalization.errorMessage
+  ) {
+    notifyTerminalOrchestrationDiagnostic(promptContext, finalization.warningMessage, "info");
   }
 }
 
@@ -1632,7 +1651,7 @@ function buildAgentEndOutputText(event: unknown): string {
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440, REQ-443, REQ-444, REQ-461, REQ-462, REQ-463, REQ-464, REQ-465, REQ-584, REQ-585, REQ-586, REQ-587, REQ-588, REQ-653, REQ-654, REQ-655, REQ-677, REQ-680, REQ-681, REQ-712, REQ-713, REQ-714, REQ-715
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440, REQ-443, REQ-444, REQ-461, REQ-462, REQ-463, REQ-464, REQ-465, REQ-584, REQ-585, REQ-586, REQ-587, REQ-588, REQ-653, REQ-654, REQ-655, REQ-677, REQ-680, REQ-681, REQ-712, REQ-713, REQ-714, REQ-715, REQ-718, REQ-719
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -1903,7 +1922,7 @@ async function handleExtensionStatusEvent(
           finalOutputParse.ok ? finalOutputParse.report : undefined,
           "error",
         );
-        notifyContextSafely(
+        notifyTerminalOrchestrationDiagnostic(
           promptContext,
           finalOutputBlockedMessage ?? `ERROR: Prompt orchestration terminated with JSON result "error".`,
           "error",
@@ -1931,7 +1950,7 @@ async function handleExtensionStatusEvent(
         // retain the active request so `req-reset` can restore `base-path` and
         // remove the retained worktree plus branch. The original base-path
         // session MUST NOT be resumed here so the failure stays visible.
-        notifyContextSafely(promptContext, closureFailureMessage, "error");
+        notifyTerminalOrchestrationDiagnostic(promptContext, closureFailureMessage, "error");
         // The retained request closed with this run: later unrelated agent runs
         // must not claim its prompt-end notification effects.
         statusController.state.activeRunBelongsToPrompt = false;
@@ -1970,7 +1989,7 @@ async function handleExtensionStatusEvent(
           } else {
             setPiUsereqWorkflowState(statusController, "error", promptContext);
           }
-          notifyContextSafely(promptContext, error instanceof Error ? error.message : String(error), "error");
+          notifyTerminalOrchestrationDiagnostic(promptContext, error instanceof Error ? error.message : String(error), "error");
         }
       }
       if (closureFailureMessage === undefined && !shouldFinalizeMatchedSuccess && !markerBlockedOutcome) {
@@ -2035,7 +2054,7 @@ async function handleExtensionStatusEvent(
         // `error` with the recorded gate diagnostic, and retain the active request so
         // `req-reset` can restore `base-path` and remove the retained worktree.
         notifyAgentFinalOutputReport(ctx, statusController.state.pendingFinalizationReport, "error");
-        notifyContextSafely(
+        notifyTerminalOrchestrationDiagnostic(
           ctx,
           statusController.state.pendingFinalizationBlockedMessage
             ?? `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after JSON result "error".`,
@@ -2065,7 +2084,7 @@ async function handleExtensionStatusEvent(
         // retain the active request so `req-reset` can restore `base-path` and remove
         // the retained worktree plus branch. The original base-path session MUST NOT be
         // resumed here so the failure stays visible.
-        notifyContextSafely(
+        notifyTerminalOrchestrationDiagnostic(
           ctx,
           `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after ${pendingOutcome} outcome.`,
           "error",

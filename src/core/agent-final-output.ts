@@ -5,6 +5,8 @@
  * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711, REQ-713, REQ-714, REQ-715
  */
 
+import { ANSI_BOLD, ANSI_CODE, ANSI_INTENSE_YELLOW, ANSI_ITALIC, ANSI_LINK, ANSI_UNDERLINE, wrapAnsiStyle } from "./ansi-style.js";
+
 /**
  * @brief Lists the only allowed values of the mandatory `result` field.
  * @details `ok` marks a successful agentic flow termination; `error` marks failure, blockage, or a no-change termination. Access complexity is O(1).
@@ -307,70 +309,6 @@ export function renderAgentFinalOutputMarkdownReport(report: AgentFinalOutputRep
 }
 
 /**
- * @brief ANSI SGR reset sequence terminating every colored fragment of the ANSI report renderer.
- * @details Appended after every styled fragment so colored report output never leaks styling into surrounding notification text. The constant carries no logic. Access complexity is O(1).
- * @satisfies REQ-713
- */
-const AGENT_FINAL_OUTPUT_ANSI_RESET = "\u001b[0m";
-
-/**
- * @brief ANSI SGR parameter selecting the intense-yellow foreground of report section headings.
- * @details `93` is the ANSI high-intensity yellow foreground code applied to every `## **<Label>**` report heading. Access complexity is O(1).
- * @satisfies REQ-714
- */
-const AGENT_FINAL_OUTPUT_ANSI_INTENSE_YELLOW = "93";
-
-/**
- * @brief ANSI SGR parameter selecting bold emphasis for markdown bold elements.
- * @details `1` is the ANSI bold attribute applied to `**bold**` and `__bold__` markdown spans. Access complexity is O(1).
- * @satisfies REQ-715
- */
-const AGENT_FINAL_OUTPUT_ANSI_BOLD = "1";
-
-/**
- * @brief ANSI SGR parameter selecting italic emphasis for markdown italic elements.
- * @details `3` is the ANSI italic attribute applied to `*italic*` and `_italic_` markdown spans. Access complexity is O(1).
- * @satisfies REQ-715
- */
-const AGENT_FINAL_OUTPUT_ANSI_ITALIC = "3";
-
-/**
- * @brief ANSI SGR parameter selecting underline emphasis for markdown underlined elements.
- * @details `4` is the ANSI underline attribute applied to `<u>...</u>` markdown spans. Access complexity is O(1).
- * @satisfies REQ-715
- */
-const AGENT_FINAL_OUTPUT_ANSI_UNDERLINE = "4";
-
-/**
- * @brief ANSI SGR parameters selecting colored link text.
- * @details `4;96` combines the ANSI underline attribute with the bright-cyan foreground for `[text](url)` markdown links. Access complexity is O(1).
- * @satisfies REQ-715
- */
-const AGENT_FINAL_OUTPUT_ANSI_LINK = "4;96";
-
-/**
- * @brief ANSI SGR parameters selecting colored code text for fences and inline code quotes.
- * @details `36` is the ANSI cyan foreground applied to fenced code blocks and backtick inline code spans. Access complexity is O(1).
- * @satisfies REQ-715
- */
-const AGENT_FINAL_OUTPUT_ANSI_CODE = "36";
-
-/**
- * @brief Wraps one text fragment into the ANSI escape sequence selected by the supplied SGR parameters.
- * @details Emits `ESC[<codes>m` before the fragment and the ANSI reset after it, leaving empty fragments unstyled so colored output never contains empty escape pairs. Runtime is O(n) in fragment length. No external state is mutated.
- * @param[in] text {string} Text fragment to style.
- * @param[in] codes {string} Semicolon-separated ANSI SGR parameter list.
- * @return {string} ANSI-styled fragment, or the input unchanged when empty.
- * @satisfies REQ-713
- */
-function applyAgentFinalOutputAnsiWrapping(text: string, codes: string): string {
-  if (text.length === 0) {
-    return text;
-  }
-  return `\u001b[${codes}m${text}${AGENT_FINAL_OUTPUT_ANSI_RESET}`;
-}
-
-/**
  * @brief Matches the inline markdown elements colored by the ANSI report renderer.
  * @details Alternation priority is inline code, link, bold `**`, bold `__`, `<u>` underline, italic `*`, and italic `_`; lookarounds keep intraword underscores and list-marker asterisks unstyled. The global flag serves `String.replace` only. Access complexity is O(1).
  * @satisfies REQ-715
@@ -387,18 +325,18 @@ const AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN =
  */
 function replaceAgentFinalOutputAnsiInline(match: string): string {
   if (match.startsWith("`")) {
-    return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_CODE);
+    return wrapAnsiStyle(match, ANSI_CODE);
   }
   if (match.startsWith("[")) {
-    return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_LINK);
+    return wrapAnsiStyle(match, ANSI_LINK);
   }
   if (match.startsWith("**") || match.startsWith("__")) {
-    return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_BOLD);
+    return wrapAnsiStyle(match, ANSI_BOLD);
   }
   if (match.startsWith("<u>")) {
-    return applyAgentFinalOutputAnsiWrapping(match.slice(3, -4), AGENT_FINAL_OUTPUT_ANSI_UNDERLINE);
+    return wrapAnsiStyle(match.slice(3, -4), ANSI_UNDERLINE);
   }
-  return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_ITALIC);
+  return wrapAnsiStyle(match, ANSI_ITALIC);
 }
 
 /**
@@ -414,15 +352,15 @@ function colorizeAgentFinalOutputMarkdownText(text: string): string {
   for (const line of text.split("\n")) {
     if (line.trimStart().startsWith("```")) {
       insideFence = !insideFence;
-      renderedLines.push(applyAgentFinalOutputAnsiWrapping(line, AGENT_FINAL_OUTPUT_ANSI_CODE));
+      renderedLines.push(wrapAnsiStyle(line, ANSI_CODE));
       continue;
     }
     if (insideFence) {
-      renderedLines.push(applyAgentFinalOutputAnsiWrapping(line, AGENT_FINAL_OUTPUT_ANSI_CODE));
+      renderedLines.push(wrapAnsiStyle(line, ANSI_CODE));
       continue;
     }
     if (/^##\s+\*\*[^*]+\*\*$/.test(line)) {
-      renderedLines.push(applyAgentFinalOutputAnsiWrapping(line, AGENT_FINAL_OUTPUT_ANSI_INTENSE_YELLOW));
+      renderedLines.push(wrapAnsiStyle(line, ANSI_INTENSE_YELLOW));
       continue;
     }
     renderedLines.push(line.replace(AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN, replaceAgentFinalOutputAnsiInline));

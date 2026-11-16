@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.162"
+version: "0.0.163"
 date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
@@ -797,6 +797,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-713**: MUST render every markdown report notification with ANSI escape sequences producing colored terminal output.
 - **REQ-714**: MUST render each `## **<Label>**` markdown report heading with intense-yellow ANSI color.
 - **REQ-715**: MUST parse each report-section value as markdown and color links, fences, inline code, bold, italic, and underlined elements with ANSI escape sequences.
+- **REQ-716**: MUST render the `Context retained.` retention sentence with intense-white ANSI color whenever the context-usage percentage segment is present.
+- **REQ-717**: MUST render the appended context-usage percentage segment with intense-yellow ANSI color.
+- **REQ-718**: MUST render every notification reporting an `error` or `warning` prompt-orchestration termination with intense-red ANSI color.
+- **REQ-719**: MUST emit every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout, the numbered Next-Workflow list, and the context-usage percentage line.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
