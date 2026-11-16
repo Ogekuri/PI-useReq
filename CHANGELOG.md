@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.15](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.15) - 2026-11-16
+## [0.109.16](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.16) - 2026-11-16
 ### ⛰️  Features
 - Update prompts.
 - Update prompts.
@@ -86,6 +86,12 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: remove req-continue-list slash command [useReq] *(next-workflow)*
+  Remove the dedicated /req-continue-list command, its registration, description constant, and the numbered full-list renderer.
+  Parameter-less /req-continue keeps printing the captured Next-Workflow table and the integer ordinal keeps dispatching the captured command (REQ-659..664, REQ-738..741).
+  SRS: delete REQ-671..676, DES-041, and TST-222..224; update scope and next-workflow surface description.
+  Docs: regenerate REFERENCES.md; prune the removed call-trace from WORKFLOW.md.
+  Tests: remove the three obsolete req-continue-list tests; full suite passes 572/572.
 - document default-enabled custom-tool inventory [useReq] *(core)*
   Add REQ-742: every configurable custom tool stays enabled by default until a persisted enabled-tools selection explicitly overrides the default. Bump SRS version 0.0.167 to 0.0.168 and append the REQ-742 evidence row. Link REQ-742 from the PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES and normalizeEnabledPiUsereqTools Doxygen contracts in src/core/pi-usereq-tools.ts. Regenerate REFERENCES.md from the updated source.
 - require ordinal parameter and print Next-Workflow table without one [useReq] *(req-continue)*
@@ -1640,7 +1646,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.15\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.15
+- \[0.109.16\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.16
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1749,4 +1755,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.15]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.15
+[0.109.16]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.16
