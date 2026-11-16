@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief Implements final-output JSON contract validation for the `json-validator` agent tool.
+ * @brief Implements final-output JSON contract validation for the `result-json-validator` agent tool.
  * @details Validates caller-supplied inline JSON text and explicit file paths through the native
  * `JSON.parse` runtime, computes deterministic parser error line and column diagnostics, summarizes
  * valid roots with structural counts plus character and `cl100k_base` token size facts, evaluates
@@ -64,7 +64,7 @@ export interface JsonRootSummary {
  * compile-time only and introduces no runtime cost.
  * @satisfies REQ-703, REQ-704, REQ-705, REQ-707, REQ-726, REQ-727, REQ-728
  */
-export interface JsonValidatorEntry {
+export interface ResultJsonValidatorEntry {
   /** @brief Caller-facing record label: `content` for inline text or the supplied file path. */
   label: string;
   /** @brief Whether the entry parsed as valid JSON; unreadable file entries stay `false`. */
@@ -100,13 +100,13 @@ export interface JsonValidatorEntry {
 }
 
 /**
- * @brief Describes the accepted `json-validator` request parameters.
+ * @brief Describes the accepted `result-json-validator` request parameters.
  * @details Mirrors the optional `content` string and optional `files` path array of the agent-tool
  * schema; unknown callers may forward loosely-typed payloads because runtime type validation is
- * performed by `runJsonValidator`. The interface is compile-time only and introduces no runtime cost.
+ * performed by `runResultJsonValidator`. The interface is compile-time only and introduces no runtime cost.
  * @satisfies REQ-706
  */
-export interface JsonValidatorRequest {
+export interface ResultJsonValidatorRequest {
   /** @brief Raw JSON text to validate inline; omitted when file paths are supplied. */
   content?: unknown;
   /** @brief Explicit file paths read as UTF-8 text and validated as JSON, in caller order. */
@@ -310,11 +310,11 @@ export function evaluateFinalOutputContractIssues(parsed: unknown): string[] {
  * issue list. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] label {string} Caller-facing record label.
  * @param[in] text {string} JSON text to validate.
- * @return {JsonValidatorEntry} Structured verdict record for the supplied text.
+ * @return {ResultJsonValidatorEntry} Structured verdict record for the supplied text.
  * @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
  * @satisfies REQ-703, REQ-704, REQ-705, REQ-726, REQ-727, REQ-728
  */
-function buildJsonValidatorEntry(label: string, text: string): JsonValidatorEntry {
+function buildResultJsonValidatorEntry(label: string, text: string): ResultJsonValidatorEntry {
   const { chars, tokens } = countTextTokensAndChars(text);
   try {
     const parsed: unknown = JSON.parse(text);
@@ -349,14 +349,14 @@ function buildJsonValidatorEntry(label: string, text: string): JsonValidatorEntr
  * @brief Validates one file entry into one structured verdict record.
  * @details Resolves the supplied path against the current working directory, reads it as UTF-8 text,
  * and converts read failures into invalid records carrying the diagnostic without aborting the
- * remaining entries. Readable entries delegate to `buildJsonValidatorEntry`. Runtime is O(n) in file
+ * remaining entries. Readable entries delegate to `buildResultJsonValidatorEntry`. Runtime is O(n) in file
  * size. Side effects are limited to filesystem reads.
  * @param[in] filePath {string} Caller-supplied relative or absolute file path.
- * @return {JsonValidatorEntry} Structured verdict record for the file content.
+ * @return {ResultJsonValidatorEntry} Structured verdict record for the file content.
  * @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
  * @satisfies REQ-707
  */
-function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry {
+function buildResultJsonValidatorFileEntry(filePath: string): ResultJsonValidatorEntry {
   const resolvedPath = path.resolve(filePath);
   let text: string;
   try {
@@ -374,7 +374,7 @@ function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry {
       error: `Unable to read file: ${message}`,
     };
   }
-  return buildJsonValidatorEntry(filePath, text);
+  return buildResultJsonValidatorEntry(filePath, text);
 }
 
 /**
@@ -384,11 +384,11 @@ function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry {
  * structural counts for valid records, error message plus line and column diagnostics for invalid
  * records), and the trailing character and token size facts. Runtime is O(n) in rendered length.
  * No external state is mutated.
- * @param[in] entry {JsonValidatorEntry} Verdict record to render.
+ * @param[in] entry {ResultJsonValidatorEntry} Verdict record to render.
  * @return {string[]} Rendered record lines without separators.
  * @satisfies REQ-703, REQ-727, REQ-728
  */
-function renderJsonValidatorEntry(entry: JsonValidatorEntry): string[] {
+function renderResultJsonValidatorEntry(entry: ResultJsonValidatorEntry): string[] {
   const lines: string[] = [];
   lines.push(`@@@ ${entry.label} | JSON`);
   lines.push(`> Result: ${entry.valid ? "valid" : "invalid"}`);
@@ -428,13 +428,13 @@ function renderJsonValidatorEntry(entry: JsonValidatorEntry): string[] {
  * newline and separated by one blank line, followed by the `## Validation Summary` section holding
  * the request, valid, and invalid counts. Runtime is O(n) in aggregate rendered length. No external
  * state is mutated.
- * @param[in] entries {readonly JsonValidatorEntry[]} Verdict records in request order.
+ * @param[in] entries {readonly ResultJsonValidatorEntry[]} Verdict records in request order.
  * @return {string} Complete monolithic verdict markdown document.
  * @satisfies REQ-703
  */
-export function renderJsonValidationMarkdown(entries: readonly JsonValidatorEntry[]): string {
+export function renderResultJsonValidationMarkdown(entries: readonly ResultJsonValidatorEntry[]): string {
   const validCount = entries.filter((entry) => entry.valid).length;
-  const blocks = entries.map((entry) => `${renderJsonValidatorEntry(entry).join("\n")}\n`);
+  const blocks = entries.map((entry) => `${renderResultJsonValidatorEntry(entry).join("\n")}\n`);
   const summaryLines = [
     "## Validation Summary",
     `- @requests ${entries.length}`,
@@ -445,7 +445,7 @@ export function renderJsonValidationMarkdown(entries: readonly JsonValidatorEntr
 }
 
 /**
- * @brief Executes one `json-validator` request and returns the monolithic verdict tool result.
+ * @brief Executes one `result-json-validator` request and returns the monolithic verdict tool result.
  * @details Type-checks the loosely-typed parameters, rejects requests supplying neither non-blank
  * `content` nor non-empty `files` with one deterministic diagnostic, validates the inline content
  * record first followed by every file entry in caller order, renders the monolithic verdict
@@ -455,35 +455,35 @@ export function renderJsonValidationMarkdown(entries: readonly JsonValidatorEntr
  * or whitespace-only `content` supplies no content and triggers the same rejection. Runtime is
  * O(n) in aggregate validated content size. Side effects are limited to filesystem reads for file
  * entries.
- * @param[in] params {JsonValidatorRequest} Loosely-typed tool parameters.
+ * @param[in] params {ResultJsonValidatorRequest} Loosely-typed tool parameters.
  * @return {ToolResult} Successful tool result carrying the monolithic verdict markdown on stdout.
  * @throws {ReqError} Throws for non-string `content`, non-string-array `files`, or requests
  * supplying neither parameter.
  * @satisfies REQ-702, REQ-703, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
  */
-export function runJsonValidator(params: JsonValidatorRequest): ToolResult {
+export function runResultJsonValidator(params: ResultJsonValidatorRequest): ToolResult {
   const content = params?.content;
   const files = params?.files;
   if (content !== undefined && typeof content !== "string") {
-    throw new ReqError("json-validator: content must be a string when supplied.");
+    throw new ReqError("result-json-validator: content must be a string when supplied.");
   }
   if (
     files !== undefined &&
     (!Array.isArray(files) || !files.every((file) => typeof file === "string" && file.trim() !== ""))
   ) {
-    throw new ReqError("json-validator: files must be an array of non-empty path strings when supplied.");
+    throw new ReqError("result-json-validator: files must be an array of non-empty path strings when supplied.");
   }
   const contentText = typeof content === "string" && content.trim() !== "" ? content : undefined;
   const filePaths = Array.isArray(files) ? (files as string[]) : [];
   if (contentText === undefined && filePaths.length === 0) {
-    throw new ReqError("json-validator: supply inline content or at least one file path to validate.");
+    throw new ReqError("result-json-validator: supply inline content or at least one file path to validate.");
   }
-  const entries: JsonValidatorEntry[] = [];
+  const entries: ResultJsonValidatorEntry[] = [];
   if (contentText !== undefined) {
-    entries.push(buildJsonValidatorEntry("content", contentText));
+    entries.push(buildResultJsonValidatorEntry("content", contentText));
   }
   for (const filePath of filePaths) {
-    entries.push(buildJsonValidatorFileEntry(filePath));
+    entries.push(buildResultJsonValidatorFileEntry(filePath));
   }
-  return { stdout: renderJsonValidationMarkdown(entries), stderr: "", code: 0 };
+  return { stdout: renderResultJsonValidationMarkdown(entries), stderr: "", code: 0 };
 }

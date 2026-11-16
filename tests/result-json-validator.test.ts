@@ -5,11 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import {
   extractJsonParsePosition,
-  renderJsonValidationMarkdown,
-  runJsonValidator,
+  renderResultJsonValidationMarkdown,
+  runResultJsonValidator,
   summarizeJsonRoot,
-  type JsonValidatorEntry,
-} from "../src/core/json-validator.js";
+  type ResultJsonValidatorEntry,
+} from "../src/core/result-json-validator.js";
 import { ReqError } from "../src/core/errors.js";
 
 /**
@@ -88,7 +88,7 @@ test("extractJsonParsePosition resolves line and column diagnostics deterministi
 });
 
 /**
- * @brief Verifies runJsonValidator reports valid and invalid verdicts without throwing.
+ * @brief Verifies runResultJsonValidator reports valid and invalid verdicts without throwing.
  * @details Executes the runner twice with one valid and one invalid inline payload, asserting exit
  * code 0 for both, the ordered record blocks, root type plus structural counts, the parser error
  * line and column diagnostics, and the aggregate validation summary. Runtime is O(n) in payload
@@ -97,8 +97,8 @@ test("extractJsonParsePosition resolves line and column diagnostics deterministi
  * @throws {AssertionError} Throws when a verdict record or the summary deviates from the contract.
  * @satisfies REQ-703, REQ-704, REQ-705
  */
-test("runJsonValidator reports valid and invalid verdicts without throwing", () => {
-  const valid = runJsonValidator({ content: '{"alpha": 1, "beta": [true, null]}' });
+test("runResultJsonValidator reports valid and invalid verdicts without throwing", () => {
+  const valid = runResultJsonValidator({ content: '{"alpha": 1, "beta": [true, null]}' });
   assert.equal(valid.code, 0);
   assert.equal(valid.stderr, "");
   assert.match(valid.stdout, /^@@@ content \| JSON\n/);
@@ -114,7 +114,7 @@ test("runJsonValidator reports valid and invalid verdicts without throwing", () 
   assert.match(valid.stdout, /- @valid 1/);
   assert.match(valid.stdout, /- @invalid 0/);
 
-  const invalid = runJsonValidator({ content: '{\n  "alpha": 1,\n}\n' });
+  const invalid = runResultJsonValidator({ content: '{\n  "alpha": 1,\n}\n' });
   assert.equal(invalid.code, 0);
   assert.match(invalid.stdout, /> Result: invalid/);
   assert.match(invalid.stdout, /- @error /);
@@ -133,15 +133,15 @@ test("runJsonValidator reports valid and invalid verdicts without throwing", () 
  * @throws {AssertionError} Throws when file records or failure isolation deviate from the contract.
  * @satisfies REQ-707
  */
-test("runJsonValidator validates file entries and reports unreadable files without aborting", () => {
-  const dir = createTempDir("pi-usereq-json-validator-");
+test("runResultJsonValidator validates file entries and reports unreadable files without aborting", () => {
+  const dir = createTempDir("pi-usereq-result-json-validator-");
   try {
     const validPath = path.join(dir, "valid.json");
     const invalidPath = path.join(dir, "invalid.json");
     fs.writeFileSync(validPath, "[1, 2, 3]", "utf8");
     fs.writeFileSync(invalidPath, "{oops}", "utf8");
 
-    const result = runJsonValidator({
+    const result = runResultJsonValidator({
       files: [validPath, invalidPath, path.join(dir, "missing.json")],
     });
     assert.equal(result.code, 0);
@@ -175,17 +175,17 @@ test("runJsonValidator validates file entries and reports unreadable files witho
  * diagnostic.
  * @satisfies REQ-706, TST-231
  */
-test("runJsonValidator rejects requests without content and files deterministically", () => {
+test("runResultJsonValidator rejects requests without content and files deterministically", () => {
   assert.throws(
-    () => runJsonValidator({}),
+    () => runResultJsonValidator({}),
     (error: unknown) =>
       error instanceof ReqError && /supply inline content or at least one file path/.test(error.message),
   );
-  assert.throws(() => runJsonValidator({ content: 42 }), /content must be a string/);
-  assert.throws(() => runJsonValidator({ files: "not-an-array" }), /files must be an array/);
-  assert.throws(() => runJsonValidator({ files: ["", "  "] }), /files must be an array/);
+  assert.throws(() => runResultJsonValidator({ content: 42 }), /content must be a string/);
+  assert.throws(() => runResultJsonValidator({ files: "not-an-array" }), /files must be an array/);
+  assert.throws(() => runResultJsonValidator({ files: ["", "  "] }), /files must be an array/);
   assert.throws(
-    () => runJsonValidator({ content: "", files: [] }),
+    () => runResultJsonValidator({ content: "", files: [] }),
     /supply inline content or at least one file path/,
   );
 });
@@ -201,8 +201,8 @@ test("runJsonValidator rejects requests without content and files deterministica
  * @throws {AssertionError} Throws when the rendered document is non-deterministic or mis-shaped.
  * @satisfies REQ-703, REQ-727
  */
-test("renderJsonValidationMarkdown emits one deterministic monolithic verdict document", () => {
-  const entries: JsonValidatorEntry[] = [
+test("renderResultJsonValidationMarkdown emits one deterministic monolithic verdict document", () => {
+  const entries: ResultJsonValidatorEntry[] = [
     {
       label: "content",
       valid: true,
@@ -230,8 +230,8 @@ test("renderJsonValidationMarkdown emits one deterministic monolithic verdict do
     },
   ];
 
-  const first = renderJsonValidationMarkdown(entries);
-  const second = renderJsonValidationMarkdown(entries);
+  const first = renderResultJsonValidationMarkdown(entries);
+  const second = renderResultJsonValidationMarkdown(entries);
   assert.equal(first, second);
   assert.match(first, /^@@@ content \| JSON\n> Result: valid\n> Final-output contract: valid\n/);
   assert.match(first, /@@@ broken\.json \| JSON\n> Result: invalid\n> Final-output contract: invalid\n/);
@@ -252,8 +252,8 @@ test("renderJsonValidationMarkdown emits one deterministic monolithic verdict do
  * the orchestration mandatory-field contract.
  * @satisfies REQ-726, REQ-727, REQ-728, TST-232
  */
-test("runJsonValidator enforces the final-output mandatory-field contract on every record", () => {
-  const compliant = runJsonValidator({
+test("runResultJsonValidator enforces the final-output mandatory-field contract on every record", () => {
+  const compliant = runResultJsonValidator({
     content: JSON.stringify({ result: "ok", summary: "done", next_commands: [] }),
   });
   assert.equal(compliant.code, 0);
@@ -261,29 +261,29 @@ test("runJsonValidator enforces the final-output mandatory-field contract on eve
   assert.match(compliant.stdout, /> Final-output contract: valid/);
   assert.ok(!compliant.stdout.includes("@final-output-issue"));
 
-  const missingSummary = runJsonValidator({
+  const missingSummary = runResultJsonValidator({
     content: JSON.stringify({ result: "ok", next_commands: [] }),
   });
   assert.match(missingSummary.stdout, /> Result: valid/);
   assert.match(missingSummary.stdout, /> Final-output contract: invalid/);
   assert.match(missingSummary.stdout, /- @final-output-issue summary: missing mandatory field "summary"/);
 
-  const badResult = runJsonValidator({
+  const badResult = runResultJsonValidator({
     content: JSON.stringify({ result: "success", summary: "s", next_commands: [] }),
   });
   assert.match(badResult.stdout, /- @final-output-issue result: expected exactly "ok" or "error"; found "success"/);
 
-  const badNextCommands = runJsonValidator({
+  const badNextCommands = runResultJsonValidator({
     content: JSON.stringify({ result: "ok", summary: "s", next_commands: "nope" }),
   });
   assert.match(badNextCommands.stdout, /- @final-output-issue next_commands: expected array; found string/);
 
-  const nonObjectRoot = runJsonValidator({ content: "[1, 2, 3]" });
+  const nonObjectRoot = runResultJsonValidator({ content: "[1, 2, 3]" });
   assert.match(nonObjectRoot.stdout, /> Result: valid/);
   assert.match(nonObjectRoot.stdout, /> Final-output contract: invalid/);
   assert.match(nonObjectRoot.stdout, /- @final-output-issue final output root must be a JSON object; found array/);
 
-  const unparseable = runJsonValidator({ content: "{oops}" });
+  const unparseable = runResultJsonValidator({ content: "{oops}" });
   assert.match(unparseable.stdout, /> Result: invalid/);
   assert.match(unparseable.stdout, /> Final-output contract: invalid/);
   assert.ok(!unparseable.stdout.includes("@final-output-issue"));

@@ -23,7 +23,6 @@
     │   ├── extension-status.ts
     │   ├── find-constructs.ts
     │   ├── generate-markdown.ts
-    │   ├── json-validator.ts
     │   ├── next-workflow.ts
     │   ├── notification-replay.ts
     │   ├── package-manager.ts
@@ -38,6 +37,7 @@
     │   ├── req-references-command.ts
     │   ├── req-reset-command.ts
     │   ├── resources.ts
+    │   ├── result-json-validator.ts
     │   ├── retention-notification.ts
     │   ├── runtime-project-paths.ts
     │   ├── settings-menu.ts
@@ -158,7 +158,7 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 - @satisfies REQ-678
 ### fn `export function isAgentFinalOutputResult(value: unknown): value is AgentFinalOutputResult` (L32-34)
 - @brief Tests whether one candidate value is one valid final-output terminal result.
-- @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Exported so the `json-validator` final-output contract evaluator reuses the identical domain source instead of duplicating it. Runtime is O(1). No external state is mutated.
+- @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Exported so the `result-json-validator` final-output contract evaluator reuses the identical domain source instead of duplicating it. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate parsed `result` payload.
 - @return {boolean} `true` when the value is exactly `ok` or `error`.
 - @satisfies REQ-678, REQ-726
@@ -3709,222 +3709,6 @@ import { SourceAnalyzer, formatMarkdown } from "./source-analyzer.js";
 
 ---
 
-# json-validator.ts | TypeScript | 489L | 16 symbols | 6 imports | 43 comments
-> Path: `src/core/json-validator.ts`
-- @brief Implements final-output JSON contract validation for the `json-validator` agent tool.
-- @details Validates caller-supplied inline JSON text and explicit file paths through the native
-`JSON.parse` runtime, computes deterministic parser error line and column diagnostics, summarizes
-valid roots with structural counts plus character and `cl100k_base` token size facts, evaluates
-every parsed value against the orchestration final-output mandatory-field contract (`result`
-exactly `ok` or `error`, `summary` string, `next_commands` array), and renders one monolithic
-machine-oriented markdown verdict document. Invalid JSON is reported as an invalid verdict record
-and never throws. Runtime is O(n) in aggregate validated content size plus one tokenizer encode
-per record. Side effects are limited to filesystem reads for file entries.
-- @satisfies DES-044, REQ-702, REQ-703, REQ-704, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
-
-## Imports
-```
-import fs from "node:fs";
-import path from "node:path";
-import { isAgentFinalOutputResult } from "./agent-final-output.js";
-import { ReqError } from "./errors.js";
-import { countTextTokensAndChars } from "./token-counter.js";
-import type { ToolResult } from "./tool-runner.js";
-```
-
-## Definitions
-
-### iface `export interface JsonParsePosition` (L29-34)
-- @brief Represents one deterministic JSON parse-position diagnostic.
-- @brief One-based error line; `undefined` when the parser message carries no position facts.
-- @brief One-based error column; `undefined` when the parser message carries no position facts.
-- @details Carries the one-based error line and column resolved from a parser message; both fields
-stay absent when the parser message exposes no position facts. The interface is compile-time only
-and introduces no runtime cost.
-- @satisfies REQ-705
-
-### iface `export interface JsonRootSummary` (L43-56)
-- @brief Describes one structured summary of a parsed JSON root value.
-- @brief Parsed root type: `object`, `array`, `string`, `number`, `boolean`, or `null`.
-- @brief Top-level object key count; defined only for object roots.
-- @details Stores the parsed root type plus the structural counts and maximum nesting depth; count
-and depth fields stay absent for scalar roots because they carry no container structure. The
-interface is compile-time only and introduces no runtime cost.
-- @satisfies REQ-704
-
-### iface `export interface JsonValidatorEntry` (L67-100)
-- @brief Describes one validation record inside the monolithic verdict document.
-- @brief Caller-facing record label: `content` for inline text or the supplied file path.
-- @brief Whether the entry parsed as valid JSON; unreadable file entries stay `false`.
-- @details Pairs the caller-facing label with the valid or invalid verdict, the final-output
-mandatory-field contract verdict with its ordered issue diagnostics, the optional structural
-summary of a parsed root, character and `cl100k_base` token size facts, and the optional parser
-or read-error diagnostic with its computed line and column position. The interface is
-compile-time only and introduces no runtime cost.
-- @satisfies REQ-703, REQ-704, REQ-705, REQ-707, REQ-726, REQ-727, REQ-728
-
-### iface `export interface JsonValidatorRequest` (L109-114)
-- @brief Describes the accepted `json-validator` request parameters.
-- @brief Raw JSON text to validate inline; omitted when file paths are supplied.
-- @brief Explicit file paths read as UTF-8 text and validated as JSON, in caller order.
-- @details Mirrors the optional `content` string and optional `files` path array of the agent-tool
-schema; unknown callers may forward loosely-typed payloads because runtime type validation is
-performed by `runJsonValidator`. The interface is compile-time only and introduces no runtime cost.
-- @satisfies REQ-706
-
-### fn `export function extractJsonParsePosition(content: string, errorMessage: string): JsonParsePosition` (L128-149)
-- @brief Extracts the one-based line and column diagnostics from one JSON parser message.
-- @details Prefers explicit `line X column Y` fragments emitted by modern V8 runtimes and otherwise
-resolves the raw zero-based `position N` fragment into one-based line and column coordinates by
-counting newline boundaries in the validated prefix. Returns an empty record when the message
-carries no position facts or the resolved position falls outside the supplied content so callers
-never render fabricated coordinates. Runtime is O(p) in prefix length. No external state is mutated.
-- @param[in] content {string} Exact text handed to the JSON parser.
-- @param[in] errorMessage {string} Parser error message carrying optional position facts.
-- @return {JsonParsePosition} One-based line and column diagnostics, or an empty record.
-- @satisfies REQ-705
-
-### fn `function measureJsonDepth(value: unknown): number` (L160-176)
-- @brief Measures the maximum container nesting depth of one parsed JSON value.
-- @details Counts one level per object or array boundary so scalar roots report 0 and a root object
-holding one scalar key reports 1. Cycles are impossible because parsed JSON values are acyclic.
-Runtime is O(n) in parsed element count. No external state is mutated.
-- @param[in] value {unknown} Parsed JSON value.
-- @return {number} Maximum nesting depth in container levels.
-- @satisfies REQ-704
-
-### fn `function countJsonKeys(value: unknown): number` (L186-198)
-- @brief Counts every object key across all nesting levels of one parsed JSON value.
-- @details Accumulates one count per object key while recursing into arrays and nested objects.
-Runtime is O(n) in parsed element count. No external state is mutated.
-- @param[in] value {unknown} Parsed JSON value.
-- @return {number} Recursive object key count; `0` for scalar and array-only roots.
-- @satisfies REQ-704
-
-### fn `function countJsonItems(value: unknown): number` (L208-220)
-- @brief Counts every array element across all nesting levels of one parsed JSON value.
-- @details Accumulates one count per array element while recursing into object values and nested
-arrays. Runtime is O(n) in parsed element count. No external state is mutated.
-- @param[in] value {unknown} Parsed JSON value.
-- @return {number} Recursive array element count; `0` for scalar and object-only roots.
-- @satisfies REQ-704
-
-### fn `export function summarizeJsonRoot(value: unknown): JsonRootSummary` (L232-253)
-- @brief Summarizes one parsed JSON root into its type and structural counts.
-- @details Branches on the root container kind: object roots expose top-level plus recursive key
-counts, array roots expose top-level plus recursive element counts, and every root exposes the
-maximum nesting depth while scalar roots expose only the type. Runtime is O(n) in parsed element
-count. No external state is mutated.
-- @param[in] value {unknown} Parsed JSON root value.
-- @return {JsonRootSummary} Root type with the applicable structural counts.
-- @satisfies REQ-704
-
-### fn `function isJsonObjectValue(value: unknown): value is Record<string, unknown>` (L262-264)
-- @brief Tests whether one parsed JSON value is a plain JSON object.
-- @details Rejects `null`, arrays, and non-object values so the final-output contract accepts
-exactly one plain JSON object as its root. Runtime is O(1). No external state is mutated.
-- @param[in] value {unknown} Parsed JSON value.
-- @return {boolean} `true` when the value is a plain object.
-
-### fn `export function evaluateFinalOutputContractIssues(parsed: unknown): string[]` (L278-300)
-- @brief Evaluates one parsed JSON value against the orchestration final-output mandatory-field contract.
-- @details Emits one ordered issue per violation, mirroring `parseAgentFinalOutput` mandatory-field
-validation: a non-object root reports one root-type issue; a missing `result`, `summary`, or
-`next_commands` field reports one missing-field issue; a `result` outside the `ok|error` domain,
-a non-string `summary`, and a non-array `next_commands` each report one expected-domain issue.
-Optional report fields are never evaluated so absent non-mandatory fields stay tolerated.
-Runtime is O(1) in field count. No external state is mutated.
-- @param[in] parsed {unknown} Parsed JSON root value.
-- @return {string[]} Ordered contract issue diagnostics; empty when the value is contract-compliant.
-- @satisfies REQ-726, REQ-727, REQ-728
-
-### fn `function buildJsonValidatorEntry(label: string, text: string): JsonValidatorEntry` (L317-346)
-- @brief Validates one text payload into one structured verdict record.
-- @details Counts characters and `cl100k_base` tokens through the shared tokenizer, parses the text
-through the native `JSON.parse` runtime, summarizes valid roots through `summarizeJsonRoot`,
-classifies valid parses against the orchestration final-output mandatory-field contract through
-`evaluateFinalOutputContractIssues`, and converts parser failures into invalid records carrying
-the parser message plus computed line and column diagnostics without throwing. Contract validity
-requires a compliant object root, so unparseable records stay contract-invalid with an empty
-issue list. Runtime is O(n) in text length. No external state is mutated.
-- @param[in] label {string} Caller-facing record label.
-- @param[in] text {string} JSON text to validate.
-- @return {JsonValidatorEntry} Structured verdict record for the supplied text.
-- @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
-- @satisfies REQ-703, REQ-704, REQ-705, REQ-726, REQ-727, REQ-728
-
-### fn `function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry` (L359-378)
-- @brief Validates one file entry into one structured verdict record.
-- @details Resolves the supplied path against the current working directory, reads it as UTF-8 text,
-and converts read failures into invalid records carrying the diagnostic without aborting the
-remaining entries. Readable entries delegate to `buildJsonValidatorEntry`. Runtime is O(n) in file
-size. Side effects are limited to filesystem reads.
-- @param[in] filePath {string} Caller-supplied relative or absolute file path.
-- @return {JsonValidatorEntry} Structured verdict record for the file content.
-- @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
-- @satisfies REQ-707
-
-### fn `function renderJsonValidatorEntry(entry: JsonValidatorEntry): string[]` (L391-423)
-- @brief Renders one verdict record as the `@@@ <label> | JSON` markdown block.
-- @details Emits the record header, the `Result:` metadata line, the `Final-output contract:`
-metadata line, the ordered verdict bullets (final-output issue bullets plus root type and
-structural counts for valid records, error message plus line and column diagnostics for invalid
-records), and the trailing character and token size facts. Runtime is O(n) in rendered length.
-No external state is mutated.
-- @param[in] entry {JsonValidatorEntry} Verdict record to render.
-- @return {string[]} Rendered record lines without separators.
-- @satisfies REQ-703, REQ-727, REQ-728
-
-### fn `export function renderJsonValidationMarkdown(entries: readonly JsonValidatorEntry[]): string` (L435-445)
-- @brief Renders the complete monolithic markdown verdict document for one validation run.
-- @details Emits one `@@@ <label> | JSON` block per record in request order, each terminated by one
-newline and separated by one blank line, followed by the `## Validation Summary` section holding
-the request, valid, and invalid counts. Runtime is O(n) in aggregate rendered length. No external
-state is mutated.
-- @param[in] entries {readonly JsonValidatorEntry[]} Verdict records in request order.
-- @return {string} Complete monolithic verdict markdown document.
-- @satisfies REQ-703
-
-### fn `export function runJsonValidator(params: JsonValidatorRequest): ToolResult` (L464-489)
-- @brief Executes one `json-validator` request and returns the monolithic verdict tool result.
-- @details Type-checks the loosely-typed parameters, rejects requests supplying neither non-blank
-`content` nor non-empty `files` with one deterministic diagnostic, validates the inline content
-record first followed by every file entry in caller order, renders the monolithic verdict
-document, and returns exit code `0` for every well-formed request regardless of per-record
-verdicts. Every parsed record is additionally classified against the orchestration final-output
-mandatory-field contract so only compliant final-output JSON objects stay contract-valid. Blank
-or whitespace-only `content` supplies no content and triggers the same rejection. Runtime is
-O(n) in aggregate validated content size. Side effects are limited to filesystem reads for file
-entries.
-- @param[in] params {JsonValidatorRequest} Loosely-typed tool parameters.
-- @return {ToolResult} Successful tool result carrying the monolithic verdict markdown on stdout.
-- @throws {ReqError} Throws for non-string `content`, non-string-array `files`, or requests
-supplying neither parameter.
-- @satisfies REQ-702, REQ-703, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
-
-## Symbol Index
-|Symbol|Kind|Vis|Lines|Sig|
-|---|---|---|---|---|
-|`JsonParsePosition`|iface||29-34|export interface JsonParsePosition|
-|`JsonRootSummary`|iface||43-56|export interface JsonRootSummary|
-|`JsonValidatorEntry`|iface||67-100|export interface JsonValidatorEntry|
-|`JsonValidatorRequest`|iface||109-114|export interface JsonValidatorRequest|
-|`extractJsonParsePosition`|fn||128-149|export function extractJsonParsePosition(content: string,...|
-|`measureJsonDepth`|fn||160-176|function measureJsonDepth(value: unknown): number|
-|`countJsonKeys`|fn||186-198|function countJsonKeys(value: unknown): number|
-|`countJsonItems`|fn||208-220|function countJsonItems(value: unknown): number|
-|`summarizeJsonRoot`|fn||232-253|export function summarizeJsonRoot(value: unknown): JsonRo...|
-|`isJsonObjectValue`|fn||262-264|function isJsonObjectValue(value: unknown): value is Reco...|
-|`evaluateFinalOutputContractIssues`|fn||278-300|export function evaluateFinalOutputContractIssues(parsed:...|
-|`buildJsonValidatorEntry`|fn||317-346|function buildJsonValidatorEntry(label: string, text: str...|
-|`buildJsonValidatorFileEntry`|fn||359-378|function buildJsonValidatorFileEntry(filePath: string): J...|
-|`renderJsonValidatorEntry`|fn||391-423|function renderJsonValidatorEntry(entry: JsonValidatorEnt...|
-|`renderJsonValidationMarkdown`|fn||435-445|export function renderJsonValidationMarkdown(entries: rea...|
-|`runJsonValidator`|fn||464-489|export function runJsonValidator(params: JsonValidatorReq...|
-
-
----
-
 # next-workflow.ts | TypeScript | 374L | 21 symbols | 4 imports | 30 comments
 > Path: `src/core/next-workflow.ts`
 - @brief Implements Next-Workflow command capture, process-scoped storage, list rendering, `/req-continue` selection, and `/req-continue-list` printing helpers.
@@ -6730,6 +6514,222 @@ import { getInstallationPath, RESOURCE_ROOT_DIRNAME } from "./path-context.js";
 
 ---
 
+# result-json-validator.ts | TypeScript | 489L | 16 symbols | 6 imports | 43 comments
+> Path: `src/core/result-json-validator.ts`
+- @brief Implements final-output JSON contract validation for the `result-json-validator` agent tool.
+- @details Validates caller-supplied inline JSON text and explicit file paths through the native
+`JSON.parse` runtime, computes deterministic parser error line and column diagnostics, summarizes
+valid roots with structural counts plus character and `cl100k_base` token size facts, evaluates
+every parsed value against the orchestration final-output mandatory-field contract (`result`
+exactly `ok` or `error`, `summary` string, `next_commands` array), and renders one monolithic
+machine-oriented markdown verdict document. Invalid JSON is reported as an invalid verdict record
+and never throws. Runtime is O(n) in aggregate validated content size plus one tokenizer encode
+per record. Side effects are limited to filesystem reads for file entries.
+- @satisfies DES-044, REQ-702, REQ-703, REQ-704, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
+
+## Imports
+```
+import fs from "node:fs";
+import path from "node:path";
+import { isAgentFinalOutputResult } from "./agent-final-output.js";
+import { ReqError } from "./errors.js";
+import { countTextTokensAndChars } from "./token-counter.js";
+import type { ToolResult } from "./tool-runner.js";
+```
+
+## Definitions
+
+### iface `export interface JsonParsePosition` (L29-34)
+- @brief Represents one deterministic JSON parse-position diagnostic.
+- @brief One-based error line; `undefined` when the parser message carries no position facts.
+- @brief One-based error column; `undefined` when the parser message carries no position facts.
+- @details Carries the one-based error line and column resolved from a parser message; both fields
+stay absent when the parser message exposes no position facts. The interface is compile-time only
+and introduces no runtime cost.
+- @satisfies REQ-705
+
+### iface `export interface JsonRootSummary` (L43-56)
+- @brief Describes one structured summary of a parsed JSON root value.
+- @brief Parsed root type: `object`, `array`, `string`, `number`, `boolean`, or `null`.
+- @brief Top-level object key count; defined only for object roots.
+- @details Stores the parsed root type plus the structural counts and maximum nesting depth; count
+and depth fields stay absent for scalar roots because they carry no container structure. The
+interface is compile-time only and introduces no runtime cost.
+- @satisfies REQ-704
+
+### iface `export interface ResultJsonValidatorEntry` (L67-100)
+- @brief Describes one validation record inside the monolithic verdict document.
+- @brief Caller-facing record label: `content` for inline text or the supplied file path.
+- @brief Whether the entry parsed as valid JSON; unreadable file entries stay `false`.
+- @details Pairs the caller-facing label with the valid or invalid verdict, the final-output
+mandatory-field contract verdict with its ordered issue diagnostics, the optional structural
+summary of a parsed root, character and `cl100k_base` token size facts, and the optional parser
+or read-error diagnostic with its computed line and column position. The interface is
+compile-time only and introduces no runtime cost.
+- @satisfies REQ-703, REQ-704, REQ-705, REQ-707, REQ-726, REQ-727, REQ-728
+
+### iface `export interface ResultJsonValidatorRequest` (L109-114)
+- @brief Describes the accepted `result-json-validator` request parameters.
+- @brief Raw JSON text to validate inline; omitted when file paths are supplied.
+- @brief Explicit file paths read as UTF-8 text and validated as JSON, in caller order.
+- @details Mirrors the optional `content` string and optional `files` path array of the agent-tool
+schema; unknown callers may forward loosely-typed payloads because runtime type validation is
+performed by `runResultJsonValidator`. The interface is compile-time only and introduces no runtime cost.
+- @satisfies REQ-706
+
+### fn `export function extractJsonParsePosition(content: string, errorMessage: string): JsonParsePosition` (L128-149)
+- @brief Extracts the one-based line and column diagnostics from one JSON parser message.
+- @details Prefers explicit `line X column Y` fragments emitted by modern V8 runtimes and otherwise
+resolves the raw zero-based `position N` fragment into one-based line and column coordinates by
+counting newline boundaries in the validated prefix. Returns an empty record when the message
+carries no position facts or the resolved position falls outside the supplied content so callers
+never render fabricated coordinates. Runtime is O(p) in prefix length. No external state is mutated.
+- @param[in] content {string} Exact text handed to the JSON parser.
+- @param[in] errorMessage {string} Parser error message carrying optional position facts.
+- @return {JsonParsePosition} One-based line and column diagnostics, or an empty record.
+- @satisfies REQ-705
+
+### fn `function measureJsonDepth(value: unknown): number` (L160-176)
+- @brief Measures the maximum container nesting depth of one parsed JSON value.
+- @details Counts one level per object or array boundary so scalar roots report 0 and a root object
+holding one scalar key reports 1. Cycles are impossible because parsed JSON values are acyclic.
+Runtime is O(n) in parsed element count. No external state is mutated.
+- @param[in] value {unknown} Parsed JSON value.
+- @return {number} Maximum nesting depth in container levels.
+- @satisfies REQ-704
+
+### fn `function countJsonKeys(value: unknown): number` (L186-198)
+- @brief Counts every object key across all nesting levels of one parsed JSON value.
+- @details Accumulates one count per object key while recursing into arrays and nested objects.
+Runtime is O(n) in parsed element count. No external state is mutated.
+- @param[in] value {unknown} Parsed JSON value.
+- @return {number} Recursive object key count; `0` for scalar and array-only roots.
+- @satisfies REQ-704
+
+### fn `function countJsonItems(value: unknown): number` (L208-220)
+- @brief Counts every array element across all nesting levels of one parsed JSON value.
+- @details Accumulates one count per array element while recursing into object values and nested
+arrays. Runtime is O(n) in parsed element count. No external state is mutated.
+- @param[in] value {unknown} Parsed JSON value.
+- @return {number} Recursive array element count; `0` for scalar and object-only roots.
+- @satisfies REQ-704
+
+### fn `export function summarizeJsonRoot(value: unknown): JsonRootSummary` (L232-253)
+- @brief Summarizes one parsed JSON root into its type and structural counts.
+- @details Branches on the root container kind: object roots expose top-level plus recursive key
+counts, array roots expose top-level plus recursive element counts, and every root exposes the
+maximum nesting depth while scalar roots expose only the type. Runtime is O(n) in parsed element
+count. No external state is mutated.
+- @param[in] value {unknown} Parsed JSON root value.
+- @return {JsonRootSummary} Root type with the applicable structural counts.
+- @satisfies REQ-704
+
+### fn `function isJsonObjectValue(value: unknown): value is Record<string, unknown>` (L262-264)
+- @brief Tests whether one parsed JSON value is a plain JSON object.
+- @details Rejects `null`, arrays, and non-object values so the final-output contract accepts
+exactly one plain JSON object as its root. Runtime is O(1). No external state is mutated.
+- @param[in] value {unknown} Parsed JSON value.
+- @return {boolean} `true` when the value is a plain object.
+
+### fn `export function evaluateFinalOutputContractIssues(parsed: unknown): string[]` (L278-300)
+- @brief Evaluates one parsed JSON value against the orchestration final-output mandatory-field contract.
+- @details Emits one ordered issue per violation, mirroring `parseAgentFinalOutput` mandatory-field
+validation: a non-object root reports one root-type issue; a missing `result`, `summary`, or
+`next_commands` field reports one missing-field issue; a `result` outside the `ok|error` domain,
+a non-string `summary`, and a non-array `next_commands` each report one expected-domain issue.
+Optional report fields are never evaluated so absent non-mandatory fields stay tolerated.
+Runtime is O(1) in field count. No external state is mutated.
+- @param[in] parsed {unknown} Parsed JSON root value.
+- @return {string[]} Ordered contract issue diagnostics; empty when the value is contract-compliant.
+- @satisfies REQ-726, REQ-727, REQ-728
+
+### fn `function buildResultJsonValidatorEntry(label: string, text: string): ResultJsonValidatorEntry` (L317-346)
+- @brief Validates one text payload into one structured verdict record.
+- @details Counts characters and `cl100k_base` tokens through the shared tokenizer, parses the text
+through the native `JSON.parse` runtime, summarizes valid roots through `summarizeJsonRoot`,
+classifies valid parses against the orchestration final-output mandatory-field contract through
+`evaluateFinalOutputContractIssues`, and converts parser failures into invalid records carrying
+the parser message plus computed line and column diagnostics without throwing. Contract validity
+requires a compliant object root, so unparseable records stay contract-invalid with an empty
+issue list. Runtime is O(n) in text length. No external state is mutated.
+- @param[in] label {string} Caller-facing record label.
+- @param[in] text {string} JSON text to validate.
+- @return {ResultJsonValidatorEntry} Structured verdict record for the supplied text.
+- @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
+- @satisfies REQ-703, REQ-704, REQ-705, REQ-726, REQ-727, REQ-728
+
+### fn `function buildResultJsonValidatorFileEntry(filePath: string): ResultJsonValidatorEntry` (L359-378)
+- @brief Validates one file entry into one structured verdict record.
+- @details Resolves the supplied path against the current working directory, reads it as UTF-8 text,
+and converts read failures into invalid records carrying the diagnostic without aborting the
+remaining entries. Readable entries delegate to `buildResultJsonValidatorEntry`. Runtime is O(n) in file
+size. Side effects are limited to filesystem reads.
+- @param[in] filePath {string} Caller-supplied relative or absolute file path.
+- @return {ResultJsonValidatorEntry} Structured verdict record for the file content.
+- @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
+- @satisfies REQ-707
+
+### fn `function renderResultJsonValidatorEntry(entry: ResultJsonValidatorEntry): string[]` (L391-423)
+- @brief Renders one verdict record as the `@@@ <label> | JSON` markdown block.
+- @details Emits the record header, the `Result:` metadata line, the `Final-output contract:`
+metadata line, the ordered verdict bullets (final-output issue bullets plus root type and
+structural counts for valid records, error message plus line and column diagnostics for invalid
+records), and the trailing character and token size facts. Runtime is O(n) in rendered length.
+No external state is mutated.
+- @param[in] entry {ResultJsonValidatorEntry} Verdict record to render.
+- @return {string[]} Rendered record lines without separators.
+- @satisfies REQ-703, REQ-727, REQ-728
+
+### fn `export function renderResultJsonValidationMarkdown(entries: readonly ResultJsonValidatorEntry[]): string` (L435-445)
+- @brief Renders the complete monolithic markdown verdict document for one validation run.
+- @details Emits one `@@@ <label> | JSON` block per record in request order, each terminated by one
+newline and separated by one blank line, followed by the `## Validation Summary` section holding
+the request, valid, and invalid counts. Runtime is O(n) in aggregate rendered length. No external
+state is mutated.
+- @param[in] entries {readonly ResultJsonValidatorEntry[]} Verdict records in request order.
+- @return {string} Complete monolithic verdict markdown document.
+- @satisfies REQ-703
+
+### fn `export function runResultJsonValidator(params: ResultJsonValidatorRequest): ToolResult` (L464-489)
+- @brief Executes one `result-json-validator` request and returns the monolithic verdict tool result.
+- @details Type-checks the loosely-typed parameters, rejects requests supplying neither non-blank
+`content` nor non-empty `files` with one deterministic diagnostic, validates the inline content
+record first followed by every file entry in caller order, renders the monolithic verdict
+document, and returns exit code `0` for every well-formed request regardless of per-record
+verdicts. Every parsed record is additionally classified against the orchestration final-output
+mandatory-field contract so only compliant final-output JSON objects stay contract-valid. Blank
+or whitespace-only `content` supplies no content and triggers the same rejection. Runtime is
+O(n) in aggregate validated content size. Side effects are limited to filesystem reads for file
+entries.
+- @param[in] params {ResultJsonValidatorRequest} Loosely-typed tool parameters.
+- @return {ToolResult} Successful tool result carrying the monolithic verdict markdown on stdout.
+- @throws {ReqError} Throws for non-string `content`, non-string-array `files`, or requests
+supplying neither parameter.
+- @satisfies REQ-702, REQ-703, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
+
+## Symbol Index
+|Symbol|Kind|Vis|Lines|Sig|
+|---|---|---|---|---|
+|`JsonParsePosition`|iface||29-34|export interface JsonParsePosition|
+|`JsonRootSummary`|iface||43-56|export interface JsonRootSummary|
+|`ResultJsonValidatorEntry`|iface||67-100|export interface ResultJsonValidatorEntry|
+|`ResultJsonValidatorRequest`|iface||109-114|export interface ResultJsonValidatorRequest|
+|`extractJsonParsePosition`|fn||128-149|export function extractJsonParsePosition(content: string,...|
+|`measureJsonDepth`|fn||160-176|function measureJsonDepth(value: unknown): number|
+|`countJsonKeys`|fn||186-198|function countJsonKeys(value: unknown): number|
+|`countJsonItems`|fn||208-220|function countJsonItems(value: unknown): number|
+|`summarizeJsonRoot`|fn||232-253|export function summarizeJsonRoot(value: unknown): JsonRo...|
+|`isJsonObjectValue`|fn||262-264|function isJsonObjectValue(value: unknown): value is Reco...|
+|`evaluateFinalOutputContractIssues`|fn||278-300|export function evaluateFinalOutputContractIssues(parsed:...|
+|`buildResultJsonValidatorEntry`|fn||317-346|function buildResultJsonValidatorEntry(label: string, tex...|
+|`buildResultJsonValidatorFileEntry`|fn||359-378|function buildResultJsonValidatorFileEntry(filePath: stri...|
+|`renderResultJsonValidatorEntry`|fn||391-423|function renderResultJsonValidatorEntry(entry: ResultJson...|
+|`renderResultJsonValidationMarkdown`|fn||435-445|export function renderResultJsonValidationMarkdown(entrie...|
+|`runResultJsonValidator`|fn||464-489|export function runResultJsonValidator(params: ResultJson...|
+
+
+---
+
 # retention-notification.ts | TypeScript | 99L | 3 symbols | 3 imports | 7 comments
 > Path: `src/core/retention-notification.ts`
 - @brief Composes the single merged context-retention notification message: ANSI report printout, Next-Workflow command table, styled retention sentence, and numbered list.
@@ -8001,7 +8001,7 @@ import { deployPiUsereqLauncher, deployUserBinPiUsereqLauncher, isPiPackageInsta
 import {
 import {
 import {
-import { runJsonValidator } from "./core/json-validator.js";
+import { runResultJsonValidator } from "./core/result-json-validator.js";
 import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
 import { makeRelativeIfContainsProject, shellSplit } from "./core/utils.js";

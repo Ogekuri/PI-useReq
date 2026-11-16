@@ -256,7 +256,7 @@ import {
   runTokens,
   type ToolResult,
 } from "./core/tool-runner.js";
-import { runJsonValidator } from "./core/json-validator.js";
+import { runResultJsonValidator } from "./core/result-json-validator.js";
 import { LANGUAGE_TAGS } from "./core/find-constructs.js";
 import {
   checkDefaultCheckersAvailability,
@@ -4506,7 +4506,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
     },
   });
 
-  const jsonValidatorSchema = Type.Object(
+  const resultJsonValidatorSchema = Type.Object(
     {
       content: Type.Optional(Type.String({
         description: "Raw final-output JSON message text to validate inline; omit when files are supplied",
@@ -4522,8 +4522,8 @@ function registerAgentTools(pi: ExtensionAPI): void {
   );
 
   pi.registerTool({
-    name: "json-validator",
-    label: "json-validator",
+    name: "result-json-validator",
+    label: "result-json-validator",
     description: "Scope: the agent's final output JSON message (the single JSON object emitted as the complete final response/result). Validate its JSON syntax AND the final-output mandatory-field contract (result exactly \"ok\" or \"error\", summary string, next_commands array); return the monolithic markdown verdict in content[0].text and keep only execution metadata in details.execution. This tool is NOT a generic JSON validator: it imposes mandatory content constraints, so syntactically valid JSON without the mandatory fields is reported contract-invalid. Use it ONLY on the final output JSON object immediately before emitting it; NEVER use it to validate arbitrary JSON files, configuration payloads, or intermediate data.",
     promptSnippet: "Return the monolithic final-output JSON contract verdict for the caller-supplied final response JSON.",
     promptGuidelines: [
@@ -4533,10 +4533,10 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Content contract: every parsed record is validated against the orchestration final-output mandatory fields — result exactly \"ok\" or \"error\", summary string, next_commands array — so valid JSON lacking these fields is reported contract-invalid; absent optional report fields are tolerated.",
       "Usage contract: use this tool ONLY to validate the complete final output JSON message immediately before emitting it. Do NOT use it for generic JSON validation: it imposes mandatory-field content constraints beyond syntax, so arbitrary JSON documents, configuration payloads, fixtures, and intermediate data fail the contract even when syntactically valid.",
     ],
-    renderResult: buildStructuredToolRenderResult("json-validator"),
-    parameters: jsonValidatorSchema,
+    renderResult: buildStructuredToolRenderResult("result-json-validator"),
+    parameters: resultJsonValidatorSchema,
     async execute(_toolCallId, params) {
-      return executeMonolithicTool(() => runJsonValidator(params));
+      return executeMonolithicTool(() => runResultJsonValidator(params));
     },
   });
 }
