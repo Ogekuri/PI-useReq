@@ -16,6 +16,7 @@ import {
   resetNextWorkflowStateForTests,
   resolveNextWorkflowCommandHandler,
   resolveNextWorkflowEntryIndex,
+  resolveNextWorkflowTextColumnTargetWidth,
 } from "../src/core/next-workflow.js";
 
 /**
@@ -98,10 +99,10 @@ test("next-workflow table condensation renders first-20 plus separator plus last
 
 /**
  * @brief Verifies the full-text Next-Workflow table rendering contract.
- * @details Asserts the table headers `N.`, `Next Workflow`, and `Text`, right-aligned space-padded one-based ordinals, prefix-free uppercase commands, full untruncated input text wrapped at whitespace boundaries into at most 35-display-column lines rendered as continuation physical rows with empty sibling cells, the `N/A` placeholder for absent input text, and the empty string for an empty entry array. Runtime is O(n) in entry length. No external state is mutated.
+ * @details Asserts the table headers `N.`, `Next Workflow`, and `Text`, right-aligned space-padded one-based ordinals, prefix-free uppercase commands, full untruncated input text wrapped at whitespace boundaries into at most the fixed minimum 35-display-column fallback lines rendered as continuation physical rows with empty sibling cells, the `N/A` placeholder for absent input text, and the empty string for an empty entry array. Runtime is O(n) in entry length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when the rendered table truncates input text, breaks the wrapping, alignment, continuation-row, or empty-array contract.
- * @satisfies REQ-722, REQ-723, REQ-724, REQ-729, REQ-730, REQ-731
+ * @satisfies REQ-722, REQ-723, REQ-724, REQ-729, REQ-730, REQ-731, REQ-750
  */
 test("next-workflow command table renders full wrapped text with right-aligned ordinals", () => {
   const rendered = formatNextWorkflowCommandTable([
@@ -126,24 +127,71 @@ test("next-workflow command table renders full wrapped text with right-aligned o
 });
 
 /**
- * @brief Verifies the wrap-boundary contract of the Next-Workflow table `Text` cell.
- * @details Asserts one unbreakable word longer than the 35-display-column bound occupies its own oversized physical row so the column widens, the following word starts the next line, and every non-unbreakable wrapped line stays within the bound. Runtime is O(n) in entry length. No external state is mutated.
+ * @brief Verifies the hard-breaking wrap contract of the Next-Workflow table `Text` cell.
+ * @details Asserts one unbreakable word longer than the fixed minimum wrap target is hard-broken across multiple physical rows of at most the target display width, the following short word joins the final chunk line, the column never widens beyond the target, and the full untruncated word stays present across the continuation rows. Runtime is O(n) in entry length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
- * @throws {AssertionError} Throws when the unbreakable word is split, the column fails to widen, or the continuation row leaks sibling cell content.
- * @satisfies REQ-729, REQ-730, REQ-731
+ * @throws {AssertionError} Throws when any produced `Text` cell line exceeds the fixed minimum width, the unbreakable word renders on one oversized row, or characters of the untruncated word are lost.
+ * @satisfies REQ-724, REQ-729, REQ-730, REQ-731, REQ-750
  */
-test("next-workflow command table widens the column for unbreakable words", () => {
+test("next-workflow command table hard-breaks unbreakable words at the fixed minimum wrap target", () => {
   const longWord = "a".repeat(40);
   const rendered = formatNextWorkflowCommandTable([
     { command: "req-fix", inputText: `${longWord} tail` },
   ]);
   const dataLines = rendered.split("\n").filter((line) => line.startsWith("│") && !line.includes("N."));
-  assert.ok(dataLines.some((line) => line.split("│")[3].trim() === longWord), "unbreakable word must own one widened physical row");
-  assert.ok(dataLines.some((line) => line.split("│")[3].trim() === "tail"), "following word must start the next physical row");
-  for (const line of dataLines) {
-    const textCell = line.split("│")[3].trim();
-    assert.ok(textCell.length <= NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH || textCell === longWord);
+  const textCells = dataLines.map((line) => line.split("│")[3].trim());
+  assert.ok(!textCells.includes(longWord), "the unbreakable word must not own one oversized physical row");
+  assert.ok(textCells.some((cell) => cell === "a".repeat(NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH)), "the first chunk fills the fixed minimum width");
+  assert.ok(textCells.some((cell) => cell === `${"a".repeat(5)} tail`), "the final chunk joins the following short word");
+  assert.equal(
+    textCells.join(" ").split(" ").filter((token) => token !== "tail").join("").length,
+    40,
+    "all untruncated word characters stay present",
+  );
+  for (const cell of textCells) {
+    assert.ok(cell.length <= NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH, `every produced line stays within the fixed minimum width, received ${cell.length}`);
   }
+});
+
+/**
+ * @brief Verifies the terminal-adaptive `Text` column wrap-target resolution contract.
+ * @details Asserts unavailable, non-integer, non-positive, and too-narrow terminal column counts fall back to the fixed minimum, and that adequate terminal widths derive the target as the terminal count minus the fixed columns width minus the fixed row chrome so every rendered physical row fits the CLI width. Runtime is O(1). No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when the derived target deviates from the documented subtraction and minimum-fallback contract.
+ * @satisfies REQ-749, REQ-750
+ */
+test("next-workflow text column wrap target adapts to the terminal width with the fixed minimum fallback", () => {
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(undefined, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(0, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(-8, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(12.5, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(60, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(80, 15), 55);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(120, 15), 95);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(200, 15), 175);
+});
+
+/**
+ * @brief Verifies terminal-width conformance of the rendered Next-Workflow table.
+ * @details Asserts one table rendered with an explicit adequate terminal column count and a long unbreakable token keeps every physical line within the terminal width while preserving the full untruncated input text across the hard-broken continuation rows, and that no condensed citation separator leaks into the full-text table. Runtime is O(n) in entry length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when any physical table line exceeds the terminal width, the untruncated token loses characters, or the table renders empty.
+ * @satisfies REQ-722, REQ-724, REQ-729, REQ-731, REQ-749
+ */
+test("next-workflow command table keeps every physical row inside the terminal width", () => {
+  const longToken = "pi.dev-src/pi/packages/coding-agent/src/modes/interactive/interactive-mode.ts:868-916,";
+  const rendered = formatNextWorkflowCommandTable([
+    { command: "req-fix", inputText: `Check the failing path ${longToken} then retry` },
+  ], 100);
+  assert.notEqual(rendered, "");
+  const lines = rendered.split("\n");
+  for (const line of lines) {
+    assert.ok(line.length <= 100, `physical row exceeds the terminal width: ${line.length}`);
+  }
+  assert.ok(!rendered.includes(" .. "), "the full-text table never uses the condensed citation separator");
+  const dataLines = lines.filter((line) => line.startsWith("│") && !line.includes("N."));
+  const textCells = dataLines.map((line) => line.split("│")[3].trim());
+  assert.ok(textCells.join("").includes(longToken), "all untruncated token characters stay present across the hard-broken rows");
 });
 
 /**

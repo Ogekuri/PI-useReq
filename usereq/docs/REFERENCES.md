@@ -3717,14 +3717,15 @@ import { SourceAnalyzer, formatMarkdown } from "./source-analyzer.js";
 
 ---
 
-# next-workflow.ts | TypeScript | 399L | 21 symbols | 4 imports | 30 comments
+# next-workflow.ts | TypeScript | 489L | 24 symbols | 5 imports | 34 comments
 > Path: `src/core/next-workflow.ts`
 - @brief Implements Next-Workflow command capture, process-scoped storage, rounded-table rendering, `/req-continue` selection, and parameter-less `/req-continue` printing helpers.
-- @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the captured commands as the dynamically sized full-text Next-Workflow table printed inside the ANSI report notification and as the `/req-continue` command table appended after the final context-retention line, resolves one-based ordinal selection, stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation, and stores the empty-array placeholder printed by parameter-less `/req-continue`. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
-- @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-733, REQ-734
+- @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the captured commands as the dynamically sized full-text Next-Workflow table whose `Text` column wraps at the terminal-adaptive target width with hard-broken unbreakable words printed inside the ANSI report notification and as the `/req-continue` command table appended after the final context-retention line, resolves one-based ordinal selection, stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation, and stores the empty-array placeholder printed by parameter-less `/req-continue`. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+- @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-733, REQ-734, REQ-749, REQ-750
 
 ## Imports
 ```
+import process from "node:process";
 import { type AgentFinalOutputCommandEntry, type AgentFinalOutputParse, resetAgentFinalOutputStateForTests } from "./agent-final-output.js";
 import { measureDisplayWidth } from "./config-cli-render.js";
 import { ReqError } from "./errors.js";
@@ -3733,28 +3734,28 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 
 ## Definitions
 
-### iface `export interface NextWorkflowCommandEntry` (L49-54)
+### iface `export interface NextWorkflowCommandEntry` (L50-55)
 - @brief Describes one captured Next-Workflow command entry.
 - @details Pairs the invokable pi-usereq command name without the leading slash with the captured `next_commands` input text, preserving the entry order of the final-output JSON. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-654
 
-- type `export type NextWorkflowCommandHandler = (args: string, ctx: any) => unknown;` (L61)
+- type `export type NextWorkflowCommandHandler = (args: string, ctx: any) => unknown;` (L62)
 - @brief Describes the loosely-typed command handler dispatched by `/req-continue`.
 - @details Mirrors the pi `registerCommand(...)` handler contract `(args, ctx) => Promise<void>` through deliberately loose structural typing: the `any` context parameter keeps every concrete registered handler assignable despite `strictFunctionTypes` contravariance while delegation forwards the live command context unchanged, so this module never imports concrete pi extension types. The alias is compile-time only and introduces no runtime cost.
 - @satisfies REQ-663
-### iface `interface ProcessScopedNextWorkflowStore` (L68-73)
+### iface `interface ProcessScopedNextWorkflowStore` (L69-74)
 - @brief Stores the process-scoped Next-Workflow state persisted across extension rebinds.
 - @details Holds the captured command entries and the latest command-handler registry on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` while the hosting process persists, so the array captured by one completed agentic flow stays consumable by `/req-continue` in the successor session. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-656
 
-- type `type GlobalNextWorkflowStore = typeof globalThis & {` (L75)
-### fn `function getNextWorkflowStore(): ProcessScopedNextWorkflowStore` (L85-91)
+- type `type GlobalNextWorkflowStore = typeof globalThis & {` (L76)
+### fn `function getNextWorkflowStore(): ProcessScopedNextWorkflowStore` (L86-92)
 - @brief Returns the process-scoped Next-Workflow store.
 - @details Lazily initializes one `globalThis` record so session rebinds reuse the captured array and the latest handler registry instead of resetting them. Runtime is O(1). Side effect: initializes process-scoped state on first access.
 - @return {ProcessScopedNextWorkflowStore} Mutable process-scoped Next-Workflow store.
 - @note Complexity: O(1). Side effect limited to first-access initialization.
 
-### fn `function appendNextWorkflowEntry(` (L102-112)
+### fn `function appendNextWorkflowEntry(` (L103-113)
 - @brief Appends one parsed `next_commands` entry when it names an allowed pi-usereq command.
 - @details Drops the entry when the normalized command is outside the pi-usereq inventory so non-pi-usereq orchestration commands are purged while `/req-continue` stays, and carries the entry `text` verbatim as the input text. Runtime is O(1). No external state is mutated.
 - @param[in] entry {AgentFinalOutputCommandEntry} Normalized `next_commands` entry of the final-output JSON.
@@ -3763,7 +3764,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(1).
 - @satisfies REQ-654, REQ-655
 
-### fn `export function parseNextWorkflowCommandEntries(` (L122-133)
+### fn `export function parseNextWorkflowCommandEntries(` (L123-134)
 - @brief Maps the `next_commands` entries of one parsed final-output JSON into Next-Workflow entries.
 - @details Iterates the normalized `next_commands` entries in payload order, keeps each entry naming a pi-usereq slash command with its verbatim input text, and purges every non-pi-usereq orchestration command while keeping the `/req-continue` exception; one invalid final-output parse yields no entry because no consumable JSON object exists. Runtime is O(n) in entry count. No external state is mutated.
 - @param[in] finalOutput {AgentFinalOutputParse} Parse result of the terminal agent output.
@@ -3771,7 +3772,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in entry count. Pure; no side effects.
 - @satisfies REQ-653, REQ-654, REQ-655
 
-### fn `export function captureNextWorkflowCommands(finalOutput: AgentFinalOutputParse): NextWorkflowCommandEntry[]` (L143-147)
+### fn `export function captureNextWorkflowCommands(finalOutput: AgentFinalOutputParse): NextWorkflowCommandEntry[]` (L144-148)
 - @brief Captures the Next-Workflow commands of one parsed final agent output into the process-scoped array.
 - @details Maps the `next_commands` entries of the final-output JSON and replaces the stored array so the captured commands always reflect the last captured completed agentic flow, including the empty result when the terminal output parses to no valid final-output JSON. Runtime is O(n) in entry count. Side effect: replaces process-scoped capture state.
 - @param[in] finalOutput {AgentFinalOutputParse} Parse result of the terminal agent output of the completed run.
@@ -3779,21 +3780,21 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in entry count.
 - @satisfies REQ-653, REQ-654, REQ-655, REQ-656
 
-### fn `export function getNextWorkflowCommands(): NextWorkflowCommandEntry[]` (L156-158)
+### fn `export function getNextWorkflowCommands(): NextWorkflowCommandEntry[]` (L157-159)
 - @brief Returns a detached snapshot of the captured Next-Workflow commands.
 - @details Copies the process-scoped entries so callers can inspect or iterate the array without mutating the stored state. Runtime is O(n) in entry count. No external state is mutated.
 - @return {NextWorkflowCommandEntry[]} Detached entry snapshot in capture order.
 - @note Complexity: O(n) in entry count.
 - @satisfies REQ-656
 
-### fn `export function clearNextWorkflowCommands(): void` (L167-169)
+### fn `export function clearNextWorkflowCommands(): void` (L168-170)
 - @brief Clears the captured Next-Workflow commands.
 - @details Resets the process-scoped array to empty. The wipe runs only at the idle-reset bootstrap boundaries (`startup|reload` `session_start`) and immediately before prompt dispatch of a `new` agentic flow after every slash-command pre-check has succeeded, so failed pre-checks preserve queued commands and `/req-reset` recovery never clears the array. Runtime is O(1). Side effect: mutates process-scoped state.
 - @return {void} No return value.
 - @note Complexity: O(1).
 - @satisfies REQ-656, REQ-669, REQ-670
 
-### fn `export function registerNextWorkflowCommandHandler(` (L180-185)
+### fn `export function registerNextWorkflowCommandHandler(` (L181-186)
 - @brief Registers the reusable handler for one pi-usereq command dispatched by `/req-continue`.
 - @details Stores the supplied handler keyed by the invokable command name in the process-scoped registry, replacing any handler from an earlier extension bind so delegation always binds to the most recent registration. Runtime is O(1). Side effect: mutates process-scoped registry state.
 - @param[in] command {string} Invokable pi-usereq command name without the leading slash.
@@ -3802,7 +3803,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(1).
 - @satisfies REQ-663
 
-### fn `export function resolveNextWorkflowCommandHandler(command: string): NextWorkflowCommandHandler | undefined` (L195-197)
+### fn `export function resolveNextWorkflowCommandHandler(command: string): NextWorkflowCommandHandler | undefined` (L196-198)
 - @brief Resolves the registered handler for one captured command name.
 - @details Returns `undefined` when no extension bind registered the requested command so `/req-continue` surfaces a deterministic diagnostic instead of dispatching an unknown symbol. Runtime is O(1). No external state is mutated.
 - @param[in] command {string} Invokable pi-usereq command name without the leading slash.
@@ -3810,16 +3811,41 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(1).
 - @satisfies REQ-663
 
-### fn `function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[]` (L220-241)
-- @brief Wraps one captured input text into `Text` cell lines bounded by the maximum display width.
-- @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, an unbreakable word longer than `maxWidth` occupies its own oversized line so column-width computation widens the column, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
+### fn `export function resolveNextWorkflowTextColumnTargetWidth(` (L228-240)
+- @brief Resolves the effective Next-Workflow table `Text` column wrap target from one terminal column count.
+- @details Returns `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH` when the terminal column count is unavailable, non-integer, non-positive, or when `terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH` stays below the minimum; otherwise returns that difference so every rendered physical table row fits the CLI width. No upper cap is applied. Runtime is O(1). No external state is mutated.
+- @param[in] terminalColumns {number | undefined} pi CLI terminal column count; `undefined` or invalid selects the fixed minimum.
+- @param[in] fixedColumnsWidth {number} Summed display width of the non-`Text` columns, such as the ordinal column plus the `Next Workflow` header.
+- @return {number} Effective `Text` column wrap target in display columns; never below `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH`.
+- @note Complexity: O(1). Pure; no side effects.
+- @satisfies REQ-749, REQ-750
+
+### fn `function readNextWorkflowTerminalColumns(): number | undefined` (L249-252)
+- @brief Reads the pi CLI terminal column count from the hosting process standard output.
+- @details Returns `process.stdout.columns` only when it is a positive integer so non-TTY pipes, redirected output, and degraded hosts select the fixed minimum fallback through `resolveNextWorkflowTextColumnTargetWidth(...)`. Runtime is O(1). No external state is mutated.
+- @return {number | undefined} Positive terminal column count, or `undefined` when unavailable.
+- @note Complexity: O(1).
+- @satisfies REQ-749, REQ-750
+
+### fn `function splitUnbreakableWordByDisplayWidth(word: string, maxWidth: number): string[]` (L263-282)
+- @brief Splits one unbreakable word into display-width-bounded chunks without splitting wide characters.
+- @details Iterates code points, accumulates characters while the joined display width stays within `maxWidth`, and flushes the chunk before a character that would exceed the bound; a single character wider than `maxWidth` occupies its own oversized chunk so degenerate narrow targets never lose characters. Runtime is O(n) in word length. No external state is mutated.
+- @param[in] word {string} Single whitespace-delimited word wider than `maxWidth`.
+- @param[in] maxWidth {number} Maximum display width per produced chunk.
+- @return {string[]} Ordered chunks in reading order; never empty.
+- @note Complexity: O(n) in word length. Pure; no side effects.
+- @satisfies REQ-729
+
+### fn `function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[]` (L293-323)
+- @brief Wraps one captured input text into `Text` cell lines bounded by the effective wrap target.
+- @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, a single word wider than `maxWidth` is hard-broken at display-width boundaries across multiple lines with the final chunk staying open for following words so no produced line exceeds `maxWidth` and the column never widens for unbreakable words, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] inputText {string} Captured input text.
 - @param[in] maxWidth {number} Maximum display width per produced line.
 - @return {string[]} Wrapped cell lines in reading order; never empty.
 - @note Complexity: O(n) in input length. Pure; no side effects.
 - @satisfies REQ-724, REQ-729
 
-### fn `export function condenseNextWorkflowTableInputText(inputText: string): string` (L251-259)
+### fn `export function condenseNextWorkflowTableInputText(inputText: string): string` (L333-341)
 - @brief Condenses one captured input text for Next-Workflow and `/req-continue` table cell rendering.
 - @details Collapses every whitespace run, including newlines, into one space, then renders inputs longer than the 30-character verbatim limit as the first 20 characters followed by the ` .. ` table separator followed by the last 10 characters and shorter inputs verbatim; the empty string stays empty so the table builder renders the `N/A` placeholder. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] inputText {string} Captured input text.
@@ -3827,7 +3853,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in input length. Pure; no side effects.
 - @satisfies REQ-658
 
-### fn `function renderNextWorkflowRoundedTable(headers: readonly string[], rows: readonly string[][][]): string` (L270-300)
+### fn `function renderNextWorkflowRoundedTable(headers: readonly string[], rows: readonly string[][][]): string` (L352-382)
 - @brief Renders headers plus per-cell line arrays as one dynamically sized rounded table printout.
 - @details Computes every column width from the maximum display width over the header and every rendered cell line, renders each cell line as one physical row that pads cells to the column width with spaces, repeats empty cells for the continuation lines of multi-line cells, and frames the table with the rounded box-drawing characters using the double-line header separator plus single-line row separators between logical rows. Runtime is O(n) in aggregate cell line length. No external state is mutated.
 - @param[in] headers {readonly string[]} Column header labels.
@@ -3836,19 +3862,20 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in aggregate cell line length. Pure; no side effects.
 - @satisfies REQ-725, REQ-730, REQ-731
 
-### fn `const border = (left: string, fill: string, middle: string, right: string): string =>` (L277-280)
+### fn `const border = (left: string, fill: string, middle: string, right: string): string =>` (L359-362)
 
-### fn `const dataRow = (cells: readonly string[]): string =>` (L279-280)
+### fn `const dataRow = (cells: readonly string[]): string =>` (L361-362)
 
-### fn `export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L310-324)
+### fn `export function formatNextWorkflowCommandTable(` (L393-414)
 - @brief Renders the captured Next-Workflow commands as the dynamically sized full-text rounded table printout.
-- @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `N.`, `Next Workflow`, and `Text` columns, renders each row with one right-aligned space-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and the full untruncated input text wrapped at whitespace boundaries into at most 35-display-column lines with `N/A` for absent input text, and frames the table with the rounded box-drawing characters; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
+- @details Computes widths through `renderNextWorkflowRoundedTable(...)`, resolves the effective `Text` column wrap target through `resolveNextWorkflowTextColumnTargetWidth(...)` from the supplied or process-detected terminal column count, renders the `N.`, `Next Workflow`, and `Text` columns, renders each row with one right-aligned space-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and the full untruncated input text wrapped at whitespace boundaries into at most the effective wrap-target display columns with hard-broken unbreakable words and `N/A` for absent input text, and frames the table with the rounded box-drawing characters; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
 - @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
+- @param[in] terminalColumns {number | undefined} pi CLI terminal column count consumed by the wrap-target resolution; defaults to the process-detected `process.stdout.columns`.
 - @return {string} Complete rounded table printout, or the empty string when no entry exists.
-- @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
-- @satisfies REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731
+- @note Complexity: O(n) in aggregate cell length. Pure aside from the process stdout metadata read performed by the default width source.
+- @satisfies REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-749, REQ-750
 
-### fn `export function formatNextWorkflowContinueCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L334-345)
+### fn `export function formatNextWorkflowContinueCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L424-435)
 - @brief Renders the captured Next-Workflow commands as the `/req-continue` command table appended after the retention line.
 - @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `Continue comand`, `Workflow`, and `Text` columns, renders each capture-order row with the directly invokable `/req-continue <one-based-ordinal>` command, the command name without the `req-` prefix in uppercase, and the condensed input-text quotation collapsing inputs longer than 30 characters into the first 20 characters, the ` .. ` separator, and the last 10 characters with `N/A` for absent input text, and frames the table like the Next-Workflow table; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
 - @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
@@ -3856,7 +3883,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
 - @satisfies REQ-657, REQ-658, REQ-731, REQ-733, REQ-734
 
-### fn `export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: number): number` (L364-386)
+### fn `export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: number): number` (L454-476)
 - @brief Resolves the zero-based entry index selected by one mandatory `/req-continue` ordinal argument.
 - @details Requires one non-empty decimal integer argument identifying the one-based Next-Workflow array ordinal, throws the mandatory-parameter diagnostic for an empty argument because parameter-less `/req-continue` invocations print the Next-Workflow table before reaching this selector, throws a deterministic diagnostic for non-numeric arguments, and throws a range diagnostic when the one-based ordinal exceeds the captured entry count. Runtime is O(n) in argument length. No external state is mutated.
 - @param[in] rawArgs {string} Raw `/req-continue` argument string.
@@ -3866,7 +3893,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in argument length. Pure aside from thrown diagnostics.
 - @satisfies REQ-661, REQ-662
 
-### fn `export function resetNextWorkflowStateForTests(): void` (L394-399)
+### fn `export function resetNextWorkflowStateForTests(): void` (L484-489)
 - @brief Resets the process-scoped Next-Workflow state for deterministic tests.
 - @details Clears both the captured entries and the handler registry plus the process-scoped captured final-output report so one test can simulate independent pi host processes without leaking captured follow-up commands, stale handlers, or stale report sections into later cases. Runtime is O(1). Side effect: mutates process-scoped state.
 - @return {void} No return value.
@@ -3875,27 +3902,30 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`NextWorkflowCommandEntry`|iface||49-54|export interface NextWorkflowCommandEntry|
-|`NextWorkflowCommandHandler`|type||61||
-|`ProcessScopedNextWorkflowStore`|iface||68-73|interface ProcessScopedNextWorkflowStore|
-|`GlobalNextWorkflowStore`|type||75||
-|`getNextWorkflowStore`|fn||85-91|function getNextWorkflowStore(): ProcessScopedNextWorkflo...|
-|`appendNextWorkflowEntry`|fn||102-112|function appendNextWorkflowEntry(|
-|`parseNextWorkflowCommandEntries`|fn||122-133|export function parseNextWorkflowCommandEntries(|
-|`captureNextWorkflowCommands`|fn||143-147|export function captureNextWorkflowCommands(finalOutput: ...|
-|`getNextWorkflowCommands`|fn||156-158|export function getNextWorkflowCommands(): NextWorkflowCo...|
-|`clearNextWorkflowCommands`|fn||167-169|export function clearNextWorkflowCommands(): void|
-|`registerNextWorkflowCommandHandler`|fn||180-185|export function registerNextWorkflowCommandHandler(|
-|`resolveNextWorkflowCommandHandler`|fn||195-197|export function resolveNextWorkflowCommandHandler(command...|
-|`wrapNextWorkflowTableCellText`|fn||220-241|function wrapNextWorkflowTableCellText(inputText: string,...|
-|`condenseNextWorkflowTableInputText`|fn||251-259|export function condenseNextWorkflowTableInputText(inputT...|
-|`renderNextWorkflowRoundedTable`|fn||270-300|function renderNextWorkflowRoundedTable(headers: readonly...|
-|`border`|fn||277-280|const border = (left: string, fill: string, middle: strin...|
-|`dataRow`|fn||279-280|const dataRow = (cells: readonly string[]): string =>|
-|`formatNextWorkflowCommandTable`|fn||310-324|export function formatNextWorkflowCommandTable(entries: r...|
-|`formatNextWorkflowContinueCommandTable`|fn||334-345|export function formatNextWorkflowContinueCommandTable(en...|
-|`resolveNextWorkflowEntryIndex`|fn||364-386|export function resolveNextWorkflowEntryIndex(rawArgs: st...|
-|`resetNextWorkflowStateForTests`|fn||394-399|export function resetNextWorkflowStateForTests(): void|
+|`NextWorkflowCommandEntry`|iface||50-55|export interface NextWorkflowCommandEntry|
+|`NextWorkflowCommandHandler`|type||62||
+|`ProcessScopedNextWorkflowStore`|iface||69-74|interface ProcessScopedNextWorkflowStore|
+|`GlobalNextWorkflowStore`|type||76||
+|`getNextWorkflowStore`|fn||86-92|function getNextWorkflowStore(): ProcessScopedNextWorkflo...|
+|`appendNextWorkflowEntry`|fn||103-113|function appendNextWorkflowEntry(|
+|`parseNextWorkflowCommandEntries`|fn||123-134|export function parseNextWorkflowCommandEntries(|
+|`captureNextWorkflowCommands`|fn||144-148|export function captureNextWorkflowCommands(finalOutput: ...|
+|`getNextWorkflowCommands`|fn||157-159|export function getNextWorkflowCommands(): NextWorkflowCo...|
+|`clearNextWorkflowCommands`|fn||168-170|export function clearNextWorkflowCommands(): void|
+|`registerNextWorkflowCommandHandler`|fn||181-186|export function registerNextWorkflowCommandHandler(|
+|`resolveNextWorkflowCommandHandler`|fn||196-198|export function resolveNextWorkflowCommandHandler(command...|
+|`resolveNextWorkflowTextColumnTargetWidth`|fn||228-240|export function resolveNextWorkflowTextColumnTargetWidth(|
+|`readNextWorkflowTerminalColumns`|fn||249-252|function readNextWorkflowTerminalColumns(): number | unde...|
+|`splitUnbreakableWordByDisplayWidth`|fn||263-282|function splitUnbreakableWordByDisplayWidth(word: string,...|
+|`wrapNextWorkflowTableCellText`|fn||293-323|function wrapNextWorkflowTableCellText(inputText: string,...|
+|`condenseNextWorkflowTableInputText`|fn||333-341|export function condenseNextWorkflowTableInputText(inputT...|
+|`renderNextWorkflowRoundedTable`|fn||352-382|function renderNextWorkflowRoundedTable(headers: readonly...|
+|`border`|fn||359-362|const border = (left: string, fill: string, middle: strin...|
+|`dataRow`|fn||361-362|const dataRow = (cells: readonly string[]): string =>|
+|`formatNextWorkflowCommandTable`|fn||393-414|export function formatNextWorkflowCommandTable(|
+|`formatNextWorkflowContinueCommandTable`|fn||424-435|export function formatNextWorkflowContinueCommandTable(en...|
+|`resolveNextWorkflowEntryIndex`|fn||454-476|export function resolveNextWorkflowEntryIndex(rawArgs: st...|
+|`resetNextWorkflowStateForTests`|fn||484-489|export function resetNextWorkflowStateForTests(): void|
 
 
 ---

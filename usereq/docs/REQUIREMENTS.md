@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.170"
+version: "0.0.171"
 date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
@@ -807,7 +807,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-726**: MUST validate every parsed JSON object against the orchestration final-output mandatory-field contract: `result` exactly `ok` or `error`, `summary` string, and `next_commands` array.
 - **REQ-727**: MUST mark each verdict record with a final-output contract verdict and list every mandatory-field violation with the violated field name and expected domain.
 - **REQ-728**: MUST classify every parsed JSON root that is not an object as final-output contract invalid with one root-type issue in the verdict record.
-- **REQ-729**: MUST wrap each Next-Workflow table `Text` cell at whitespace boundaries into lines of at most 35 display columns, widening the column to fit any longer unbreakable word.
+- **REQ-729**: MUST wrap each Next-Workflow table `Text` cell at whitespace boundaries into lines of at most the effective `Text` column wrap target, hard-breaking any single word longer than that target across multiple lines.
 - **REQ-730**: MUST render every wrapped `Text` cell line as one physical table row whose remaining cells stay empty.
 - **REQ-731**: MUST compute every Next-Workflow and `/req-continue` table column width from the maximum display width over the header and all rendered cell lines.
 - **REQ-732**: MUST apply the same ANSI markdown colorizer used for the report sections to the rendered Next-Workflow command table text.
@@ -824,6 +824,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-746**: MUST perform the extension-changelog version-key migration best-effort and MUST NOT change the `--upgrade` exit code or completion summary when reading or writing pi CLI settings fails.
 - **REQ-747**: MUST resolve the pi CLI global settings file as `<agent-dir>/settings.json` honoring `PI_CODING_AGENT_DIR` and MUST preserve every other settings field and entry during migration writes.
 - **REQ-748**: MUST restrict the extension-changelog version-key migration to develop-channel `--upgrade` runs and MUST NOT read or write pi CLI settings during default-channel `--upgrade` runs.
+- **REQ-749**: MUST derive the Next-Workflow `Text` column wrap target as the pi CLI terminal column count minus the other columns and row chrome whenever that value reaches the fixed minimum.
+- **REQ-750**: MUST fall back the Next-Workflow `Text` column wrap target to the fixed minimum 35 display columns whenever the derived target is unavailable or below the minimum.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.

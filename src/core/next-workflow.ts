@@ -1,10 +1,11 @@
 /**
  * @file
  * @brief Implements Next-Workflow command capture, process-scoped storage, rounded-table rendering, `/req-continue` selection, and parameter-less `/req-continue` printing helpers.
- * @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the captured commands as the dynamically sized full-text Next-Workflow table printed inside the ANSI report notification and as the `/req-continue` command table appended after the final context-retention line, resolves one-based ordinal selection, stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation, and stores the empty-array placeholder printed by parameter-less `/req-continue`. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
- * @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-733, REQ-734
+ * @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the captured commands as the dynamically sized full-text Next-Workflow table whose `Text` column wraps at the terminal-adaptive target width with hard-broken unbreakable words printed inside the ANSI report notification and as the `/req-continue` command table appended after the final context-retention line, resolves one-based ordinal selection, stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation, and stores the empty-array placeholder printed by parameter-less `/req-continue`. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+ * @satisfies DES-040, REQ-653, REQ-654, REQ-655, REQ-656, REQ-657, REQ-658, REQ-659, REQ-662, REQ-663, REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-733, REQ-734, REQ-749, REQ-750
  */
 
+import process from "node:process";
 import { type AgentFinalOutputCommandEntry, type AgentFinalOutputParse, resetAgentFinalOutputStateForTests } from "./agent-final-output.js";
 import { measureDisplayWidth } from "./config-cli-render.js";
 import { ReqError } from "./errors.js";
@@ -202,15 +203,87 @@ const NEXT_WORKFLOW_CONDENSED_VERBATIM_LIMIT =
   NEXT_WORKFLOW_CONDENSED_PREFIX_LENGTH + NEXT_WORKFLOW_CONDENSED_SUFFIX_LENGTH;
 
 /**
- * @brief Stores the maximum display width of one wrapped Next-Workflow table `Text` cell line.
- * @details Bounds every wrapped `Text` cell line so the full untruncated input text renders across multiple physical table rows instead of one oversized line; an unbreakable word longer than the bound occupies its own oversized line so the column-width computation widens the column. Access complexity is O(1).
- * @satisfies REQ-729
+ * @brief Stores the fixed minimum display width of the Next-Workflow table `Text` column wrap target.
+ * @details Serves as the fallback wrap target whenever the pi CLI terminal column count is unavailable or leaves the derived target below the minimum, and bounds every wrapped `Text` cell line in that fallback so the full untruncated input text renders across multiple physical table rows instead of one oversized line. Access complexity is O(1).
+ * @satisfies REQ-729, REQ-750
  */
 export const NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH = 35;
 
 /**
- * @brief Wraps one captured input text into `Text` cell lines bounded by the maximum display width.
- * @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, an unbreakable word longer than `maxWidth` occupies its own oversized line so column-width computation widens the column, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
+ * @brief Stores the fixed display-width chrome of one Next-Workflow table physical row outside the three column widths.
+ * @details Counts the leading `│ ` border, the two ` │ ` cell separators, and the trailing ` │` border so `terminal columns - fixed columns - chrome` yields the widest `Text` column that keeps every physical row inside the CLI width. Access complexity is O(1).
+ * @satisfies REQ-749
+ */
+const NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH = 10;
+
+/**
+ * @brief Resolves the effective Next-Workflow table `Text` column wrap target from one terminal column count.
+ * @details Returns `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH` when the terminal column count is unavailable, non-integer, non-positive, or when `terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH` stays below the minimum; otherwise returns that difference so every rendered physical table row fits the CLI width. No upper cap is applied. Runtime is O(1). No external state is mutated.
+ * @param[in] terminalColumns {number | undefined} pi CLI terminal column count; `undefined` or invalid selects the fixed minimum.
+ * @param[in] fixedColumnsWidth {number} Summed display width of the non-`Text` columns, such as the ordinal column plus the `Next Workflow` header.
+ * @return {number} Effective `Text` column wrap target in display columns; never below `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH`.
+ * @satisfies REQ-749, REQ-750
+ * @note Complexity: O(1). Pure; no side effects.
+ */
+export function resolveNextWorkflowTextColumnTargetWidth(
+  terminalColumns: number | undefined,
+  fixedColumnsWidth: number,
+): number {
+  if (typeof terminalColumns !== "number" || !Number.isInteger(terminalColumns) || terminalColumns <= 0) {
+    return NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH;
+  }
+  const derivedTarget = terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH;
+  if (derivedTarget < NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH) {
+    return NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH;
+  }
+  return derivedTarget;
+}
+
+/**
+ * @brief Reads the pi CLI terminal column count from the hosting process standard output.
+ * @details Returns `process.stdout.columns` only when it is a positive integer so non-TTY pipes, redirected output, and degraded hosts select the fixed minimum fallback through `resolveNextWorkflowTextColumnTargetWidth(...)`. Runtime is O(1). No external state is mutated.
+ * @return {number | undefined} Positive terminal column count, or `undefined` when unavailable.
+ * @satisfies REQ-749, REQ-750
+ * @note Complexity: O(1).
+ */
+function readNextWorkflowTerminalColumns(): number | undefined {
+  const columns = process.stdout?.columns;
+  return typeof columns === "number" && Number.isInteger(columns) && columns > 0 ? columns : undefined;
+}
+
+/**
+ * @brief Splits one unbreakable word into display-width-bounded chunks without splitting wide characters.
+ * @details Iterates code points, accumulates characters while the joined display width stays within `maxWidth`, and flushes the chunk before a character that would exceed the bound; a single character wider than `maxWidth` occupies its own oversized chunk so degenerate narrow targets never lose characters. Runtime is O(n) in word length. No external state is mutated.
+ * @param[in] word {string} Single whitespace-delimited word wider than `maxWidth`.
+ * @param[in] maxWidth {number} Maximum display width per produced chunk.
+ * @return {string[]} Ordered chunks in reading order; never empty.
+ * @satisfies REQ-729
+ * @note Complexity: O(n) in word length. Pure; no side effects.
+ */
+function splitUnbreakableWordByDisplayWidth(word: string, maxWidth: number): string[] {
+  const chunks: string[] = [];
+  let current = "";
+  let currentWidth = 0;
+  for (const char of Array.from(word)) {
+    const charWidth = measureDisplayWidth(char);
+    if (current !== "" && currentWidth + charWidth > maxWidth) {
+      chunks.push(current);
+      current = char;
+      currentWidth = charWidth;
+    } else {
+      current += char;
+      currentWidth += charWidth;
+    }
+  }
+  if (current !== "") {
+    chunks.push(current);
+  }
+  return chunks;
+}
+
+/**
+ * @brief Wraps one captured input text into `Text` cell lines bounded by the effective wrap target.
+ * @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, a single word wider than `maxWidth` is hard-broken at display-width boundaries across multiple lines with the final chunk staying open for following words so no produced line exceeds `maxWidth` and the column never widens for unbreakable words, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
  * @param[in] inputText {string} Captured input text.
  * @param[in] maxWidth {number} Maximum display width per produced line.
  * @return {string[]} Wrapped cell lines in reading order; never empty.
@@ -225,6 +298,15 @@ function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): str
   const lines: string[] = [];
   let current = "";
   for (const word of normalized.split(" ")) {
+    if (measureDisplayWidth(word) > maxWidth) {
+      const chunks = splitUnbreakableWordByDisplayWidth(word, maxWidth);
+      if (current !== "") {
+        lines.push(current);
+      }
+      lines.push(...chunks.slice(0, -1));
+      current = chunks[chunks.length - 1] ?? "";
+      continue;
+    }
     if (current === "") {
       current = word;
     } else if (measureDisplayWidth(current) + 1 + measureDisplayWidth(word) <= maxWidth) {
@@ -301,24 +383,32 @@ function renderNextWorkflowRoundedTable(headers: readonly string[], rows: readon
 
 /**
  * @brief Renders the captured Next-Workflow commands as the dynamically sized full-text rounded table printout.
- * @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `N.`, `Next Workflow`, and `Text` columns, renders each row with one right-aligned space-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and the full untruncated input text wrapped at whitespace boundaries into at most 35-display-column lines with `N/A` for absent input text, and frames the table with the rounded box-drawing characters; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
+ * @details Computes widths through `renderNextWorkflowRoundedTable(...)`, resolves the effective `Text` column wrap target through `resolveNextWorkflowTextColumnTargetWidth(...)` from the supplied or process-detected terminal column count, renders the `N.`, `Next Workflow`, and `Text` columns, renders each row with one right-aligned space-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and the full untruncated input text wrapped at whitespace boundaries into at most the effective wrap-target display columns with hard-broken unbreakable words and `N/A` for absent input text, and frames the table with the rounded box-drawing characters; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
  * @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
+ * @param[in] terminalColumns {number | undefined} pi CLI terminal column count consumed by the wrap-target resolution; defaults to the process-detected `process.stdout.columns`.
  * @return {string} Complete rounded table printout, or the empty string when no entry exists.
- * @satisfies REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731
- * @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
+ * @satisfies REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-749, REQ-750
+ * @note Complexity: O(n) in aggregate cell length. Pure aside from the process stdout metadata read performed by the default width source.
  */
-export function formatNextWorkflowCommandTable(entries: readonly NextWorkflowCommandEntry[]): string {
+export function formatNextWorkflowCommandTable(
+  entries: readonly NextWorkflowCommandEntry[],
+  terminalColumns: number | undefined = readNextWorkflowTerminalColumns(),
+): string {
   if (entries.length === 0) {
     return "";
   }
   const ordinalWidth = Math.max(2, String(entries.length).length);
   const headers = ["N.", "Next Workflow", "Text"];
+  const textColumnTargetWidth = resolveNextWorkflowTextColumnTargetWidth(
+    terminalColumns,
+    ordinalWidth + measureDisplayWidth(headers[1]),
+  );
   const rows = entries.map((entry, index) => [
     [String(index + 1).padStart(ordinalWidth)],
     [entry.command.replace(/^req-/, "").toUpperCase()],
     entry.inputText === ""
       ? ["N/A"]
-      : wrapNextWorkflowTableCellText(entry.inputText, NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH),
+      : wrapNextWorkflowTableCellText(entry.inputText, textColumnTargetWidth),
   ]);
   return renderNextWorkflowRoundedTable(headers, rows);
 }
