@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.167"
+version: "0.0.168"
 date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
@@ -823,6 +823,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-739**: MUST make parameter-less `req-continue` execute only the printing operation without workflow dispatch, workflow-state transition, notification, or Next-Workflow array mutation.
 - **REQ-740**: MUST allow parameter-less `req-continue` execution from every workflow state without applying the startability gate.
 - **REQ-741**: MUST print the empty Next-Workflow list placeholder into the editor for parameter-less `req-continue` when the Next-Workflow array is empty.
+- **REQ-742**: MUST enable every configurable custom tool by default until a persisted `enabled-tools` selection explicitly overrides the default.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1422,6 +1423,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-739 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: print-only path with no dispatch, workflow-state transition, notification, or array mutation. |
 | REQ-740 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch precedes terminal-state resynchronization plus the startability gate. |
 | REQ-741 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: `NEXT_WORKFLOW_EMPTY_LIST_TEXT` from `src/core/next-workflow.ts` for an empty array. |
+| REQ-742 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES` plus `normalizeEnabledPiUsereqTools` :: default tuple enables every configurable custom tool and the absent-configuration fallback returns it; `src/index.ts` :: `applyConfiguredPiUsereqTools` :: persisted selections override only when present. |
 | REQ-663 | `src/index.ts` :: handler registrations (L3724, L3798, L3848, L4040) plus delegation (L3832-3842); `src/core/next-workflow.ts` :: `registerNextWorkflowCommandHandler` (L242-250) plus `resolveNextWorkflowCommandHandler` (L257-261) :: manual-invocation-equivalent dispatch. |
 | REQ-664 | `src/index.ts` :: `registerReqContinueCommand` delegation comment (L3854-3857) plus `await delegatedHandler(entry.inputText, ctx)` (L3858) :: delegated command owns every workflow-state transition. |
 | REQ-665 | `src/core/prompt-command-runtime.ts` :: `redirectPromptCommandExecutionToRetainedWorktree` (L1938-1980) invoked by the `finalizePromptCommandExecution` merge-failure branch (L2103-2120) :: switches back to the retained execution session, aligns `process.cwd()`, and restores worktree path facts before termination. |

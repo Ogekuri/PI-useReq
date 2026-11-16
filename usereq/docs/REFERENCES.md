@@ -5192,7 +5192,7 @@ import { parseAgentFinalOutput } from "./agent-final-output.js";
 - @details Returns the default enabled-tool tuple when the input is not an array. Otherwise filters to string entries, removes names outside the configurable tool set, and deduplicates while preserving first-seen order. Time complexity is O(n). No external state is mutated.
 - @param[in] value {unknown} Raw configuration payload for `enabled-tools`.
 - @return {PiUsereqStartupToolName[]} Deduplicated canonical tool names.
-- @satisfies REQ-064
+- @satisfies REQ-064, REQ-742
 - @post Returned values are members of `PI_USEREQ_STARTUP_TOOL_NAMES` only.
 
 ### fn `function buildPiUsereqStartupToolSortKey(` (L149-157)

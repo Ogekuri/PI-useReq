@@ -49,7 +49,7 @@ export const PI_USEREQ_STARTUP_TOOL_NAMES = [
 /**
  * @brief Enumerates the default enabled-tool configuration.
  * @details Enables the documented analysis and static-check custom tools plus the supported embedded read/write shell quartet, while leaving embedded discovery helpers disabled until explicitly configured. Access complexity is O(1).
- * @satisfies REQ-064
+ * @satisfies REQ-064, REQ-742
  */
 export const PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES = [
   "req-files-tokens",
@@ -128,7 +128,7 @@ export function isPiUsereqEmbeddedToolName(name: string): name is PiUsereqEmbedd
  * @param[in] value {unknown} Raw configuration payload for `enabled-tools`.
  * @return {PiUsereqStartupToolName[]} Deduplicated canonical tool names.
  * @post Returned values are members of `PI_USEREQ_STARTUP_TOOL_NAMES` only.
- * @satisfies REQ-064
+ * @satisfies REQ-064, REQ-742
  */
 export function normalizeEnabledPiUsereqTools(value: unknown): PiUsereqStartupToolName[] {
   if (!Array.isArray(value)) {
