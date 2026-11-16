@@ -13,6 +13,7 @@ import type {
   ExtensionContext,
   ThemeColor,
 } from "@earendil-works/pi-coding-agent";
+import type { AgentFinalOutputReport } from "./agent-final-output.js";
 import type { UseReqConfig } from "./config.js";
 import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
 import type { PromptCommandExecutionPlan, PromptCommandStatusMarker } from "./prompt-command-runtime.js";
@@ -116,7 +117,7 @@ export type PiUsereqWorkflowState = "idle" | "checking" | "running" | "merging" 
 
 /**
  * @brief Stores the mutable runtime facts displayed by the status bar.
- * @details Persists the prompt-orchestration workflow state, the active orchestration request token, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome, inspected status gate, and blocked-gate message recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
+ * @details Persists the prompt-orchestration workflow state, the active orchestration request token, the latest context-usage snapshot, the active run start timestamp, the flag marking that the in-flight or most recently ended agent run belongs to the active prompt request, the duration of the most recently ended run recorded even when aborted, the most recent normally completed run duration, the accumulated duration of all normally completed runs, the in-memory runtime sound level, prompt-request metadata carried from command dispatch into the next runtime execution, and the deferred terminal finalization outcome, inspected status gate, blocked-gate message, and parsed final-output report recorded at intermediate `agent_end` events and consumed at orchestration termination. Runtime state is mutated in-place by controller helpers. Compile-time only and introduces no runtime cost.
  */
 export interface PiUsereqStatusState {
   workflowState: PiUsereqWorkflowState;
@@ -133,6 +134,8 @@ export interface PiUsereqStatusState {
   pendingFinalizationOutcome: PiNotifyOutcome | undefined;
   pendingFinalizationStatusMarker: PromptCommandStatusMarker | undefined;
   pendingFinalizationBlockedMessage: string | undefined;
+  /** Parsed final-output report of a blocked terminal run recorded at `agent_end` and consumed by the settle-time report notification. */
+  pendingFinalizationReport: AgentFinalOutputReport | undefined;
   agentSettledEventSupported: boolean | undefined;
 }
 
@@ -790,6 +793,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       pendingFinalizationOutcome: undefined,
       pendingFinalizationStatusMarker: undefined,
       pendingFinalizationBlockedMessage: undefined,
+      pendingFinalizationReport: undefined,
       agentSettledEventSupported: undefined,
     },
     tickHandle: undefined,
@@ -1011,6 +1015,7 @@ export function updateExtensionStatus(
       controller.state.pendingFinalizationOutcome = undefined;
       controller.state.pendingFinalizationStatusMarker = undefined;
       controller.state.pendingFinalizationBlockedMessage = undefined;
+      controller.state.pendingFinalizationReport = undefined;
     }
   }
 
@@ -1099,6 +1104,7 @@ export function updateExtensionStatus(
       controller.state.pendingFinalizationOutcome = undefined;
       controller.state.pendingFinalizationStatusMarker = undefined;
       controller.state.pendingFinalizationBlockedMessage = undefined;
+      controller.state.pendingFinalizationReport = undefined;
       if (
         controller.state.workflowState === "checking"
         || controller.state.workflowState === "running"

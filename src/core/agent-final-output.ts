@@ -1,8 +1,8 @@
 /**
  * @file
  * @brief Implements final-output JSON extraction, parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture.
- * @details Extracts the one embedded JSON object from the terminal assistant text of one completed agentic prompt run, parses it as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
- * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711
+ * @details Extracts the one embedded JSON object from the terminal assistant text of one completed agentic prompt run, parses it as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, converts that block into ANSI-colored text with intense-yellow `## **<Label>**` headings plus colored markdown links, fenced code, inline code, bold, italic, and underlined elements, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+ * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711, REQ-713, REQ-714, REQ-715
  */
 
 /**
@@ -304,6 +304,141 @@ export function renderAgentFinalOutputMarkdownReport(report: AgentFinalOutputRep
     }
   }
   return sections.join("\n\n");
+}
+
+/**
+ * @brief ANSI SGR reset sequence terminating every colored fragment of the ANSI report renderer.
+ * @details Appended after every styled fragment so colored report output never leaks styling into surrounding notification text. The constant carries no logic. Access complexity is O(1).
+ * @satisfies REQ-713
+ */
+const AGENT_FINAL_OUTPUT_ANSI_RESET = "\u001b[0m";
+
+/**
+ * @brief ANSI SGR parameter selecting the intense-yellow foreground of report section headings.
+ * @details `93` is the ANSI high-intensity yellow foreground code applied to every `## **<Label>**` report heading. Access complexity is O(1).
+ * @satisfies REQ-714
+ */
+const AGENT_FINAL_OUTPUT_ANSI_INTENSE_YELLOW = "93";
+
+/**
+ * @brief ANSI SGR parameter selecting bold emphasis for markdown bold elements.
+ * @details `1` is the ANSI bold attribute applied to `**bold**` and `__bold__` markdown spans. Access complexity is O(1).
+ * @satisfies REQ-715
+ */
+const AGENT_FINAL_OUTPUT_ANSI_BOLD = "1";
+
+/**
+ * @brief ANSI SGR parameter selecting italic emphasis for markdown italic elements.
+ * @details `3` is the ANSI italic attribute applied to `*italic*` and `_italic_` markdown spans. Access complexity is O(1).
+ * @satisfies REQ-715
+ */
+const AGENT_FINAL_OUTPUT_ANSI_ITALIC = "3";
+
+/**
+ * @brief ANSI SGR parameter selecting underline emphasis for markdown underlined elements.
+ * @details `4` is the ANSI underline attribute applied to `<u>...</u>` markdown spans. Access complexity is O(1).
+ * @satisfies REQ-715
+ */
+const AGENT_FINAL_OUTPUT_ANSI_UNDERLINE = "4";
+
+/**
+ * @brief ANSI SGR parameters selecting colored link text.
+ * @details `4;96` combines the ANSI underline attribute with the bright-cyan foreground for `[text](url)` markdown links. Access complexity is O(1).
+ * @satisfies REQ-715
+ */
+const AGENT_FINAL_OUTPUT_ANSI_LINK = "4;96";
+
+/**
+ * @brief ANSI SGR parameters selecting colored code text for fences and inline code quotes.
+ * @details `36` is the ANSI cyan foreground applied to fenced code blocks and backtick inline code spans. Access complexity is O(1).
+ * @satisfies REQ-715
+ */
+const AGENT_FINAL_OUTPUT_ANSI_CODE = "36";
+
+/**
+ * @brief Wraps one text fragment into the ANSI escape sequence selected by the supplied SGR parameters.
+ * @details Emits `ESC[<codes>m` before the fragment and the ANSI reset after it, leaving empty fragments unstyled so colored output never contains empty escape pairs. Runtime is O(n) in fragment length. No external state is mutated.
+ * @param[in] text {string} Text fragment to style.
+ * @param[in] codes {string} Semicolon-separated ANSI SGR parameter list.
+ * @return {string} ANSI-styled fragment, or the input unchanged when empty.
+ * @satisfies REQ-713
+ */
+function applyAgentFinalOutputAnsiWrapping(text: string, codes: string): string {
+  if (text.length === 0) {
+    return text;
+  }
+  return `\u001b[${codes}m${text}${AGENT_FINAL_OUTPUT_ANSI_RESET}`;
+}
+
+/**
+ * @brief Matches the inline markdown elements colored by the ANSI report renderer.
+ * @details Alternation priority is inline code, link, bold `**`, bold `__`, `<u>` underline, italic `*`, and italic `_`; lookarounds keep intraword underscores and list-marker asterisks unstyled. The global flag serves `String.replace` only. Access complexity is O(1).
+ * @satisfies REQ-715
+ */
+const AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN =
+  /(`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(<u>[^<\n]+<\/u>)|((?<![\w*])\*(?![\s*])[^*\n]+?(?<![\s*])\*(?![\w*]))|((?<![\w_])_(?![\s_])[^_\n]+?(?<![\s_])_(?![\w_]))/g;
+
+/**
+ * @brief Replaces one matched inline markdown element with its ANSI-colored rendering.
+ * @details Dispatches on the matched prefix: backtick spans style as code, `[text](url)` links style as colored links, `**`/`__` spans style bold, `<u>` spans strip their tags and style the inner text underlined, and every remaining match styles italic. Runtime is O(n) in match length. No external state is mutated.
+ * @param[in] match {string} Matched inline markdown element.
+ * @return {string} ANSI-colored rendering of the matched element.
+ * @satisfies REQ-715
+ */
+function replaceAgentFinalOutputAnsiInline(match: string): string {
+  if (match.startsWith("`")) {
+    return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_CODE);
+  }
+  if (match.startsWith("[")) {
+    return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_LINK);
+  }
+  if (match.startsWith("**") || match.startsWith("__")) {
+    return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_BOLD);
+  }
+  if (match.startsWith("<u>")) {
+    return applyAgentFinalOutputAnsiWrapping(match.slice(3, -4), AGENT_FINAL_OUTPUT_ANSI_UNDERLINE);
+  }
+  return applyAgentFinalOutputAnsiWrapping(match, AGENT_FINAL_OUTPUT_ANSI_ITALIC);
+}
+
+/**
+ * @brief Converts one rendered markdown report into ANSI-colored text.
+ * @details Colors every `## **<Label>**` heading with intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line so every source character of the plain rendering stays present. Runtime is O(n) in text length. No external state is mutated.
+ * @param[in] text {string} Plain markdown report text produced by the fixed-order renderer.
+ * @return {string} ANSI-colored report text.
+ * @satisfies REQ-713, REQ-714, REQ-715
+ */
+function colorizeAgentFinalOutputMarkdownText(text: string): string {
+  const renderedLines: string[] = [];
+  let insideFence = false;
+  for (const line of text.split("\n")) {
+    if (line.trimStart().startsWith("```")) {
+      insideFence = !insideFence;
+      renderedLines.push(applyAgentFinalOutputAnsiWrapping(line, AGENT_FINAL_OUTPUT_ANSI_CODE));
+      continue;
+    }
+    if (insideFence) {
+      renderedLines.push(applyAgentFinalOutputAnsiWrapping(line, AGENT_FINAL_OUTPUT_ANSI_CODE));
+      continue;
+    }
+    if (/^##\s+\*\*[^*]+\*\*$/.test(line)) {
+      renderedLines.push(applyAgentFinalOutputAnsiWrapping(line, AGENT_FINAL_OUTPUT_ANSI_INTENSE_YELLOW));
+      continue;
+    }
+    renderedLines.push(line.replace(AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN, replaceAgentFinalOutputAnsiInline));
+  }
+  return renderedLines.join("\n");
+}
+
+/**
+ * @brief Renders the captured report fields as the fixed-order ANSI-colored markdown section block.
+ * @details Renders the plain fixed-order report through `renderAgentFinalOutputMarkdownReport(...)` and converts it through the ANSI markdown colorizer so every section heading prints in intense yellow and links, fences, inline code, bold, italic, and underlined elements print colored; `undefined` reports render the empty string. Runtime is O(n) in aggregate field length. No external state is mutated.
+ * @param[in] report {AgentFinalOutputReport | undefined} Captured final-output report; `undefined` renders the empty string.
+ * @return {string} ANSI-colored newline-delimited markdown sections, or the empty string when no report is captured.
+ * @satisfies REQ-713, REQ-714, REQ-715
+ */
+export function renderAgentFinalOutputAnsiReport(report: AgentFinalOutputReport | undefined): string {
+  return colorizeAgentFinalOutputMarkdownText(renderAgentFinalOutputMarkdownReport(report));
 }
 
 /**

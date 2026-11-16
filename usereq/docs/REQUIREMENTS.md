@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.161"
-date: "2026-11-14"
+version: "0.0.162"
+date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -793,6 +793,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-709**: MUST register `json-validator` with a machine-oriented description binding every JSON-formatting validation request to this tool.
 - **REQ-710**: MUST perform the final-output extraction deterministically by stripping surrounding non-JSON text and optional markdown code fences around the first balanced top-level JSON object.
 - **REQ-711**: MUST reject final agent outputs containing no JSON object or more than one JSON object with the existing final-output JSON-contract diagnostic.
+- **REQ-712**: MUST emit one markdown report notification for every terminal agentic prompt-run outcome with a parsed final-output report, including `result` `error` outcomes and `warning` terminal outcomes.
+- **REQ-713**: MUST render every markdown report notification with ANSI escape sequences producing colored terminal output.
+- **REQ-714**: MUST render each `## **<Label>**` markdown report heading with intense-yellow ANSI color.
+- **REQ-715**: MUST parse each report-section value as markdown and color links, fences, inline code, bold, italic, and underlined elements with ANSI escape sequences.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.

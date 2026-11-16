@@ -51,7 +51,9 @@ import {
   captureAgentFinalOutputReport,
   getCapturedAgentFinalOutputReport,
   parseAgentFinalOutput,
+  renderAgentFinalOutputAnsiReport,
   renderAgentFinalOutputMarkdownReport,
+  type AgentFinalOutputReport,
 } from "./core/agent-final-output.js";
 import {
   DEFAULT_PI_NOTIFY_CMD,
@@ -1293,17 +1295,39 @@ function notifyContextSafely(
 }
 
 /**
+ * @brief Emits one ANSI-rendered final-output markdown report notification when a parsed report exists.
+ * @details Renders the supplied final-output report through `renderAgentFinalOutputAnsiReport(...)`, skips emission for `undefined` reports so contract-violating terminal outputs print no stale sections, and delivers the colored printout through `notifyContextSafely(...)` so stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in report length. Side effect is user notification delivery when the supplied context is still active.
+ * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
+ * @param[in] report {AgentFinalOutputReport | undefined} Parsed final-output report to print; `undefined` emits nothing.
+ * @param[in] level {"info" | "warning" | "error"} Notification severity of the report printout.
+ * @return {void} No return value.
+ * @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-439, REQ-442
+ */
+function notifyAgentFinalOutputReport(
+  ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
+  report: AgentFinalOutputReport | undefined,
+  level: "info" | "warning" | "error",
+): void {
+  const reportText = renderAgentFinalOutputAnsiReport(report);
+  if (reportText === "") {
+    return;
+  }
+  notifyContextSafely(ctx, reportText, level);
+}
+
+/**
  * @brief Emits the final context-retention reminder info notification for a successfully completed `/req-*` orchestration.
- * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot, then appends the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow so the follow-up commands print one per line after the retention line, and prepends the markdown report sections rendered from the process-scoped captured final-output JSON so every present report field prints before the retention line. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is user notification delivery only when the supplied context is still active.
+ * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot, then appends the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow so the follow-up commands print one per line after the retention line, and prepends the markdown report sections rendered from the process-scoped captured final-output JSON so every present report field prints before the retention line; the ANSI-colored report printout from `notifyAgentFinalOutputReport(...)` is emitted first so every parsed report prints colored regardless of the orchestration outcome. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is user notification delivery only when the supplied context is still active.
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @return {void} No return value.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715
  */
 function notifyContextRetentionReminder(
   statusController: PiUsereqStatusController,
   ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
 ): void {
+  notifyAgentFinalOutputReport(ctx, getCapturedAgentFinalOutputReport(), "info");
   const percent = statusController.state.contextUsage?.percent;
   const percentText = typeof percent === "number" && Number.isFinite(percent)
     ? ` Current context usage: ${Math.round(percent)}%.`
@@ -1541,6 +1565,7 @@ async function finalizeMatchedPromptSuccess(
   statusController.state.pendingFinalizationOutcome = undefined;
   statusController.state.pendingFinalizationStatusMarker = undefined;
   statusController.state.pendingFinalizationBlockedMessage = undefined;
+  statusController.state.pendingFinalizationReport = undefined;
   statusController.state.pendingPromptRequest = undefined;
   statusController.state.activePromptRequest = undefined;
   const terminalWorkflowState = finalization.errorMessage
@@ -1600,14 +1625,14 @@ function buildAgentEndOutputText(event: unknown): string {
 
 /**
  * @brief Handles one intercepted pi lifecycle hook for pi-usereq status updates.
- * @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. After the status update, captures the exact `before_provider_request` provider payload for the live active or pending prompt run by reloading the prompt debug gating configuration from the prompt run's original `base-path` (worktree-backed checkouts do not contain the untracked `.pi-usereq.json`, so the cwd-derived cached config would silently disable capture), flushes the process-scoped captured payload as one `<timestamp>-<req-command>-error-<status>` file whenever `after_provider_response` reports a status >= 400 or whenever one finalized `message_end` assistant error message carries a leading HTTP status >= 400 (the provider-independent fallback for provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses) without requiring live workflow state, and discards the capture at prompt-run end so stale payloads never reach later runs. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects with the final assistant output text feeding `%%OUTPUT%%` placeholder substitution resolved from the final-output JSON `summary` field for completed outcomes; the prompt request is gated on post-update run association so only an `agent_end` that provably belongs to the live active prompt request notifies, the completion time comes from the ended run's own resolved duration (recovered from the process-scoped run record when the in-memory run timer was cleared mid-run between `agent_start` and `agent_end` on a long-lived host) instead of a previous run's completed counter or a fabricated zero, and unassociated terminal events (never-started pending requests, duplicate deliveries, error-retained worktree requests) stay silent for command-notify and Pushover while their outcome-gated sound effects still run, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, parses the terminal output as one final-output JSON object whose `result` field gates worktree merge and whose report fields render as markdown sections before the final context-retention line, and defers every terminal workflow-state determination for worktree-backed runs to `agent_settled` when the running pi host supports that 0.80.4+ event (because `agent_end` is not a final-idle signal — retries, overflow compaction recovery, and queued work start further agent runs after it, so an intermediate error the host recovers must keep the workflow `running`, and its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), recording the run outcome as the terminal candidate while intermediate `agent_end` events keep the workflow `running` without parking `error`, emitting the worktree-retention error, or clearing prompt-run ownership, or determines the terminal outcome directly at `agent_end` when the host does not emit `agent_settled`; notification and closure consume one coherent post-update completion snapshot of the live active prompt request taken before any destructive reset, so a resynchronized completion can never split into two identities. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, determines the terminal outcome of the settled orchestration, transitions matched-success runs through `merging` into the deferred stash-assisted merge-and-delete finalization path, parks interrupted or failed runs in `error` with the worktree-retention error notification and cleared prompt-run ownership, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `done` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
+ * @details Applies session-start-specific resource validation, project-config refresh, idle-time shared-tokenizer and context-file measurement pre-warm, startup-tool enablement, and selected debug-tool logging before forwarding the originating hook name and payload into the shared `updateExtensionStatus(...)` pipeline. After the status update, captures the exact `before_provider_request` provider payload for the live active or pending prompt run by reloading the prompt debug gating configuration from the prompt run's original `base-path` (worktree-backed checkouts do not contain the untracked `.pi-usereq.json`, so the cwd-derived cached config would silently disable capture), flushes the process-scoped captured payload as one `<timestamp>-<req-command>-error-<status>` file whenever `after_provider_response` reports a status >= 400 or whenever one finalized `message_end` assistant error message carries a leading HTTP status >= 400 (the provider-independent fallback for provider APIs whose SDK clients throw before emitting `after_provider_response` for non-2xx statuses) without requiring live workflow state, and discards the capture at prompt-run end so stale payloads never reach later runs. Before `agent_start`, re-verifies any prepared prompt execution session switch. On `agent_end`, dispatches configured command-notify, sound, and prompt-specific Pushover effects with the final assistant output text feeding `%%OUTPUT%%` placeholder substitution resolved from the final-output JSON `summary` field for completed outcomes; the prompt request is gated on post-update run association so only an `agent_end` that provably belongs to the live active prompt request notifies, the completion time comes from the ended run's own resolved duration (recovered from the process-scoped run record when the in-memory run timer was cleared mid-run between `agent_start` and `agent_end` on a long-lived host) instead of a previous run's completed counter or a fabricated zero, and unassociated terminal events (never-started pending requests, duplicate deliveries, error-retained worktree requests) stay silent for command-notify and Pushover while their outcome-gated sound effects still run, logs dedicated workflow-closure diagnostics, classifies the prompt outcome, parses the terminal output as one final-output JSON object whose `result` field gates worktree merge and whose report fields render as markdown sections before the final context-retention line, emits the ANSI-colored final-output markdown report notification with intense-yellow headings and colored markdown link, fence, inline-code, bold, italic, and underline elements for every terminal outcome carrying a parsed final-output report, and defers every terminal workflow-state determination for worktree-backed runs to `agent_settled` when the running pi host supports that 0.80.4+ event (because `agent_end` is not a final-idle signal — retries, overflow compaction recovery, and queued work start further agent runs after it, so an intermediate error the host recovers must keep the workflow `running`, and its `switchSession` awaits the active agent run to become idle and would deadlock inside `agent_end`), recording the run outcome as the terminal candidate while intermediate `agent_end` events keep the workflow `running` without parking `error`, emitting the worktree-retention error, or clearing prompt-run ownership, or determines the terminal outcome directly at `agent_end` when the host does not emit `agent_settled`; notification and closure consume one coherent post-update completion snapshot of the live active prompt request taken before any destructive reset, so a resynchronized completion can never split into two identities. On `agent_settled`, reuses persisted replacement-session command contexts when event contexts omit `switchSession()`, determines the terminal outcome of the settled orchestration, transitions matched-success runs through `merging` into the deferred stash-assisted merge-and-delete finalization path, parks interrupted or failed runs in `error` with the worktree-retention error notification and cleared prompt-run ownership, emits a warning-only notification when restored `base-path` changes are reapplied after merge, tolerates stale replacement-session notification contexts after session replacement, retains the worktree plus notifies closure failure for interrupted or failed outcomes, logs selected prompt workflow transitions, and transitions workflow state through `merging`, `error`, and `done` as required. On `session_shutdown`, captures pre-update prompt snapshots so workflow-shutdown diagnostics and same-runtime command continuation preserve the active prompt workflow state across switch-triggered rebinding, then disposes the shared controller. Runtime is dominated by configuration loading during `session_start` and git finalization during matched successful closure handling; all other hooks are O(1). Side effects include resource checks, active-tool mutation, active-session replacement, status updates, live-ticker disposal on shutdown, optional child-process spawning, outbound HTTPS requests, branch merges, worktree deletion, and optional debug-log writes.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded by pi.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {Promise<void>} Promise resolved when hook processing completes.
- * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440, REQ-443, REQ-444, REQ-461, REQ-462, REQ-463, REQ-464, REQ-465, REQ-584, REQ-585, REQ-586, REQ-587, REQ-588, REQ-653, REQ-654, REQ-655, REQ-677, REQ-680, REQ-681
+ * @satisfies REQ-117, REQ-118, REQ-119, REQ-131, REQ-132, REQ-133, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-176, REQ-178, REQ-184, REQ-185, REQ-186, REQ-187, REQ-208, REQ-209, REQ-221, REQ-228, REQ-229, REQ-230, REQ-244, REQ-245, REQ-246, REQ-247, REQ-276, REQ-277, REQ-278, REQ-279, REQ-280, REQ-291, REQ-292, REQ-421, REQ-422, REQ-425, REQ-440, REQ-443, REQ-444, REQ-461, REQ-462, REQ-463, REQ-464, REQ-465, REQ-584, REQ-585, REQ-586, REQ-587, REQ-588, REQ-653, REQ-654, REQ-655, REQ-677, REQ-680, REQ-681, REQ-712, REQ-713, REQ-714, REQ-715
  */
 async function handleExtensionStatusEvent(
   pi: ExtensionAPI,
@@ -1852,6 +1877,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationOutcome = outcome;
         statusController.state.pendingFinalizationStatusMarker = statusMarker;
         statusController.state.pendingFinalizationBlockedMessage = finalOutputBlockedMessage;
+        statusController.state.pendingFinalizationReport = finalOutputParse.ok ? finalOutputParse.report : undefined;
       } else if (shouldFinalizeMatchedSuccess) {
         // Legacy hosts never emit `agent_settled`, so no idle-waiting
         // `switchSession` deadlock exists; finalize the matched success
@@ -1872,6 +1898,11 @@ async function handleExtensionStatusEvent(
         // park the workflow in `error` with the user-facing gate diagnostic, and retain
         // the active request so `req-reset` can restore `base-path` and remove the
         // retained worktree.
+        notifyAgentFinalOutputReport(
+          promptContext,
+          finalOutputParse.ok ? finalOutputParse.report : undefined,
+          "error",
+        );
         notifyContextSafely(
           promptContext,
           finalOutputBlockedMessage ?? `ERROR: Prompt orchestration terminated with JSON result "error".`,
@@ -1949,6 +1980,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationOutcome = undefined;
         statusController.state.pendingFinalizationStatusMarker = undefined;
         statusController.state.pendingFinalizationBlockedMessage = undefined;
+        statusController.state.pendingFinalizationReport = undefined;
         const terminalWorkflowState = outcome === "completed" ? "done" as const : "error" as const;
         if (debugConfig) {
           transitionPromptWorkflowState(
@@ -2002,6 +2034,7 @@ async function handleExtensionStatusEvent(
         // MUST NOT run. Keep the worktree execution session visible, park the workflow in
         // `error` with the recorded gate diagnostic, and retain the active request so
         // `req-reset` can restore `base-path` and remove the retained worktree.
+        notifyAgentFinalOutputReport(ctx, statusController.state.pendingFinalizationReport, "error");
         notifyContextSafely(
           ctx,
           statusController.state.pendingFinalizationBlockedMessage
@@ -2012,6 +2045,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationOutcome = undefined;
         statusController.state.pendingFinalizationStatusMarker = undefined;
         statusController.state.pendingFinalizationBlockedMessage = undefined;
+        statusController.state.pendingFinalizationReport = undefined;
         const settledDebugConfig = statusController.config;
         if (settledDebugConfig) {
           transitionPromptWorkflowState(
@@ -2042,6 +2076,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationOutcome = undefined;
         statusController.state.pendingFinalizationStatusMarker = undefined;
         statusController.state.pendingFinalizationBlockedMessage = undefined;
+        statusController.state.pendingFinalizationReport = undefined;
         const settledDebugConfig = statusController.config;
         if (settledDebugConfig) {
           transitionPromptWorkflowState(
