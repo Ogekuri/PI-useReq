@@ -1,17 +1,20 @@
 /**
  * @file
- * @brief Implements JSON formatting validation for the `json-validator` agent tool.
+ * @brief Implements final-output JSON contract validation for the `json-validator` agent tool.
  * @details Validates caller-supplied inline JSON text and explicit file paths through the native
  * `JSON.parse` runtime, computes deterministic parser error line and column diagnostics, summarizes
- * valid roots with structural counts plus character and `cl100k_base` token size facts, and renders
- * one monolithic machine-oriented markdown verdict document. Invalid JSON is reported as an invalid
- * verdict record and never throws. Runtime is O(n) in aggregate validated content size plus one
- * tokenizer encode per record. Side effects are limited to filesystem reads for file entries.
- * @satisfies DES-044, REQ-702, REQ-703, REQ-704, REQ-705, REQ-706, REQ-707
+ * valid roots with structural counts plus character and `cl100k_base` token size facts, evaluates
+ * every parsed value against the orchestration final-output mandatory-field contract (`result`
+ * exactly `ok` or `error`, `summary` string, `next_commands` array), and renders one monolithic
+ * machine-oriented markdown verdict document. Invalid JSON is reported as an invalid verdict record
+ * and never throws. Runtime is O(n) in aggregate validated content size plus one tokenizer encode
+ * per record. Side effects are limited to filesystem reads for file entries.
+ * @satisfies DES-044, REQ-702, REQ-703, REQ-704, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { isAgentFinalOutputResult } from "./agent-final-output.js";
 import { ReqError } from "./errors.js";
 import { countTextTokensAndChars } from "./token-counter.js";
 import type { ToolResult } from "./tool-runner.js";
@@ -54,17 +57,24 @@ export interface JsonRootSummary {
 
 /**
  * @brief Describes one validation record inside the monolithic verdict document.
- * @details Pairs the caller-facing label with the valid or invalid verdict, the optional structural
+ * @details Pairs the caller-facing label with the valid or invalid verdict, the final-output
+ * mandatory-field contract verdict with its ordered issue diagnostics, the optional structural
  * summary of a parsed root, character and `cl100k_base` token size facts, and the optional parser
  * or read-error diagnostic with its computed line and column position. The interface is
  * compile-time only and introduces no runtime cost.
- * @satisfies REQ-703, REQ-704, REQ-705, REQ-707
+ * @satisfies REQ-703, REQ-704, REQ-705, REQ-707, REQ-726, REQ-727, REQ-728
  */
 export interface JsonValidatorEntry {
   /** @brief Caller-facing record label: `content` for inline text or the supplied file path. */
   label: string;
   /** @brief Whether the entry parsed as valid JSON; unreadable file entries stay `false`. */
   valid: boolean;
+  /** @brief Whether the parsed root is a plain JSON object; `false` for unparseable records. */
+  isJsonObject: boolean;
+  /** @brief Final-output mandatory-field contract verdict; `true` only for a compliant object root. */
+  finalOutputContractValid: boolean;
+  /** @brief Ordered final-output contract issue diagnostics; empty when compliant or unparseable. */
+  finalOutputIssues: string[];
   /** @brief Parsed root type; defined only for parsed entries. */
   rootType?: string;
   /** @brief Top-level object key count; object roots only. */
@@ -243,27 +253,90 @@ export function summarizeJsonRoot(value: unknown): JsonRootSummary {
 }
 
 /**
+ * @brief Tests whether one parsed JSON value is a plain JSON object.
+ * @details Rejects `null`, arrays, and non-object values so the final-output contract accepts
+ * exactly one plain JSON object as its root. Runtime is O(1). No external state is mutated.
+ * @param[in] value {unknown} Parsed JSON value.
+ * @return {boolean} `true` when the value is a plain object.
+ */
+function isJsonObjectValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * @brief Evaluates one parsed JSON value against the orchestration final-output mandatory-field contract.
+ * @details Emits one ordered issue per violation, mirroring `parseAgentFinalOutput` mandatory-field
+ * validation: a non-object root reports one root-type issue; a missing `result`, `summary`, or
+ * `next_commands` field reports one missing-field issue; a `result` outside the `ok|error` domain,
+ * a non-string `summary`, and a non-array `next_commands` each report one expected-domain issue.
+ * Optional report fields are never evaluated so absent non-mandatory fields stay tolerated.
+ * Runtime is O(1) in field count. No external state is mutated.
+ * @param[in] parsed {unknown} Parsed JSON root value.
+ * @return {string[]} Ordered contract issue diagnostics; empty when the value is contract-compliant.
+ * @satisfies REQ-726, REQ-727, REQ-728
+ */
+export function evaluateFinalOutputContractIssues(parsed: unknown): string[] {
+  const issues: string[] = [];
+  if (!isJsonObjectValue(parsed)) {
+    issues.push(`final output root must be a JSON object; found ${summarizeJsonRoot(parsed).rootType}`);
+    return issues;
+  }
+  if (!("result" in parsed)) {
+    issues.push('result: missing mandatory field "result"');
+  } else if (!isAgentFinalOutputResult(parsed.result)) {
+    issues.push(`result: expected exactly "ok" or "error"; found ${JSON.stringify(parsed.result)}`);
+  }
+  if (!("summary" in parsed)) {
+    issues.push('summary: missing mandatory field "summary"');
+  } else if (typeof parsed.summary !== "string") {
+    issues.push(`summary: expected string; found ${summarizeJsonRoot(parsed.summary).rootType}`);
+  }
+  if (!("next_commands" in parsed)) {
+    issues.push('next_commands: missing mandatory field "next_commands"');
+  } else if (!Array.isArray(parsed.next_commands)) {
+    issues.push(`next_commands: expected array; found ${summarizeJsonRoot(parsed.next_commands).rootType}`);
+  }
+  return issues;
+}
+
+/**
  * @brief Validates one text payload into one structured verdict record.
  * @details Counts characters and `cl100k_base` tokens through the shared tokenizer, parses the text
- * through the native `JSON.parse` runtime, summarizes valid roots through `summarizeJsonRoot`, and
- * converts parser failures into invalid records carrying the parser message plus computed line and
- * column diagnostics without throwing. Runtime is O(n) in text length. No external state is mutated.
+ * through the native `JSON.parse` runtime, summarizes valid roots through `summarizeJsonRoot`,
+ * classifies valid parses against the orchestration final-output mandatory-field contract through
+ * `evaluateFinalOutputContractIssues`, and converts parser failures into invalid records carrying
+ * the parser message plus computed line and column diagnostics without throwing. Contract validity
+ * requires a compliant object root, so unparseable records stay contract-invalid with an empty
+ * issue list. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] label {string} Caller-facing record label.
  * @param[in] text {string} JSON text to validate.
  * @return {JsonValidatorEntry} Structured verdict record for the supplied text.
  * @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
- * @satisfies REQ-703, REQ-704, REQ-705
+ * @satisfies REQ-703, REQ-704, REQ-705, REQ-726, REQ-727, REQ-728
  */
 function buildJsonValidatorEntry(label: string, text: string): JsonValidatorEntry {
   const { chars, tokens } = countTextTokensAndChars(text);
   try {
     const parsed: unknown = JSON.parse(text);
-    return { label, valid: true, ...summarizeJsonRoot(parsed), chars, tokens };
+    const finalOutputIssues = evaluateFinalOutputContractIssues(parsed);
+    return {
+      label,
+      valid: true,
+      isJsonObject: isJsonObjectValue(parsed),
+      finalOutputContractValid: finalOutputIssues.length === 0,
+      finalOutputIssues,
+      ...summarizeJsonRoot(parsed),
+      chars,
+      tokens,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
       label,
       valid: false,
+      isJsonObject: false,
+      finalOutputContractValid: false,
+      finalOutputIssues: [],
       chars,
       tokens,
       error: message,
@@ -293,6 +366,9 @@ function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry {
     return {
       label: filePath,
       valid: false,
+      isJsonObject: false,
+      finalOutputContractValid: false,
+      finalOutputIssues: [],
       chars: 0,
       tokens: 0,
       error: `Unable to read file: ${message}`,
@@ -303,18 +379,23 @@ function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry {
 
 /**
  * @brief Renders one verdict record as the `@@@ <label> | JSON` markdown block.
- * @details Emits the record header, the `Result:` metadata line, the ordered verdict bullets (root
- * type plus structural counts for valid records, error message plus line and column diagnostics for
- * invalid records), and the trailing character and token size facts. Runtime is O(n) in rendered
- * length. No external state is mutated.
+ * @details Emits the record header, the `Result:` metadata line, the `Final-output contract:`
+ * metadata line, the ordered verdict bullets (final-output issue bullets plus root type and
+ * structural counts for valid records, error message plus line and column diagnostics for invalid
+ * records), and the trailing character and token size facts. Runtime is O(n) in rendered length.
+ * No external state is mutated.
  * @param[in] entry {JsonValidatorEntry} Verdict record to render.
  * @return {string[]} Rendered record lines without separators.
- * @satisfies REQ-703
+ * @satisfies REQ-703, REQ-727, REQ-728
  */
 function renderJsonValidatorEntry(entry: JsonValidatorEntry): string[] {
   const lines: string[] = [];
   lines.push(`@@@ ${entry.label} | JSON`);
   lines.push(`> Result: ${entry.valid ? "valid" : "invalid"}`);
+  lines.push(`> Final-output contract: ${entry.finalOutputContractValid ? "valid" : "invalid"}`);
+  for (const issue of entry.finalOutputIssues) {
+    lines.push(`- @final-output-issue ${issue}`);
+  }
   if (entry.valid) {
     lines.push(`- @root-type ${entry.rootType}`);
     if (entry.rootType === "object") {
@@ -369,14 +450,16 @@ export function renderJsonValidationMarkdown(entries: readonly JsonValidatorEntr
  * `content` nor non-empty `files` with one deterministic diagnostic, validates the inline content
  * record first followed by every file entry in caller order, renders the monolithic verdict
  * document, and returns exit code `0` for every well-formed request regardless of per-record
- * verdicts. Blank or whitespace-only `content` supplies no content and triggers the same rejection.
- * Runtime is O(n) in aggregate validated content size. Side effects are limited to filesystem
- * reads for file entries.
+ * verdicts. Every parsed record is additionally classified against the orchestration final-output
+ * mandatory-field contract so only compliant final-output JSON objects stay contract-valid. Blank
+ * or whitespace-only `content` supplies no content and triggers the same rejection. Runtime is
+ * O(n) in aggregate validated content size. Side effects are limited to filesystem reads for file
+ * entries.
  * @param[in] params {JsonValidatorRequest} Loosely-typed tool parameters.
  * @return {ToolResult} Successful tool result carrying the monolithic verdict markdown on stdout.
  * @throws {ReqError} Throws for non-string `content`, non-string-array `files`, or requests
  * supplying neither parameter.
- * @satisfies REQ-702, REQ-703, REQ-705, REQ-706, REQ-707
+ * @satisfies REQ-702, REQ-703, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
  */
 export function runJsonValidator(params: JsonValidatorRequest): ToolResult {
   const content = params?.content;

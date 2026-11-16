@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.164"
+version: "0.0.165"
 date: "2026-11-16"
 author: "OpenAI Codex"
 scope:
@@ -790,7 +790,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-706**: MUST make `json-validator` accept optional `content` and `files` parameters and MUST reject requests supplying neither with a deterministic diagnostic.
 - **REQ-707**: MUST validate every supplied `files` entry as UTF-8 text and MUST report unreadable file entries as failed records without aborting remaining entries.
 - **REQ-708**: MUST keep `json-validator` `details` limited to `execution` metadata and MUST NOT mirror request echoes or verdict content there.
-- **REQ-709**: MUST register `json-validator` with a machine-oriented description binding every JSON-formatting validation request to this tool.
+- **REQ-709**: MUST register `json-validator` with a machine-oriented description declaring it the sole validator of the final output JSON message and prohibiting generic JSON format validation.
 - **REQ-710**: MUST perform the final-output extraction deterministically by stripping surrounding non-JSON text and optional markdown code fences around the first balanced top-level JSON object.
 - **REQ-711**: MUST reject final agent outputs containing no JSON object or more than one JSON object with the existing final-output JSON-contract diagnostic.
 - **REQ-712**: MUST emit one markdown report notification for every terminal agentic prompt-run outcome with a parsed final-output report, including `result` `error` outcomes and `warning` terminal outcomes.
@@ -807,6 +807,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-723**: MUST render each table row with a zero-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and `N/A` for absent input text.
 - **REQ-724**: MUST condense table input text longer than 30 characters into its first 20 characters, the ` .. ` separator, and its last 10 characters.
 - **REQ-725**: MUST frame the table with `╭╮╰╯│─┬┴`, the double-line header separator `╞══╪══╡`, and `├──┼──┤` row separators.
+- **REQ-726**: MUST validate every parsed JSON object against the orchestration final-output mandatory-field contract: `result` exactly `ok` or `error`, `summary` string, and `next_commands` array.
+- **REQ-727**: MUST mark each verdict record with a final-output contract verdict and list every mandatory-field violation with the violated field name and expected domain.
+- **REQ-728**: MUST classify every parsed JSON root that is not an object as final-output contract invalid with one root-type issue in the verdict record.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1035,6 +1038,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-229**: MUST verify extension activation registers `json-validator` outside slash-command surfaces with default-enabled configurable-tool configuration and documented custom-tool ordering.
 - **TST-230**: MUST verify `json-validator` places one monolithic markdown verdict in `content[0].text` for valid inline content, invalid inline content with line and column diagnostics, and file-path inputs while restricting `details` to execution metadata.
 - **TST-231**: MUST verify `json-validator` rejects requests supplying neither `content` nor `files` with one deterministic diagnostic without throwing.
+- **TST-232**: MUST verify `json-validator` verdict records report final-output contract validity, per-field violation diagnostics, and non-object-root diagnostics while preserving JSON-format verdicts.
+- **TST-233**: MUST verify the `json-validator` registration description declares exclusive final-output JSON validation and prohibits generic JSON validation.
 
 ## 5. Observed Component Model
 

@@ -156,12 +156,12 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 - @brief Represents one validated terminal result of an agentic flow.
 - @details Narrows the mandatory `result` field domain to exactly `ok` or `error`. The alias is compile-time only and introduces no runtime cost.
 - @satisfies REQ-678
-### fn `function isAgentFinalOutputResult(value: unknown): value is AgentFinalOutputResult` (L32-34)
+### fn `export function isAgentFinalOutputResult(value: unknown): value is AgentFinalOutputResult` (L32-34)
 - @brief Tests whether one candidate value is one valid final-output terminal result.
-- @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Runtime is O(1). No external state is mutated.
+- @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Exported so the `json-validator` final-output contract evaluator reuses the identical domain source instead of duplicating it. Runtime is O(1). No external state is mutated.
 - @param[in] value {unknown} Candidate parsed `result` payload.
 - @return {boolean} `true` when the value is exactly `ok` or `error`.
-- @satisfies REQ-678
+- @satisfies REQ-678, REQ-726
 
 ### iface `export interface AgentFinalOutputCommandEntry` (L41-46)
 - @brief Represents one validated `next_commands` entry of the final-output JSON.
@@ -278,7 +278,7 @@ import { measureDisplayWidth } from "./config-cli-render.js";
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
 |`AgentFinalOutputResult`|type||23||
-|`isAgentFinalOutputResult`|fn||32-34|function isAgentFinalOutputResult(value: unknown): value ...|
+|`isAgentFinalOutputResult`|fn||32-34|export function isAgentFinalOutputResult(value: unknown):...|
 |`AgentFinalOutputCommandEntry`|iface||41-46|export interface AgentFinalOutputCommandEntry|
 |`AgentFinalOutputReport`|iface||53-76|export interface AgentFinalOutputReport|
 |`AgentFinalOutputParse`|type||83||
@@ -3709,21 +3709,24 @@ import { SourceAnalyzer, formatMarkdown } from "./source-analyzer.js";
 
 ---
 
-# json-validator.ts | TypeScript | 406L | 14 symbols | 5 imports | 38 comments
+# json-validator.ts | TypeScript | 489L | 16 symbols | 6 imports | 43 comments
 > Path: `src/core/json-validator.ts`
-- @brief Implements JSON formatting validation for the `json-validator` agent tool.
+- @brief Implements final-output JSON contract validation for the `json-validator` agent tool.
 - @details Validates caller-supplied inline JSON text and explicit file paths through the native
 `JSON.parse` runtime, computes deterministic parser error line and column diagnostics, summarizes
-valid roots with structural counts plus character and `cl100k_base` token size facts, and renders
-one monolithic machine-oriented markdown verdict document. Invalid JSON is reported as an invalid
-verdict record and never throws. Runtime is O(n) in aggregate validated content size plus one
-tokenizer encode per record. Side effects are limited to filesystem reads for file entries.
-- @satisfies DES-044, REQ-702, REQ-703, REQ-704, REQ-705, REQ-706, REQ-707
+valid roots with structural counts plus character and `cl100k_base` token size facts, evaluates
+every parsed value against the orchestration final-output mandatory-field contract (`result`
+exactly `ok` or `error`, `summary` string, `next_commands` array), and renders one monolithic
+machine-oriented markdown verdict document. Invalid JSON is reported as an invalid verdict record
+and never throws. Runtime is O(n) in aggregate validated content size plus one tokenizer encode
+per record. Side effects are limited to filesystem reads for file entries.
+- @satisfies DES-044, REQ-702, REQ-703, REQ-704, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
 
 ## Imports
 ```
 import fs from "node:fs";
 import path from "node:path";
+import { isAgentFinalOutputResult } from "./agent-final-output.js";
 import { ReqError } from "./errors.js";
 import { countTextTokensAndChars } from "./token-counter.js";
 import type { ToolResult } from "./tool-runner.js";
@@ -3731,7 +3734,7 @@ import type { ToolResult } from "./tool-runner.js";
 
 ## Definitions
 
-### iface `export interface JsonParsePosition` (L26-31)
+### iface `export interface JsonParsePosition` (L29-34)
 - @brief Represents one deterministic JSON parse-position diagnostic.
 - @brief One-based error line; `undefined` when the parser message carries no position facts.
 - @brief One-based error column; `undefined` when the parser message carries no position facts.
@@ -3740,7 +3743,7 @@ stay absent when the parser message exposes no position facts. The interface is 
 and introduces no runtime cost.
 - @satisfies REQ-705
 
-### iface `export interface JsonRootSummary` (L40-53)
+### iface `export interface JsonRootSummary` (L43-56)
 - @brief Describes one structured summary of a parsed JSON root value.
 - @brief Parsed root type: `object`, `array`, `string`, `number`, `boolean`, or `null`.
 - @brief Top-level object key count; defined only for object roots.
@@ -3749,17 +3752,18 @@ and depth fields stay absent for scalar roots because they carry no container st
 interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-704
 
-### iface `export interface JsonValidatorEntry` (L63-90)
+### iface `export interface JsonValidatorEntry` (L67-100)
 - @brief Describes one validation record inside the monolithic verdict document.
 - @brief Caller-facing record label: `content` for inline text or the supplied file path.
 - @brief Whether the entry parsed as valid JSON; unreadable file entries stay `false`.
-- @details Pairs the caller-facing label with the valid or invalid verdict, the optional structural
+- @details Pairs the caller-facing label with the valid or invalid verdict, the final-output
+mandatory-field contract verdict with its ordered issue diagnostics, the optional structural
 summary of a parsed root, character and `cl100k_base` token size facts, and the optional parser
 or read-error diagnostic with its computed line and column position. The interface is
 compile-time only and introduces no runtime cost.
-- @satisfies REQ-703, REQ-704, REQ-705, REQ-707
+- @satisfies REQ-703, REQ-704, REQ-705, REQ-707, REQ-726, REQ-727, REQ-728
 
-### iface `export interface JsonValidatorRequest` (L99-104)
+### iface `export interface JsonValidatorRequest` (L109-114)
 - @brief Describes the accepted `json-validator` request parameters.
 - @brief Raw JSON text to validate inline; omitted when file paths are supplied.
 - @brief Explicit file paths read as UTF-8 text and validated as JSON, in caller order.
@@ -3768,7 +3772,7 @@ schema; unknown callers may forward loosely-typed payloads because runtime type 
 performed by `runJsonValidator`. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-706
 
-### fn `export function extractJsonParsePosition(content: string, errorMessage: string): JsonParsePosition` (L118-139)
+### fn `export function extractJsonParsePosition(content: string, errorMessage: string): JsonParsePosition` (L128-149)
 - @brief Extracts the one-based line and column diagnostics from one JSON parser message.
 - @details Prefers explicit `line X column Y` fragments emitted by modern V8 runtimes and otherwise
 resolves the raw zero-based `position N` fragment into one-based line and column coordinates by
@@ -3780,7 +3784,7 @@ never render fabricated coordinates. Runtime is O(p) in prefix length. No extern
 - @return {JsonParsePosition} One-based line and column diagnostics, or an empty record.
 - @satisfies REQ-705
 
-### fn `function measureJsonDepth(value: unknown): number` (L150-166)
+### fn `function measureJsonDepth(value: unknown): number` (L160-176)
 - @brief Measures the maximum container nesting depth of one parsed JSON value.
 - @details Counts one level per object or array boundary so scalar roots report 0 and a root object
 holding one scalar key reports 1. Cycles are impossible because parsed JSON values are acyclic.
@@ -3789,7 +3793,7 @@ Runtime is O(n) in parsed element count. No external state is mutated.
 - @return {number} Maximum nesting depth in container levels.
 - @satisfies REQ-704
 
-### fn `function countJsonKeys(value: unknown): number` (L176-188)
+### fn `function countJsonKeys(value: unknown): number` (L186-198)
 - @brief Counts every object key across all nesting levels of one parsed JSON value.
 - @details Accumulates one count per object key while recursing into arrays and nested objects.
 Runtime is O(n) in parsed element count. No external state is mutated.
@@ -3797,7 +3801,7 @@ Runtime is O(n) in parsed element count. No external state is mutated.
 - @return {number} Recursive object key count; `0` for scalar and array-only roots.
 - @satisfies REQ-704
 
-### fn `function countJsonItems(value: unknown): number` (L198-210)
+### fn `function countJsonItems(value: unknown): number` (L208-220)
 - @brief Counts every array element across all nesting levels of one parsed JSON value.
 - @details Accumulates one count per array element while recursing into object values and nested
 arrays. Runtime is O(n) in parsed element count. No external state is mutated.
@@ -3805,7 +3809,7 @@ arrays. Runtime is O(n) in parsed element count. No external state is mutated.
 - @return {number} Recursive array element count; `0` for scalar and object-only roots.
 - @satisfies REQ-704
 
-### fn `export function summarizeJsonRoot(value: unknown): JsonRootSummary` (L222-243)
+### fn `export function summarizeJsonRoot(value: unknown): JsonRootSummary` (L232-253)
 - @brief Summarizes one parsed JSON root into its type and structural counts.
 - @details Branches on the root container kind: object roots expose top-level plus recursive key
 counts, array roots expose top-level plus recursive element counts, and every root exposes the
@@ -3815,19 +3819,41 @@ count. No external state is mutated.
 - @return {JsonRootSummary} Root type with the applicable structural counts.
 - @satisfies REQ-704
 
-### fn `function buildJsonValidatorEntry(label: string, text: string): JsonValidatorEntry` (L257-273)
+### fn `function isJsonObjectValue(value: unknown): value is Record<string, unknown>` (L262-264)
+- @brief Tests whether one parsed JSON value is a plain JSON object.
+- @details Rejects `null`, arrays, and non-object values so the final-output contract accepts
+exactly one plain JSON object as its root. Runtime is O(1). No external state is mutated.
+- @param[in] value {unknown} Parsed JSON value.
+- @return {boolean} `true` when the value is a plain object.
+
+### fn `export function evaluateFinalOutputContractIssues(parsed: unknown): string[]` (L278-300)
+- @brief Evaluates one parsed JSON value against the orchestration final-output mandatory-field contract.
+- @details Emits one ordered issue per violation, mirroring `parseAgentFinalOutput` mandatory-field
+validation: a non-object root reports one root-type issue; a missing `result`, `summary`, or
+`next_commands` field reports one missing-field issue; a `result` outside the `ok|error` domain,
+a non-string `summary`, and a non-array `next_commands` each report one expected-domain issue.
+Optional report fields are never evaluated so absent non-mandatory fields stay tolerated.
+Runtime is O(1) in field count. No external state is mutated.
+- @param[in] parsed {unknown} Parsed JSON root value.
+- @return {string[]} Ordered contract issue diagnostics; empty when the value is contract-compliant.
+- @satisfies REQ-726, REQ-727, REQ-728
+
+### fn `function buildJsonValidatorEntry(label: string, text: string): JsonValidatorEntry` (L317-346)
 - @brief Validates one text payload into one structured verdict record.
 - @details Counts characters and `cl100k_base` tokens through the shared tokenizer, parses the text
-through the native `JSON.parse` runtime, summarizes valid roots through `summarizeJsonRoot`, and
-converts parser failures into invalid records carrying the parser message plus computed line and
-column diagnostics without throwing. Runtime is O(n) in text length. No external state is mutated.
+through the native `JSON.parse` runtime, summarizes valid roots through `summarizeJsonRoot`,
+classifies valid parses against the orchestration final-output mandatory-field contract through
+`evaluateFinalOutputContractIssues`, and converts parser failures into invalid records carrying
+the parser message plus computed line and column diagnostics without throwing. Contract validity
+requires a compliant object root, so unparseable records stay contract-invalid with an empty
+issue list. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] label {string} Caller-facing record label.
 - @param[in] text {string} JSON text to validate.
 - @return {JsonValidatorEntry} Structured verdict record for the supplied text.
 - @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
-- @satisfies REQ-703, REQ-704, REQ-705
+- @satisfies REQ-703, REQ-704, REQ-705, REQ-726, REQ-727, REQ-728
 
-### fn `function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry` (L286-302)
+### fn `function buildJsonValidatorFileEntry(filePath: string): JsonValidatorEntry` (L359-378)
 - @brief Validates one file entry into one structured verdict record.
 - @details Resolves the supplied path against the current working directory, reads it as UTF-8 text,
 and converts read failures into invalid records carrying the diagnostic without aborting the
@@ -3838,17 +3864,18 @@ size. Side effects are limited to filesystem reads.
 - @throws {ReqError} Propagates the tokenizer dependency failure when `js-tiktoken` is unavailable.
 - @satisfies REQ-707
 
-### fn `function renderJsonValidatorEntry(entry: JsonValidatorEntry): string[]` (L314-342)
+### fn `function renderJsonValidatorEntry(entry: JsonValidatorEntry): string[]` (L391-423)
 - @brief Renders one verdict record as the `@@@ <label> | JSON` markdown block.
-- @details Emits the record header, the `Result:` metadata line, the ordered verdict bullets (root
-type plus structural counts for valid records, error message plus line and column diagnostics for
-invalid records), and the trailing character and token size facts. Runtime is O(n) in rendered
-length. No external state is mutated.
+- @details Emits the record header, the `Result:` metadata line, the `Final-output contract:`
+metadata line, the ordered verdict bullets (final-output issue bullets plus root type and
+structural counts for valid records, error message plus line and column diagnostics for invalid
+records), and the trailing character and token size facts. Runtime is O(n) in rendered length.
+No external state is mutated.
 - @param[in] entry {JsonValidatorEntry} Verdict record to render.
 - @return {string[]} Rendered record lines without separators.
-- @satisfies REQ-703
+- @satisfies REQ-703, REQ-727, REQ-728
 
-### fn `export function renderJsonValidationMarkdown(entries: readonly JsonValidatorEntry[]): string` (L354-364)
+### fn `export function renderJsonValidationMarkdown(entries: readonly JsonValidatorEntry[]): string` (L435-445)
 - @brief Renders the complete monolithic markdown verdict document for one validation run.
 - @details Emits one `@@@ <label> | JSON` block per record in request order, each terminated by one
 newline and separated by one blank line, followed by the `## Validation Summary` section holding
@@ -3858,38 +3885,42 @@ state is mutated.
 - @return {string} Complete monolithic verdict markdown document.
 - @satisfies REQ-703
 
-### fn `export function runJsonValidator(params: JsonValidatorRequest): ToolResult` (L381-406)
+### fn `export function runJsonValidator(params: JsonValidatorRequest): ToolResult` (L464-489)
 - @brief Executes one `json-validator` request and returns the monolithic verdict tool result.
 - @details Type-checks the loosely-typed parameters, rejects requests supplying neither non-blank
 `content` nor non-empty `files` with one deterministic diagnostic, validates the inline content
 record first followed by every file entry in caller order, renders the monolithic verdict
 document, and returns exit code `0` for every well-formed request regardless of per-record
-verdicts. Blank or whitespace-only `content` supplies no content and triggers the same rejection.
-Runtime is O(n) in aggregate validated content size. Side effects are limited to filesystem
-reads for file entries.
+verdicts. Every parsed record is additionally classified against the orchestration final-output
+mandatory-field contract so only compliant final-output JSON objects stay contract-valid. Blank
+or whitespace-only `content` supplies no content and triggers the same rejection. Runtime is
+O(n) in aggregate validated content size. Side effects are limited to filesystem reads for file
+entries.
 - @param[in] params {JsonValidatorRequest} Loosely-typed tool parameters.
 - @return {ToolResult} Successful tool result carrying the monolithic verdict markdown on stdout.
 - @throws {ReqError} Throws for non-string `content`, non-string-array `files`, or requests
 supplying neither parameter.
-- @satisfies REQ-702, REQ-703, REQ-705, REQ-706, REQ-707
+- @satisfies REQ-702, REQ-703, REQ-705, REQ-706, REQ-707, REQ-726, REQ-727, REQ-728
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`JsonParsePosition`|iface||26-31|export interface JsonParsePosition|
-|`JsonRootSummary`|iface||40-53|export interface JsonRootSummary|
-|`JsonValidatorEntry`|iface||63-90|export interface JsonValidatorEntry|
-|`JsonValidatorRequest`|iface||99-104|export interface JsonValidatorRequest|
-|`extractJsonParsePosition`|fn||118-139|export function extractJsonParsePosition(content: string,...|
-|`measureJsonDepth`|fn||150-166|function measureJsonDepth(value: unknown): number|
-|`countJsonKeys`|fn||176-188|function countJsonKeys(value: unknown): number|
-|`countJsonItems`|fn||198-210|function countJsonItems(value: unknown): number|
-|`summarizeJsonRoot`|fn||222-243|export function summarizeJsonRoot(value: unknown): JsonRo...|
-|`buildJsonValidatorEntry`|fn||257-273|function buildJsonValidatorEntry(label: string, text: str...|
-|`buildJsonValidatorFileEntry`|fn||286-302|function buildJsonValidatorFileEntry(filePath: string): J...|
-|`renderJsonValidatorEntry`|fn||314-342|function renderJsonValidatorEntry(entry: JsonValidatorEnt...|
-|`renderJsonValidationMarkdown`|fn||354-364|export function renderJsonValidationMarkdown(entries: rea...|
-|`runJsonValidator`|fn||381-406|export function runJsonValidator(params: JsonValidatorReq...|
+|`JsonParsePosition`|iface||29-34|export interface JsonParsePosition|
+|`JsonRootSummary`|iface||43-56|export interface JsonRootSummary|
+|`JsonValidatorEntry`|iface||67-100|export interface JsonValidatorEntry|
+|`JsonValidatorRequest`|iface||109-114|export interface JsonValidatorRequest|
+|`extractJsonParsePosition`|fn||128-149|export function extractJsonParsePosition(content: string,...|
+|`measureJsonDepth`|fn||160-176|function measureJsonDepth(value: unknown): number|
+|`countJsonKeys`|fn||186-198|function countJsonKeys(value: unknown): number|
+|`countJsonItems`|fn||208-220|function countJsonItems(value: unknown): number|
+|`summarizeJsonRoot`|fn||232-253|export function summarizeJsonRoot(value: unknown): JsonRo...|
+|`isJsonObjectValue`|fn||262-264|function isJsonObjectValue(value: unknown): value is Reco...|
+|`evaluateFinalOutputContractIssues`|fn||278-300|export function evaluateFinalOutputContractIssues(parsed:...|
+|`buildJsonValidatorEntry`|fn||317-346|function buildJsonValidatorEntry(label: string, text: str...|
+|`buildJsonValidatorFileEntry`|fn||359-378|function buildJsonValidatorFileEntry(filePath: string): J...|
+|`renderJsonValidatorEntry`|fn||391-423|function renderJsonValidatorEntry(entry: JsonValidatorEnt...|
+|`renderJsonValidationMarkdown`|fn||435-445|export function renderJsonValidationMarkdown(entries: rea...|
+|`runJsonValidator`|fn||464-489|export function runJsonValidator(params: JsonValidatorReq...|
 
 
 ---
@@ -7929,7 +7960,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 5890L | 134 symbols | 38 imports | 248 comments
+# index.ts | TypeScript | 5891L | 134 symbols | 38 imports | 248 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -8706,7 +8737,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102, REQ-293, REQ-294, REQ-295, REQ-296, REQ-297
 
-### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4551-4576)
+### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4552-4577)
 - @brief Builds the shared settings-menu choices for startup-tool management.
 - @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting the removed status-reference action. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8714,7 +8745,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
 - @satisfies REQ-007, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4586-4600)
+### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4587-4601)
 - @brief Builds the shared settings-menu choices for per-tool startup toggles.
 - @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends a value-less subtree-local `Reset defaults` row. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8722,7 +8753,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
 - @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-231, REQ-232
 
-### fn `async function configurePiUsereqToolsMenu(` (L4611-4728)
+### fn `async function configurePiUsereqToolsMenu(` (L4612-4729)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with the effective config, renders startup-tool actions through the shared settings-menu UI, persists enablement changes into global configuration, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8731,78 +8762,78 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-231, REQ-232
 
-### fn `function getStaticCheckLanguageConfigForMenu(` (L4737-4742)
+### fn `function getStaticCheckLanguageConfigForMenu(` (L4738-4743)
 - @brief Resolves one static-check language config for menu rendering.
 - @details Returns the configured per-language static-check object when present and otherwise synthesizes a disabled empty-language object so menu code can render all supported languages deterministically. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {StaticCheckLanguageConfig} Resolved per-language config object.
 
-### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4750-4752)
+### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4751-4753)
 - @brief Counts languages that currently expose at least one configured checker.
 - @details Treats configured-but-disabled languages as configured when their checker list is non-empty so removal actions remain deterministic. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of languages with at least one configured checker.
 
-### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4760-4762)
+### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4761-4763)
 - @brief Counts languages whose static-check enable flag is on.
 - @details Counts only languages whose persisted per-language config explicitly sets `enabled=enable`, regardless of checker count. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of enabled languages.
 
-### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4771-4773)
+### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4772-4774)
 - @brief Restores the documented static-check default configuration.
 - @details Replaces the mutable config subtree with a fresh clone of the documented per-language defaults so menu reset actions restore both enable flags and checker lists in one step. Runtime is O(l + c). Side effect: mutates `config`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 - @satisfies REQ-250, REQ-251, REQ-252
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4781-4783)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4782-4784)
 - @brief Summarizes enabled and configured static-check languages.
 - @details Counts enabled languages and languages with at least one checker, then emits one compact summary string suitable for the top-level configuration menu. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string.
 
-### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4792-4836)
+### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4793-4837)
 - @brief Builds the shared settings-menu choices for static-check management.
 - @details Serializes guided Command-oriented add and remove actions, renders one direct on/off toggle row for every supported language, and appends canonical terminal rows while omitting raw-spec and reference-only actions. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
 - @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248, REQ-345, REQ-347
 
-### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4844-4861)
+### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4845-4862)
 - @brief Builds the shared settings-menu choices for supported static-check languages.
 - @details Exposes every supported language as one row whose right-side value reports extensions, enablement, and configured checker count for guided Command configuration flows, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
 
-### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4869-4886)
+### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4870-4887)
 - @brief Builds the shared settings-menu choices for configured static-check languages.
 - @details Exposes only languages whose checker lists are non-empty so removal remains deterministic, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
 
-### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4894-4898)
+### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L4895-4899)
 - @brief Formats one static-check checker entry as a compact command summary.
 - @details Joins the module command plus its parameter list into a single shell-like token sequence so inspection and confirmation menus can render checker identity deterministically. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Compact command summary string.
 
-### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4907-4913)
+### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L4908-4914)
 - @brief Summarizes every configured checker for one language as a delimited command list.
 - @details Joins each checker entry summary with `; ` so the value column exposes the full language configuration in one row. Runtime is O(c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {string} Delimited checker summary string, or `(none)` when no checkers are configured.
 
-### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4922-4967)
+### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4923-4968)
 - @brief Builds the shared settings-menu choices for the read-only static-check inspection submenu.
 - @details Exposes only configured languages as disabled rows whose value column renders the full checker command list, appends one selectable `Close` row, and emits a disabled placeholder when no language is configured so the submenu never mutates configuration. Runtime is O(l * c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered read-only inspection choices.
 - @satisfies REQ-346
 
-### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4977-5015)
+### fn `function buildStaticCheckRemovalConfirmationChoices(` (L4978-5016)
 - @brief Builds the confirmation submenu choices for removing one configured static-check language.
 - @details Renders each configured checker as a disabled preview row, appends explicit approve and abort actions, and falls back to one disabled no-op row when the language has no checkers. Runtime is O(c * p). No external state is mutated.
 - @param[in] language {string} Canonical language name targeted for removal.
@@ -8810,7 +8841,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removal-confirmation choices.
 - @satisfies REQ-349
 
-### fn `async function confirmStaticCheckRemoval(` (L5026-5037)
+### fn `async function confirmStaticCheckRemoval(` (L5027-5038)
 - @brief Opens one explicit removal-confirmation submenu for a configured static-check language.
 - @details Renders the targeted checker entries before removal and returns `true` only when the user selects the explicit approval action. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -8819,7 +8850,7 @@ registration and status updates.
 - @return {Promise<boolean>} `true` when the removal is explicitly approved.
 - @satisfies REQ-349
 
-### fn `async function configureStaticCheckMenu(` (L5047-5226)
+### fn `async function configureStaticCheckMenu(` (L5048-5227)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user add, inspect, confirm-before-remove, and reset global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -8827,7 +8858,7 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253, REQ-345, REQ-346, REQ-347, REQ-348, REQ-349
 
-### fn `function formatContextFilesSummary(` (L5237-5252)
+### fn `function formatContextFilesSummary(` (L5238-5253)
 - @brief Summarizes the `Context Files` flag state with measured sizes and context occupancy for the top-level menu value column.
 - @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -8836,7 +8867,7 @@ registration and status updates.
 - @return {string} Compact `Context Files` summary string with the occupancy suffix.
 - @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405
 
-### fn `function buildContextFilesMenuChoices(` (L5263-5306)
+### fn `function buildContextFilesMenuChoices(` (L5264-5307)
 - @brief Builds the shared settings-menu choices for the `Context Files` submenu.
 - @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -8845,7 +8876,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412
 
-### fn `async function configureContextFilesMenu(` (L5318-5378)
+### fn `async function configureContextFilesMenu(` (L5319-5379)
 - @brief Runs the `Context Files` configuration submenu.
 - @details Measures the context files through the yielding async measurement helper, then loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -8855,9 +8886,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-406
 
-### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L5325-5329)
+### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L5326-5330)
 
-### fn `function buildPiUsereqMenuChoices(` (L5389-5495)
+### fn `function buildPiUsereqMenuChoices(` (L5390-5496)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
 - @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] cwd {string} Current working directory.
@@ -8866,21 +8897,21 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376, REQ-405
 
-### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5504-5522)
+### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5505-5523)
 - @brief Builds the shared settings-menu choices for source-directory management.
 - @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5531-5543)
+### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5532-5544)
 - @brief Builds the shared settings-menu choices for removing one source-directory entry.
 - @details Exposes every configured `src-dir` entry as one removable row and appends a value-less subtree-local `Reset defaults` row. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L5554-5815)
+### fn `async function configurePiUsereq(` (L5555-5816)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads the effective merged config, performs one yielding async context-file measurement warm pass so menu renders resolve through stat-signed cache hits instead of first-measurement encodes, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8889,9 +8920,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-327, REQ-328, REQ-333
 
-### fn `const persistConfigChange = () =>` (L5567-5572)
+### fn `const persistConfigChange = () =>` (L5568-5573)
 
-### fn `function registerConfigCommands(` (L5825-5835)
+### fn `function registerConfigCommands(` (L5826-5836)
 - @brief Registers configuration-management commands.
 - @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -8899,14 +8930,14 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-006, REQ-031
 
-### fn `function activatePiUsereqExtension(pi: ExtensionAPI): void` (L5844-5871)
+### fn `function activatePiUsereqExtension(pi: ExtensionAPI): void` (L5845-5872)
 - @brief Activates the complete pi-usereq extension surface.
 - @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset`, `req-references`, `req-continue`, and `req-continue-list` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies DES-002, DES-015, DES-030, DES-040, DES-041, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520, REQ-653, REQ-656, REQ-659, REQ-663, REQ-671, REQ-672, REQ-673, REQ-674, REQ-675, REQ-676
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5880-5890)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L5881-5891)
 - @brief Registers the complete pi-usereq extension at most once per installation in one pi host process.
 - @details Claims activation ownership for the executing installation path before any launcher deployment, registration, persistence, or probe scheduling, so a duplicated installation of the same package from another pi-managed source cannot register the documented commands, agent tools, shortcuts, and lifecycle hooks a second time; pi keeps every loaded extension active and reports duplicated tool names as extension load errors, so skipping the duplicate keeps the effective registered inventory identical (pi already resolves precedence by load order) while removing the conflict diagnostics. Repeated activation of the same installation path stays allowed because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` and the extension must re-register on every rebind. Claim release on activation failure preserves the documented behavior where a partially initialized installation surfaces its failure while another installed copy can still activate. Runtime is O(1) plus the delegated activation cost. Side effects are limited to process-scoped activation state mutation plus the delegated activation side effects only for the owning installation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -9021,33 +9052,33 @@ registration and status updates.
 |`registerPromptCommands`|fn||3969-4164|function registerPromptCommands(|
 |`promptCommandHandler`|fn||3974-4157|const promptCommandHandler = async (args: string, ctx: Ex...|
 |`registerAgentTools`|fn||4174-4473|function registerAgentTools(pi: ExtensionAPI): void|
-|`buildPiUsereqToolsMenuChoices`|fn||4551-4576|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
-|`buildPiUsereqToolToggleChoices`|fn||4586-4600|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
-|`configurePiUsereqToolsMenu`|fn||4611-4728|async function configurePiUsereqToolsMenu(|
-|`getStaticCheckLanguageConfigForMenu`|fn||4737-4742|function getStaticCheckLanguageConfigForMenu(|
-|`countConfiguredStaticCheckLanguages`|fn||4750-4752|function countConfiguredStaticCheckLanguages(config: UseR...|
-|`countEnabledStaticCheckLanguages`|fn||4760-4762|function countEnabledStaticCheckLanguages(config: UseReqC...|
-|`resetStaticCheckConfig`|fn||4771-4773|function resetStaticCheckConfig(config: UseReqConfig): void|
-|`formatStaticCheckLanguagesSummary`|fn||4781-4783|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckMenuChoices`|fn||4792-4836|function buildStaticCheckMenuChoices(config: UseReqConfig...|
-|`buildSupportedStaticCheckLanguageChoices`|fn||4844-4861|function buildSupportedStaticCheckLanguageChoices(config:...|
-|`buildConfiguredStaticCheckLanguageChoices`|fn||4869-4886|function buildConfiguredStaticCheckLanguageChoices(config...|
-|`formatStaticCheckCheckerEntry`|fn||4894-4898|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
-|`formatStaticCheckLanguageCheckerSummary`|fn||4907-4913|function formatStaticCheckLanguageCheckerSummary(config: ...|
-|`buildStaticCheckViewChoices`|fn||4922-4967|function buildStaticCheckViewChoices(config: UseReqConfig...|
-|`buildStaticCheckRemovalConfirmationChoices`|fn||4977-5015|function buildStaticCheckRemovalConfirmationChoices(|
-|`confirmStaticCheckRemoval`|fn||5026-5037|async function confirmStaticCheckRemoval(|
-|`configureStaticCheckMenu`|fn||5047-5226|async function configureStaticCheckMenu(|
-|`formatContextFilesSummary`|fn||5237-5252|function formatContextFilesSummary(|
-|`buildContextFilesMenuChoices`|fn||5263-5306|function buildContextFilesMenuChoices(|
-|`configureContextFilesMenu`|fn||5318-5378|async function configureContextFilesMenu(|
-|`setFlag`|fn||5325-5329|const setFlag = (flagKey: "context-files-requirements" | ...|
-|`buildPiUsereqMenuChoices`|fn||5389-5495|function buildPiUsereqMenuChoices(|
-|`buildSrcDirMenuChoices`|fn||5504-5522|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
-|`buildSrcDirRemovalChoices`|fn||5531-5543|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||5554-5815|async function configurePiUsereq(|
-|`persistConfigChange`|fn||5567-5572|const persistConfigChange = () =>|
-|`registerConfigCommands`|fn||5825-5835|function registerConfigCommands(|
-|`activatePiUsereqExtension`|fn||5844-5871|function activatePiUsereqExtension(pi: ExtensionAPI): void|
-|`piUsereqExtension`|fn||5880-5890|export default function piUsereqExtension(pi: ExtensionAP...|
+|`buildPiUsereqToolsMenuChoices`|fn||4552-4577|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
+|`buildPiUsereqToolToggleChoices`|fn||4587-4601|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
+|`configurePiUsereqToolsMenu`|fn||4612-4729|async function configurePiUsereqToolsMenu(|
+|`getStaticCheckLanguageConfigForMenu`|fn||4738-4743|function getStaticCheckLanguageConfigForMenu(|
+|`countConfiguredStaticCheckLanguages`|fn||4751-4753|function countConfiguredStaticCheckLanguages(config: UseR...|
+|`countEnabledStaticCheckLanguages`|fn||4761-4763|function countEnabledStaticCheckLanguages(config: UseReqC...|
+|`resetStaticCheckConfig`|fn||4772-4774|function resetStaticCheckConfig(config: UseReqConfig): void|
+|`formatStaticCheckLanguagesSummary`|fn||4782-4784|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckMenuChoices`|fn||4793-4837|function buildStaticCheckMenuChoices(config: UseReqConfig...|
+|`buildSupportedStaticCheckLanguageChoices`|fn||4845-4862|function buildSupportedStaticCheckLanguageChoices(config:...|
+|`buildConfiguredStaticCheckLanguageChoices`|fn||4870-4887|function buildConfiguredStaticCheckLanguageChoices(config...|
+|`formatStaticCheckCheckerEntry`|fn||4895-4899|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
+|`formatStaticCheckLanguageCheckerSummary`|fn||4908-4914|function formatStaticCheckLanguageCheckerSummary(config: ...|
+|`buildStaticCheckViewChoices`|fn||4923-4968|function buildStaticCheckViewChoices(config: UseReqConfig...|
+|`buildStaticCheckRemovalConfirmationChoices`|fn||4978-5016|function buildStaticCheckRemovalConfirmationChoices(|
+|`confirmStaticCheckRemoval`|fn||5027-5038|async function confirmStaticCheckRemoval(|
+|`configureStaticCheckMenu`|fn||5048-5227|async function configureStaticCheckMenu(|
+|`formatContextFilesSummary`|fn||5238-5253|function formatContextFilesSummary(|
+|`buildContextFilesMenuChoices`|fn||5264-5307|function buildContextFilesMenuChoices(|
+|`configureContextFilesMenu`|fn||5319-5379|async function configureContextFilesMenu(|
+|`setFlag`|fn||5326-5330|const setFlag = (flagKey: "context-files-requirements" | ...|
+|`buildPiUsereqMenuChoices`|fn||5390-5496|function buildPiUsereqMenuChoices(|
+|`buildSrcDirMenuChoices`|fn||5505-5523|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
+|`buildSrcDirRemovalChoices`|fn||5532-5544|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
+|`configurePiUsereq`|fn||5555-5816|async function configurePiUsereq(|
+|`persistConfigChange`|fn||5568-5573|const persistConfigChange = () =>|
+|`registerConfigCommands`|fn||5826-5836|function registerConfigCommands(|
+|`activatePiUsereqExtension`|fn||5845-5872|function activatePiUsereqExtension(pi: ExtensionAPI): void|
+|`piUsereqExtension`|fn||5881-5891|export default function piUsereqExtension(pi: ExtensionAP...|
 

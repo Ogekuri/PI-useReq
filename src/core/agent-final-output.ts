@@ -24,12 +24,12 @@ export type AgentFinalOutputResult = "ok" | "error";
 
 /**
  * @brief Tests whether one candidate value is one valid final-output terminal result.
- * @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Runtime is O(1). No external state is mutated.
+ * @details Narrows the mandatory `result` payload to the `ok|error` domain so the parsed report carries the literal union. Exported so the `json-validator` final-output contract evaluator reuses the identical domain source instead of duplicating it. Runtime is O(1). No external state is mutated.
  * @param[in] value {unknown} Candidate parsed `result` payload.
  * @return {boolean} `true` when the value is exactly `ok` or `error`.
- * @satisfies REQ-678
+ * @satisfies REQ-678, REQ-726
  */
-function isAgentFinalOutputResult(value: unknown): value is AgentFinalOutputResult {
+export function isAgentFinalOutputResult(value: unknown): value is AgentFinalOutputResult {
   return AGENT_FINAL_OUTPUT_RESULT_VALUES.includes(value as AgentFinalOutputResult);
 }
 

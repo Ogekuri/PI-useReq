@@ -193,25 +193,98 @@ test("runJsonValidator rejects requests without content and files deterministica
 /**
  * @brief Verifies the verdict renderer emits one deterministic monolithic document.
  * @details Renders the same record vector twice and asserts byte identity, the leading record
- * header, the summary footer carrying the invalid count, and that valid records omit error bullets
- * while invalid records omit structural bullets. Runtime is O(n) in rendered length. No external
- * state is mutated. No filesystem or network access occurs.
+ * header with its Result and Final-output contract metadata lines, the summary footer carrying the
+ * invalid count, and that valid records omit error bullets while invalid records omit structural
+ * bullets. Runtime is O(n) in rendered length. No external state is mutated. No filesystem or
+ * network access occurs.
  * @return {void} No return value.
  * @throws {AssertionError} Throws when the rendered document is non-deterministic or mis-shaped.
- * @satisfies REQ-703
+ * @satisfies REQ-703, REQ-727
  */
 test("renderJsonValidationMarkdown emits one deterministic monolithic verdict document", () => {
   const entries: JsonValidatorEntry[] = [
-    { label: "content", valid: true, rootType: "object", keys: 1, totalKeys: 1, depth: 1, chars: 12, tokens: 8 },
-    { label: "broken.json", valid: false, chars: 9, tokens: 6, error: "Unexpected token", line: 1, column: 3 },
+    {
+      label: "content",
+      valid: true,
+      isJsonObject: true,
+      finalOutputContractValid: true,
+      finalOutputIssues: [],
+      rootType: "object",
+      keys: 1,
+      totalKeys: 1,
+      depth: 1,
+      chars: 12,
+      tokens: 8,
+    },
+    {
+      label: "broken.json",
+      valid: false,
+      isJsonObject: false,
+      finalOutputContractValid: false,
+      finalOutputIssues: [],
+      chars: 9,
+      tokens: 6,
+      error: "Unexpected token",
+      line: 1,
+      column: 3,
+    },
   ];
 
   const first = renderJsonValidationMarkdown(entries);
   const second = renderJsonValidationMarkdown(entries);
   assert.equal(first, second);
-  assert.match(first, /^@@@ content \| JSON\n> Result: valid\n/);
-  assert.match(first, /@@@ broken\.json \| JSON\n> Result: invalid\n/);
+  assert.match(first, /^@@@ content \| JSON\n> Result: valid\n> Final-output contract: valid\n/);
+  assert.match(first, /@@@ broken\.json \| JSON\n> Result: invalid\n> Final-output contract: invalid\n/);
   assert.ok(first.includes("- @line 1\n- @column 3\n"));
   assert.ok(!first.includes("- @error Unexpected token\n- @root-type"));
   assert.ok(first.trimEnd().endsWith("- @invalid 1"));
+});
+
+/**
+ * @brief Verifies every parsed record is classified against the final-output mandatory-field contract.
+ * @details Probes one compliant final-output object, an object missing `summary`, an object with a
+ * non-domain `result`, an object with a non-array `next_commands`, one array root, and one
+ * unparseable payload, asserting the JSON-format verdict, the Final-output contract marker, the
+ * ordered mandatory-field issue bullets, and the empty issue list of unparseable records. Runtime
+ * is O(n) in payload size. No external state is mutated. No filesystem or network access occurs.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when contract classification or issue diagnostics deviate from
+ * the orchestration mandatory-field contract.
+ * @satisfies REQ-726, REQ-727, REQ-728, TST-232
+ */
+test("runJsonValidator enforces the final-output mandatory-field contract on every record", () => {
+  const compliant = runJsonValidator({
+    content: JSON.stringify({ result: "ok", summary: "done", next_commands: [] }),
+  });
+  assert.equal(compliant.code, 0);
+  assert.match(compliant.stdout, /> Result: valid/);
+  assert.match(compliant.stdout, /> Final-output contract: valid/);
+  assert.ok(!compliant.stdout.includes("@final-output-issue"));
+
+  const missingSummary = runJsonValidator({
+    content: JSON.stringify({ result: "ok", next_commands: [] }),
+  });
+  assert.match(missingSummary.stdout, /> Result: valid/);
+  assert.match(missingSummary.stdout, /> Final-output contract: invalid/);
+  assert.match(missingSummary.stdout, /- @final-output-issue summary: missing mandatory field "summary"/);
+
+  const badResult = runJsonValidator({
+    content: JSON.stringify({ result: "success", summary: "s", next_commands: [] }),
+  });
+  assert.match(badResult.stdout, /- @final-output-issue result: expected exactly "ok" or "error"; found "success"/);
+
+  const badNextCommands = runJsonValidator({
+    content: JSON.stringify({ result: "ok", summary: "s", next_commands: "nope" }),
+  });
+  assert.match(badNextCommands.stdout, /- @final-output-issue next_commands: expected array; found string/);
+
+  const nonObjectRoot = runJsonValidator({ content: "[1, 2, 3]" });
+  assert.match(nonObjectRoot.stdout, /> Result: valid/);
+  assert.match(nonObjectRoot.stdout, /> Final-output contract: invalid/);
+  assert.match(nonObjectRoot.stdout, /- @final-output-issue final output root must be a JSON object; found array/);
+
+  const unparseable = runJsonValidator({ content: "{oops}" });
+  assert.match(unparseable.stdout, /> Result: invalid/);
+  assert.match(unparseable.stdout, /> Final-output contract: invalid/);
+  assert.ok(!unparseable.stdout.includes("@final-output-issue"));
 });

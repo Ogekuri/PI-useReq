@@ -4509,7 +4509,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
   const jsonValidatorSchema = Type.Object(
     {
       content: Type.Optional(Type.String({
-        description: "Raw JSON text to validate inline; omit when files are supplied",
+        description: "Raw final-output JSON message text to validate inline; omit when files are supplied",
       })),
       files: Type.Optional(Type.Array(
         Type.String({ description: "Project-relative or absolute file path resolved from the current working directory when not already absolute" }),
@@ -4517,20 +4517,21 @@ function registerAgentTools(pi: ExtensionAPI): void {
       )),
     },
     {
-      description: "Input contract: optional content string plus optional files[]; at least one must be supplied. Scope: caller-supplied JSON only, independent of project configuration. Output contract: monolithic markdown verdict in content[0].text plus details.execution diagnostics. Invalid JSON is reported as an invalid verdict record and never fails the tool; only malformed requests fail.",
+      description: "Input contract: optional content string plus optional files[]; at least one must be supplied. Scope: the agent's final output JSON message only, independent of project configuration. Output contract: monolithic markdown verdict in content[0].text plus details.execution diagnostics. Every record is checked for JSON syntax AND the mandatory final-output fields (result, summary, next_commands); invalid JSON is reported as an invalid verdict record and never fails the tool; only malformed requests fail.",
     },
   );
 
   pi.registerTool({
     name: "json-validator",
     label: "json-validator",
-    description: "Scope: caller-supplied inline JSON content or explicit files. Validate JSON formatting and return the monolithic markdown verdict in content[0].text and keep only execution metadata in details.execution. Use this tool every time a request requires validating JSON content or a JSON structure.",
-    promptSnippet: "Return the monolithic JSON-validation verdict for caller-supplied content or files.",
+    description: "Scope: the agent's final output JSON message (the single JSON object emitted as the complete final response/result). Validate its JSON syntax AND the final-output mandatory-field contract (result exactly \"ok\" or \"error\", summary string, next_commands array); return the monolithic markdown verdict in content[0].text and keep only execution metadata in details.execution. This tool is NOT a generic JSON validator: it imposes mandatory content constraints, so syntactically valid JSON without the mandatory fields is reported contract-invalid. Use it ONLY on the final output JSON object immediately before emitting it; NEVER use it to validate arbitrary JSON files, configuration payloads, or intermediate data.",
+    promptSnippet: "Return the monolithic final-output JSON contract verdict for the caller-supplied final response JSON.",
     promptGuidelines: [
-      "Input contract: optional content string plus optional files[]; the tool fails with a deterministic diagnostic when neither is supplied.",
-      "Output contract: monolithic markdown verdict in content[0].text with one `@@@ <label> | JSON` record per input carrying Result, root type, structural counts, parser line/column diagnostics for invalid JSON, and character plus cl100k_base token facts; details.execution preserves only exit code and residual diagnostics.",
+      "Input contract: optional content string plus optional files[]; the tool fails with a deterministic diagnostic when neither is supplied. Scope is the agent's final output JSON message only, independent of project configuration.",
+      "Output contract: monolithic markdown verdict in content[0].text with one `@@@ <label> | JSON` record per input carrying Result, the Final-output contract marker, mandatory-field issue bullets, root type, structural counts, parser line/column diagnostics for invalid JSON, and character plus cl100k_base token facts; details.execution preserves only exit code and residual diagnostics.",
       "Behavior contract: invalid JSON is reported as an invalid verdict record and never throws; unreadable file entries surface as failed records without aborting remaining entries.",
-      "Usage contract: use this tool every time a request requires validating the formatting or structural validity of JSON content or a JSON structure.",
+      "Content contract: every parsed record is validated against the orchestration final-output mandatory fields — result exactly \"ok\" or \"error\", summary string, next_commands array — so valid JSON lacking these fields is reported contract-invalid; absent optional report fields are tolerated.",
+      "Usage contract: use this tool ONLY to validate the complete final output JSON message immediately before emitting it. Do NOT use it for generic JSON validation: it imposes mandatory-field content constraints beyond syntax, so arbitrary JSON documents, configuration payloads, fixtures, and intermediate data fail the contract even when syntactically valid.",
     ],
     renderResult: buildStructuredToolRenderResult("json-validator"),
     parameters: jsonValidatorSchema,

@@ -1343,15 +1343,16 @@ test("files-tokens defers js-tiktoken loading until execution and returns monoli
 /**
  * @brief Verifies json-validator registers as a default-enabled agent tool outside slash commands.
  * @details Activates the extension once, asserts the tool registers with a custom renderer, a
- * machine-oriented description binding every JSON validation request to the tool, a schema
- * describing the monolithic verdict contract, default-enabled configurable-tool membership, and the
- * documented alphabetical non-files custom-tool menu ordering, while no slash command of the same
- * name exists. Runtime is O(1) plus extension registration. Side effects are limited to in-memory
- * registration state. No filesystem or network access occurs.
+ * machine-oriented description binding the tool exclusively to final-output JSON contract
+ * validation while prohibiting generic JSON validation, a schema describing the monolithic verdict
+ * contract plus the mandatory final-output fields, default-enabled configurable-tool membership,
+ * and the documented alphabetical non-files custom-tool menu ordering, while no slash command of
+ * the same name exists. Runtime is O(1) plus extension registration. Side effects are limited to
+ * in-memory registration state. No filesystem or network access occurs.
  * @return {void} No return value.
  * @throws {AssertionError} Throws when json-validator registration, description, or default
  * enablement deviates from the documented contract.
- * @satisfies TST-229, REQ-701, REQ-709
+ * @satisfies TST-229, TST-233, REQ-701, REQ-709
  */
 test("json-validator registers as a default-enabled agent tool outside slash commands", () => {
   const pi = createFakePi();
@@ -1361,13 +1362,19 @@ test("json-validator registers as a default-enabled agent tool outside slash com
   const tool = pi.tools.find((candidate: RegisteredTool) => candidate.name === "json-validator");
   assert.ok(tool, "missing json-validator tool");
   assert.equal(typeof tool?.renderResult, "function", "missing renderResult for json-validator");
-  assert.match(tool?.description ?? "", /validate JSON formatting/i);
-  assert.match(tool?.description ?? "", /every time/);
+  assert.match(tool?.description ?? "", /final output JSON message/i);
+  assert.match(tool?.description ?? "", /NOT a generic JSON validator/);
+  assert.match(tool?.description ?? "", /ONLY on the final output JSON object/);
   assert.match(
     String((tool?.parameters as { description?: string } | undefined)?.description ?? ""),
     /monolithic markdown verdict/,
   );
-  assert.ok(tool?.promptGuidelines?.some((line: string) => line.includes("every time")));
+  assert.match(
+    String((tool?.parameters as { description?: string } | undefined)?.description ?? ""),
+    /mandatory final-output fields/,
+  );
+  assert.ok(tool?.promptGuidelines?.some((line: string) => line.includes("ONLY to validate the complete final output JSON message")));
+  assert.ok(tool?.promptGuidelines?.some((line: string) => line.includes("Do NOT use it for generic JSON validation")));
   assert.ok((PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES as readonly string[]).includes("json-validator"));
   const sortedCustomTools = [...PI_USEREQ_CUSTOM_TOOL_NAMES].sort(comparePiUsereqStartupToolNames);
   assert.equal(sortedCustomTools.indexOf("json-validator"), sortedCustomTools.indexOf("compress") + 1);
@@ -1378,14 +1385,15 @@ test("json-validator registers as a default-enabled agent tool outside slash com
  * @details Writes one valid and one invalid JSON file next to one missing file, executes the
  * registered tool with inline content plus the three file paths, and asserts one monolithic verdict
  * document in content[0].text carrying a record per input in request order, valid and invalid
- * results, root type and structural counts, line plus column diagnostics, the validation summary,
- * and details.execution limited to the numeric exit code. Runtime is dominated by extension
- * registration plus one tokenizer encode per record. Side effects are limited to temporary
- * filesystem mutation and process cwd changes inside the helper.
+ * results, final-output contract markers with mandatory-field issue bullets, root type and
+ * structural counts, line plus column diagnostics, the validation summary, and details.execution
+ * limited to the numeric exit code. Runtime is dominated by extension registration plus one
+ * tokenizer encode per record. Side effects are limited to temporary filesystem mutation and
+ * process cwd changes inside the helper.
  * @return {Promise<void>} Promise resolved when every assertion completes.
  * @throws {AssertionError} Throws when the verdict payload, record ordering, or execution metadata
  * deviates from the documented contract.
- * @satisfies TST-230, REQ-703, REQ-704, REQ-705, REQ-707, REQ-708
+ * @satisfies TST-230, REQ-703, REQ-704, REQ-705, REQ-707, REQ-708, REQ-726, REQ-727
  */
 test("json-validator returns monolithic verdict markdown with execution diagnostics", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
@@ -1409,6 +1417,8 @@ test("json-validator returns monolithic verdict markdown with execution diagnost
     assert.match(text, /@@@ missing\.json \| JSON/);
     assert.match(text, /> Result: valid/);
     assert.match(text, /> Result: invalid/);
+    assert.match(text, /> Final-output contract: invalid/);
+    assert.match(text, /- @final-output-issue /);
     assert.match(text, /- @root-type object/);
     assert.match(text, /- @total-keys 1/);
     assert.match(text, /- @line 3/);
