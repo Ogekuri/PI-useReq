@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.12](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.12) - 2026-11-16
+## [0.109.13](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.13) - 2026-11-16
 ### ⛰️  Features
 - Update prompts.
 - Update prompt with json validator.
@@ -32,6 +32,18 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- color inline code atomically over emphasis [useReq] *(agent-final-output)*
+  The ANSI markdown colorizer let the italic-emphasis alternative pair
+  emphasis-lookalike asterisks (e.g. the glob in prompts/*.md with the
+  trailing asterisk of req-*) and consume the inline code spans between
+  them, so enclosed backtick spans printed uncolored instead of code.
+  Segment each line on inline code spans first and style every code span
+  through the shared dispatcher; the link, bold, underline, and italic
+  alternatives now run only on the remaining segments, restoring REQ-715
+  inline-code coloring without changing any public interface.
+  Adds two failing-first reproducer tests for the observed report line
+  and the inline-code-atomicity guarantee; updates WORKFLOW.md call
+  traces and regenerates REFERENCES.md.
 - merge retention report into one ANSI notification [useReq] *(notify)*
   Compose the boxed ANSI report, Next-Workflow command table, intense-white
   retention sentence with intense-yellow percentage, and numbered list into
@@ -72,6 +84,20 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: Rename all agent tools with the req- prefix [useReq] *(tools)*
+  Rename the twelve configurable agent tools (compress -> req-compress,
+  references -> req-references, search -> req-search, static-check ->
+  req-static-check, summarize -> req-summarize, tokens -> req-tokens,
+  files-* -> req-files-*, result-json-validator -> req-result-json-validator)
+  to avoid name collisions with embedded or third-party pi CLI tools.
+  Update registration metadata and bundled agentic prompt descriptions,
+  the menu-order req-files-* grouping, the debug --args converter, and
+  registration tests. Requirements: REQ-735..REQ-737, TST-234 plus
+  renamed tool identifiers across existing REQ/TST lines.
+- render full-text table and tabular req-continue citations [useReq] *(next-workflow)*
+  REQ-722..725/729..732: the ANSI-report Next-Workflow table now carries the full untruncated input text (whitespace-normalized) wrapped at whitespace boundaries into at most 35-display-column lines rendered as continuation physical rows with empty sibling cells, right-aligned one-based ordinals, the 'Next Workflow' column header, display-width-based column sizing, and the same section ANSI markdown colorizer applied to the table text.
+  REQ-657/658/733/734: the numbered list after the retention line is replaced by the '/req-continue' command table ('Continue comand'/'Workflow'/'Text') carrying invokable '/req-continue <ordinal>' commands and only the first-20/' .. '/last-10 condensed citations with N/A placeholders.
+  Tests updated for the new rendering contracts: 572 pass, 0 fail; tsc and eslint clean.
 - BREAKING CHANGE: rename json-validator agent tool to result-json-validator [useReq] *(result-json-validator)*
   Renames the registered agent tool, its module (src/core/result-json-validator.ts), and its tool-scoped symbols to the new naming convention; requirements DES-044, REQ-064, REQ-701..709, TST-229..233 updated (version 0.0.166).
   Bundled prompt resources now instruct the agent to execute result-json-validator exclusively for validating the final agentic output JSON message and never for generic JSON artifacts; alphabetical toggle-order expectations updated (REQ-231); tests renamed and updated; workflow model and references regenerated.
@@ -1601,7 +1627,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.12\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.12
+- \[0.109.13\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.13
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1710,4 +1736,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.12]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.12
+[0.109.13]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.13
