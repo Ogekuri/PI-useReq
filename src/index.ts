@@ -51,11 +51,13 @@ import {
   captureAgentFinalOutputReport,
   getCapturedAgentFinalOutputReport,
   parseAgentFinalOutput,
-  renderAgentFinalOutputAnsiReport,
-  renderAgentFinalOutputMarkdownReport,
   type AgentFinalOutputReport,
 } from "./core/agent-final-output.js";
-import { ANSI_INTENSE_RED, ANSI_INTENSE_WHITE, ANSI_INTENSE_YELLOW, openAnsiStyle, wrapAnsiStyle } from "./core/ansi-style.js";
+import { ANSI_INTENSE_RED, openAnsiStyle } from "./core/ansi-style.js";
+import {
+  buildAgentFinalOutputAnsiPrintout,
+  buildContextRetentionNotificationMessage,
+} from "./core/retention-notification.js";
 import {
   DEFAULT_PI_NOTIFY_CMD,
   DEFAULT_PI_NOTIFY_PUSHOVER_TEXT,
@@ -144,9 +146,7 @@ import {
   REQ_CONTINUE_LIST_COMMAND_DESCRIPTION,
   captureNextWorkflowCommands,
   clearNextWorkflowCommands,
-  formatNextWorkflowCommandTable,
   formatNextWorkflowFullList,
-  formatNextWorkflowList,
   getNextWorkflowCommands,
   registerNextWorkflowCommandHandler,
   resolveNextWorkflowCommandHandler,
@@ -1298,7 +1298,7 @@ function notifyContextSafely(
 
 /**
  * @brief Emits one ANSI-rendered final-output markdown report notification with the Next-Workflow command table.
- * @details Renders the supplied final-output report through `renderAgentFinalOutputAnsiReport(...)` with rounded section-title boxes, appends the dynamically sized rounded table of the captured Next-Workflow commands rendered by `formatNextWorkflowCommandTable(...)`, skips emission when both payloads stay empty so contract-violating terminal outputs print no stale sections, and delivers the colored printout through `notifyContextSafely(...)` so stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in report and table length. Side effect is user notification delivery when the supplied context is still active.
+ * @details Composes the printout through `buildAgentFinalOutputAnsiPrintout(...)` — the rounded-box ANSI report from `renderAgentFinalOutputAnsiReport(...)` plus the dynamically sized rounded Next-Workflow table from `formatNextWorkflowCommandTable(...)` — skips emission when the printout stays empty so contract-violating terminal outputs print no stale sections, and delivers the colored printout through `notifyContextSafely(...)` so stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in report and table length. Side effect is user notification delivery when the supplied context is still active.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @param[in] report {AgentFinalOutputReport | undefined} Parsed final-output report to print; `undefined` contributes no sections.
  * @param[in] level {"info" | "warning" | "error"} Notification severity of the report printout.
@@ -1310,11 +1310,7 @@ function notifyAgentFinalOutputReport(
   report: AgentFinalOutputReport | undefined,
   level: "info" | "warning" | "error",
 ): void {
-  const reportText = renderAgentFinalOutputAnsiReport(report);
-  const commandTable = formatNextWorkflowCommandTable(getNextWorkflowCommands());
-  const printout = commandTable === ""
-    ? reportText
-    : reportText === "" ? commandTable : `${reportText}\n\n${commandTable}`;
+  const printout = buildAgentFinalOutputAnsiPrintout(report, getNextWorkflowCommands());
   if (printout === "") {
     return;
   }
@@ -1339,32 +1335,24 @@ function notifyTerminalOrchestrationDiagnostic(
 }
 
 /**
- * @brief Emits the final context-retention reminder info notification for a successfully completed `/req-*` orchestration.
- * @details Builds one message stating that the session context content was retained, recommending a clean-context session start before the next `/req-*` command, and appending the current context-usage percentage when the controller holds a normalized snapshot, then appends the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow so the follow-up commands print one per line after the retention line, and prepends the markdown report sections rendered from the process-scoped captured final-output JSON so every present report field prints before the retention line; the ANSI-colored report printout from `notifyAgentFinalOutputReport(...)` is emitted first so every parsed report prints colored regardless of the orchestration outcome, and the complete retention sentence carrying the percentage segment renders in intense white with the percentage in intense yellow. Delivers exclusively through `notifyContextSafely(...)`, so stale replacement-session contexts are suppressed, and performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is user notification delivery only when the supplied context is still active.
+ * @brief Emits the single merged final context-retention notification for a completed `/req-*` orchestration.
+ * @details Builds exactly one info-level message through `buildContextRetentionNotificationMessage(...)` — the ANSI-colored report printout with rounded section-title boxes, the dynamically sized rounded Next-Workflow command table, the intense-white `Context retained.` retention sentence carrying the intense-yellow percentage segment when a normalized snapshot exists, and the numbered Next-Workflow list rendered from the process-scoped capture of the last completed agentic flow — and delivers it through one `notifyContextSafely(...)` call so the pi TUI back-to-back info-notification collapse can never overwrite the ANSI report printout with a subsequent status line; the report appears exactly once because no plain-markdown duplicate is emitted. Performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effect is one user notification delivery when the supplied context is still active.
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @return {void} No return value.
- * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717
+ * @satisfies REQ-360, REQ-361, REQ-362, REQ-363, REQ-364, REQ-365, REQ-439, REQ-441, REQ-657, REQ-658, REQ-681, REQ-682, REQ-683, REQ-684, REQ-712, REQ-713, REQ-714, REQ-715, REQ-716, REQ-717, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725
  */
 function notifyContextRetentionReminder(
   statusController: PiUsereqStatusController,
   ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
 ): void {
-  notifyAgentFinalOutputReport(ctx, getCapturedAgentFinalOutputReport(), "info");
-  const percent = statusController.state.contextUsage?.percent;
-  const retentionMessage = typeof percent === "number" && Number.isFinite(percent)
-    ? wrapAnsiStyle("Context retained. Current context usage: ", ANSI_INTENSE_WHITE)
-      + wrapAnsiStyle(`${Math.round(percent)}%`, ANSI_INTENSE_YELLOW)
-      + wrapAnsiStyle(". Start a new session with a clean context (/new) before the next /req-* command.", ANSI_INTENSE_WHITE)
-    : `Context retained. Start a new session with a clean context (/new) before the next /req-* command.`;
-  const reportMarkdown = renderAgentFinalOutputMarkdownReport(getCapturedAgentFinalOutputReport());
-  const nextWorkflowList = formatNextWorkflowList(getNextWorkflowCommands());
-  const retentionWithList = nextWorkflowList === ""
-    ? retentionMessage
-    : `${retentionMessage}\n${nextWorkflowList}`;
   notifyContextSafely(
     ctx,
-    reportMarkdown === "" ? retentionWithList : `${reportMarkdown}\n\n${retentionWithList}`,
+    buildContextRetentionNotificationMessage(
+      statusController.state.contextUsage?.percent,
+      getCapturedAgentFinalOutputReport(),
+      getNextWorkflowCommands(),
+    ),
     "info",
   );
 }
