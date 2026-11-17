@@ -1,7 +1,8 @@
 # Changelog
 
-## [0.109.18](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.18) - 2026-11-17
+## [0.109.19](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.19) - 2026-11-17
 ### ⛰️  Features
+- Add new /req-print-result slash-command.
 - Update prompts.
 - Update prompts.
 - Update prompts.
@@ -34,6 +35,13 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- refresh captured report and Next-Workflow on result error [useReq] *(orchestration)*
+  Gate the agent_end final-output capture on the parse outcome instead of
+  the merge-gate marker so workflow-mandated result "error" terminals
+  refresh the process-scoped report store, Next-Workflow array, retained
+  message, and /req-continue entries with the executed flow outcome
+  instead of keeping the antecedent flow state; outputs without one valid
+  final-output JSON never feed the capture (REQ-654, REQ-656, REQ-712).
 - use repository commit format for sync commit [useReq] *(prompts-updater)*
   DEFECT: the script-generated commit (89a297a) used the bare subject
   'Update bundled prompts from v0.12.14 to v0.12.15', violating the
@@ -95,6 +103,20 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Update bundled prompts from v0.12.15 to v0.12.16 [useReq] *(prompts)*
+- load %%ARGS%% user requests from @file references [useReq] *(prompt-args)*
+  Add src/core/prompt-command-args.ts (DES-047): empty prompt-command input maps to the fixed no-request placeholder (REQ-782); '@' references load double-quoted, single-quoted, backslash-escaped, and plain-space paths with tilde expansion (REQ-783, REQ-784, REQ-787); syntax, missing-file, non-regular, binary, and empty-content failures raise deterministic ReqError causes (REQ-785, REQ-786, REQ-788, REQ-789, REQ-791); verbatim UTF-8 content substitutes %%ARGS%% (REQ-790); non-covered commands keep raw passthrough (REQ-793).; Wire the prompt-command handler to pass the resolved request text into execution preparation and rendered prompts while the invocation summary keeps raw input (REQ-781, REQ-792).; Add tests/prompt-command-args.test.ts covering TST-246..TST-249 and update REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.
+- Add 80-percent red alert styling to config-menu occupancy suffixes [useReq] *(context-file-size)*
+  Add CONTEXT_OCCUPANCY_MENU_ALERT_THRESHOLD_PERCENT plus
+  formatConfigMenuContextOccupancySuffix in src/core/context-file-size.ts:
+  occupancy suffixes in the Context Files top-level summary and submenu rows
+  wrap unchanged in intense-red ANSI when the displayed percentage exceeds 80.
+  Expose the numeric displayed percentage in ContextOccupancyFacts; command
+  summary and early-check diagnostics keep the plain suffix (REQ-770).
+  Requirements DES-046, REQ-768..770, TST-241..242; new
+  tests/context-occupancy-menu.test.ts (4/4); full suite 581/582 with the
+  only failure pre-existing on HEAD (stale release-workflow allowlist
+  assertion vs REQ-743). WORKFLOW.md and REFERENCES.md regenerated.
 - reserve 5-column right margin in table width [useReq] *(next-workflow)*
   REQ-749 now derives the Next-Workflow Text column wrap target as the pi CLI
   terminal column count minus the other columns, row chrome, and a fixed
@@ -1708,7 +1730,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.18\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.18
+- \[0.109.19\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.19
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1817,4 +1839,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.18]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.18
+[0.109.19]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.19
