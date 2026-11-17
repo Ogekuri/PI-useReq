@@ -5542,10 +5542,11 @@ test("worktree-backed finalization transitions through merging, error, and idle 
     assert.ok(!retentionNotifications[0]?.message.includes("## **"));
     const mergeFailureNotifications = ctx.__state.notifications.filter(
       (entry: { message: string; level: string }) => entry.level === "error"
-        && entry.message.includes(`ERROR: Fast-forward merge failed for worktree ${worktreeName}.`),
+        && entry.message.includes(`Fast-forward merge failed for worktree ${worktreeName}.`),
     );
     assert.equal(mergeFailureNotifications.length, 1);
-    assert.match(mergeFailureNotifications[0]?.message ?? "", /ERROR: Fast-forward merge failed for worktree [^\n]+\.\nERROR: Fast-forward merge failed\. The worktree was retained\. Merge the worktree changes manually to recover the executed work\.$/);
+    assert.ok(!mergeFailureNotifications[0]?.message.includes("ERROR: Fast-forward merge failed for worktree"));
+    assert.match(mergeFailureNotifications[0]?.message ?? "", /Fast-forward merge failed for worktree [^\n]+\.\nERROR: Fast-forward merge failed\. The worktree was retained\. Merge the worktree changes manually to recover the executed work\.$/);
     assert.equal(mergeFailureNotifications[0]?.message.endsWith(PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE), true);
     assert.equal(getNextWorkflowCommands().length, 2);
   } finally {

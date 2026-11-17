@@ -1009,7 +1009,7 @@ export const PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE =
 
 /**
  * @brief Executes the successful-closure merge sequence from restored `base-path`.
- * @details Detects tracked staged or unstaged `base-path` changes, wraps the existing fast-forward merge in `git stash` and `git stash pop` when required, preserves the direct merge path when no tracked changes exist, emits a warning-only result after successful local-change restoration, and writes one merge-finalization debug entry when enabled. Runtime is dominated by up to four git subprocesses plus O(n) status parsing. Side effects include stash-stack mutation, branch merge attempts, and optional debug-log writes.
+ * @details Detects tracked staged or unstaged `base-path` changes, wraps the existing fast-forward merge in `git stash` and `git stash pop` when required, preserves the direct merge path when no tracked changes exist, emits a warning-only result after successful local-change restoration, and writes one merge-finalization debug entry when enabled. `errorMessage` omits the `ERROR: ` severity prefix because the pi CLI renders error-level notifications as `Error: <message>`, so a prefixed message would print the redundant `Error: ERROR: ` marker; the uniform `PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE` last line keeps its `ERROR: ` prefix per REQ-667. Runtime is dominated by up to four git subprocesses plus O(n) status parsing. Side effects include stash-stack mutation, branch merge attempts, and optional debug-log writes.
  * @param[in] plan {PromptCommandExecutionPlan} Prompt execution plan whose branch should be merged.
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
  * @return {{ mergeAttempted: boolean; mergeSucceeded: boolean; errorMessage?: string; warningMessage?: string }} Merge-attempt facts plus optional warning text.
@@ -1098,7 +1098,7 @@ function finalizePromptCommandMerge(
   const mergeSucceeded = !mergeResult.error && mergeResult.status === 0;
   const errorMessage = mergeSucceeded
     ? undefined
-    : `ERROR: Fast-forward merge failed for worktree ${worktreeDir}.`;
+    : `Fast-forward merge failed for worktree ${worktreeDir}.`;
   let stashPopStatus: number | null | undefined;
   let warningMessage: string | undefined;
   if (usedStash) {
