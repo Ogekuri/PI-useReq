@@ -96,8 +96,8 @@ Use to: identify candidate symbols by name, description, or `@satisfies` link; o
 ### 3. Code Extraction: `req-search` / `req-files-search` tools
 Use after pillars 1-2 to extract only the targeted named constructs identified during analysis.
 - Prefer the `req-search` tool for project-wide named-symbol, declaration, and construct scans, and the `req-files-search` tool when target files are already known.
-- Use these tools as the default discovery path for named-symbol, declaration, construct, and known-file lookup; use `rg`/`grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
-- Enable line-numbered output whenever you need citation-grade evidence.
+- Use these tools as the preferred extraction path for named objects, functions, data structures, declarations, constructs, and known-file lookup; they return source content exactly as it appears in source files, including comments; use `rg`/`grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
+- `req-search` and `req-files-search` always emit original source line numbers.
 - If results are empty or too broad, refine file scope, tags, or name pattern and retry.
 - Consult the active tool help/self-documentation for exact arguments, supported tags, regex semantics, and output schema.
 
@@ -108,7 +108,7 @@ Use for: string/pattern searches inside code bodies, cross-file references, conf
 ### Recommended Analysis Workflow
 1. **Read `%%DOC_PATH%%/WORKFLOW.md`** (full read) → identify execution units, call-trace paths, and function names relevant to the task.
 2. **Read `%%DOC_PATH%%/REFERENCES.md`** (full read or targeted search) → locate candidate symbols by name/description/`@satisfies`, obtain file paths and line ranges, understand function contracts.
-3. **Extract code** via the `req-search` or `req-files-search` tool → use symbol names from steps 1-2 as `NAME_REGEX`, file paths as `req-files-search` targets, and enable line numbers when citing evidence.
+3. **Extract code** via the `req-search` or `req-files-search` tool → use symbol names from steps 1-2 as `NAME_REGEX` and file paths as `req-files-search` targets.
 4. **Search code bodies** via `rg`/`grep` → after `req-search`/`req-files-search`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
 
 
