@@ -841,7 +841,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-746**: MUST perform the extension-changelog version-key migration best-effort and MUST NOT change the `--upgrade` exit code or completion summary when reading or writing pi CLI settings fails.
 - **REQ-747**: MUST resolve the pi CLI global settings file as `<agent-dir>/settings.json` honoring `PI_CODING_AGENT_DIR` and MUST preserve every other settings field and entry during migration writes.
 - **REQ-748**: MUST restrict the extension-changelog version-key migration to develop-channel `--upgrade` runs and MUST NOT read or write pi CLI settings during default-channel `--upgrade` runs.
-- **REQ-749**: MUST derive the Next-Workflow `Text` column wrap target as the pi CLI terminal column count minus the other columns and row chrome whenever that value reaches the fixed minimum.
+- **REQ-749**: MUST derive the Next-Workflow `Text` column wrap target as the pi CLI terminal column count minus the other columns, row chrome, and a 5-display-column right margin whenever that value reaches the fixed minimum.
 - **REQ-750**: MUST fall back the Next-Workflow `Text` column wrap target to the fixed minimum 35 display columns whenever the derived target is unavailable or below the minimum.
 
 ## 4. Test Requirements

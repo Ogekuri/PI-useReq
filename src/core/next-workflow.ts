@@ -211,14 +211,21 @@ export const NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH = 35;
 
 /**
  * @brief Stores the fixed display-width chrome of one Next-Workflow table physical row outside the three column widths.
- * @details Counts the leading `│ ` border, the two ` │ ` cell separators, and the trailing ` │` border so `terminal columns - fixed columns - chrome` yields the widest `Text` column that keeps every physical row inside the CLI width. Access complexity is O(1).
+ * @details Counts the leading `│ ` border, the two ` │ ` cell separators, and the trailing ` │` border so `terminal columns - fixed columns - chrome - right margin` yields the widest `Text` column that keeps every physical row inside the CLI width while preserving the reserved right margin. Access complexity is O(1).
  * @satisfies REQ-749
  */
 const NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH = 10;
 
 /**
+ * @brief Stores the fixed display-width right margin reserved between the widest derived Next-Workflow table row and the identified pi CLI terminal column count.
+ * @details Subtracted from the terminal-derived `Text` column wrap target so the widest rendered physical table row keeps at least this many display columns of right margin against the identified terminal width; at equal console width every terminal-adaptive table renders at most `terminal columns - 5` display columns wide while staying left-aligned. Access complexity is O(1).
+ * @satisfies REQ-749
+ */
+const NEXT_WORKFLOW_TABLE_RIGHT_MARGIN_WIDTH = 5;
+
+/**
  * @brief Resolves the effective Next-Workflow table `Text` column wrap target from one terminal column count.
- * @details Returns `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH` when the terminal column count is unavailable, non-integer, non-positive, or when `terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH` stays below the minimum; otherwise returns that difference so every rendered physical table row fits the CLI width. No upper cap is applied. Runtime is O(1). No external state is mutated.
+ * @details Returns `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH` when the terminal column count is unavailable, non-integer, non-positive, or when `terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH - NEXT_WORKFLOW_TABLE_RIGHT_MARGIN_WIDTH` stays below the minimum; otherwise returns that difference so every rendered physical table row fits the CLI width while keeping at least `NEXT_WORKFLOW_TABLE_RIGHT_MARGIN_WIDTH` display columns of right margin against the terminal width. No upper cap is applied. Runtime is O(1). No external state is mutated.
  * @param[in] terminalColumns {number | undefined} pi CLI terminal column count; `undefined` or invalid selects the fixed minimum.
  * @param[in] fixedColumnsWidth {number} Summed display width of the non-`Text` columns, such as the ordinal column plus the `Next Workflow` header.
  * @return {number} Effective `Text` column wrap target in display columns; never below `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH`.
@@ -232,7 +239,8 @@ export function resolveNextWorkflowTextColumnTargetWidth(
   if (typeof terminalColumns !== "number" || !Number.isInteger(terminalColumns) || terminalColumns <= 0) {
     return NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH;
   }
-  const derivedTarget = terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH;
+  const derivedTarget =
+    terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH - NEXT_WORKFLOW_TABLE_RIGHT_MARGIN_WIDTH;
   if (derivedTarget < NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH) {
     return NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH;
   }

@@ -3733,7 +3733,7 @@ import { SourceAnalyzer, formatMarkdown } from "./source-analyzer.js";
 
 ---
 
-# next-workflow.ts | TypeScript | 489L | 24 symbols | 5 imports | 34 comments
+# next-workflow.ts | TypeScript | 497L | 24 symbols | 5 imports | 35 comments
 > Path: `src/core/next-workflow.ts`
 - @brief Implements Next-Workflow command capture, process-scoped storage, rounded-table rendering, `/req-continue` selection, and parameter-less `/req-continue` printing helpers.
 - @details Maps the `next_commands` entries of the parsed final-output JSON into pi-usereq slash commands plus input-text pairs captured in one process-scoped Next-Workflow array that survives extension rebinds and `/new` session starts, renders the captured commands as the dynamically sized full-text Next-Workflow table whose `Text` column wraps at the terminal-adaptive target width with hard-broken unbreakable words printed inside the ANSI report notification and as the `/req-continue` command table appended after the final context-retention line, resolves one-based ordinal selection, stores the reusable command handlers that let `/req-continue` delegate exactly like a manual user invocation, and stores the empty-array placeholder printed by parameter-less `/req-continue`. Runtime is O(n) in captured entry count per capture and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
@@ -3827,23 +3827,23 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(1).
 - @satisfies REQ-663
 
-### fn `export function resolveNextWorkflowTextColumnTargetWidth(` (L228-240)
+### fn `export function resolveNextWorkflowTextColumnTargetWidth(` (L235-248)
 - @brief Resolves the effective Next-Workflow table `Text` column wrap target from one terminal column count.
-- @details Returns `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH` when the terminal column count is unavailable, non-integer, non-positive, or when `terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH` stays below the minimum; otherwise returns that difference so every rendered physical table row fits the CLI width. No upper cap is applied. Runtime is O(1). No external state is mutated.
+- @details Returns `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH` when the terminal column count is unavailable, non-integer, non-positive, or when `terminalColumns - fixedColumnsWidth - NEXT_WORKFLOW_TABLE_ROW_FIXED_CHROME_WIDTH - NEXT_WORKFLOW_TABLE_RIGHT_MARGIN_WIDTH` stays below the minimum; otherwise returns that difference so every rendered physical table row fits the CLI width while keeping at least `NEXT_WORKFLOW_TABLE_RIGHT_MARGIN_WIDTH` display columns of right margin against the terminal width. No upper cap is applied. Runtime is O(1). No external state is mutated.
 - @param[in] terminalColumns {number | undefined} pi CLI terminal column count; `undefined` or invalid selects the fixed minimum.
 - @param[in] fixedColumnsWidth {number} Summed display width of the non-`Text` columns, such as the ordinal column plus the `Next Workflow` header.
 - @return {number} Effective `Text` column wrap target in display columns; never below `NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH`.
 - @note Complexity: O(1). Pure; no side effects.
 - @satisfies REQ-749, REQ-750
 
-### fn `function readNextWorkflowTerminalColumns(): number | undefined` (L249-252)
+### fn `function readNextWorkflowTerminalColumns(): number | undefined` (L257-260)
 - @brief Reads the pi CLI terminal column count from the hosting process standard output.
 - @details Returns `process.stdout.columns` only when it is a positive integer so non-TTY pipes, redirected output, and degraded hosts select the fixed minimum fallback through `resolveNextWorkflowTextColumnTargetWidth(...)`. Runtime is O(1). No external state is mutated.
 - @return {number | undefined} Positive terminal column count, or `undefined` when unavailable.
 - @note Complexity: O(1).
 - @satisfies REQ-749, REQ-750
 
-### fn `function splitUnbreakableWordByDisplayWidth(word: string, maxWidth: number): string[]` (L263-282)
+### fn `function splitUnbreakableWordByDisplayWidth(word: string, maxWidth: number): string[]` (L271-290)
 - @brief Splits one unbreakable word into display-width-bounded chunks without splitting wide characters.
 - @details Iterates code points, accumulates characters while the joined display width stays within `maxWidth`, and flushes the chunk before a character that would exceed the bound; a single character wider than `maxWidth` occupies its own oversized chunk so degenerate narrow targets never lose characters. Runtime is O(n) in word length. No external state is mutated.
 - @param[in] word {string} Single whitespace-delimited word wider than `maxWidth`.
@@ -3852,7 +3852,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in word length. Pure; no side effects.
 - @satisfies REQ-729
 
-### fn `function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[]` (L293-323)
+### fn `function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[]` (L301-331)
 - @brief Wraps one captured input text into `Text` cell lines bounded by the effective wrap target.
 - @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, a single word wider than `maxWidth` is hard-broken at display-width boundaries across multiple lines with the final chunk staying open for following words so no produced line exceeds `maxWidth` and the column never widens for unbreakable words, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] inputText {string} Captured input text.
@@ -3861,7 +3861,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in input length. Pure; no side effects.
 - @satisfies REQ-724, REQ-729
 
-### fn `export function condenseNextWorkflowTableInputText(inputText: string): string` (L333-341)
+### fn `export function condenseNextWorkflowTableInputText(inputText: string): string` (L341-349)
 - @brief Condenses one captured input text for Next-Workflow and `/req-continue` table cell rendering.
 - @details Collapses every whitespace run, including newlines, into one space, then renders inputs longer than the 30-character verbatim limit as the first 20 characters followed by the ` .. ` table separator followed by the last 10 characters and shorter inputs verbatim; the empty string stays empty so the table builder renders the `N/A` placeholder. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] inputText {string} Captured input text.
@@ -3869,7 +3869,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in input length. Pure; no side effects.
 - @satisfies REQ-658
 
-### fn `function renderNextWorkflowRoundedTable(headers: readonly string[], rows: readonly string[][][]): string` (L352-382)
+### fn `function renderNextWorkflowRoundedTable(headers: readonly string[], rows: readonly string[][][]): string` (L360-390)
 - @brief Renders headers plus per-cell line arrays as one dynamically sized rounded table printout.
 - @details Computes every column width from the maximum display width over the header and every rendered cell line, renders each cell line as one physical row that pads cells to the column width with spaces, repeats empty cells for the continuation lines of multi-line cells, and frames the table with the rounded box-drawing characters using the double-line header separator plus single-line row separators between logical rows. Runtime is O(n) in aggregate cell line length. No external state is mutated.
 - @param[in] headers {readonly string[]} Column header labels.
@@ -3878,11 +3878,11 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in aggregate cell line length. Pure; no side effects.
 - @satisfies REQ-725, REQ-730, REQ-731
 
-### fn `const border = (left: string, fill: string, middle: string, right: string): string =>` (L359-362)
+### fn `const border = (left: string, fill: string, middle: string, right: string): string =>` (L367-370)
 
-### fn `const dataRow = (cells: readonly string[]): string =>` (L361-362)
+### fn `const dataRow = (cells: readonly string[]): string =>` (L369-370)
 
-### fn `export function formatNextWorkflowCommandTable(` (L393-414)
+### fn `export function formatNextWorkflowCommandTable(` (L401-422)
 - @brief Renders the captured Next-Workflow commands as the dynamically sized full-text rounded table printout.
 - @details Computes widths through `renderNextWorkflowRoundedTable(...)`, resolves the effective `Text` column wrap target through `resolveNextWorkflowTextColumnTargetWidth(...)` from the supplied or process-detected terminal column count, renders the `N.`, `Next Workflow`, and `Text` columns, renders each row with one right-aligned space-padded one-based ordinal, the command name without the `req-` prefix in uppercase, and the full untruncated input text wrapped at whitespace boundaries into at most the effective wrap-target display columns with hard-broken unbreakable words and `N/A` for absent input text, and frames the table with the rounded box-drawing characters; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
 - @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
@@ -3891,7 +3891,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in aggregate cell length. Pure aside from the process stdout metadata read performed by the default width source.
 - @satisfies REQ-722, REQ-723, REQ-724, REQ-725, REQ-729, REQ-730, REQ-731, REQ-749, REQ-750
 
-### fn `export function formatNextWorkflowContinueCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L424-435)
+### fn `export function formatNextWorkflowContinueCommandTable(entries: readonly NextWorkflowCommandEntry[]): string` (L432-443)
 - @brief Renders the captured Next-Workflow commands as the `/req-continue` command table appended after the retention line.
 - @details Computes widths through `renderNextWorkflowRoundedTable(...)`, renders the `Continue comand`, `Workflow`, and `Text` columns, renders each capture-order row with the directly invokable `/req-continue <one-based-ordinal>` command, the command name without the `req-` prefix in uppercase, and the condensed input-text quotation collapsing inputs longer than 30 characters into the first 20 characters, the ` .. ` separator, and the last 10 characters with `N/A` for absent input text, and frames the table like the Next-Workflow table; an empty entry array renders the empty string. Runtime is O(n) in aggregate cell length. No external state is mutated.
 - @param[in] entries {readonly NextWorkflowCommandEntry[]} Captured command entries.
@@ -3899,7 +3899,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in aggregate cell length. Pure; no side effects.
 - @satisfies REQ-657, REQ-658, REQ-731, REQ-733, REQ-734
 
-### fn `export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: number): number` (L454-476)
+### fn `export function resolveNextWorkflowEntryIndex(rawArgs: string, entryCount: number): number` (L462-484)
 - @brief Resolves the zero-based entry index selected by one mandatory `/req-continue` ordinal argument.
 - @details Requires one non-empty decimal integer argument identifying the one-based Next-Workflow array ordinal, throws the mandatory-parameter diagnostic for an empty argument because parameter-less `/req-continue` invocations print the Next-Workflow table before reaching this selector, throws a deterministic diagnostic for non-numeric arguments, and throws a range diagnostic when the one-based ordinal exceeds the captured entry count. Runtime is O(n) in argument length. No external state is mutated.
 - @param[in] rawArgs {string} Raw `/req-continue` argument string.
@@ -3909,7 +3909,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in argument length. Pure aside from thrown diagnostics.
 - @satisfies REQ-661, REQ-662
 
-### fn `export function resetNextWorkflowStateForTests(): void` (L484-489)
+### fn `export function resetNextWorkflowStateForTests(): void` (L492-497)
 - @brief Resets the process-scoped Next-Workflow state for deterministic tests.
 - @details Clears both the captured entries and the handler registry plus the process-scoped captured final-output report so one test can simulate independent pi host processes without leaking captured follow-up commands, stale handlers, or stale report sections into later cases. Runtime is O(1). Side effect: mutates process-scoped state.
 - @return {void} No return value.
@@ -3930,18 +3930,18 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 |`clearNextWorkflowCommands`|fn||168-170|export function clearNextWorkflowCommands(): void|
 |`registerNextWorkflowCommandHandler`|fn||181-186|export function registerNextWorkflowCommandHandler(|
 |`resolveNextWorkflowCommandHandler`|fn||196-198|export function resolveNextWorkflowCommandHandler(command...|
-|`resolveNextWorkflowTextColumnTargetWidth`|fn||228-240|export function resolveNextWorkflowTextColumnTargetWidth(|
-|`readNextWorkflowTerminalColumns`|fn||249-252|function readNextWorkflowTerminalColumns(): number | unde...|
-|`splitUnbreakableWordByDisplayWidth`|fn||263-282|function splitUnbreakableWordByDisplayWidth(word: string,...|
-|`wrapNextWorkflowTableCellText`|fn||293-323|function wrapNextWorkflowTableCellText(inputText: string,...|
-|`condenseNextWorkflowTableInputText`|fn||333-341|export function condenseNextWorkflowTableInputText(inputT...|
-|`renderNextWorkflowRoundedTable`|fn||352-382|function renderNextWorkflowRoundedTable(headers: readonly...|
-|`border`|fn||359-362|const border = (left: string, fill: string, middle: strin...|
-|`dataRow`|fn||361-362|const dataRow = (cells: readonly string[]): string =>|
-|`formatNextWorkflowCommandTable`|fn||393-414|export function formatNextWorkflowCommandTable(|
-|`formatNextWorkflowContinueCommandTable`|fn||424-435|export function formatNextWorkflowContinueCommandTable(en...|
-|`resolveNextWorkflowEntryIndex`|fn||454-476|export function resolveNextWorkflowEntryIndex(rawArgs: st...|
-|`resetNextWorkflowStateForTests`|fn||484-489|export function resetNextWorkflowStateForTests(): void|
+|`resolveNextWorkflowTextColumnTargetWidth`|fn||235-248|export function resolveNextWorkflowTextColumnTargetWidth(|
+|`readNextWorkflowTerminalColumns`|fn||257-260|function readNextWorkflowTerminalColumns(): number | unde...|
+|`splitUnbreakableWordByDisplayWidth`|fn||271-290|function splitUnbreakableWordByDisplayWidth(word: string,...|
+|`wrapNextWorkflowTableCellText`|fn||301-331|function wrapNextWorkflowTableCellText(inputText: string,...|
+|`condenseNextWorkflowTableInputText`|fn||341-349|export function condenseNextWorkflowTableInputText(inputT...|
+|`renderNextWorkflowRoundedTable`|fn||360-390|function renderNextWorkflowRoundedTable(headers: readonly...|
+|`border`|fn||367-370|const border = (left: string, fill: string, middle: strin...|
+|`dataRow`|fn||369-370|const dataRow = (cells: readonly string[]): string =>|
+|`formatNextWorkflowCommandTable`|fn||401-422|export function formatNextWorkflowCommandTable(|
+|`formatNextWorkflowContinueCommandTable`|fn||432-443|export function formatNextWorkflowContinueCommandTable(en...|
+|`resolveNextWorkflowEntryIndex`|fn||462-484|export function resolveNextWorkflowEntryIndex(rawArgs: st...|
+|`resetNextWorkflowStateForTests`|fn||492-497|export function resetNextWorkflowStateForTests(): void|
 
 
 ---

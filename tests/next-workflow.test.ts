@@ -155,7 +155,7 @@ test("next-workflow command table hard-breaks unbreakable words at the fixed min
 
 /**
  * @brief Verifies the terminal-adaptive `Text` column wrap-target resolution contract.
- * @details Asserts unavailable, non-integer, non-positive, and too-narrow terminal column counts fall back to the fixed minimum, and that adequate terminal widths derive the target as the terminal count minus the fixed columns width minus the fixed row chrome so every rendered physical row fits the CLI width. Runtime is O(1). No external state is mutated.
+ * @details Asserts unavailable, non-integer, non-positive, and too-narrow terminal column counts fall back to the fixed minimum, and that adequate terminal widths derive the target as the terminal count minus the fixed columns width minus the fixed row chrome minus the fixed 5-display-column right margin so every rendered physical row fits the CLI width while preserving the reserved right margin. Runtime is O(1). No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
  * @throws {AssertionError} Throws when the derived target deviates from the documented subtraction and minimum-fallback contract.
  * @satisfies REQ-749, REQ-750
@@ -166,16 +166,17 @@ test("next-workflow text column wrap target adapts to the terminal width with th
   assert.equal(resolveNextWorkflowTextColumnTargetWidth(-8, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
   assert.equal(resolveNextWorkflowTextColumnTargetWidth(12.5, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
   assert.equal(resolveNextWorkflowTextColumnTargetWidth(60, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
-  assert.equal(resolveNextWorkflowTextColumnTargetWidth(80, 15), 55);
-  assert.equal(resolveNextWorkflowTextColumnTargetWidth(120, 15), 95);
-  assert.equal(resolveNextWorkflowTextColumnTargetWidth(200, 15), 175);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(65, 15), NEXT_WORKFLOW_TEXT_COLUMN_MAX_WIDTH);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(80, 15), 50);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(120, 15), 90);
+  assert.equal(resolveNextWorkflowTextColumnTargetWidth(200, 15), 170);
 });
 
 /**
  * @brief Verifies terminal-width conformance of the rendered Next-Workflow table.
- * @details Asserts one table rendered with an explicit adequate terminal column count and a long unbreakable token keeps every physical line within the terminal width while preserving the full untruncated input text across the hard-broken continuation rows, and that no condensed citation separator leaks into the full-text table. Runtime is O(n) in entry length. No external state is mutated.
+ * @details Asserts one table rendered with an explicit adequate terminal column count and a long unbreakable token keeps every physical line within the terminal width minus the fixed 5-display-column right margin, renders its widest physical row exactly 5 display columns narrower than the terminal width, and preserves the full untruncated input text across the hard-broken continuation rows without leaking the condensed citation separator into the full-text table. Runtime is O(n) in entry length. No external state is mutated.
  * @return {void} Promise-less assertions executed synchronously.
- * @throws {AssertionError} Throws when any physical table line exceeds the terminal width, the untruncated token loses characters, or the table renders empty.
+ * @throws {AssertionError} Throws when any physical table line exceeds the terminal width minus the right margin, the widest row deviates from the terminal-width-minus-margin bound, the untruncated token loses characters, or the table renders empty.
  * @satisfies REQ-722, REQ-724, REQ-729, REQ-731, REQ-749
  */
 test("next-workflow command table keeps every physical row inside the terminal width", () => {
@@ -185,8 +186,10 @@ test("next-workflow command table keeps every physical row inside the terminal w
   ], 100);
   assert.notEqual(rendered, "");
   const lines = rendered.split("\n");
+  const widestLineWidth = Math.max(...lines.map((line) => line.length));
+  assert.equal(widestLineWidth, 95, "the widest physical row stays exactly 5 display columns narrower than the 100-column terminal width");
   for (const line of lines) {
-    assert.ok(line.length <= 100, `physical row exceeds the terminal width: ${line.length}`);
+    assert.ok(line.length <= 95, `physical row exceeds the terminal width minus the right margin: ${line.length}`);
   }
   assert.ok(!rendered.includes(" .. "), "the full-text table never uses the condensed citation separator");
   const dataLines = lines.filter((line) => line.startsWith("│") && !line.includes("N."));
