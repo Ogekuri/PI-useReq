@@ -10723,3 +10723,118 @@ test("retained-result wipe runs right before a new flow dispatch and survives fa
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
+
+/**
+ * @brief Verifies a completed orchestration carrying final-output JSON `result` `error` refreshes the captured report, Next-Workflow array, and `/req-reset` retention composition with the executed flow outcome.
+ * @details Runs one no-worktree `req-change` flow that completes with `result` `ok` (summary `Alpha flow completed.` plus one `/req-fix` follow-up), then runs a second flow whose terminal output carries `result` `error` with its own summary and `/req-check` follow-up. Asserts the executed flow's error printout pairs its own report summary with its own Next-Workflow table, the process-scoped Next-Workflow array holds the executed flow entries, `/req-reset` recovery recomposes its final context-retention notification from the executed flow report instead of the antecedent flow report, and `/req-continue 1` delegates the executed flow's captured entry. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after capture and recovery assertions complete.
+ * @throws {AssertionError} Throws when a `result` `error` terminal keeps the antecedent flow report or Next-Workflow entries in any captured-state surface consumed by `/req-reset` or `/req-continue`.
+ * @satisfies REQ-584, REQ-587, REQ-653, REQ-654, REQ-655, REQ-656, REQ-712, REQ-772
+ */
+test("result error orchestration refreshes the captured report and req-reset retention composition", async () => {
+  resetNextWorkflowStateForTests();
+  resetResultRetentionStateForTests();
+  const { projectBase } = initFixtureRepo();
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    const fixSpyArgs: string[] = [];
+    const checkSpyArgs: string[] = [];
+    registerNextWorkflowCommandHandler("req-fix", async (args) => {
+      fixSpyArgs.push(args);
+    });
+    registerNextWorkflowCommandHandler("req-check", async (args) => {
+      checkSpyArgs.push(args);
+    });
+
+    // Flow A completes with `result` `ok` and seeds the captured state surfaces.
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{
+        role: "assistant",
+        stopReason: "stop",
+        content: [{
+          type: "text",
+          text: buildFinalOutputText("Alpha flow completed.", [
+            { command: "/req-fix", text: "Fix the antecedent flow follow-up" },
+          ]),
+        }],
+      }],
+    }, ctx);
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-fix"],
+    );
+
+    // Flow B completes with the workflow-mandated `result` `error` outcome carrying
+    // its own report summary and follow-up commands; every captured-state surface
+    // must switch to the executed flow instead of keeping the antecedent flow state.
+    await pi.commands.get("req-change")!.handler("Adjust docs again", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{
+        role: "assistant",
+        stopReason: "stop",
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            result: "error",
+            summary: "Beta flow failed.",
+            next_commands: [
+              { command: "/req-check", text: "Check the failing static analysis gate" },
+            ],
+          }),
+        }],
+      }],
+    }, ctx);
+
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>\u001b\[5mchange ➔ error\u001b\[25m<\/error>/,
+    );
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-check"],
+    );
+    const errorPrintout = ctx.__state.notifications.filter(
+      (entry: { level: string; message: string }) => entry.level === "error"
+        && entry.message.includes("Beta flow failed."),
+    ).at(-1);
+    assert.ok(errorPrintout, "missing the executed flow error report notification");
+    assert.ok(errorPrintout!.message.includes("CHECK"), "the error printout must pair the executed flow Next-Workflow table");
+    assert.ok(errorPrintout!.message.includes("Check the failing static analysis"), "the error printout must carry the executed flow entry text");
+    assert.ok(!errorPrintout!.message.includes("Fix the antecedent flow follow-up"), "the error printout must not pair the antecedent flow table");
+
+    // `/req-reset` recovery recomposes its final context-retention notification from
+    // the captured report store: it must present the executed flow result.
+    const notificationsBeforeReset = ctx.__state.notifications.length;
+    await pi.commands.get("req-reset")!.handler("", ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>reset ➔ idle<\/warning>/,
+    );
+    const resetRetention = ctx.__state.notifications.slice(notificationsBeforeReset).find(
+      (entry: { level: string; message: string }) => entry.level === "info"
+        && entry.message.includes("Context retained."),
+    );
+    assert.ok(resetRetention, "missing the retention notification after req-reset recovery");
+    assert.ok(resetRetention!.message.includes("Beta flow failed."), "the reset retention notification must carry the executed flow report");
+    assert.ok(!resetRetention!.message.includes("Alpha flow completed."), "the reset retention notification must not carry the antecedent flow report");
+
+    // `/req-continue` consumes the executed flow's captured entries (REQ-656).
+    await pi.commands.get("req-continue")!.handler("1", ctx);
+    assert.deepEqual(checkSpyArgs, ["Check the failing static analysis gate"]);
+    assert.deepEqual(fixSpyArgs, []);
+  } finally {
+    resetNextWorkflowStateForTests();
+    resetResultRetentionStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});

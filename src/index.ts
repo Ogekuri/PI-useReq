@@ -1844,12 +1844,17 @@ async function handleExtensionStatusEvent(
       );
       const finalOutputParse = parseAgentFinalOutput(agentEndOutputText);
       const statusMarker = resolvePromptCommandMergeGate(agentEndOutputText, finalOutputParse);
-      if (outcome === "completed" && statusMarker === "ok") {
-        // Stage A (REQ-653/REQ-654/REQ-655/REQ-681): capture the final-output report and
+      if (outcome === "completed" && finalOutputParse.ok) {
+        // Stage A (REQ-653/REQ-654/REQ-655/REQ-656/REQ-681): capture the final-output report and
         // the Next-Workflow commands from the terminal output of every completed agentic
-        // run carrying `result` `ok`, before the final retention notification renders the
-        // markdown report sections plus the command tables; blocked runs never feed the
-        // capture so retained-worktree failures cannot pollute it.
+        // run whose output parses to one valid final-output JSON object, before the
+        // terminal notifications render the markdown report sections plus the command
+        // tables. The capture gates on the parse outcome instead of the merge-gate
+        // marker so a workflow-mandated `result` "error" terminal refreshes every
+        // captured-state surface (`/req-reset` retention composition, `/req-print-result`,
+        // and the `/req-continue` array) with the EXECUTED flow outcome instead of
+        // keeping the antecedent flow state; runs whose output carries no valid
+        // final-output JSON never feed the capture because no parsed report exists.
         captureAgentFinalOutputReport(finalOutputParse);
         captureNextWorkflowCommands(finalOutputParse);
       }
