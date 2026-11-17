@@ -41,8 +41,8 @@ export const ANSI_BOLD = "1";
 
 /**
  * @brief ANSI SGR parameter selecting italic emphasis for markdown italic elements.
- * @details `3` is the ANSI italic attribute applied to `*italic*` and `_italic_` markdown spans. Access complexity is O(1).
- * @satisfies REQ-715
+ * @details `3` is the ANSI italic attribute applied to `*italic*` and `_italic_` markdown spans and to single-quote-span text, composed with `ANSI_CODE` as `3;36` for inline code spans inside single-quote spans. Access complexity is O(1).
+ * @satisfies REQ-715, REQ-763, REQ-764
  */
 export const ANSI_ITALIC = "3";
 

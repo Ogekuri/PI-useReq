@@ -9,6 +9,7 @@ import {
   resetAgentFinalOutputStateForTests,
 } from "../src/core/agent-final-output.js";
 import { ANSI_CODE, ANSI_ITALIC } from "../src/core/ansi-style.js";
+import { formatNextWorkflowCommandTable } from "../src/core/next-workflow.js";
 import { getDefaultConfig } from "../src/core/config.js";
 import {
   runPiNotifyEffectsForOutcome,
@@ -408,4 +409,70 @@ test("ANSI colorizer keeps coloring bold, italic, links, and code spans enclosed
   assert.ok(colored.includes(`\u001b[4;96m[text](url)\u001b[0m`), "link element must carry the link escape pair");
   assert.ok(colored.includes(`\u001b[${ANSI_CODE}m\`code\`\u001b[0m`), "plain inline code span must carry the code escape pair");
   assert.ok(colored.includes(`\u001b[${ANSI_CODE}m\`deep\`\u001b[0m`), "inline code span enclosed by emphasis-lookalike asterisks must carry the code escape pair");
+});
+
+/**
+ * @brief Verifies single-quote spans render italic with nested inline code composed as italic plus code.
+ * @details Colorizes the mandated mixed line where plain text, one single-quote span, and one nested inline code span coexist, asserting the pre-code text prints italic including the opening quote, the nested code span carries the combined italic-plus-code escape pair, the post-code text keeps italic styling despite the nested reset, the text outside the span stays unstyled, and every source character survives the ANSI substitution. Runtime is O(n) in line length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when any quoted region loses italic styling, the nested code span misses the composed escape pair, or the outer text gets styled.
+ * @satisfies REQ-763, REQ-764, REQ-766
+ */
+test("ANSI colorizer renders single-quote spans as italic with nested inline code composed as italic plus code", () => {
+  const line = "foo bar1 'foo bar2 `foo bar3` foo bar4'";
+  const colored = colorizeAgentFinalOutputMarkdownText(line);
+  assert.ok(colored.includes("\u001b[3m'foo bar2 \u001b[0m"), "text before the nested code span must print italic including the opening quote");
+  assert.ok(colored.includes(`\u001b[${ANSI_ITALIC};${ANSI_CODE}m\`foo bar3\`\u001b[0m`), "the nested inline code span must carry the combined italic plus code escape pair");
+  assert.ok(colored.includes("\u001b[3m foo bar4'\u001b[0m"), "text after the nested code span must keep italic styling despite the nested reset");
+  assert.ok(!colored.includes("\u001b[3mfoo bar1"), "text outside the single-quote span must stay unstyled");
+  assert.equal(colored.replace(/\u001b\[[0-9;]*m/g, ""), line, "every source character outside escape sequences must survive the coloring");
+});
+
+/**
+ * @brief Verifies apostrophe-lookalike quotes never open spans and only paired single-quote spans style italic.
+ * @details Colorizes one contraction-plus-possessive line and one mixed line where a contraction sits next to a paired single-quote span, asserting the contraction line renders escape-free, the paired span carries exactly one italic escape pair, the contraction apostrophe stays unstyled, and every source character survives the ANSI substitution. Runtime is O(n) in line length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when a contraction or possessive apostrophe opens a span or the paired span misses the italic escape pair.
+ * @satisfies REQ-763, REQ-765
+ */
+test("ANSI colorizer keeps apostrophe-lookalike quotes unstyled and styles only paired single-quote spans", () => {
+  const possessive = "don't worry about the book's cover";
+  const coloredPossessive = colorizeAgentFinalOutputMarkdownText(possessive);
+  assert.equal(coloredPossessive, possessive, "contraction and possessive apostrophes must not open or close a single-quote span");
+  const paired = "it's 'fine' here";
+  const coloredPaired = colorizeAgentFinalOutputMarkdownText(paired);
+  assert.ok(coloredPaired.includes("\u001b[3m'fine'\u001b[0m"), "the paired single-quote span must carry the italic escape pair");
+  assert.equal((coloredPaired.match(/\u001b\[3m/g) ?? []).length, 1, "exactly one italic escape opener must be emitted");
+  assert.ok(!coloredPaired.includes("\u001b[3mit's"), "the contraction apostrophe must stay unstyled");
+  assert.equal(coloredPaired.replace(/\u001b\[[0-9;]*m/g, ""), paired, "every source character outside escape sequences must survive the coloring");
+});
+
+/**
+ * @brief Verifies fenced code blocks stay free of single-quote span styling while surrounding lines color normally.
+ * @details Colorizes one text with a fenced block containing single quotes between two quoting lines, asserting the fenced content carries only the code escape pair, no italic escape appears inside the fence, and the single-quote spans on the surrounding lines carry the italic escape pair. Runtime is O(n) in text length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when the fence content gains italic styling or an outside single-quote span stays unstyled.
+ * @satisfies REQ-763, REQ-766
+ */
+test("ANSI colorizer keeps fenced code blocks free of single-quote span styling", () => {
+  const text = "Plain 'quoted' text.\n```\ninside 'fence' block\n```\nAfter 'more' quoting.";
+  const colored = colorizeAgentFinalOutputMarkdownText(text);
+  assert.ok(colored.includes(`\u001b[${ANSI_CODE}minside 'fence' block\u001b[0m`), "fenced content must carry only the code escape pair");
+  assert.ok(!colored.includes("\u001b[3minside"), "fenced single quotes must not open an italic region");
+  assert.ok(colored.includes("\u001b[3m'quoted'\u001b[0m"), "the single-quote span before the fence must carry the italic escape pair");
+  assert.ok(colored.includes("\u001b[3m'more'\u001b[0m"), "the single-quote span after the fence must carry the italic escape pair");
+});
+
+/**
+ * @brief Verifies the shared colorizer applies single-quote span styling to the rendered Next-Workflow command table.
+ * @details Renders one Next-Workflow command table with a quoted input-text cell at a fixed terminal width, colorizes it through the shared ANSI markdown colorizer, asserting the quoted fragment carries the italic escape pair and every source character of the table survives the ANSI substitution. Runtime is O(n) in table length. No external state is mutated.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when the table cell quote fragment misses the italic escape pair or the table text mutates.
+ * @satisfies REQ-732, REQ-763
+ */
+test("ANSI colorizer applies single-quote span styling to the rendered Next-Workflow command table", () => {
+  const table = formatNextWorkflowCommandTable([{ command: "req-fix", inputText: "Fix 'quoted' path" }], 80);
+  const colored = colorizeAgentFinalOutputMarkdownText(table);
+  assert.ok(colored.includes("\u001b[3m'quoted'\u001b[0m"), "the shared colorizer must style single-quote spans inside Next-Workflow table cells");
+  assert.equal(colored.replace(/\u001b\[[0-9;]*m/g, ""), table, "every source character of the table must survive the coloring");
 });

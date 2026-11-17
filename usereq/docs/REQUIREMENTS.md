@@ -805,13 +805,18 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-712**: MUST emit one markdown report notification for every terminal agentic prompt-run outcome with a parsed final-output report, including `result` `error` outcomes and `warning` terminal outcomes.
 - **REQ-713**: MUST render every markdown report notification with ANSI escape sequences producing colored terminal output.
 - **REQ-714**: MUST render each `## **<Label>**` markdown report heading with intense-yellow ANSI color.
-- **REQ-715**: MUST parse each report-section value as markdown and color links, fences, inline code, bold, italic, and underlined elements with ANSI escape sequences.
+- **REQ-715**: MUST parse each report-section value as markdown and color links, fences, inline code, bold, italic, underlined, and single-quote-span elements with ANSI escape sequences.
 - **REQ-716**: MUST render the `Context retained.` retention sentence with intense-white ANSI color whenever the context-usage percentage segment is present.
 - **REQ-717**: MUST render the appended context-usage percentage segment with intense-yellow ANSI color.
 - **REQ-718**: MUST render every notification reporting an `error` or `warning` prompt-orchestration termination with intense-red ANSI color.
 - **REQ-719**: MUST emit every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout, the Next-Workflow command table, the `/req-continue` command table, and the context-usage percentage line.
 - **REQ-720**: MUST render each report section heading of the ANSI-colored report notification as a rounded box frame sized from the label length.
 - **REQ-721**: MUST wrap every box line of a section heading with the intense-yellow ANSI color.
+- **REQ-763**: MUST render each matched single-quote span, including its delimiting quote characters, in ANSI italic by wrapping every inner text token with the italic SGR parameter.
+- **REQ-764**: MUST render each inline code span inside a single-quote span with combined italic and code SGR parameters so nested color escapes stay preserved.
+- **REQ-765**: MUST match single-quote spans only when the opening quote is not preceded by a word character and the closing quote is not followed by a word character.
+- **REQ-766**: MUST treat inline code spans and single-quote spans as atomic protected spans so the earliest-starting span renders as one unit and emphasis matching never consumes it.
+- **REQ-767**: MUST NOT re-apply the non-code inline alternatives to content inside a matched single-quote span.
 - **REQ-722**: MUST render the captured Next-Workflow commands as a dynamically sized rounded table with `N.`, `Next Workflow`, and `Text` columns in the ANSI-colored report notification.
 - **REQ-723**: MUST render each table row with a right-aligned one-based ordinal, the command name without the `req-` prefix in uppercase, and `N/A` for absent input text.
 - **REQ-724**: MUST render each Next-Workflow table `Text` cell with the full untruncated input text, collapsing every whitespace run into one space.
