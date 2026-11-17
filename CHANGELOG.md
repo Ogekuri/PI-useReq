@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.19](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.19) - 2026-11-17
+## [0.109.20](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.20) - 2026-11-17
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -103,6 +103,13 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Render resolved user request in command summary header [useReq] *(prompts)*
+  Render the bundled prompt-backed command invocation summary User's Request section as a standalone label line with the resolved user-request text on the immediately following line (REQ-795).
+  Pass userRequest.requestText into renderPromptCommandSummary so the on-screen recap shows the effective %%ARGS%% content instead of the raw @ reference or inline input (REQ-792).
+  Pin that covered user-request resolution completes before the command invocation summary render (REQ-794).
+  Add REQ-794 and REQ-795, update REQ-792 plus its evidence row, and bump the SRS to 0.0.173.
+  Update WORKFLOW.md call-trace notes for resolvePromptCommandUserRequest and renderPromptCommandSummary and regenerate REFERENCES.md.
+  Align the tests/prompt-command-summary.test.ts format assertion; full suite passes 592/592.
 - Update bundled prompts from v0.12.15 to v0.12.16 [useReq] *(prompts)*
 - load %%ARGS%% user requests from @file references [useReq] *(prompt-args)*
   Add src/core/prompt-command-args.ts (DES-047): empty prompt-command input maps to the fixed no-request placeholder (REQ-782); '@' references load double-quoted, single-quoted, backslash-escaped, and plain-space paths with tilde expansion (REQ-783, REQ-784, REQ-787); syntax, missing-file, non-regular, binary, and empty-content failures raise deterministic ReqError causes (REQ-785, REQ-786, REQ-788, REQ-789, REQ-791); verbatim UTF-8 content substitutes %%ARGS%% (REQ-790); non-covered commands keep raw passthrough (REQ-793).; Wire the prompt-command handler to pass the resolved request text into execution preparation and rendered prompts while the invocation summary keeps raw input (REQ-781, REQ-792).; Add tests/prompt-command-args.test.ts covering TST-246..TST-249 and update REQUIREMENTS.md, WORKFLOW.md, and REFERENCES.md.
@@ -1730,7 +1737,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.19\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.19
+- \[0.109.20\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.20
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1839,4 +1846,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.19]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.19
+[0.109.20]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.20
