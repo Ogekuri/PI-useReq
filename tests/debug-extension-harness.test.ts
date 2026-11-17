@@ -341,7 +341,6 @@ test("pi-usereq-debug tool forwards --params unchanged for req-files-search", ()
       tag: "FUNCTION",
       pattern: "^foo$",
       files: ["src/find_target.py"],
-      enableLineNumbers: true,
     };
     const result = runPiUsereqDebug(
       ["tool", "req-files-search", "--params", JSON.stringify(expectedParams), "--format", "json"],
@@ -364,14 +363,13 @@ test("pi-usereq-debug tool converts --args text into forwarded params JSON", () 
       tag: "FUNCTION",
       pattern: "^foo$",
       files: ["src/find_target.py"],
-      enableLineNumbers: true,
     };
     const result = runPiUsereqDebug(
       [
         "tool",
         "req-files-search",
         "--args",
-        "FUNCTION ^foo$ src/find_target.py --enable-line-numbers",
+        "FUNCTION ^foo$ src/find_target.py",
         "--format",
         "json",
       ],

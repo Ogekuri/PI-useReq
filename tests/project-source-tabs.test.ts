@@ -23,11 +23,11 @@ test("project-scan source extraction preserves leading tabs for Go sources", (t)
   assert.equal(summarize.status, 0, summarize.stderr);
   assert.match(summarize.stdout, /\tvar wg sync\.WaitGroup/);
 
-  const compress = runNodeCli(["--compress", "--enable-line-numbers"], projectBase);
+  const compress = runNodeCli(["--compress"], projectBase);
   assert.equal(compress.status, 0, compress.stderr);
   assert.match(compress.stdout, /\d+: \t"context"/);
 
-  const find = runNodeCli(["--find", "METHOD|FUNCTION", "^Start$", "--enable-line-numbers"], projectBase);
+  const find = runNodeCli(["--find", "METHOD|FUNCTION", "^Start$"], projectBase);
   assert.equal(find.status, 0, find.stderr);
   assert.match(find.stdout, /\d+: \ts\.Lock\(\)/);
 });

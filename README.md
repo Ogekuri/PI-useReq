@@ -235,7 +235,7 @@ and the project-local `.pi-usereq.json` files.
 
 ### Extension Custom Tools
 
-The extension registers the following agent tools (available to the LLM inside pi). All parameters are exposed through the pi tool-call contract; `FILE` entries may be project-relative or absolute paths. Optional `enableLineNumbers` adds `<n>:` line prefixes to compressed/search output.
+The extension registers the following agent tools (available to the LLM inside pi). All parameters are exposed through the pi tool-call contract; `FILE` entries may be project-relative or absolute paths. Compressed and search outputs always prefix every code-block line with its original source line number; search excerpts reproduce matched construct source lines as-is, including comments.
 
 - Count tokens and chars for the given files
   `files-tokens FILE [FILE ...]`
@@ -244,10 +244,10 @@ The extension registers the following agent tools (available to the LLM inside p
   `files-summarize FILE [FILE ...]`
 
 - Generate compressed output for the given files
-  `files-compress FILE [FILE ...] [enableLineNumbers]`
+  `files-compress FILE [FILE ...]`
 
 - Find and extract specific constructs from the given files
-  `files-search TAG PATTERN FILE [FILE ...] [enableLineNumbers]`
+  `files-search TAG PATTERN FILE [FILE ...]`
 
 - Run static analysis on the given files using the checkers configured for their extensions
   `files-static-check FILE [FILE ...]`
@@ -262,10 +262,10 @@ The extension registers the following agent tools (available to the LLM inside p
   `references`
 
 - Generate compressed output for the configured `src-dir` directories
-  `compress [enableLineNumbers]`
+  `compress`
 
 - Find and extract specific constructs from the configured `src-dir` directories
-  `search TAG PATTERN [enableLineNumbers]`
+  `search TAG PATTERN`
 
 - Run static analysis on the configured `src-dir` plus `tests-dir` selections (excluding `fixtures/`)
   `static-check`
@@ -308,12 +308,12 @@ Analysis and static-check options mirror the agent tools for scripting and debug
 ```text
 --files-tokens FILE [FILE ...]
 --files-summarize FILE [FILE ...]
---files-compress FILE [FILE ...] [--enable-line-numbers] [--verbose]
---files-find TAG PATTERN FILE [FILE ...] [--enable-line-numbers] [--verbose]
+--files-compress FILE [FILE ...] [--verbose]
+--files-find TAG PATTERN FILE [FILE ...] [--verbose]
 --files-static-check FILE [FILE ...]
 --summarize [--verbose]
---compress [--enable-line-numbers] [--verbose]
---find TAG PATTERN [--enable-line-numbers] [--verbose]
+--compress [--verbose]
+--find TAG PATTERN [--verbose]
 --tokens
 --static-check
 --test-static-check {dummy,command} [FILES...]

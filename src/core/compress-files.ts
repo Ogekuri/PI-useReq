@@ -22,17 +22,16 @@ function formatOutputPath(filePath: string, outputBase?: string): string {
 
 /**
  * @brief Compresses a list of explicit source files into concatenated markdown sections.
- * @details Validates file existence, infers each supported language, invokes per-file compression, preserves optional line numbers, and emits one fenced block per successful file. Runtime is O(F + S) where F is file count and S is total processed source size. Side effects are limited to filesystem reads and optional stderr progress logging.
+ * @details Validates file existence, infers each supported language, invokes per-file compression, prefixes every retained line with its original source line number, and emits one fenced block per successful file. Runtime is O(F + S) where F is file count and S is total processed source size. Side effects are limited to filesystem reads and optional stderr progress logging.
  * @param[in] filePaths {string[]} Explicit file paths to process.
- * @param[in] includeLineNumbers {boolean} When `true`, preserve original source line numbers in the emitted code block.
  * @param[in] verbose {boolean} When `true`, write progress and skip diagnostics to stderr.
  * @param[in] outputBase {string | undefined} Optional base directory used to shorten output paths.
  * @return {string} Markdown document containing one section per successfully compressed file.
  * @throws {Error} Throws when no valid source files can be processed.
+ * @satisfies REQ-012, REQ-083
  */
 export function compressFiles(
   filePaths: string[],
-  includeLineNumbers = true,
   verbose = false,
   outputBase?: string,
 ): string {
@@ -52,7 +51,7 @@ export function compressFiles(
       continue;
     }
     try {
-      const compressed = compressFileDetailed(filePath, language, includeLineNumbers);
+      const compressed = compressFileDetailed(filePath, language);
       const outputPath = formatOutputPath(filePath, resolvedOutputBase);
       parts.push(`@@@ ${outputPath} | ${language}\n> Lines: ${compressed.source_start_line_number}-${compressed.source_end_line_number}\n\
 \`\`\`\n${compressed.compressed_source_text}\n\`\`\``);

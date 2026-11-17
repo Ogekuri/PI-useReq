@@ -164,8 +164,6 @@ const IMPORTED_CASE_MAPPINGS: ImportedCaseMapping[] = [
   { sourceId: "test_files_commands.py::TestFilesSummarizeCommand::test_files_summarize_verbose_outputs_progress", targetId: "direct::files-summarize-verbose" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_basic", targetId: "direct::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_base_required", targetId: "direct::standalone::files-compress-line-number-modes" },
-  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_no_line_numbers_by_default", targetId: "direct::standalone::files-compress-line-number-modes" },
-  { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_enable_line_numbers", targetId: "direct::standalone::files-compress-line-number-modes" },
   { sourceId: "test_files_commands.py::TestFilesCompressCommand::test_files_compress_verbose_outputs_progress", targetId: "direct::standalone::files-compress-verbose" },
   { sourceId: "test_files_commands.py::TestSummarizeCommand::test_rejects_base", targetId: "direct::summarize-modes" },
   { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_with_here", targetId: "direct::summarize-modes" },
@@ -173,16 +171,12 @@ const IMPORTED_CASE_MAPPINGS: ImportedCaseMapping[] = [
   { sourceId: "test_files_commands.py::TestSummarizeCommand::test_summarize_from_config", targetId: "direct::summarize-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_rejects_base", targetId: "direct::project::compress-modes" },
   { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_with_here", targetId: "direct::project::compress-modes" },
-  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_no_line_numbers_by_default", targetId: "direct::project::compress-modes" },
-  { sourceId: "test_files_commands.py::TestCompressCommand::test_compress_enable_line_numbers", targetId: "direct::project::compress-modes" },
   { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_rejects_base", targetId: "direct::project::tokens-doc-selection" },
   { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_implies_here_and_uses_config_docs_dir", targetId: "direct::project::tokens-doc-selection" },
   { sourceId: "test_files_commands.py::TestTokensCommand::test_tokens_counts_docs_files", targetId: "direct::project::tokens-doc-selection" },
   { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_default_suppresses_progress", targetId: "direct::standalone::files-find-modes" },
   { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_verbose_outputs_progress", targetId: "direct::standalone::files-find-modes" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_files_find_enable_line_numbers", targetId: "direct::standalone::files-find-modes" },
   { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_verbose_outputs_progress", targetId: "direct::project::find-modes" },
-  { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_enable_line_numbers", targetId: "direct::project::find-modes" },
   { sourceId: "test_files_commands.py::TestFindCommandVerbose::test_find_rejects_base", targetId: "direct::project::find-modes" },
   { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_dispatches_dummy", targetId: "direct::standalone::test-static-check-dispatch" },
   { sourceId: "test_static_check.py::TestCLIIntegrationStaticCheck::test_main_dispatches_unknown_subcommand", targetId: "direct::standalone::test-static-check-dispatch" },
@@ -274,11 +268,7 @@ const TARGET_CASES: TargetParityCase[] = [
     run(t) {
       const filePath = createScratchFile(t, "sample.py", "# comment\nvalue = 1\n");
       const cwd = path.dirname(filePath);
-      const plain = runNodeCli(["--files-compress", filePath], cwd);
-      assert.equal(plain.status, 0, plain.stderr);
-      assert.equal(plain.stderr, "");
-      assert.equal(plain.stdout, "@@@ sample.py | python\n> Lines: 2-2\n```\nvalue = 1\n```\n");
-      const numbered = runNodeCli(["--files-compress", filePath, "--enable-line-numbers"], cwd);
+      const numbered = runNodeCli(["--files-compress", filePath], cwd);
       assert.equal(numbered.status, 0, numbered.stderr);
       assert.equal(numbered.stderr, "");
       assert.equal(numbered.stdout, "@@@ sample.py | python\n> Lines: 2-2\n```\n2: value = 1\n```\n");
@@ -290,7 +280,7 @@ const TARGET_CASES: TargetParityCase[] = [
       const filePath = createScratchFile(t, "sample.py", "value = 1\n");
       const result = runNodeCli(["--verbose", "--files-compress", filePath], path.dirname(filePath));
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, "@@@ sample.py | python\n> Lines: 1-1\n```\nvalue = 1\n```\n");
+      assert.equal(result.stdout, "@@@ sample.py | python\n> Lines: 1-1\n```\n1: value = 1\n```\n");
       assert.equal(result.stderr, `  OK    ${filePath}\n\n  Compressed: 1 ok, 0 failed\n`);
     },
   },
@@ -324,12 +314,11 @@ const TARGET_CASES: TargetParityCase[] = [
     run(t) {
       const { projectBase } = createFixtureRepo(t, { fixtures: [] });
       fs.writeFileSync(path.join(projectBase, "src", "sample.py"), "# comment\nvalue = 1\n", "utf8");
-      for (const args of [["--compress"], ["--here", "--compress"], ["--compress", "--enable-line-numbers"]]) {
+      for (const args of [["--compress"], ["--here", "--compress"]]) {
         const result = runNodeCli(args, projectBase);
-        const sourceLine = args.includes("--enable-line-numbers") ? "2: value = 1" : "value = 1";
         assert.equal(result.status, 0, result.stderr);
         assert.equal(result.stderr, "");
-        assert.equal(result.stdout, `@@@ src/sample.py | python\n> Lines: 2-2\n\`\`\`\n${sourceLine}\n\`\`\`\n`);
+        assert.equal(result.stdout, `@@@ src/sample.py | python\n> Lines: 2-2\n\`\`\`\n2: value = 1\n\`\`\`\n`);
       }
       const rejected = runNodeCli(["--base", projectBase, "--compress"], projectBase);
       assert.notEqual(rejected.status, 0);
@@ -383,12 +372,11 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.equal(basic.status, 0, basic.stderr);
       assert.equal(basic.stderr, "");
       assert.match(basic.stdout, /### FUNCTION: `foo`/);
+      assert.match(basic.stdout, /1: def foo\(\):/);
+      assert.match(basic.stdout, /2:     return 1/);
       const verbose = runNodeCli(["--verbose", "--files-find", "FUNCTION", "foo", filePath], cwd);
       assert.equal(verbose.status, 0, verbose.stderr);
       assert.match(verbose.stderr, /Found:/);
-      const numbered = runNodeCli(["--files-find", "FUNCTION", "foo", filePath, "--enable-line-numbers"], cwd);
-      assert.equal(numbered.status, 0, numbered.stderr);
-      assert.match(numbered.stdout, /1: def foo\(\):/);
     },
   },
   {
@@ -399,12 +387,11 @@ const TARGET_CASES: TargetParityCase[] = [
       const basic = runNodeCli(["--find", "FUNCTION", "foo"], projectBase);
       assert.equal(basic.status, 0, basic.stderr);
       assert.match(basic.stdout, /### FUNCTION: `foo`/);
+      assert.match(basic.stdout, /1: def foo\(\):/);
+      assert.match(basic.stdout, /2:     return 1/);
       const verbose = runNodeCli(["--verbose", "--find", "FUNCTION", "foo"], projectBase);
       assert.equal(verbose.status, 0, verbose.stderr);
       assert.match(verbose.stderr, /Found:/);
-      const numbered = runNodeCli(["--find", "FUNCTION", "foo", "--enable-line-numbers"], projectBase);
-      assert.equal(numbered.status, 0, numbered.stderr);
-      assert.match(numbered.stdout, /1: def foo\(\):/);
       const rejected = runNodeCli(["--base", projectBase, "--find", "FUNCTION", "foo"], projectBase);
       assert.notEqual(rejected.status, 0);
     },
@@ -775,11 +762,11 @@ const TARGET_CASES: TargetParityCase[] = [
       assert.equal(summarize.status, 0, summarize.stderr);
       assert.match(summarize.stdout, /\tvar wg sync\.WaitGroup/);
 
-      const compress = runNodeCli(["--files-compress", fixture, "--enable-line-numbers"], cwd);
+      const compress = runNodeCli(["--files-compress", fixture], cwd);
       assert.equal(compress.status, 0, compress.stderr);
       assert.match(compress.stdout, /\d+: \t"context"/);
 
-      const find = runNodeCli(["--files-find", "METHOD|FUNCTION", "^Start$", fixture, "--enable-line-numbers"], cwd);
+      const find = runNodeCli(["--files-find", "METHOD|FUNCTION", "^Start$", fixture], cwd);
       assert.equal(find.status, 0, find.stderr);
       assert.match(find.stdout, /\d+: \ts\.Lock\(\)/);
     },

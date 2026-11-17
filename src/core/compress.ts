@@ -52,7 +52,7 @@ let specsCache: ReturnType<typeof buildLanguageSpecs> | undefined;
 
 /**
  * @brief Describes one structured compressed output line.
- * @details Separates source coordinates, output order, raw compressed text, and rendered display text so downstream JSON payloads can expose line facts without reparsing prefixed strings. The interface is compile-time only and introduces no runtime cost.
+ * @details Separates source coordinates, output order, raw compressed text, and rendered display text so downstream JSON payloads can expose line facts without reparsing prefixed strings. `display_text` always carries the `<source_line_number>: ` prefix. The interface is compile-time only and introduces no runtime cost.
  */
 export interface CompressedLineEntry {
   compressed_line_number: number;
@@ -63,11 +63,10 @@ export interface CompressedLineEntry {
 
 /**
  * @brief Describes one structured compression result.
- * @details Exposes language identity, source line metrics, removed-line totals, structured compressed lines, and the final rendered excerpt text so CLI and agent-tool layers can share one canonical compression model. The interface is compile-time only and introduces no runtime cost.
+ * @details Exposes language identity, source line metrics, removed-line totals, structured compressed lines, and the final rendered excerpt text so CLI and agent-tool layers can share one canonical compression model. Every rendered excerpt line is prefixed with its original source line number. The interface is compile-time only and introduces no runtime cost.
  */
 export interface CompressedSourceResult {
   language_id: string;
-  include_line_numbers: boolean;
   source_line_count: number;
   source_start_line_number: number;
   source_end_line_number: number;
@@ -209,24 +208,23 @@ function removeInlineComment(line: string, singleComment: string | undefined, st
 
 /**
  * @brief Builds one rendered compressed line entry.
- * @details Materializes both the raw compressed text and the display text that optionally prefixes the original source line number. Runtime is O(n) in line length. No side effects occur.
+ * @details Materializes both the raw compressed text and the display text prefixed with the original source line number. Runtime is O(n) in line length. No side effects occur.
  * @param[in] text {string} Compressed source text for one retained line.
  * @param[in] sourceLineNumber {number} Original source line number.
  * @param[in] compressedLineNumber {number} One-based output line number inside the compressed excerpt.
- * @param[in] includeLineNumbers {boolean} When `true`, prefix the display text with the original source line number.
- * @return {CompressedLineEntry} Structured compressed line entry.
+ * @return {CompressedLineEntry} Structured compressed line entry whose `display_text` always carries the `<sourceLineNumber>: ` prefix.
+ * @satisfies REQ-012
  */
 function buildCompressedLineEntry(
   text: string,
   sourceLineNumber: number,
   compressedLineNumber: number,
-  includeLineNumbers: boolean,
 ): CompressedLineEntry {
   return {
     compressed_line_number: compressedLineNumber,
     source_line_number: sourceLineNumber,
     text,
-    display_text: includeLineNumbers ? `${sourceLineNumber}: ${text}` : text,
+    display_text: `${sourceLineNumber}: ${text}`,
   };
 }
 
@@ -263,14 +261,14 @@ function normalizeRetainedLineIndentation(line: string, preserveIndent: boolean)
 
 /**
  * @brief Compresses in-memory source text into the structured compression model.
- * @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, retains full leading indentation for indentation-significant languages, preserves leading-tab indentation for other languages, and emits both structured line entries and a rendered text excerpt. Runtime is O(n) in source length. No external state is mutated.
+ * @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, retains full leading indentation for indentation-significant languages, preserves leading-tab indentation for other languages, and emits both structured line entries and a rendered text excerpt whose every line is prefixed with its original source line number. Runtime is O(n) in source length. No external state is mutated.
  * @param[in] source {string} Raw source text.
  * @param[in] language {string} Canonical compression language identifier.
- * @param[in] includeLineNumbers {boolean} When `true`, prefix rendered text lines with original source line numbers.
  * @return {CompressedSourceResult} Structured compression result.
  * @throws {Error} Throws when the language is unsupported.
+ * @satisfies REQ-012
  */
-export function compressSourceDetailed(source: string, language: string, includeLineNumbers = true): CompressedSourceResult {
+export function compressSourceDetailed(source: string, language: string): CompressedSourceResult {
   const specs = getSpecs();
   const langKey = language.toLowerCase().trim().replace(/^\./, "");
   const spec = specs[langKey];
@@ -410,7 +408,7 @@ export function compressSourceDetailed(source: string, language: string, include
   }
 
   const compressedLines = retainedEntries.map(([sourceLineNumber, text], outputIndex) =>
-    buildCompressedLineEntry(text, sourceLineNumber, outputIndex + 1, includeLineNumbers),
+    buildCompressedLineEntry(text, sourceLineNumber, outputIndex + 1),
   );
   const sourceLineCount = countLogicalLines(source);
   const sourceStartLineNumber = compressedLines[0]?.source_line_number ?? 0;
@@ -418,7 +416,6 @@ export function compressSourceDetailed(source: string, language: string, include
 
   return {
     language_id: langKey,
-    include_line_numbers: includeLineNumbers,
     source_line_count: sourceLineCount,
     source_start_line_number: sourceStartLineNumber,
     source_end_line_number: sourceEndLineNumber,
@@ -432,15 +429,15 @@ export function compressSourceDetailed(source: string, language: string, include
 
 /**
  * @brief Compresses in-memory source text for one language.
- * @details Delegates to `compressSourceDetailed(...)` and returns only the rendered compressed source text so legacy CLI and markdown-oriented paths keep their existing behavior. Runtime is O(n) in source length. No external state is mutated.
+ * @details Delegates to `compressSourceDetailed(...)` and returns only the rendered compressed source text so CLI and markdown-oriented paths keep their established numbered text contract. Runtime is O(n) in source length. No external state is mutated.
  * @param[in] source {string} Raw source text.
  * @param[in] language {string} Canonical compression language identifier.
- * @param[in] includeLineNumbers {boolean} When `true`, include original line-number prefixes in the output.
- * @return {string} Compressed source text.
+ * @return {string} Compressed source text whose lines carry original source line-number prefixes.
  * @throws {Error} Throws when the language is unsupported.
+ * @satisfies REQ-012
  */
-export function compressSource(source: string, language: string, includeLineNumbers = true): string {
-  return compressSourceDetailed(source, language, includeLineNumbers).compressed_source_text;
+export function compressSource(source: string, language: string): string {
+  return compressSourceDetailed(source, language).compressed_source_text;
 }
 
 /**
@@ -448,28 +445,28 @@ export function compressSource(source: string, language: string, includeLineNumb
  * @details Detects the language when not supplied, reads the file as UTF-8, and delegates to `compressSourceDetailed(...)`. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] filePath {string} Source file path.
  * @param[in] language {string | undefined} Optional explicit language override.
- * @param[in] includeLineNumbers {boolean} When `true`, prefix rendered text lines with original source line numbers.
- * @return {CompressedSourceResult} Structured compression result.
+ * @return {CompressedSourceResult} Structured compression result whose rendered lines carry original source line-number prefixes.
  * @throws {Error} Throws when the language cannot be detected or the file cannot be read.
+ * @satisfies REQ-012
  */
-export function compressFileDetailed(filePath: string, language?: string, includeLineNumbers = true): CompressedSourceResult {
+export function compressFileDetailed(filePath: string, language?: string): CompressedSourceResult {
   const detectedLanguage = language ?? detectLanguage(filePath);
   if (!detectedLanguage) {
     throw new Error(`Cannot detect language for '${filePath}'. Use --lang to specify explicitly.`);
   }
   const source = fs.readFileSync(filePath, "utf8");
-  return compressSourceDetailed(source, detectedLanguage, includeLineNumbers);
+  return compressSourceDetailed(source, detectedLanguage);
 }
 
 /**
  * @brief Compresses one source file from disk.
- * @details Delegates to `compressFileDetailed(...)` and returns only the rendered compressed source text so CLI and markdown emitters can retain their established text contract. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Delegates to `compressFileDetailed(...)` and returns only the rendered compressed source text so CLI and markdown emitters can retain their established numbered text contract. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] filePath {string} Source file path.
  * @param[in] language {string | undefined} Optional explicit language override.
- * @param[in] includeLineNumbers {boolean} When `true`, include original line-number prefixes in the output.
- * @return {string} Compressed source text.
+ * @return {string} Compressed source text whose lines carry original source line-number prefixes.
  * @throws {Error} Throws when the language cannot be detected or the file cannot be read.
+ * @satisfies REQ-012
  */
-export function compressFile(filePath: string, language?: string, includeLineNumbers = true): string {
-  return compressFileDetailed(filePath, language, includeLineNumbers).compressed_source_text;
+export function compressFile(filePath: string, language?: string): string {
+  return compressFileDetailed(filePath, language).compressed_source_text;
 }

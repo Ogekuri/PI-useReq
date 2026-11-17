@@ -802,14 +802,14 @@ function buildSearchToolSupportedTagGuidelines(): string[] {
  */
 function buildSearchToolSchemaDescription(scope: FindToolScope): string {
   const inputContract = scope === "explicit-files"
-    ? "Input contract: tag + pattern + files[] + optional enableLineNumbers."
-    : "Input contract: tag + pattern + optional enableLineNumbers. Scope is the configured src-dir list resolved from the current project configuration.";
+    ? "Input contract: tag + pattern + files[]."
+    : "Input contract: tag + pattern. Scope is the configured src-dir list resolved from the current project configuration.";
   return `${inputContract} Output contract: monolithic markdown in content[0].text plus details.execution diagnostics. Regex matches construct names only.`;
 }
 
 /**
  * @brief Builds the prompt-guideline set for one search-tool registration.
- * @details Encodes scope selection, monolithic markdown output semantics, regex semantics, line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
+ * @details Encodes scope selection, monolithic markdown output semantics, regex semantics, always-on line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
  * @param[in] scope {FindToolScope} Search-tool scope.
  * @return {string[]} Prompt-guideline strings.
  */
@@ -822,7 +822,7 @@ function buildSearchToolPromptGuidelines(scope: FindToolScope): string[] {
     "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
     "Regex rule: pattern is applied to construct names only with JavaScript RegExp search semantics; it never matches construct bodies; use ^...$ for exact-name matching.",
     "Tag rule: tag is pipe-separated and case-insensitive; unsupported tags are ignored.",
-    "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
+    "Line-number behavior: fenced code block lines always include original source line-number prefixes; excerpt content reproduces matched construct source lines as-is, including comments.",
     "Failure contract: invalid tag filters, invalid regex patterns, unsupported extensions, unsupported tag-language combinations, no-match files, and analysis failures surface through details.execution diagnostics.",
     ...buildSearchToolSupportedTagGuidelines(),
   ];
@@ -4398,10 +4398,9 @@ function registerAgentTools(pi: ExtensionAPI): void {
         Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
         { description: "Explicit source-file list preserved in caller order" },
       ),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
     },
     {
-      description: "Input contract: files[] plus optional enableLineNumbers. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics. The tool fails when no file is compressed.",
+      description: "Input contract: files[]. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics. The tool fails when no file is compressed.",
     },
   );
 
@@ -4414,7 +4413,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Scope: explicit source files selected by files[]; caller order is preserved; each item may be project-relative or absolute.",
       "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
       "Formatting contract: output uses `@@@ <path> | <language>` headers, `> Lines:` metadata, and fenced code blocks matching `compress_files.py`.",
-      "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
+      "Line-number behavior: fenced code block lines always include original source line-number prefixes.",
     ],
     renderResult: buildStructuredToolRenderResult("req-files-compress"),
     parameters: filesCompressSchema,
@@ -4423,7 +4422,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
       return executeMonolithicTool(() => runFilesCompress(
         params.files,
         contextPath,
-        params.enableLineNumbers ?? false,
       ));
     },
   });
@@ -4436,7 +4434,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         Type.String({ description: "Project-relative or absolute source file path resolved from the current working directory when not already absolute" }),
         { description: "Explicit source-file list preserved in caller order" },
       ),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
     },
     {
       description: buildSearchToolSchemaDescription("explicit-files"),
@@ -4454,7 +4451,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       return executeMonolithicTool(() => runFilesSearch(
         [params.tag, params.pattern, ...params.files],
-        params.enableLineNumbers ?? false,
       ));
     },
   });
@@ -4522,11 +4518,9 @@ function registerAgentTools(pi: ExtensionAPI): void {
   });
 
   const compressSchema = Type.Object(
+    {},
     {
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
-    },
-    {
-      description: "Input contract: optional enableLineNumbers boolean. Scope is the configured src-dir list resolved from the current project configuration. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics.",
+      description: "Input contract: no params. Scope is the configured src-dir list resolved from the current project configuration. Output contract: monolithic markdown in content[0].text plus details.execution diagnostics.",
     },
   );
 
@@ -4539,7 +4533,7 @@ function registerAgentTools(pi: ExtensionAPI): void {
       "Scope: resolve src-dir from the current project configuration and scan the configured source surface from the current working directory.",
       "Output contract: monolithic markdown in content[0].text; details.execution preserves only exit code and residual diagnostics.",
       "Formatting contract: output uses `@@@ <path> | <language>` headers, `> Lines:` metadata, and fenced code blocks matching `compress_files.py`.",
-      "Line-number behavior: enableLineNumbers toggles original source line prefixes inside fenced code blocks.",
+      "Line-number behavior: fenced code block lines always include original source line-number prefixes.",
     ],
     renderResult: buildStructuredToolRenderResult("req-compress"),
     parameters: compressSchema,
@@ -4550,7 +4544,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
       return executeMonolithicTool(() => runCompress(
         contextPath,
         config,
-        params.enableLineNumbers ?? false,
       ));
     },
   });
@@ -4559,7 +4552,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
     {
       tag: Type.String({ description: "Pipe-separated construct-tag filter applied case-insensitively; unsupported tags are ignored" }),
       pattern: Type.String({ description: "JavaScript RegExp applied to construct names only; use ^...$ for exact-name matching" }),
-      enableLineNumbers: Type.Optional(Type.Boolean({ description: "When true, fenced code block lines include original source line-number prefixes" })),
     },
     {
       description: buildSearchToolSchemaDescription("configured-source-directories"),
@@ -4583,7 +4575,6 @@ function registerAgentTools(pi: ExtensionAPI): void {
         params.tag,
         params.pattern,
         config,
-        params.enableLineNumbers ?? false,
       ));
     },
   });

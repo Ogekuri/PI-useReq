@@ -321,19 +321,9 @@ function buildStandaloneScenarios(): AttendedScenario[] {
         ["--files-compress", relativeFixturePath],
       ),
       createStandaloneScenario(
-        `standalone/files-compress-line-numbers/${fixtureName}`,
-        path.posix.join("standalone", "files-compress-line-numbers", `${fixtureName}.json`),
-        ["--files-compress", relativeFixturePath, "--enable-line-numbers"],
-      ),
-      createStandaloneScenario(
         `standalone/files-find/${fixtureName}`,
         path.posix.join("standalone", "files-find", `${fixtureName}.json`),
         ["--files-find", tagFilter, ".*", relativeFixturePath],
-      ),
-      createStandaloneScenario(
-        `standalone/files-find-line-numbers/${fixtureName}`,
-        path.posix.join("standalone", "files-find-line-numbers", `${fixtureName}.json`),
-        ["--files-find", tagFilter, ".*", relativeFixturePath, "--enable-line-numbers"],
       ),
       createStandaloneScenario(
         `standalone/test-static-check-dummy/${fixtureName}`,
@@ -406,28 +396,10 @@ function buildProjectScenarios(): AttendedScenario[] {
         cleanup: () => removePath(projectBase),
       };
     }),
-    createProjectScenario("project/compress-line-numbers", path.posix.join("project", "compress-line-numbers.json"), () => {
-      const { projectBase } = initFixtureRepo();
-      return {
-        args: ["--compress", "--enable-line-numbers"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
     createProjectScenario("project/find", path.posix.join("project", "find.json"), () => {
       const { projectBase } = initFixtureRepo();
       return {
         args: ["--find", [...LANGUAGE_TAGS.python].sort((left, right) => left.localeCompare(right)).join("|"), ".*"],
-        cwd: projectBase,
-        normalize: createProjectNormalizer(projectBase),
-        cleanup: () => removePath(projectBase),
-      };
-    }),
-    createProjectScenario("project/find-line-numbers", path.posix.join("project", "find-line-numbers.json"), () => {
-      const { projectBase } = initFixtureRepo();
-      return {
-        args: ["--find", [...LANGUAGE_TAGS.python].sort((left, right) => left.localeCompare(right)).join("|"), ".*", "--enable-line-numbers"],
         cwd: projectBase,
         normalize: createProjectNormalizer(projectBase),
         cleanup: () => removePath(projectBase),

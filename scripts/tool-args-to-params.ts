@@ -66,33 +66,13 @@ function parseCliArgs(argv: string[]): ParsedToolArgsCli {
 }
 
 /**
- * @brief Removes one boolean flag from a shell-token array.
- * @details Preserves token order for all non-matching items and reports whether the requested flag appeared at least once. Runtime is O(n) in token count. No external state is mutated.
- * @param[in] tokens {string[]} Tokenized `--args` payload.
- * @param[in] flag {string} Flag token to remove.
- * @return {{ tokens: string[]; present: boolean }} Remaining tokens plus presence marker.
- */
-function takeBooleanFlag(tokens: string[], flag: string): { tokens: string[]; present: boolean } {
-  const remaining: string[] = [];
-  let present = false;
-  for (const token of tokens) {
-    if (token === flag) {
-      present = true;
-      continue;
-    }
-    remaining.push(token);
-  }
-  return { tokens: remaining, present };
-}
-
-/**
  * @brief Converts one pi-usereq-debug tool `--args` string into a tool-parameter object.
- * @details Tokenizes shell-style text with `shellSplit`, applies tool-specific positional and flag mappings, and rejects unsupported or structurally incomplete argument layouts before wrapper forwarding. Runtime is O(n) in token count. No external state is mutated.
+ * @details Tokenizes shell-style text with `shellSplit`, applies tool-specific positional mappings, and rejects unsupported or structurally incomplete argument layouts before wrapper forwarding. Compress and search tools expose no optional flags: line numbering is always active and construct excerpts reproduce source lines as-is. Runtime is O(n) in token count. No external state is mutated.
  * @param[in] toolName {string} Registered tool name selected by `scripts/pi-usereq-debug.sh`.
  * @param[in] argsText {string} Raw wrapper `--args` payload.
  * @return {Record<string, unknown>} JSON-serializable tool-parameter object compatible with `--params`.
  * @throws {ReqError} Throws when the selected tool has no supported `--args` mapping or when the token layout is invalid.
- * @satisfies REQ-065
+ * @satisfies REQ-065, REQ-083, REQ-092
  */
 export function buildToolParamsFromArgsText(toolName: string, argsText: string): Record<string, unknown> {
   const tokens = shellSplit(argsText);
@@ -108,32 +88,26 @@ export function buildToolParamsFromArgsText(toolName: string, argsText: string):
     case "req-files-summarize":
     case "req-files-static-check":
       return { files: tokens };
-    case "req-files-compress": {
-      const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
-      return present ? { files: remaining, enableLineNumbers: true } : { files: remaining };
-    }
+    case "req-files-compress":
+      return { files: tokens };
     case "req-files-search": {
-      const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
-      if (remaining.length < 3) {
+      if (tokens.length < 3) {
         throw new ReqError("Error: tool req-files-search requires <tag> <pattern> <file...> in --args text.", 1);
       }
-      const [tag, pattern, ...files] = remaining;
-      return present ? { tag, pattern, files, enableLineNumbers: true } : { tag, pattern, files };
+      const [tag, pattern, ...files] = tokens;
+      return { tag, pattern, files };
     }
-    case "req-compress": {
-      const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
-      if (remaining.length !== 0) {
-        throw new ReqError("Error: tool req-compress accepts only --enable-line-numbers in --args text.", 1);
+    case "req-compress":
+      if (tokens.length !== 0) {
+        throw new ReqError("Error: tool req-compress does not accept --args values.", 1);
       }
-      return present ? { enableLineNumbers: true } : {};
-    }
+      return {};
     case "req-search": {
-      const { tokens: remaining, present } = takeBooleanFlag(tokens, "--enable-line-numbers");
-      if (remaining.length !== 2) {
+      if (tokens.length !== 2) {
         throw new ReqError("Error: tool req-search requires <tag> <pattern> in --args text.", 1);
       }
-      const [tag, pattern] = remaining;
-      return present ? { tag, pattern, enableLineNumbers: true } : { tag, pattern };
+      const [tag, pattern] = tokens;
+      return { tag, pattern };
     }
     default:
       throw new ReqError(`Error: unsupported --args conversion for tool ${toolName}. Use --params with JSON.`, 1);

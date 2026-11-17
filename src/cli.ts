@@ -55,7 +55,6 @@ interface ParsedArgs {
   base?: string;
   here?: boolean;
   verbose?: boolean;
-  enableLineNumbers?: boolean;
   enableStaticCheck?: string[];
   filesTokens?: string[];
   filesSummarize?: string[];
@@ -102,10 +101,6 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--verbose":
         parsed.verbose = true;
-        index += 1;
-        break;
-      case "--enable-line-numbers":
-        parsed.enableLineNumbers = true;
         index += 1;
         break;
       case "--enable-static-check":
@@ -315,13 +310,13 @@ export function main(argv = process.argv.slice(2)): number {
 
     if (args.filesTokens) return writeResult(runFilesTokens(args.filesTokens));
     if (args.filesSummarize) return writeResult(runFilesSummarize(args.filesSummarize, process.cwd(), args.verbose));
-    if (args.filesCompress) return writeResult(runFilesCompress(args.filesCompress, process.cwd(), args.enableLineNumbers, args.verbose));
-    if (args.filesSearch) return writeResult(runFilesSearch(args.filesSearch, args.enableLineNumbers, args.verbose));
+    if (args.filesCompress) return writeResult(runFilesCompress(args.filesCompress, process.cwd(), args.verbose));
+    if (args.filesSearch) return writeResult(runFilesSearch(args.filesSearch, args.verbose));
     if (args.testStaticCheck) return runStaticCheck(args.testStaticCheck);
     if (args.filesStaticCheck) return writeResult(runFilesStaticCheck(args.filesStaticCheck, projectBase, config));
     if (args.summarize) return writeResult(runSummarize(projectBase, config, args.verbose));
-    if (args.compress) return writeResult(runCompress(projectBase, config, args.enableLineNumbers, args.verbose));
-    if (args.search) return writeResult(runSearch(projectBase, args.search[0], args.search[1], config, args.enableLineNumbers, args.verbose));
+    if (args.compress) return writeResult(runCompress(projectBase, config, args.verbose));
+    if (args.search) return writeResult(runSearch(projectBase, args.search[0], args.search[1], config, args.verbose));
     if (args.tokens) return writeResult(runTokens(projectBase, config));
     if (args.staticCheck) return writeResult(runProjectStaticCheck(projectBase, config));
     return 0;

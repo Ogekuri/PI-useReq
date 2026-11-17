@@ -37,7 +37,7 @@ test("analysis commands need only declared Node dependencies and Git", async (t)
   const commands = [
     ["--files-tokens", source],
     ["--files-summarize", source],
-    ["--files-compress", source, "--enable-line-numbers"],
+    ["--files-compress", source],
     ["--files-find", "FUNCTION", "^req_cover_py_1$", source],
     ["--summarize"],
     ["--compress"],

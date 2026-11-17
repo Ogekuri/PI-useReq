@@ -268,29 +268,29 @@ export function runFilesSummarize(files: string[], cwd = process.cwd(), verbose 
  * @details Delegates to `compressFiles` using the caller working directory as the relative-output base by default. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] files {string[]} Explicit file paths.
  * @param[in] cwd {string} Base directory for relative output formatting. Defaults to `process.cwd()`.
- * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers.
  * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
- * @return {ToolResult} Successful tool result containing compressed output.
+ * @return {ToolResult} Successful tool result containing line-numbered compressed output.
+ * @satisfies REQ-012, REQ-083
  */
-export function runFilesCompress(files: string[], cwd = process.cwd(), enableLineNumbers = false, verbose = false): ToolResult {
-  return ok(`${compressFiles(files, enableLineNumbers, verbose, cwd)}\n`);
+export function runFilesCompress(files: string[], cwd = process.cwd(), verbose = false): ToolResult {
+  return ok(`${compressFiles(files, verbose, cwd)}\n`);
 }
 
 /**
  * @brief Searches named constructs in explicit files.
  * @details Expects `[TAG, PATTERN, ...FILES]`, validates minimum arity, and delegates to `searchConstructsInFiles`. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] argsList {string[]} Positional argument list containing tag filter, regex pattern, and files.
- * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers in excerpts.
  * @param[in] verbose {boolean} When `true`, emit diagnostics to stderr.
- * @return {ToolResult} Successful tool result containing construct markdown.
+ * @return {ToolResult} Successful tool result containing construct markdown with as-is numbered excerpts.
  * @throws {ReqError} Throws when required arguments are missing.
+ * @satisfies REQ-013, REQ-092
  */
-export function runFilesSearch(argsList: string[], enableLineNumbers = false, verbose = false): ToolResult {
+export function runFilesSearch(argsList: string[], verbose = false): ToolResult {
   if (argsList.length < 3) {
     fail("Error: --files-find requires at least TAG, PATTERN, and one FILE.", 1);
   }
   const [tagFilter, pattern, ...files] = argsList;
-  return ok(`${searchConstructsInFiles(files, tagFilter!, pattern!, enableLineNumbers, verbose)}\n`);
+  return ok(`${searchConstructsInFiles(files, tagFilter!, pattern!, verbose)}\n`);
 }
 
 /**
@@ -345,16 +345,16 @@ export function runReferences(projectBase: string, config?: UseReqConfig, verbos
  * @details Resolves the project base, collects source files, and delegates to `compressFiles`. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
- * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers.
  * @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
- * @return {ToolResult} Successful tool result containing compressed output.
+ * @return {ToolResult} Successful tool result containing line-numbered compressed output.
  * @throws {ReqError} Throws when no source files are found.
+ * @satisfies REQ-012, REQ-015, REQ-083
  */
-export function runCompress(projectBase: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult {
+export function runCompress(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult {
   const [base, srcDirs] = resolveProjectSrcDirs(projectBase, config);
   const files = collectSourceFiles(srcDirs, base);
   if (files.length === 0) fail("Error: no source files found in configured directories.", 1);
-  return ok(`${compressFiles(files, enableLineNumbers, verbose, base)}\n`);
+  return ok(`${compressFiles(files, verbose, base)}\n`);
 }
 
 /**
@@ -364,17 +364,17 @@ export function runCompress(projectBase: string, config?: UseReqConfig, enableLi
  * @param[in] tagFilter {string} Pipe-delimited tag filter.
  * @param[in] pattern {string} Regular expression applied to construct names.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
- * @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers in excerpts.
  * @param[in] verbose {boolean} When `true`, emit diagnostics to stderr.
- * @return {ToolResult} Successful tool result containing construct markdown.
+ * @return {ToolResult} Successful tool result containing construct markdown with as-is numbered excerpts.
  * @throws {ReqError} Throws when no source files are found or the search fails.
+ * @satisfies REQ-013, REQ-016, REQ-092
  */
-export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult {
+export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, verbose = false): ToolResult {
   const [base, srcDirs] = resolveProjectSrcDirs(projectBase, config);
   const files = collectSourceFiles(srcDirs, base);
   if (files.length === 0) fail("Error: no source files found in configured directories.", 1);
   try {
-    return ok(`${searchConstructsInFiles(files, tagFilter, pattern, enableLineNumbers, verbose)}\n`);
+    return ok(`${searchConstructsInFiles(files, tagFilter, pattern, verbose)}\n`);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error), 1);
   }

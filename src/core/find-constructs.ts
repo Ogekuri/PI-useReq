@@ -1,11 +1,11 @@
 /**
  * @file
  * @brief Searches named language constructs in explicit source-file lists and renders compact excerpts.
- * @details Combines source analysis, tag filtering, regex name matching, optional Doxygen extraction, and comment-stripped code rendering. Runtime is O(F + S + M) where F is file count, S is analyzed source size, and M is candidate element count. Side effects are limited to filesystem reads and optional stderr logging.
+ * @details Combines source analysis, tag filtering, regex name matching, optional Doxygen extraction, and as-is numbered code rendering. Runtime is O(F + S + M) where F is file count, S is analyzed source size, and M is candidate element count. Side effects are limited to filesystem reads and optional stderr logging.
  */
 
 import fs from "node:fs";
-import { compressSource, detectLanguage } from "./compress.js";
+import { detectLanguage } from "./compress.js";
 import { formatDoxygenFieldsAsMarkdown, parseDoxygenComment } from "./doxygen-parser.js";
 import { SourceAnalyzer, SourceElement, ElementType } from "./source-analyzer.js";
 
@@ -146,10 +146,10 @@ function extractFileLevelDoxygenFields(elements: SourceElement[]): Record<string
 }
 
 /**
- * @brief Describes one stripped-code line extracted from a matched construct.
- * @details Preserves output order, original source coordinates, normalized stripped text, and rendered display text so markdown and JSON renderers can share one canonical intermediate format. The interface is compile-time only and introduces no runtime cost.
+ * @brief Describes one as-is code line extracted from a matched construct.
+ * @details Preserves output order, original source coordinates, verbatim source text, and rendered display text so markdown and JSON renderers can share one canonical intermediate format. `display_text` always carries the `<source_line_number>: ` prefix. The interface is compile-time only and introduces no runtime cost.
  */
-export interface StrippedConstructLineEntry {
+export interface ConstructLineEntry {
   output_line_number: number;
   source_line_number: number;
   text: string;
@@ -157,72 +157,35 @@ export interface StrippedConstructLineEntry {
 }
 
 /**
- * @brief Removes comments from a construct excerpt and returns structured stripped-code lines.
- * @details Reuses `compressSource` for comment stripping, translates local compressed line numbers back into absolute file coordinates, and emits both direct-access text fields and rendered display strings. Runtime is O(n) in excerpt length. No external state is mutated.
- * @param[in] codeLines {string[]} Raw code lines belonging to the construct.
- * @param[in] language {string} Canonical analyzer language identifier.
+ * @brief Extracts a construct excerpt verbatim and returns structured as-is line entries.
+ * @details Copies each construct line unchanged, including comment and blank lines, removes at most one trailing line terminator per entry, and prefixes every rendered display string with the absolute source line number. Runtime is O(n) in excerpt length. No external state is mutated.
+ * @param[in] codeLines {string[]} Raw code lines belonging to the construct; entries may retain their trailing line terminators.
  * @param[in] lineStart {number} Absolute starting line number of the construct.
- * @param[in] includeLineNumbers {boolean} When `true`, `display_text` includes absolute source line prefixes.
- * @return {StrippedConstructLineEntry[]} Structured stripped-code line entries.
+ * @return {ConstructLineEntry[]} Structured as-is line entries in source order.
+ * @satisfies REQ-013, REQ-092
  */
-export function buildStrippedConstructLineEntries(
-  codeLines: string[],
-  language: string,
-  lineStart: number,
-  includeLineNumbers: boolean,
-): StrippedConstructLineEntry[] {
-  const rawSource = codeLines.join("");
-  const strippedWithLocalNumbers = compressSource(rawSource, language, true);
-  return strippedWithLocalNumbers
-    .split(/\r?\n/)
-    .filter((line) => line.length > 0)
-    .map((line, outputIndex) => {
-      const match = /^(\d+):\s(.*)$/.exec(line);
-      if (!match) {
-        return {
-          output_line_number: outputIndex + 1,
-          source_line_number: lineStart + outputIndex,
-          text: line,
-          display_text: line,
-        } satisfies StrippedConstructLineEntry;
-      }
-      const localLine = Number.parseInt(match[1]!, 10);
-      const absoluteLine = lineStart + localLine - 1;
-      const strippedText = match[2]!;
-      return {
-        output_line_number: outputIndex + 1,
-        source_line_number: absoluteLine,
-        text: strippedText,
-        display_text: includeLineNumbers ? `${absoluteLine}: ${strippedText}` : strippedText,
-      } satisfies StrippedConstructLineEntry;
-    });
-}
-
-/**
- * @brief Removes comments from a construct excerpt while preserving optional absolute line numbers.
- * @details Delegates to `buildStrippedConstructLineEntries(...)` and joins the rendered display strings into one newline-delimited excerpt. Runtime is O(n) in excerpt length. No external state is mutated.
- * @param[in] codeLines {string[]} Raw code lines belonging to the construct.
- * @param[in] language {string} Canonical analyzer language identifier.
- * @param[in] lineStart {number} Absolute starting line number of the construct.
- * @param[in] includeLineNumbers {boolean} When `true`, emit absolute source line prefixes.
- * @return {string} Comment-stripped construct excerpt.
- */
-function stripConstructComments(codeLines: string[], language: string, lineStart: number, includeLineNumbers: boolean): string {
-  return buildStrippedConstructLineEntries(codeLines, language, lineStart, includeLineNumbers)
-    .map((line) => line.display_text)
-    .join("\n");
+export function buildConstructLineEntries(codeLines: string[], lineStart: number): ConstructLineEntry[] {
+  return codeLines.map((rawLine, outputIndex) => {
+    const text = rawLine.replace(/\r?\n$/, "");
+    const sourceLineNumber = lineStart + outputIndex;
+    return {
+      output_line_number: outputIndex + 1,
+      source_line_number: sourceLineNumber,
+      text,
+      display_text: `${sourceLineNumber}: ${text}`,
+    } satisfies ConstructLineEntry;
+  });
 }
 
 /**
  * @brief Formats one matched construct as markdown.
- * @details Emits construct metadata, attached Doxygen fields, and a fenced code block stripped of comments. Runtime is O(n) in construct span length plus attached documentation size. No side effects occur.
+ * @details Emits construct metadata, attached Doxygen fields, and a fenced code block reproducing the construct source lines verbatim, including comments and blank lines, each prefixed with its absolute source line number. Runtime is O(n) in construct span length plus attached documentation size. No side effects occur.
  * @param[in] element {SourceElement} Matched source element.
  * @param[in] sourceLines {string[]} Full source file split into line-preserving entries.
- * @param[in] includeLineNumbers {boolean} When `true`, include absolute source line prefixes.
- * @param[in] language {string} Canonical analyzer language identifier. Defaults to `python`.
  * @return {string} Markdown section for the matched construct.
+ * @satisfies REQ-013, REQ-092
  */
-export function formatConstruct(element: SourceElement, sourceLines: string[], includeLineNumbers: boolean, language = "python"): string {
+export function formatConstruct(element: SourceElement, sourceLines: string[]): string {
   const lines: string[] = [];
   lines.push(`### ${element.typeLabel}: \`${element.name}\``);
   if (element.signature) lines.push(`> Signature: \`${element.signature}\``);
@@ -232,7 +195,9 @@ export function formatConstruct(element: SourceElement, sourceLines: string[], i
     lines.push(...formatDoxygenFieldsAsMarkdown(doxygenFields));
   }
   const codeLines = sourceLines.slice(element.lineStart - 1, element.lineEnd);
-  const formatted = stripConstructComments(codeLines, language, element.lineStart, includeLineNumbers);
+  const formatted = buildConstructLineEntries(codeLines, element.lineStart)
+    .map((line) => line.display_text)
+    .join("\n");
   lines.push("```");
   lines.push(formatted);
   lines.push("```");
@@ -241,20 +206,19 @@ export function formatConstruct(element: SourceElement, sourceLines: string[], i
 
 /**
  * @brief Searches named constructs across explicit files and renders markdown excerpts.
- * @details Validates files, infers languages, skips unsupported tag/language combinations, analyzes source elements, filters matches by tag and regex, and emits one markdown section per file containing matches. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
+ * @details Validates files, infers languages, skips unsupported tag/language combinations, analyzes source elements, filters matches by tag and regex, and emits one markdown section per file containing matches with as-is numbered code excerpts. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
  * @param[in] filePaths {string[]} Explicit file paths to search.
  * @param[in] tagFilter {string} Pipe-delimited requested construct tags.
  * @param[in] pattern {string} Regular expression applied to construct names.
- * @param[in] includeLineNumbers {boolean} When `true`, preserve absolute source line numbers in code excerpts.
  * @param[in] verbose {boolean} When `true`, write progress and skip diagnostics to stderr.
  * @return {string} Concatenated markdown output grouped by file.
  * @throws {Error} Throws when no valid tags are provided or when no constructs match the request.
+ * @satisfies REQ-013, REQ-092
  */
 export function searchConstructsInFiles(
   filePaths: string[],
   tagFilter: string,
   pattern: string,
-  includeLineNumbers = true,
   verbose = false,
 ): string {
   const tagSet = parseTagFilter(tagFilter);
@@ -296,7 +260,7 @@ export function searchConstructsInFiles(
         const header = `@@@ ${filePath} | ${language}`;
         const fileLevelDoxygen = extractFileLevelDoxygenFields(elements);
         const fileLevelLines = Object.keys(fileLevelDoxygen).length > 0 ? formatDoxygenFieldsAsMarkdown(fileLevelDoxygen) : [];
-        const constructsMarkdown = matches.map((element) => formatConstruct(element, sourceLines, includeLineNumbers, language)).join("\n\n");
+        const constructsMarkdown = matches.map((element) => formatConstruct(element, sourceLines)).join("\n\n");
         parts.push(fileLevelLines.length > 0 ? `${header}\n${fileLevelLines.join("\n")}\n\n${constructsMarkdown}` : `${header}\n\n${constructsMarkdown}`);
         totalMatches += matches.length;
         okCount += 1;

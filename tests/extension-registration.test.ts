@@ -1271,7 +1271,6 @@ test("agent tools define custom renderResult with compact and expanded structure
       tag: "FUNCTION",
       pattern: "^alpha$",
       files: ["src/render_result_target.ts"],
-      enableLineNumbers: true,
     };
     const result = await executeRegisteredTool(pi, "req-files-search", projectBase, params);
     const theme: FakeThemeAdapter = {
@@ -1639,7 +1638,6 @@ export function buildSample(input: string): string {
     piUsereqExtension(pi);
     const result = await executeRegisteredTool(pi, "req-files-compress", projectBase, {
       files: ["src/sample.ts", "src/missing.ts"],
-      enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
@@ -1672,9 +1670,7 @@ test("req-compress returns monolithic repository-scoped compression markdown", a
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const result = await executeRegisteredTool(pi, "req-compress", projectBase, {
-      enableLineNumbers: false,
-    }) as {
+    const result = await executeRegisteredTool(pi, "req-compress", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
     };
@@ -1682,7 +1678,7 @@ test("req-compress returns monolithic repository-scoped compression markdown", a
     const content = result.content?.[0]?.text ?? "";
     assert.match(content, /@@@ src\/alpha\.ts \| typescript/);
     assert.match(content, /@@@ src\/nested\/beta\.ts \| typescript/);
-    assert.match(content, /^export function buildBeta/m);
+    assert.match(content, /^\d+: export function buildBeta/m);
     assert.equal(result.details?.execution.code, 0);
     assert.deepEqual(result.details?.execution.stderr_lines, undefined);
   } finally {
@@ -1715,7 +1711,6 @@ export function buildSample(input: string): string {
       tag: "FUNCTION",
       pattern: "^buildSample$",
       files: ["src/sample.ts", "src/missing.ts"],
-      enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
@@ -1759,7 +1754,6 @@ export function buildAlpha(): number {
     const result = await executeRegisteredTool(pi, "req-search", projectBase, {
       tag: "FUNCTION",
       pattern: "^build",
-      enableLineNumbers: false,
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number; stderr_lines?: string[] } };
@@ -1767,7 +1761,7 @@ export function buildAlpha(): number {
 
     const content = result.content?.[0]?.text ?? "";
     assert.match(content, /### FUNCTION: `buildAlpha`/);
-    assert.match(content, /export function buildAlpha/);
+    assert.match(content, /^\d+: export function buildAlpha/m);
     assert.doesNotMatch(content, /helperBeta/);
     assert.equal(result.details?.execution.code, 0);
     assert.deepEqual(result.details?.execution.stderr_lines, undefined);
@@ -1821,7 +1815,6 @@ func (s *Server) Start(ctx context.Context) error {
 
     const filesCompressResult = await executeRegisteredTool(pi, "req-files-compress", projectBase, {
       files: ["src/sample.go"],
-      enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number } };
@@ -1829,9 +1822,7 @@ func (s *Server) Start(ctx context.Context) error {
     assert.match(filesCompressResult.content?.[0]?.text ?? "", /\d+: \t"context"/);
     assert.equal(filesCompressResult.details?.execution.code, 0);
 
-    const compressResult = await executeRegisteredTool(pi, "req-compress", projectBase, {
-      enableLineNumbers: true,
-    }) as {
+    const compressResult = await executeRegisteredTool(pi, "req-compress", projectBase, {}) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number } };
     };
@@ -1842,7 +1833,6 @@ func (s *Server) Start(ctx context.Context) error {
       tag: "METHOD|FUNCTION",
       pattern: "^Start$",
       files: ["src/sample.go"],
-      enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number } };
@@ -1853,7 +1843,6 @@ func (s *Server) Start(ctx context.Context) error {
     const searchResult = await executeRegisteredTool(pi, "req-search", projectBase, {
       tag: "METHOD|FUNCTION",
       pattern: "^Start$",
-      enableLineNumbers: true,
     }) as {
       content?: Array<{ type: string; text?: string }>;
       details?: { execution: { code: number } };

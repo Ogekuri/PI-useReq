@@ -52,7 +52,7 @@
     └── index.ts
 ```
 
-# cli.ts | TypeScript | 338L | 9 symbols | 7 imports | 9 comments
+# cli.ts | TypeScript | 333L | 9 symbols | 7 imports | 9 comments
 > Path: `src/cli.ts`
 - @brief Implements the standalone pi-usereq command-line entry point.
 - @details Parses CLI flags, resolves project configuration, dispatches tool-runner operations, and converts thrown `ReqError` instances into process-style stdout, stderr, and exit codes. Runtime is dominated by the selected subcommand. Side effects include stdout/stderr writes and any filesystem or git operations performed by delegated commands.
@@ -70,44 +70,44 @@ import {
 
 ## Definitions
 
-### iface `interface ParsedArgs` (L54-71)
+### iface `interface ParsedArgs` (L54-70)
 - @brief Represents the parsed CLI flag state for one invocation.
 - @details The interface captures every supported command and option in a normalized shape consumed by `main`. It is compile-time only and introduces no runtime cost.
 
-### fn `function parseArgs(argv: string[]): ParsedArgs` (L79-175)
+### fn `function parseArgs(argv: string[]): ParsedArgs` (L78-170)
 - @brief Parses raw CLI tokens into a normalized argument object.
 - @details Performs a single left-to-right scan, supports options with variable-length value tails, and records only the last occurrence of scalar flags. Runtime is O(n) in argument count. No external state is mutated.
 - @param[in] argv {string[]} Raw CLI arguments excluding the executable and script path.
 - @return {ParsedArgs} Parsed flag object.
 
-### fn `const takeUntilOption = (start: number): [string[], number] =>` (L81-89)
+### fn `const takeUntilOption = (start: number): [string[], number] =>` (L80-88)
 
-### fn `function writeStdout(text: string): void` (L183-185)
+### fn `function writeStdout(text: string): void` (L178-180)
 - @brief Writes text to stdout when non-empty.
 - @details Avoids emitting zero-length writes so callers can compose result output safely. Runtime is O(n) in text length. Side effect: writes to `process.stdout`.
 - @param[in] text {string} Text to emit.
 - @return {void} No return value.
 
-### fn `function writeStderr(text: string): void` (L193-196)
+### fn `function writeStderr(text: string): void` (L188-191)
 - @brief Writes text to stderr and ensures a trailing newline.
 - @details Skips empty input, appends a newline when necessary, and emits the final text to `process.stderr`. Runtime is O(n) in text length. Side effect: writes to `process.stderr`.
 - @param[in] text {string} Text to emit.
 - @return {void} No return value.
 
-### fn `function writeResult(result: { stdout: string; stderr: string; code: number }): number` (L204-208)
+### fn `function writeResult(result: { stdout: string; stderr: string; code: number }): number` (L199-203)
 - @brief Emits a tool result object to process streams.
 - @details Writes stdout first, then stderr, and returns the embedded exit code without modification. Runtime is O(n) in total emitted text size. Side effects are stdout/stderr writes.
 - @param[in] result {{ stdout: string; stderr: string; code: number }} Command result payload.
 - @return {number} Exit code to propagate from the invoked command.
 
-### fn `function loadMutableProjectConfig(projectBase: string): { base: string; config: UseReqConfig }` (L217-221)
+### fn `function loadMutableProjectConfig(projectBase: string): { base: string; config: UseReqConfig }` (L212-216)
 - @brief Loads mutable project config state without persisting runtime path metadata.
 - @details Resolves the project base, loads existing config or defaults, normalizes persisted directory fields into project-relative form, and returns the in-memory pair used by CLI mutations. Runtime is dominated by config I/O. Side effects are limited to config reads.
 - @param[in] projectBase {string} Candidate project root path.
 - @return {{ base: string; config: UseReqConfig }} Validated project base and normalized in-memory config.
 - @satisfies REQ-035, REQ-146
 
-### fn `function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseReqConfig` (L232-255)
+### fn `function applyEnableStaticCheckSpecs(projectBase: string, specs: string[]): UseReqConfig` (L227-250)
 - @brief Applies repeatable `--enable-static-check` specifications to project config.
 - @details Parses each specification, validates command-backed entries before persistence, appends only non-duplicate identities in argument order, preserves existing per-language checker lists, forces each targeted language enable flag to `enable`, and writes the merged config once after all validations succeed. Runtime is O(s + e) plus PATH probing where s is spec count and e is existing entry count. Side effects include config writes.
 - @param[in] projectBase {string} Candidate project root path.
@@ -116,7 +116,7 @@ import {
 - @throws {ReqError} Throws when parsing or validation fails.
 - @satisfies REQ-035, REQ-036, REQ-037, REQ-253
 
-### fn `export function main(argv = process.argv.slice(2)): number` (L265-334)
+### fn `export function main(argv = process.argv.slice(2)): number` (L260-329)
 - @brief Executes one pi-usereq CLI invocation.
 - @details Dispatches package-management commands (`--help`, `--ver|--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`) before standard flag parsing by scheduling the async management handler and assigning its exit code to `process.exitCode` on completion, mapping an empty argv to the `--help` command so a no-argument invocation prints the full help screen, then parses arguments, enforces mutually exclusive project-selection rules, normalizes persisted config when needed, dispatches the first matching command handler, and converts thrown `ReqError` instances into stream output plus numeric exit codes. Runtime is O(n) in argument count plus delegated command cost. Side effects include config normalization writes, stdout/stderr output, and management-command HTTP probes or package-manager child processes.
 - @param[in] argv {string[]} Raw CLI arguments. Defaults to `process.argv.slice(2)`.
@@ -127,15 +127,15 @@ import {
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`ParsedArgs`|iface||54-71|interface ParsedArgs|
-|`parseArgs`|fn||79-175|function parseArgs(argv: string[]): ParsedArgs|
-|`takeUntilOption`|fn||81-89|const takeUntilOption = (start: number): [string[], numbe...|
-|`writeStdout`|fn||183-185|function writeStdout(text: string): void|
-|`writeStderr`|fn||193-196|function writeStderr(text: string): void|
-|`writeResult`|fn||204-208|function writeResult(result: { stdout: string; stderr: st...|
-|`loadMutableProjectConfig`|fn||217-221|function loadMutableProjectConfig(projectBase: string): {...|
-|`applyEnableStaticCheckSpecs`|fn||232-255|function applyEnableStaticCheckSpecs(projectBase: string,...|
-|`main`|fn||265-334|export function main(argv = process.argv.slice(2)): number|
+|`ParsedArgs`|iface||54-70|interface ParsedArgs|
+|`parseArgs`|fn||78-170|function parseArgs(argv: string[]): ParsedArgs|
+|`takeUntilOption`|fn||80-88|const takeUntilOption = (start: number): [string[], numbe...|
+|`writeStdout`|fn||178-180|function writeStdout(text: string): void|
+|`writeStderr`|fn||188-191|function writeStderr(text: string): void|
+|`writeResult`|fn||199-203|function writeResult(result: { stdout: string; stderr: st...|
+|`loadMutableProjectConfig`|fn||212-216|function loadMutableProjectConfig(projectBase: string): {...|
+|`applyEnableStaticCheckSpecs`|fn||227-250|function applyEnableStaticCheckSpecs(projectBase: string,...|
+|`main`|fn||260-329|export function main(argv = process.argv.slice(2)): number|
 
 
 ---
@@ -698,7 +698,7 @@ import type { ReqReferencesCommandExecutionResult } from "./req-references-comma
 
 ---
 
-# compress-files.ts | TypeScript | 72L | 2 symbols | 3 imports | 3 comments
+# compress-files.ts | TypeScript | 71L | 2 symbols | 3 imports | 3 comments
 > Path: `src/core/compress-files.ts`
 - @brief Compresses explicit source-file lists into compact fenced-markdown excerpts.
 - @details Bridges file validation, language detection, per-file source compression, and final markdown packaging for prompt consumption. Runtime is O(F + S) where F is file count and S is total source size processed. Side effects are limited to filesystem reads and optional stderr logging.
@@ -719,26 +719,26 @@ import { compressFileDetailed, detectLanguage } from "./compress.js";
 - @param[in] outputBase {string | undefined} Optional base directory for relative formatting.
 - @return {string} Display path used in the markdown header.
 
-### fn `export function compressFiles(` (L33-72)
+### fn `export function compressFiles(` (L33-71)
 - @brief Compresses a list of explicit source files into concatenated markdown sections.
-- @details Validates file existence, infers each supported language, invokes per-file compression, preserves optional line numbers, and emits one fenced block per successful file. Runtime is O(F + S) where F is file count and S is total processed source size. Side effects are limited to filesystem reads and optional stderr progress logging.
+- @details Validates file existence, infers each supported language, invokes per-file compression, prefixes every retained line with its original source line number, and emits one fenced block per successful file. Runtime is O(F + S) where F is file count and S is total processed source size. Side effects are limited to filesystem reads and optional stderr progress logging.
 - @param[in] filePaths {string[]} Explicit file paths to process.
-- @param[in] includeLineNumbers {boolean} When `true`, preserve original source line numbers in the emitted code block.
 - @param[in] verbose {boolean} When `true`, write progress and skip diagnostics to stderr.
 - @param[in] outputBase {string | undefined} Optional base directory used to shorten output paths.
 - @return {string} Markdown document containing one section per successfully compressed file.
 - @throws {Error} Throws when no valid source files can be processed.
+- @satisfies REQ-012, REQ-083
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
 |`formatOutputPath`|fn||18-21|function formatOutputPath(filePath: string, outputBase?: ...|
-|`compressFiles`|fn||33-72|export function compressFiles(|
+|`compressFiles`|fn||33-71|export function compressFiles(|
 
 
 ---
 
-# compress.ts | TypeScript | 475L | 14 symbols | 3 imports | 18 comments
+# compress.ts | TypeScript | 472L | 14 symbols | 3 imports | 18 comments
 > Path: `src/core/compress.ts`
 - @brief Removes comments and redundant whitespace from source code while preserving semantic structure.
 - @details Provides extension-based language detection and language-aware source compression backed by analyzer language specs. Runtime is linear in processed source size. Side effects are limited to filesystem reads in file-based helpers.
@@ -754,30 +754,30 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ### iface `export interface CompressedLineEntry` (L57-62)
 - @brief Describes one structured compressed output line.
-- @details Separates source coordinates, output order, raw compressed text, and rendered display text so downstream JSON payloads can expose line facts without reparsing prefixed strings. The interface is compile-time only and introduces no runtime cost.
+- @details Separates source coordinates, output order, raw compressed text, and rendered display text so downstream JSON payloads can expose line facts without reparsing prefixed strings. `display_text` always carries the `<source_line_number>: ` prefix. The interface is compile-time only and introduces no runtime cost.
 
-### iface `export interface CompressedSourceResult` (L68-79)
+### iface `export interface CompressedSourceResult` (L68-78)
 - @brief Describes one structured compression result.
-- @details Exposes language identity, source line metrics, removed-line totals, structured compressed lines, and the final rendered excerpt text so CLI and agent-tool layers can share one canonical compression model. The interface is compile-time only and introduces no runtime cost.
+- @details Exposes language identity, source line metrics, removed-line totals, structured compressed lines, and the final rendered excerpt text so CLI and agent-tool layers can share one canonical compression model. Every rendered excerpt line is prefixed with its original source line number. The interface is compile-time only and introduces no runtime cost.
 
-### fn `function getSpecs()` (L86-89)
+### fn `function getSpecs()` (L85-88)
 - @brief Returns the cached language specification table.
 - @details Initializes the cache on first access by calling `buildLanguageSpecs`, then reuses the result for all subsequent calls. Time complexity is O(1) after cold start. Mutates module-local cache state only.
 - @return {ReturnType<typeof buildLanguageSpecs>} Cached language specification map.
 
-### fn `export function detectLanguage(filePath: string): string | undefined` (L97-99)
+### fn `export function detectLanguage(filePath: string): string | undefined` (L96-98)
 - @brief Infers a compression language from a file path extension.
 - @details Lowercases the file extension and looks it up in `EXT_LANG_MAP`. Time complexity is O(1). No I/O side effects occur.
 - @param[in] filePath {string} Source file path.
 - @return {string | undefined} Canonical compression language identifier, or `undefined` when unsupported.
 
-### fn `function countLogicalLines(content: string): number` (L107-113)
+### fn `function countLogicalLines(content: string): number` (L106-112)
 - @brief Counts logical lines in one text payload.
 - @details Counts newline separators while treating a trailing newline as line termination instead of an extra empty logical line. Runtime is O(n) in text length. No side effects occur.
 - @param[in] content {string} Source text.
 - @return {number} Logical line count; `0` for empty content.
 
-### fn `function isInString(line: string, pos: number, stringDelimiters: string[]): boolean` (L123-158)
+### fn `function isInString(line: string, pos: number, stringDelimiters: string[]): boolean` (L122-157)
 - @brief Tests whether a character position falls inside a string literal.
 - @details Scans the line left-to-right while tracking active string delimiters and escaped quote characters. Runtime is O(n) in inspected prefix length. No side effects occur.
 - @param[in] line {string} Source line to inspect.
@@ -785,7 +785,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 - @param[in] stringDelimiters {string[]} Supported string delimiters for the language.
 - @return {boolean} `true` when the position is inside a string literal.
 
-### fn `function removeInlineComment(line: string, singleComment: string | undefined, stringDelimiters: string[]): string` (L168-208)
+### fn `function removeInlineComment(line: string, singleComment: string | undefined, stringDelimiters: string[]): string` (L167-207)
 - @brief Removes a trailing single-line comment from a source line.
 - @details Scans the line while respecting string literals so comment markers inside strings are preserved. Runtime is O(n) in line length. No external state is mutated.
 - @param[in] line {string} Source line to strip.
@@ -793,81 +793,81 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 - @param[in] stringDelimiters {string[]} Supported string delimiters for the language.
 - @return {string} Line content before the first real comment marker.
 
-### fn `function buildCompressedLineEntry(` (L219-231)
+### fn `function buildCompressedLineEntry(` (L218-229)
 - @brief Builds one rendered compressed line entry.
-- @details Materializes both the raw compressed text and the display text that optionally prefixes the original source line number. Runtime is O(n) in line length. No side effects occur.
+- @details Materializes both the raw compressed text and the display text prefixed with the original source line number. Runtime is O(n) in line length. No side effects occur.
 - @param[in] text {string} Compressed source text for one retained line.
 - @param[in] sourceLineNumber {number} Original source line number.
 - @param[in] compressedLineNumber {number} One-based output line number inside the compressed excerpt.
-- @param[in] includeLineNumbers {boolean} When `true`, prefix the display text with the original source line number.
-- @return {CompressedLineEntry} Structured compressed line entry.
+- @return {CompressedLineEntry} Structured compressed line entry whose `display_text` always carries the `<sourceLineNumber>: ` prefix.
+- @satisfies REQ-012
 
-### fn `function formatCompressedSourceText(entries: CompressedLineEntry[]): string` (L239-241)
+### fn `function formatCompressedSourceText(entries: CompressedLineEntry[]): string` (L237-239)
 - @brief Formats compressed line entries as newline-delimited text.
 - @details Joins pre-rendered display lines without adding headers, fences, or other presentation artifacts. Runtime is O(n) in entry count and aggregate content length. No side effects occur.
 - @param[in] entries {CompressedLineEntry[]} Structured compressed line entries.
 - @return {string} Final compressed source text.
 
-### fn `function normalizeRetainedLineIndentation(line: string, preserveIndent: boolean): string` (L250-262)
+### fn `function normalizeRetainedLineIndentation(line: string, preserveIndent: boolean): string` (L248-260)
 - @brief Normalizes one retained source line while preserving requested indentation semantics.
 - @details Preserves the full leading whitespace prefix for indentation-significant languages and for any other line whose leading indentation contains at least one tab, while trimming leading whitespace for space-only indentation in other languages. Runtime is O(n) in line length. No external state is mutated.
 - @param[in] line {string} Candidate source line after comment removal.
 - @param[in] preserveIndent {boolean} Whether the language requires full indentation preservation.
 - @return {string} Normalized retained line, or an empty string when no content remains.
 
-### fn `export function compressSourceDetailed(source: string, language: string, includeLineNumbers = true): CompressedSourceResult` (L273-431)
+### fn `export function compressSourceDetailed(source: string, language: string): CompressedSourceResult` (L271-428)
 - @brief Compresses in-memory source text into the structured compression model.
-- @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, retains full leading indentation for indentation-significant languages, preserves leading-tab indentation for other languages, and emits both structured line entries and a rendered text excerpt. Runtime is O(n) in source length. No external state is mutated.
+- @details Removes blank lines and comments, preserves shebangs, respects string-literal boundaries, retains full leading indentation for indentation-significant languages, preserves leading-tab indentation for other languages, and emits both structured line entries and a rendered text excerpt whose every line is prefixed with its original source line number. Runtime is O(n) in source length. No external state is mutated.
 - @param[in] source {string} Raw source text.
 - @param[in] language {string} Canonical compression language identifier.
-- @param[in] includeLineNumbers {boolean} When `true`, prefix rendered text lines with original source line numbers.
 - @return {CompressedSourceResult} Structured compression result.
 - @throws {Error} Throws when the language is unsupported.
+- @satisfies REQ-012
 
-### fn `export function compressSource(source: string, language: string, includeLineNumbers = true): string` (L442-444)
+### fn `export function compressSource(source: string, language: string): string` (L439-441)
 - @brief Compresses in-memory source text for one language.
-- @details Delegates to `compressSourceDetailed(...)` and returns only the rendered compressed source text so legacy CLI and markdown-oriented paths keep their existing behavior. Runtime is O(n) in source length. No external state is mutated.
+- @details Delegates to `compressSourceDetailed(...)` and returns only the rendered compressed source text so CLI and markdown-oriented paths keep their established numbered text contract. Runtime is O(n) in source length. No external state is mutated.
 - @param[in] source {string} Raw source text.
 - @param[in] language {string} Canonical compression language identifier.
-- @param[in] includeLineNumbers {boolean} When `true`, include original line-number prefixes in the output.
-- @return {string} Compressed source text.
+- @return {string} Compressed source text whose lines carry original source line-number prefixes.
 - @throws {Error} Throws when the language is unsupported.
+- @satisfies REQ-012
 
-### fn `export function compressFileDetailed(filePath: string, language?: string, includeLineNumbers = true): CompressedSourceResult` (L455-462)
+### fn `export function compressFileDetailed(filePath: string, language?: string): CompressedSourceResult` (L452-459)
 - @brief Compresses one source file from disk into the structured compression model.
 - @details Detects the language when not supplied, reads the file as UTF-8, and delegates to `compressSourceDetailed(...)`. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] filePath {string} Source file path.
 - @param[in] language {string | undefined} Optional explicit language override.
-- @param[in] includeLineNumbers {boolean} When `true`, prefix rendered text lines with original source line numbers.
-- @return {CompressedSourceResult} Structured compression result.
+- @return {CompressedSourceResult} Structured compression result whose rendered lines carry original source line-number prefixes.
 - @throws {Error} Throws when the language cannot be detected or the file cannot be read.
+- @satisfies REQ-012
 
-### fn `export function compressFile(filePath: string, language?: string, includeLineNumbers = true): string` (L473-475)
+### fn `export function compressFile(filePath: string, language?: string): string` (L470-472)
 - @brief Compresses one source file from disk.
-- @details Delegates to `compressFileDetailed(...)` and returns only the rendered compressed source text so CLI and markdown emitters can retain their established text contract. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+- @details Delegates to `compressFileDetailed(...)` and returns only the rendered compressed source text so CLI and markdown emitters can retain their established numbered text contract. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
 - @param[in] filePath {string} Source file path.
 - @param[in] language {string | undefined} Optional explicit language override.
-- @param[in] includeLineNumbers {boolean} When `true`, include original line-number prefixes in the output.
-- @return {string} Compressed source text.
+- @return {string} Compressed source text whose lines carry original source line-number prefixes.
 - @throws {Error} Throws when the language cannot be detected or the file cannot be read.
+- @satisfies REQ-012
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
 |`CompressedLineEntry`|iface||57-62|export interface CompressedLineEntry|
-|`CompressedSourceResult`|iface||68-79|export interface CompressedSourceResult|
-|`getSpecs`|fn||86-89|function getSpecs()|
-|`detectLanguage`|fn||97-99|export function detectLanguage(filePath: string): string ...|
-|`countLogicalLines`|fn||107-113|function countLogicalLines(content: string): number|
-|`isInString`|fn||123-158|function isInString(line: string, pos: number, stringDeli...|
-|`removeInlineComment`|fn||168-208|function removeInlineComment(line: string, singleComment:...|
-|`buildCompressedLineEntry`|fn||219-231|function buildCompressedLineEntry(|
-|`formatCompressedSourceText`|fn||239-241|function formatCompressedSourceText(entries: CompressedLi...|
-|`normalizeRetainedLineIndentation`|fn||250-262|function normalizeRetainedLineIndentation(line: string, p...|
-|`compressSourceDetailed`|fn||273-431|export function compressSourceDetailed(source: string, la...|
-|`compressSource`|fn||442-444|export function compressSource(source: string, language: ...|
-|`compressFileDetailed`|fn||455-462|export function compressFileDetailed(filePath: string, la...|
-|`compressFile`|fn||473-475|export function compressFile(filePath: string, language?:...|
+|`CompressedSourceResult`|iface||68-78|export interface CompressedSourceResult|
+|`getSpecs`|fn||85-88|function getSpecs()|
+|`detectLanguage`|fn||96-98|export function detectLanguage(filePath: string): string ...|
+|`countLogicalLines`|fn||106-112|function countLogicalLines(content: string): number|
+|`isInString`|fn||122-157|function isInString(line: string, pos: number, stringDeli...|
+|`removeInlineComment`|fn||167-207|function removeInlineComment(line: string, singleComment:...|
+|`buildCompressedLineEntry`|fn||218-229|function buildCompressedLineEntry(|
+|`formatCompressedSourceText`|fn||237-239|function formatCompressedSourceText(entries: CompressedLi...|
+|`normalizeRetainedLineIndentation`|fn||248-260|function normalizeRetainedLineIndentation(line: string, p...|
+|`compressSourceDetailed`|fn||271-428|export function compressSourceDetailed(source: string, la...|
+|`compressSource`|fn||439-441|export function compressSource(source: string, language: ...|
+|`compressFileDetailed`|fn||452-459|export function compressFileDetailed(filePath: string, la...|
+|`compressFile`|fn||470-472|export function compressFile(filePath: string, language?:...|
 
 
 ---
@@ -3581,15 +3581,15 @@ limited to interval disposal and in-memory state mutation.
 
 ---
 
-# find-constructs.ts | TypeScript | 319L | 12 symbols | 4 imports | 14 comments
+# find-constructs.ts | TypeScript | 283L | 11 symbols | 4 imports | 13 comments
 > Path: `src/core/find-constructs.ts`
 - @brief Searches named language constructs in explicit source-file lists and renders compact excerpts.
-- @details Combines source analysis, tag filtering, regex name matching, optional Doxygen extraction, and comment-stripped code rendering. Runtime is O(F + S + M) where F is file count, S is analyzed source size, and M is candidate element count. Side effects are limited to filesystem reads and optional stderr logging.
+- @details Combines source analysis, tag filtering, regex name matching, optional Doxygen extraction, and as-is numbered code rendering. Runtime is O(F + S + M) where F is file count, S is analyzed source size, and M is candidate element count. Side effects are limited to filesystem reads and optional stderr logging.
 
 ## Imports
 ```
 import fs from "node:fs";
-import { compressSource, detectLanguage } from "./compress.js";
+import { detectLanguage } from "./compress.js";
 import { formatDoxygenFieldsAsMarkdown, parseDoxygenComment } from "./doxygen-parser.js";
 import { SourceAnalyzer, SourceElement, ElementType } from "./source-analyzer.js";
 ```
@@ -3637,47 +3637,36 @@ import { SourceAnalyzer, SourceElement, ElementType } from "./source-analyzer.js
 
 ### fn `function extractFileLevelDoxygenFields(elements: SourceElement[]): Record<string, string[]>` (L135-146)
 
-### iface `export interface StrippedConstructLineEntry` (L152-157)
-- @brief Describes one stripped-code line extracted from a matched construct.
-- @details Preserves output order, original source coordinates, normalized stripped text, and rendered display text so markdown and JSON renderers can share one canonical intermediate format. The interface is compile-time only and introduces no runtime cost.
+### iface `export interface ConstructLineEntry` (L152-157)
+- @brief Describes one as-is code line extracted from a matched construct.
+- @details Preserves output order, original source coordinates, verbatim source text, and rendered display text so markdown and JSON renderers can share one canonical intermediate format. `display_text` always carries the `<source_line_number>: ` prefix. The interface is compile-time only and introduces no runtime cost.
 
-### fn `export function buildStrippedConstructLineEntries(` (L168-199)
-- @brief Removes comments from a construct excerpt and returns structured stripped-code lines.
-- @details Reuses `compressSource` for comment stripping, translates local compressed line numbers back into absolute file coordinates, and emits both direct-access text fields and rendered display strings. Runtime is O(n) in excerpt length. No external state is mutated.
-- @param[in] codeLines {string[]} Raw code lines belonging to the construct.
-- @param[in] language {string} Canonical analyzer language identifier.
+### fn `export function buildConstructLineEntries(codeLines: string[], lineStart: number): ConstructLineEntry[]` (L167-178)
+- @brief Extracts a construct excerpt verbatim and returns structured as-is line entries.
+- @details Copies each construct line unchanged, including comment and blank lines, removes at most one trailing line terminator per entry, and prefixes every rendered display string with the absolute source line number. Runtime is O(n) in excerpt length. No external state is mutated.
+- @param[in] codeLines {string[]} Raw code lines belonging to the construct; entries may retain their trailing line terminators.
 - @param[in] lineStart {number} Absolute starting line number of the construct.
-- @param[in] includeLineNumbers {boolean} When `true`, `display_text` includes absolute source line prefixes.
-- @return {StrippedConstructLineEntry[]} Structured stripped-code line entries.
+- @return {ConstructLineEntry[]} Structured as-is line entries in source order.
+- @satisfies REQ-013, REQ-092
 
-### fn `function stripConstructComments(codeLines: string[], language: string, lineStart: number, includeLineNumbers: boolean): string` (L210-214)
-- @brief Removes comments from a construct excerpt while preserving optional absolute line numbers.
-- @details Delegates to `buildStrippedConstructLineEntries(...)` and joins the rendered display strings into one newline-delimited excerpt. Runtime is O(n) in excerpt length. No external state is mutated.
-- @param[in] codeLines {string[]} Raw code lines belonging to the construct.
-- @param[in] language {string} Canonical analyzer language identifier.
-- @param[in] lineStart {number} Absolute starting line number of the construct.
-- @param[in] includeLineNumbers {boolean} When `true`, emit absolute source line prefixes.
-- @return {string} Comment-stripped construct excerpt.
-
-### fn `export function formatConstruct(element: SourceElement, sourceLines: string[], includeLineNumbers: boolean, language = "python"): string` (L225-240)
+### fn `export function formatConstruct(element: SourceElement, sourceLines: string[]): string` (L188-205)
 - @brief Formats one matched construct as markdown.
-- @details Emits construct metadata, attached Doxygen fields, and a fenced code block stripped of comments. Runtime is O(n) in construct span length plus attached documentation size. No side effects occur.
+- @details Emits construct metadata, attached Doxygen fields, and a fenced code block reproducing the construct source lines verbatim, including comments and blank lines, each prefixed with its absolute source line number. Runtime is O(n) in construct span length plus attached documentation size. No side effects occur.
 - @param[in] element {SourceElement} Matched source element.
 - @param[in] sourceLines {string[]} Full source file split into line-preserving entries.
-- @param[in] includeLineNumbers {boolean} When `true`, include absolute source line prefixes.
-- @param[in] language {string} Canonical analyzer language identifier. Defaults to `python`.
 - @return {string} Markdown section for the matched construct.
+- @satisfies REQ-013, REQ-092
 
-### fn `export function searchConstructsInFiles(` (L253-319)
+### fn `export function searchConstructsInFiles(` (L218-283)
 - @brief Searches named constructs across explicit files and renders markdown excerpts.
-- @details Validates files, infers languages, skips unsupported tag/language combinations, analyzes source elements, filters matches by tag and regex, and emits one markdown section per file containing matches. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
+- @details Validates files, infers languages, skips unsupported tag/language combinations, analyzes source elements, filters matches by tag and regex, and emits one markdown section per file containing matches with as-is numbered code excerpts. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] filePaths {string[]} Explicit file paths to search.
 - @param[in] tagFilter {string} Pipe-delimited requested construct tags.
 - @param[in] pattern {string} Regular expression applied to construct names.
-- @param[in] includeLineNumbers {boolean} When `true`, preserve absolute source line numbers in code excerpts.
 - @param[in] verbose {boolean} When `true`, write progress and skip diagnostics to stderr.
 - @return {string} Concatenated markdown output grouped by file.
 - @throws {Error} Throws when no valid tags are provided or when no constructs match the request.
+- @satisfies REQ-013, REQ-092
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -3689,11 +3678,10 @@ import { SourceAnalyzer, SourceElement, ElementType } from "./source-analyzer.js
 |`mergeDoxygenFields`|fn||103-109|function mergeDoxygenFields(baseFields: Record<string, st...|
 |`extractConstructDoxygenFields`|fn||117-127|function extractConstructDoxygenFields(element: SourceEle...|
 |`extractFileLevelDoxygenFields`|fn||135-146|function extractFileLevelDoxygenFields(elements: SourceEl...|
-|`StrippedConstructLineEntry`|iface||152-157|export interface StrippedConstructLineEntry|
-|`buildStrippedConstructLineEntries`|fn||168-199|export function buildStrippedConstructLineEntries(|
-|`stripConstructComments`|fn||210-214|function stripConstructComments(codeLines: string[], lang...|
-|`formatConstruct`|fn||225-240|export function formatConstruct(element: SourceElement, s...|
-|`searchConstructsInFiles`|fn||253-319|export function searchConstructsInFiles(|
+|`ConstructLineEntry`|iface||152-157|export interface ConstructLineEntry|
+|`buildConstructLineEntries`|fn||167-178|export function buildConstructLineEntries(codeLines: stri...|
+|`formatConstruct`|fn||188-205|export function formatConstruct(element: SourceElement, s...|
+|`searchConstructsInFiles`|fn||218-283|export function searchConstructsInFiles(|
 
 
 ---
@@ -8057,23 +8045,23 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @return {ToolResult} Successful tool result containing monolithic markdown.
 - @satisfies REQ-011, REQ-076, REQ-077, REQ-078, REQ-079
 
-### fn `export function runFilesCompress(files: string[], cwd = process.cwd(), enableLineNumbers = false, verbose = false): ToolResult` (L275-277)
+### fn `export function runFilesCompress(files: string[], cwd = process.cwd(), verbose = false): ToolResult` (L275-277)
 - @brief Compresses explicit files into compact source excerpts.
 - @details Delegates to `compressFiles` using the caller working directory as the relative-output base by default. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] files {string[]} Explicit file paths.
 - @param[in] cwd {string} Base directory for relative output formatting. Defaults to `process.cwd()`.
-- @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers.
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
-- @return {ToolResult} Successful tool result containing compressed output.
+- @return {ToolResult} Successful tool result containing line-numbered compressed output.
+- @satisfies REQ-012, REQ-083
 
-### fn `export function runFilesSearch(argsList: string[], enableLineNumbers = false, verbose = false): ToolResult` (L288-294)
+### fn `export function runFilesSearch(argsList: string[], verbose = false): ToolResult` (L288-294)
 - @brief Searches named constructs in explicit files.
 - @details Expects `[TAG, PATTERN, ...FILES]`, validates minimum arity, and delegates to `searchConstructsInFiles`. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] argsList {string[]} Positional argument list containing tag filter, regex pattern, and files.
-- @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers in excerpts.
 - @param[in] verbose {boolean} When `true`, emit diagnostics to stderr.
-- @return {ToolResult} Successful tool result containing construct markdown.
+- @return {ToolResult} Successful tool result containing construct markdown with as-is numbered excerpts.
 - @throws {ReqError} Throws when required arguments are missing.
+- @satisfies REQ-013, REQ-092
 
 ### fn `export function runSummarize(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L306-317)
 - @brief Generates the monolithic summary markdown for configured source directories.
@@ -8095,27 +8083,27 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 - @throws {ReqError} Throws when the git file inventory cannot be collected, when summary generation fails for a non-empty inventory, or when the placeholder or generated file write fails.
 - @satisfies REQ-293, REQ-294, REQ-300, REQ-620, REQ-622
 
-### fn `export function runCompress(projectBase: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L353-358)
+### fn `export function runCompress(projectBase: string, config?: UseReqConfig, verbose = false): ToolResult` (L353-358)
 - @brief Compresses all source files from configured source directories.
 - @details Resolves the project base, collects source files, and delegates to `compressFiles`. Runtime is O(F + S). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
-- @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers.
 - @param[in] verbose {boolean} When `true`, emit per-file diagnostics to stderr.
-- @return {ToolResult} Successful tool result containing compressed output.
+- @return {ToolResult} Successful tool result containing line-numbered compressed output.
 - @throws {ReqError} Throws when no source files are found.
+- @satisfies REQ-012, REQ-015, REQ-083
 
-### fn `export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, enableLineNumbers = false, verbose = false): ToolResult` (L372-381)
+### fn `export function runSearch(projectBase: string, tagFilter: string, pattern: string, config?: UseReqConfig, verbose = false): ToolResult` (L372-381)
 - @brief Searches named constructs across configured project source files.
 - @details Resolves the project base, collects source files, delegates to `searchConstructsInFiles`, and converts thrown search errors into structured `ReqError` failures. Runtime is O(F + S + M). Side effects are limited to filesystem reads and optional stderr logging.
 - @param[in] projectBase {string} Candidate project root.
 - @param[in] tagFilter {string} Pipe-delimited tag filter.
 - @param[in] pattern {string} Regular expression applied to construct names.
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
-- @param[in] enableLineNumbers {boolean} When `true`, preserve original source line numbers in excerpts.
 - @param[in] verbose {boolean} When `true`, emit diagnostics to stderr.
-- @return {ToolResult} Successful tool result containing construct markdown.
+- @return {ToolResult} Successful tool result containing construct markdown with as-is numbered excerpts.
 - @throws {ReqError} Throws when no source files are found or the search fails.
+- @satisfies REQ-013, REQ-016, REQ-092
 
 ### fn `export function runTokens(projectBase: string, config?: UseReqConfig): ToolResult` (L391-400)
 - @brief Counts tokens for canonical documentation files.
@@ -8174,7 +8162,7 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 |`runFilesTokens`|fn||235-247|export function runFilesTokens(files: string[]): ToolResult|
 |`runFilesSummarize`|fn||258-264|export function runFilesSummarize(files: string[], cwd = ...|
 |`runFilesCompress`|fn||275-277|export function runFilesCompress(files: string[], cwd = p...|
-|`runFilesSearch`|fn||288-294|export function runFilesSearch(argsList: string[], enable...|
+|`runFilesSearch`|fn||288-294|export function runFilesSearch(argsList: string[], verbos...|
 |`runSummarize`|fn||306-317|export function runSummarize(projectBase: string, config?...|
 |`runReferences`|fn||329-341|export function runReferences(projectBase: string, config...|
 |`runCompress`|fn||353-358|export function runCompress(projectBase: string, config?:...|
@@ -8270,7 +8258,7 @@ import path from "node:path";
 
 ---
 
-# index.ts | TypeScript | 6041L | 136 symbols | 40 imports | 294 comments
+# index.ts | TypeScript | 6032L | 136 symbols | 40 imports | 294 comments
 > Path: `src/index.ts`
 - @brief Registers the pi-usereq extension commands, tools, and configuration UI.
 - @details Bridges the standalone tool-runner layer into the pi extension API by registering prompt commands, agent tools, and interactive configuration menus. Runtime at module load is O(1); later behavior depends on the selected command or tool. Side effects include extension registration, UI updates, filesystem reads/writes, and delegated tool execution.
@@ -8505,7 +8493,7 @@ cost.
 
 ### fn `function buildSearchToolPromptGuidelines(scope: FindToolScope): string[]` (L816-829)
 - @brief Builds the prompt-guideline set for one search-tool registration.
-- @details Encodes scope selection, monolithic markdown output semantics, regex semantics, line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
+- @details Encodes scope selection, monolithic markdown output semantics, regex semantics, always-on line-number behavior, tag-filter rules, and the full language-to-tag matrix as stable agent-oriented strings. Runtime is O(l * t log t). No side effects occur.
 - @param[in] scope {FindToolScope} Search-tool scope.
 - @return {string[]} Prompt-guideline strings.
 
@@ -9063,7 +9051,7 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-005, REQ-010, REQ-011, REQ-014, REQ-017, REQ-044, REQ-069, REQ-070, REQ-071, REQ-072, REQ-073, REQ-074, REQ-075, REQ-076, REQ-077, REQ-078, REQ-079, REQ-080, REQ-089, REQ-090, REQ-091, REQ-092, REQ-093, REQ-094, REQ-095, REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102, REQ-293, REQ-294, REQ-295, REQ-296, REQ-297
 
-### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4702-4727)
+### fn `function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4693-4718)
 - @brief Builds the shared settings-menu choices for startup-tool management.
 - @details Serializes startup-tool actions into right-valued menu rows consumed by the shared settings-menu renderer while omitting the removed status-reference action. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -9071,7 +9059,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered startup-tool menu choices.
 - @satisfies REQ-007, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4737-4751)
+### fn `function buildPiUsereqToolToggleChoices(pi: ExtensionAPI, config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4728-4742)
 - @brief Builds the shared settings-menu choices for per-tool startup toggles.
 - @details Exposes every configurable startup tool as one row whose right-side value reports the current enabled state, preserves the documented custom/files/embedded/default-disabled ordering, and appends a value-less subtree-local `Reset defaults` row. Runtime is O(t) in configurable-tool count. No external state is mutated.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -9079,7 +9067,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered per-tool toggle choices.
 - @satisfies REQ-007, REQ-151, REQ-152, REQ-153, REQ-154, REQ-231, REQ-232
 
-### fn `async function configurePiUsereqToolsMenu(` (L4762-4879)
+### fn `async function configurePiUsereqToolsMenu(` (L4753-4870)
 - @brief Runs the interactive active-tool configuration menu.
 - @details Synchronizes runtime active tools with the effective config, renders startup-tool actions through the shared settings-menu UI, persists enablement changes into global configuration, preserves the documented per-tool ordering, and updates configuration state in response to selections until the user exits. Runtime depends on user interaction count. Side effects include UI updates, active-tool changes, and config mutation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -9088,78 +9076,78 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-007, REQ-063, REQ-064, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193, REQ-231, REQ-232
 
-### fn `function getStaticCheckLanguageConfigForMenu(` (L4888-4893)
+### fn `function getStaticCheckLanguageConfigForMenu(` (L4879-4884)
 - @brief Resolves one static-check language config for menu rendering.
 - @details Returns the configured per-language static-check object when present and otherwise synthesizes a disabled empty-language object so menu code can render all supported languages deterministically. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {StaticCheckLanguageConfig} Resolved per-language config object.
 
-### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4901-4903)
+### fn `function countConfiguredStaticCheckLanguages(config: UseReqConfig): number` (L4892-4894)
 - @brief Counts languages that currently expose at least one configured checker.
 - @details Treats configured-but-disabled languages as configured when their checker list is non-empty so removal actions remain deterministic. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of languages with at least one configured checker.
 
-### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4911-4913)
+### fn `function countEnabledStaticCheckLanguages(config: UseReqConfig): number` (L4902-4904)
 - @brief Counts languages whose static-check enable flag is on.
 - @details Counts only languages whose persisted per-language config explicitly sets `enabled=enable`, regardless of checker count. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {number} Number of enabled languages.
 
-### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4922-4924)
+### fn `function resetStaticCheckConfig(config: UseReqConfig): void` (L4913-4915)
 - @brief Restores the documented static-check default configuration.
 - @details Replaces the mutable config subtree with a fresh clone of the documented per-language defaults so menu reset actions restore both enable flags and checker lists in one step. Runtime is O(l + c). Side effect: mutates `config`.
 - @param[in,out] config {UseReqConfig} Mutable configuration object.
 - @return {void} No return value.
 - @satisfies REQ-250, REQ-251, REQ-252
 
-### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4932-4934)
+### fn `function formatStaticCheckLanguagesSummary(config: UseReqConfig): string` (L4923-4925)
 - @brief Summarizes enabled and configured static-check languages.
 - @details Counts enabled languages and languages with at least one checker, then emits one compact summary string suitable for the top-level configuration menu. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {string} Compact summary string.
 
-### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4943-4987)
+### fn `function buildStaticCheckMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4934-4978)
 - @brief Builds the shared settings-menu choices for static-check management.
 - @details Serializes guided Command-oriented add and remove actions, renders one direct on/off toggle row for every supported language, and appends canonical terminal rows while omitting raw-spec and reference-only actions. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered static-check menu choices.
 - @satisfies REQ-008, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-248, REQ-345, REQ-347
 
-### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4995-5012)
+### fn `function buildSupportedStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L4986-5003)
 - @brief Builds the shared settings-menu choices for supported static-check languages.
 - @details Exposes every supported language as one row whose right-side value reports extensions, enablement, and configured checker count for guided Command configuration flows, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered language-choice vector.
 
-### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5020-5037)
+### fn `function buildConfiguredStaticCheckLanguageChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5011-5028)
 - @brief Builds the shared settings-menu choices for configured static-check languages.
 - @details Exposes only languages whose checker lists are non-empty so removal remains deterministic, then appends subtree-local terminal rows. Runtime is O(l). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered configured-language vector.
 
-### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L5045-5049)
+### fn `function formatStaticCheckCheckerEntry(entry: StaticCheckEntry): string` (L5036-5040)
 - @brief Formats one static-check checker entry as a compact command summary.
 - @details Joins the module command plus its parameter list into a single shell-like token sequence so inspection and confirmation menus can render checker identity deterministically. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Static-check configuration entry.
 - @return {string} Compact command summary string.
 
-### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L5058-5064)
+### fn `function formatStaticCheckLanguageCheckerSummary(config: UseReqConfig, language: string): string` (L5049-5055)
 - @brief Summarizes every configured checker for one language as a delimited command list.
 - @details Joins each checker entry summary with `; ` so the value column exposes the full language configuration in one row. Runtime is O(c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @param[in] language {string} Canonical language name.
 - @return {string} Delimited checker summary string, or `(none)` when no checkers are configured.
 
-### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5073-5118)
+### fn `function buildStaticCheckViewChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5064-5109)
 - @brief Builds the shared settings-menu choices for the read-only static-check inspection submenu.
 - @details Exposes only configured languages as disabled rows whose value column renders the full checker command list, appends one selectable `Close` row, and emits a disabled placeholder when no language is configured so the submenu never mutates configuration. Runtime is O(l * c * p). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered read-only inspection choices.
 - @satisfies REQ-346
 
-### fn `function buildStaticCheckRemovalConfirmationChoices(` (L5128-5166)
+### fn `function buildStaticCheckRemovalConfirmationChoices(` (L5119-5157)
 - @brief Builds the confirmation submenu choices for removing one configured static-check language.
 - @details Renders each configured checker as a disabled preview row, appends explicit approve and abort actions, and falls back to one disabled no-op row when the language has no checkers. Runtime is O(c * p). No external state is mutated.
 - @param[in] language {string} Canonical language name targeted for removal.
@@ -9167,7 +9155,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removal-confirmation choices.
 - @satisfies REQ-349
 
-### fn `async function confirmStaticCheckRemoval(` (L5177-5188)
+### fn `async function confirmStaticCheckRemoval(` (L5168-5179)
 - @brief Opens one explicit removal-confirmation submenu for a configured static-check language.
 - @details Renders the targeted checker entries before removal and returns `true` only when the user selects the explicit approval action. Runtime depends on user interaction count. Side effects are limited to transient custom-UI rendering.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -9176,7 +9164,7 @@ registration and status updates.
 - @return {Promise<boolean>} `true` when the removal is explicitly approved.
 - @satisfies REQ-349
 
-### fn `async function configureStaticCheckMenu(` (L5198-5377)
+### fn `async function configureStaticCheckMenu(` (L5189-5368)
 - @brief Runs the interactive static-check configuration menu.
 - @details Lets the user add, inspect, confirm-before-remove, and reset global Command entries, toggle direct local per-language enable flags, and reset the subtree to documented defaults through the shared settings-menu renderer until the user exits. Runtime depends on user interaction count. Side effects include UI updates and config mutation.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -9184,7 +9172,7 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the menu closes.
 - @satisfies REQ-008, REQ-151, REQ-152, REQ-153, REQ-154, REQ-160, REQ-161, REQ-193, REQ-195, REQ-248, REQ-253, REQ-345, REQ-346, REQ-347, REQ-348, REQ-349
 
-### fn `function formatContextFilesSummary(` (L5388-5403)
+### fn `function formatContextFilesSummary(` (L5379-5394)
 - @brief Summarizes the `Context Files` flag state with measured sizes and context occupancy for the top-level menu value column.
 - @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, wrapping the unchanged suffix in intense-red ANSI styling through the shared threshold helper when the displayed percentage exceeds the documented 80-percent menu alert threshold, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -9193,7 +9181,7 @@ registration and status updates.
 - @return {string} Compact `Context Files` summary string with the threshold-styled occupancy suffix.
 - @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405, REQ-768
 
-### fn `function buildContextFilesMenuChoices(` (L5414-5457)
+### fn `function buildContextFilesMenuChoices(` (L5405-5448)
 - @brief Builds the shared settings-menu choices for the `Context Files` submenu.
 - @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, with the suffix wrapped in intense-red ANSI styling through the shared threshold helper when that row's displayed percentage exceeds the documented 80-percent menu alert threshold, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -9202,7 +9190,7 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412, REQ-769
 
-### fn `async function configureContextFilesMenu(` (L5469-5529)
+### fn `async function configureContextFilesMenu(` (L5460-5520)
 - @brief Runs the `Context Files` configuration submenu.
 - @details Measures the context files through the yielding async measurement helper, then loads the shared settings menu with the three context-file toggle rows, persists each inline toggle immediately through the shared change callback, restores all three flags to enabled on approved subtree reset, preserves focus on the toggled row, and returns to the top-level menu on cancel. Runtime depends on user interaction count. Side effects include config writes and UI notifications.
 - @param[in] ctx {ExtensionCommandContext} Active command context.
@@ -9212,9 +9200,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when the submenu closes.
 - @satisfies REQ-327, REQ-328, REQ-333, REQ-406
 
-### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L5476-5480)
+### fn `const setFlag = (flagKey: "context-files-requirements" | "context-files-references" | "context-files-workflow", enabled: boolean): void =>` (L5467-5471)
 
-### fn `function buildPiUsereqMenuChoices(` (L5540-5646)
+### fn `function buildPiUsereqMenuChoices(` (L5531-5637)
 - @brief Builds the shared settings-menu choices for the top-level pi-usereq configuration UI.
 - @details Serializes primary configuration actions into right-valued menu rows consumed by the shared settings-menu renderer, including the `Context Files` injection toggles, automatic git-commit mode, effective prompt-command worktree state, notification summary, debug summary, locked worktree rows when automatic git commit is disabled, and display-only local plus global config paths. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] cwd {string} Current working directory.
@@ -9223,21 +9211,21 @@ registration and status updates.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered top-level menu choices.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-162, REQ-190, REQ-191, REQ-197, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-376, REQ-405
 
-### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5655-5673)
+### fn `function buildSrcDirMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5646-5664)
 - @brief Builds the shared settings-menu choices for source-directory management.
 - @details Exposes add and remove actions for `src-dir` entries through right-valued menu rows consumed by the shared settings-menu renderer. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered source-directory management choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154, REQ-193
 
-### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5682-5694)
+### fn `function buildSrcDirRemovalChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[]` (L5673-5685)
 - @brief Builds the shared settings-menu choices for removing one source-directory entry.
 - @details Exposes every configured `src-dir` entry as one removable row and appends a value-less subtree-local `Reset defaults` row. Runtime is O(s) in source-directory count. No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
 - @return {PiUsereqSettingsMenuChoice[]} Ordered removable source-directory choices.
 - @satisfies REQ-006, REQ-151, REQ-152, REQ-153, REQ-154
 
-### fn `async function configurePiUsereq(` (L5705-5966)
+### fn `async function configurePiUsereq(` (L5696-5957)
 - @brief Runs the top-level pi-usereq configuration menu.
 - @details Loads the effective merged config, performs one yielding async context-file measurement warm pass so menu renders resolve through stat-signed cache hits instead of first-measurement encodes, exposes docs/test/source/automatic-commit/worktree/static-check/startup-tool/notification/debug actions through the shared settings-menu renderer, forces worktree disablement when automatic git commit is disabled, prevents locked row edits, persists changes on exit, closes immediately after `Show local configuration` or `Show global configuration`, and refreshes the single-line status bar. Runtime depends on user interaction count. Side effects include UI updates, config writes, active-tool changes, and editor text updates.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -9246,9 +9234,9 @@ registration and status updates.
 - @return {Promise<void>} Promise resolved when configuration is saved and the menu closes.
 - @satisfies REQ-006, REQ-031, REQ-137, REQ-150, REQ-151, REQ-152, REQ-153, REQ-154, REQ-162, REQ-190, REQ-191, REQ-192, REQ-194, REQ-195, REQ-204, REQ-205, REQ-212, REQ-215, REQ-216, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-314, REQ-318, REQ-319, REQ-320, REQ-326, REQ-327, REQ-328, REQ-333
 
-### fn `const persistConfigChange = () =>` (L5718-5723)
+### fn `const persistConfigChange = () =>` (L5709-5714)
 
-### fn `function registerConfigCommands(` (L5976-5986)
+### fn `function registerConfigCommands(` (L5967-5977)
 - @brief Registers configuration-management commands.
 - @details Adds the interactive `pi-usereq` configuration command only; the config-viewer action is now exposed exclusively inside that menu. Runtime is O(1) for registration. Side effects include command registration.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -9256,14 +9244,14 @@ registration and status updates.
 - @return {void} No return value.
 - @satisfies REQ-006, REQ-031
 
-### fn `function activatePiUsereqExtension(pi: ExtensionAPI): void` (L5995-6022)
+### fn `function activatePiUsereqExtension(pi: ExtensionAPI): void` (L5986-6013)
 - @brief Activates the complete pi-usereq extension surface.
 - @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset`, `req-references`, `req-continue`, and `req-print-result` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @return {void} No return value.
 - @satisfies DES-002, DES-015, DES-030, DES-040, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-312, REQ-313, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520, REQ-653, REQ-656, REQ-659, REQ-663, REQ-776, REQ-777, REQ-778, REQ-779, REQ-780
 
-### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L6031-6041)
+### fn `export default function piUsereqExtension(pi: ExtensionAPI): void` (L6022-6032)
 - @brief Registers the complete pi-usereq extension at most once per installation in one pi host process.
 - @details Claims activation ownership for the executing installation path before any launcher deployment, registration, persistence, or probe scheduling, so a duplicated installation of the same package from another pi-managed source cannot register the documented commands, agent tools, shortcuts, and lifecycle hooks a second time; pi keeps every loaded extension active and reports duplicated tool names as extension load errors, so skipping the duplicate keeps the effective registered inventory identical (pi already resolves precedence by load order) while removing the conflict diagnostics. Repeated activation of the same installation path stays allowed because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` and the extension must re-register on every rebind. Claim release on activation failure preserves the documented behavior where a partially initialized installation surfaces its failure while another installed copy can still activate. Runtime is O(1) plus the delegated activation cost. Side effects are limited to process-scoped activation state mutation plus the delegated activation side effects only for the owning installation.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -9380,33 +9368,33 @@ registration and status updates.
 |`registerPromptCommands`|fn||4115-4314|function registerPromptCommands(|
 |`promptCommandHandler`|fn||4120-4307|const promptCommandHandler = async (args: string, ctx: Ex...|
 |`registerAgentTools`|fn||4324-4623|function registerAgentTools(pi: ExtensionAPI): void|
-|`buildPiUsereqToolsMenuChoices`|fn||4702-4727|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
-|`buildPiUsereqToolToggleChoices`|fn||4737-4751|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
-|`configurePiUsereqToolsMenu`|fn||4762-4879|async function configurePiUsereqToolsMenu(|
-|`getStaticCheckLanguageConfigForMenu`|fn||4888-4893|function getStaticCheckLanguageConfigForMenu(|
-|`countConfiguredStaticCheckLanguages`|fn||4901-4903|function countConfiguredStaticCheckLanguages(config: UseR...|
-|`countEnabledStaticCheckLanguages`|fn||4911-4913|function countEnabledStaticCheckLanguages(config: UseReqC...|
-|`resetStaticCheckConfig`|fn||4922-4924|function resetStaticCheckConfig(config: UseReqConfig): void|
-|`formatStaticCheckLanguagesSummary`|fn||4932-4934|function formatStaticCheckLanguagesSummary(config: UseReq...|
-|`buildStaticCheckMenuChoices`|fn||4943-4987|function buildStaticCheckMenuChoices(config: UseReqConfig...|
-|`buildSupportedStaticCheckLanguageChoices`|fn||4995-5012|function buildSupportedStaticCheckLanguageChoices(config:...|
-|`buildConfiguredStaticCheckLanguageChoices`|fn||5020-5037|function buildConfiguredStaticCheckLanguageChoices(config...|
-|`formatStaticCheckCheckerEntry`|fn||5045-5049|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
-|`formatStaticCheckLanguageCheckerSummary`|fn||5058-5064|function formatStaticCheckLanguageCheckerSummary(config: ...|
-|`buildStaticCheckViewChoices`|fn||5073-5118|function buildStaticCheckViewChoices(config: UseReqConfig...|
-|`buildStaticCheckRemovalConfirmationChoices`|fn||5128-5166|function buildStaticCheckRemovalConfirmationChoices(|
-|`confirmStaticCheckRemoval`|fn||5177-5188|async function confirmStaticCheckRemoval(|
-|`configureStaticCheckMenu`|fn||5198-5377|async function configureStaticCheckMenu(|
-|`formatContextFilesSummary`|fn||5388-5403|function formatContextFilesSummary(|
-|`buildContextFilesMenuChoices`|fn||5414-5457|function buildContextFilesMenuChoices(|
-|`configureContextFilesMenu`|fn||5469-5529|async function configureContextFilesMenu(|
-|`setFlag`|fn||5476-5480|const setFlag = (flagKey: "context-files-requirements" | ...|
-|`buildPiUsereqMenuChoices`|fn||5540-5646|function buildPiUsereqMenuChoices(|
-|`buildSrcDirMenuChoices`|fn||5655-5673|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
-|`buildSrcDirRemovalChoices`|fn||5682-5694|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
-|`configurePiUsereq`|fn||5705-5966|async function configurePiUsereq(|
-|`persistConfigChange`|fn||5718-5723|const persistConfigChange = () =>|
-|`registerConfigCommands`|fn||5976-5986|function registerConfigCommands(|
-|`activatePiUsereqExtension`|fn||5995-6022|function activatePiUsereqExtension(pi: ExtensionAPI): void|
-|`piUsereqExtension`|fn||6031-6041|export default function piUsereqExtension(pi: ExtensionAP...|
+|`buildPiUsereqToolsMenuChoices`|fn||4693-4718|function buildPiUsereqToolsMenuChoices(pi: ExtensionAPI, ...|
+|`buildPiUsereqToolToggleChoices`|fn||4728-4742|function buildPiUsereqToolToggleChoices(pi: ExtensionAPI,...|
+|`configurePiUsereqToolsMenu`|fn||4753-4870|async function configurePiUsereqToolsMenu(|
+|`getStaticCheckLanguageConfigForMenu`|fn||4879-4884|function getStaticCheckLanguageConfigForMenu(|
+|`countConfiguredStaticCheckLanguages`|fn||4892-4894|function countConfiguredStaticCheckLanguages(config: UseR...|
+|`countEnabledStaticCheckLanguages`|fn||4902-4904|function countEnabledStaticCheckLanguages(config: UseReqC...|
+|`resetStaticCheckConfig`|fn||4913-4915|function resetStaticCheckConfig(config: UseReqConfig): void|
+|`formatStaticCheckLanguagesSummary`|fn||4923-4925|function formatStaticCheckLanguagesSummary(config: UseReq...|
+|`buildStaticCheckMenuChoices`|fn||4934-4978|function buildStaticCheckMenuChoices(config: UseReqConfig...|
+|`buildSupportedStaticCheckLanguageChoices`|fn||4986-5003|function buildSupportedStaticCheckLanguageChoices(config:...|
+|`buildConfiguredStaticCheckLanguageChoices`|fn||5011-5028|function buildConfiguredStaticCheckLanguageChoices(config...|
+|`formatStaticCheckCheckerEntry`|fn||5036-5040|function formatStaticCheckCheckerEntry(entry: StaticCheck...|
+|`formatStaticCheckLanguageCheckerSummary`|fn||5049-5055|function formatStaticCheckLanguageCheckerSummary(config: ...|
+|`buildStaticCheckViewChoices`|fn||5064-5109|function buildStaticCheckViewChoices(config: UseReqConfig...|
+|`buildStaticCheckRemovalConfirmationChoices`|fn||5119-5157|function buildStaticCheckRemovalConfirmationChoices(|
+|`confirmStaticCheckRemoval`|fn||5168-5179|async function confirmStaticCheckRemoval(|
+|`configureStaticCheckMenu`|fn||5189-5368|async function configureStaticCheckMenu(|
+|`formatContextFilesSummary`|fn||5379-5394|function formatContextFilesSummary(|
+|`buildContextFilesMenuChoices`|fn||5405-5448|function buildContextFilesMenuChoices(|
+|`configureContextFilesMenu`|fn||5460-5520|async function configureContextFilesMenu(|
+|`setFlag`|fn||5467-5471|const setFlag = (flagKey: "context-files-requirements" | ...|
+|`buildPiUsereqMenuChoices`|fn||5531-5637|function buildPiUsereqMenuChoices(|
+|`buildSrcDirMenuChoices`|fn||5646-5664|function buildSrcDirMenuChoices(config: UseReqConfig): Pi...|
+|`buildSrcDirRemovalChoices`|fn||5673-5685|function buildSrcDirRemovalChoices(config: UseReqConfig):...|
+|`configurePiUsereq`|fn||5696-5957|async function configurePiUsereq(|
+|`persistConfigChange`|fn||5709-5714|const persistConfigChange = () =>|
+|`registerConfigCommands`|fn||5967-5977|function registerConfigCommands(|
+|`activatePiUsereqExtension`|fn||5986-6013|function activatePiUsereqExtension(pi: ExtensionAPI): void|
+|`piUsereqExtension`|fn||6022-6032|export default function piUsereqExtension(pi: ExtensionAP...|
 
