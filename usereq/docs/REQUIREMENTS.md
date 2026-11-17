@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.171"
-date: "2026-11-16"
+version: "0.0.172"
+date: "2026-11-17"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -36,7 +36,7 @@ tags: ["markdown", "requirements", "typescript", "cli", "pi-extension"]
 - Future edits MUST update only `date` and `version` in the YAML front matter and MUST NOT add in-document revision history.
 
 ### 1.2 Project Scope
-PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, Next-Workflow command capture with `/req-continue` chain continuation and parameter-less captured-command printing, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, the distribution bin launcher, the release packaging build script, and the pre-release verification gate. `.github/workflows/` contains the npm release workflow in this revision.
+PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone extension-debug surface for requirements-oriented prompt delivery, source summarization, static-check orchestration, prompt-command-owned repository/worktree orchestration, Next-Workflow command capture with `/req-continue` chain continuation and parameter-less captured-command printing, retained final-output notification reprinting through `/req-print-result`, offline extension contract validation, and npm release automation. Implemented UI is the pi selection/input/editor/status/notification surface. No standalone GUI code is present. `scripts/` contains the standalone harness, bash wrapper, support modules, the bundled-resource prompt updater, the pi CLI reference updater, the package-management wrapper, the distribution bin launcher, the release packaging build script, and the pre-release verification gate. `.github/workflows/` contains the npm release workflow in this revision.
 
 ## 2. Project Requirements
 
@@ -847,6 +847,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-768**: MUST render the top-level `Context Files` summary occupancy suffix with intense-red ANSI styling when its displayed one-decimal percentage exceeds 80, and without styling otherwise.
 - **REQ-769**: MUST render each `Context Files` submenu row occupancy suffix with intense-red ANSI styling when that row's displayed one-decimal percentage exceeds 80, and without styling otherwise.
 - **REQ-770**: MUST keep the occupancy suffix text unstyled on the command invocation summary and early-check diagnostic surfaces regardless of the percentage value.
+- **REQ-771**: MUST capture the exact composed final context-retention notification message into one process-scoped retention store at every agentic-flow terminal emission of that notification.
+- **REQ-772**: MUST preserve the retained final-output notification message across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` recovery so `/req-print-result` consumes the last completed flow's notification.
+- **REQ-773**: MUST clear the retained final-output notification message at the idle-reset `startup|reload` `session_start` boundaries together with the captured Next-Workflow array.
+- **REQ-774**: MUST clear the retained final-output notification message immediately before prompt dispatch of a `new` agentic flow, after every slash-command pre-check has succeeded.
+- **REQ-775**: MUST NOT clear the retained final-output notification message during `/req-reset` recovery or failed slash-command pre-checks.
+- **REQ-776**: MUST register `req-print-result` as a dedicated non-agentic extension command with description `Print the final-output report notification of the last completed agentic workflow` and MUST NOT depend on a bundled prompt Markdown file.
+- **REQ-777**: MUST redeliver the retained final-output notification message verbatim through the stale-context-safe UI-notification channel with its original info severity.
+- **REQ-778**: MUST allow `req-print-result` execution from every workflow state without workflow dispatch, startability gate, workflow-state transition, or captured-state mutation.
+- **REQ-779**: MUST reject `req-print-result` with one deterministic error notification and MUST NOT mutate any captured state when no final-output notification message is retained.
+- **REQ-780**: MUST keep `req-print-result` eligible inside the Next-Workflow array and delegable through its registered `/req-continue` handler.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1083,6 +1093,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-240**: MUST verify default-channel `--upgrade` reads and writes no pi CLI settings and develop-channel source-switch runs perform the changelog-key migration.
 - **TST-241**: MUST verify occupancy facts expose the displayed numeric percentage with the suffix text unchanged for known and fallback bases.
 - **TST-242**: MUST verify the shared menu suffix helper returns the plain suffix at or below 80 displayed percent and the intense-red-wrapped suffix above 80 for both basis variants.
+- **TST-243**: MUST verify the result-retention store captures the exact message, keeps the latest capture, wipes on demand, and pins the `/req-print-result` command description.
+- **TST-244**: MUST verify `req-print-result` reprints the emitted retention notification identically with info severity from every workflow state without dispatch, transition, or captured-state mutation, rejects deterministically without retention, and stays reachable through `/req-continue` delegation.
+- **TST-245**: MUST verify the retained-message wipe runs immediately before a `new` agentic flow dispatch and survives failed pre-checks plus `/req-reset` recovery.
 
 ## 5. Observed Component Model
 
@@ -1204,6 +1217,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `tests/release-workflow.test.ts` verifies semver-tag gating, the pinned Node.js `24.15.0` release runtime, `dist/` artifact publication, absence of build or pre-release verification steps, GitHub release asset directives in `.github/workflows/release-npm.yml`, plus npm manifest compliance for license, discoverability, engines, and lockfile version identity.
 - `tests/build-script.test.ts` covers `scripts/build.sh` syntax, previous-build `dist/` cleanup across versioned tarballs, `node_modules/` and non-tarball `dist/` preservation, plus run-created intermediate artifact removal on successful and failed exits.
 - `tests/agent-final-output.test.ts` covers final-output JSON parsing, mandatory-field validation, optional-field tolerance, markdown report rendering, and completed-outcome summary resolution.
+- `tests/result-retention.test.ts` covers the process-scoped retained final-output notification capture, latest-capture replacement, wipe, byte-identical readback, and the pinned `/req-print-result` command description.
 - Test business logic focuses on repository-owned output contracts, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
 
 ## 8. Evidence Matrix
@@ -1488,6 +1502,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-768 | `src/index.ts` :: `formatContextFilesSummary` :: appends the shared-helper occupancy suffix so the top-level `Context Files` summary value wraps the suffix in intense-red ANSI styling exactly above 80 displayed percent. |
 | REQ-769 | `src/index.ts` :: `buildContextFilesMenuChoices` :: builds every submenu row value through the shared-helper occupancy suffix so each row wraps its suffix in intense-red ANSI styling exactly above 80 displayed percent. |
 | REQ-770 | `src/core/prompts.ts` :: `renderPromptCommandSummary` and `src/core/context-file-size.ts` :: `enforceContextOccupancyLimit` :: keep appending the plain unstyled `ContextOccupancyFacts.suffix` on non-menu surfaces. |
+| REQ-771 | `src/index.ts` :: `notifyContextRetentionReminder` capture branch :: stores the exact composed retention notification in the process-scoped store only when the emission terminates an agentic flow; `src/core/result-retention.ts` :: `captureRetainedResultMessage` :: verbatim message storage. |
+| REQ-772 | `src/core/result-retention.ts` :: `ProcessScopedResultRetentionStore` plus `getRetainedResultMessage` :: `globalThis` persistence across rebinds; `src/index.ts` :: `resetCommandHandler` plus `referencesCommandHandler` :: `captureMessage false` emissions preserve the retained message. |
+| REQ-773 | `src/index.ts` :: `handleExtensionStatusEvent` :: `session_start` `shouldResetWorkflowStateOnSessionStart` branch :: `clearRetainedResultMessage()` beside `clearNextWorkflowCommands()`. |
+| REQ-774 | `src/index.ts` :: `promptCommandHandler` pre-dispatch wipe :: `clearRetainedResultMessage()` only for the `new` flow after all pre-checks. |
+| REQ-775 | `src/index.ts` :: `resetCommandHandler` idle transition plus failed-preflight `req-change` rejection :: neither path invokes `clearRetainedResultMessage()`. |
+| REQ-776 | `src/index.ts` :: `registerReqPrintResultCommand` registers `req-print-result` with `REQ_PRINT_RESULT_COMMAND_DESCRIPTION`; `src/core/result-retention.ts` :: `REQ_PRINT_RESULT_COMMAND_DESCRIPTION` :: dedicated registration outside the bundled prompt inventory. |
+| REQ-777 | `src/index.ts` :: `printResultCommandHandler` retained branch :: `notifyContextSafely(ctx, retainedMessage, "info")` redelivers the byte-identical message through the notification channel. |
+| REQ-778 | `src/index.ts` :: `printResultCommandHandler` :: no `isPiUsereqWorkflowStartable` gate, no request recording, no workflow-state transition, and no capture mutation before notification delivery. |
+| REQ-779 | `src/index.ts` :: `printResultCommandHandler` missing-retention branch :: deterministic error notification plus `ReqError` throw without any captured-state mutation. |
+| REQ-780 | `src/core/next-workflow.ts` :: `NEXT_WORKFLOW_SPECIALIZED_COMMAND_NAMES` keeps `req-print-result` eligible; `src/index.ts` :: `registerReqPrintResultCommand` :: `registerNextWorkflowCommandHandler("req-print-result", ...)` for `/req-continue` delegation. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1577,6 +1601,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-234 | `tests/extension-registration.test.ts` :: `extension registers prompt and config commands while exposing tool capabilities only as tools` validates the `req-`-prefixed tool registration set and the absence of un-prefixed legacy tool names. |
 | TST-241 | `tests/context-occupancy-menu.test.ts` :: occupancy-facts tests :: numeric displayed percentage exposure with unchanged suffix text for known and fallback bases. |
 | TST-242 | `tests/context-occupancy-menu.test.ts` :: shared-helper threshold tests :: plain suffix at or below 80 displayed percent and exact intense-red-wrapped suffix above 80 for both basis variants. |
+| TST-243 | `tests/result-retention.test.ts` :: capture, latest-capture, wipe, byte-identical readback, and pinned-description tests. |
+| TST-244 | `tests/extension-registration.test.ts` :: `req-print-result reprints the emitted retention notification identically from every workflow state` :: byte-identical info-severity reprints from `done` and `error`, deterministic empty-retention rejection, no dispatch or user-message send, no captured-state mutation, and `/req-continue` delegation. |
+| TST-245 | `tests/extension-registration.test.ts` :: `retained-result wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` :: failed pre-checks and `/req-reset` preserve the message while the dispatch-time sample observes the post-wipe `undefined`. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

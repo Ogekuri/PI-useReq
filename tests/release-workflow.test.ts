@@ -196,6 +196,7 @@ test(
     assert.deepEqual(
       manifest.files,
       [
+        "CHANGELOG.md",
         "src",
         "!src/resources/pi-prompts-version.txt",
         "scripts/pi-usereq.js",
@@ -203,7 +204,7 @@ test(
         "scripts/install-static-checkers.ts",
         "scripts/install-static-checkers.js",
       ],
-      "npm files allowlist must exclude maintainer-only scripts and the updater version record",
+      "npm files allowlist must ship the boot changelog and exclude maintainer-only scripts and the updater version record",
     );
   },
 );

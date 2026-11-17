@@ -13,12 +13,13 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 
 /**
  * @brief Lists the specialized non-prompt pi-usereq commands eligible for Next-Workflow capture.
- * @details Extends the bundled prompt-command inventory with `req-references`, `req-reset`, and the `/req-continue` exception so chained continuations stay capturable while every non-pi-usereq orchestration command is purged from the array. Access complexity is O(1).
- * @satisfies REQ-655, REQ-659
+ * @details Extends the bundled prompt-command inventory with `req-references`, `req-reset`, `req-print-result`, and the `/req-continue` exception so chained continuations stay capturable while every non-pi-usereq orchestration command is purged from the array. Access complexity is O(1).
+ * @satisfies REQ-655, REQ-659, REQ-780
  */
 export const NEXT_WORKFLOW_SPECIALIZED_COMMAND_NAMES = [
   "req-references",
   "req-reset",
+  "req-print-result",
   "req-continue",
 ] as const;
 

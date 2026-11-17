@@ -53,6 +53,7 @@ import {
   clearNextWorkflowCommands,
   formatNextWorkflowCommandTable,
   getNextWorkflowCommands,
+  NEXT_WORKFLOW_COMMAND_NAMES,
   NEXT_WORKFLOW_EMPTY_LIST_TEXT,
   parseNextWorkflowCommandEntries,
   registerNextWorkflowCommandHandler,
@@ -60,6 +61,13 @@ import {
   resetNextWorkflowStateForTests,
   resolveNextWorkflowEntryIndex,
 } from "../src/core/next-workflow.js";
+import {
+  REQ_PRINT_RESULT_COMMAND_DESCRIPTION,
+  captureRetainedResultMessage,
+  clearRetainedResultMessage,
+  getRetainedResultMessage,
+  resetResultRetentionStateForTests,
+} from "../src/core/result-retention.js";
 import {
   setJsTiktokenModuleLoaderForTests,
 } from "../src/core/token-counter.js";
@@ -96,7 +104,10 @@ import {
 } from "../src/core/extension-status.js";
 import { showPiUsereqSettingsMenu } from "../src/core/settings-menu.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
-import { parseAgentFinalOutput } from "../src/core/agent-final-output.js";
+import {
+  captureAgentFinalOutputReport,
+  parseAgentFinalOutput,
+} from "../src/core/agent-final-output.js";
 import {
   createTempDir,
   initFixtureRepo,
@@ -979,6 +990,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "req-refactor",
     "req-references",
     "req-reset",
+    "req-print-result",
     "req-renumber",
     "req-workflow",
     "req-write",
@@ -10530,6 +10542,183 @@ test("next-workflow wipe runs right before a new flow dispatch and survives fail
     assert.deepEqual(dispatchSamples, [0]);
   } finally {
     resetNextWorkflowStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-print-result` reprints the emitted retention notification identically from every workflow state and rejects deterministically without retention.
+ * @details Activates the extension on a no-source fixture, asserts the missing-retention invocation emits the deterministic error notification and rejects from `idle` without state change, seeds one captured final-output report plus a two-entry Next-Workflow array, completes the no-source `req-workflow` flow so its terminal retention notification becomes the retained message, and asserts the invocation redelivers that exact notification with info severity from `done` with no dispatch, no sent user message, no workflow-state change, and no captured-state mutation; parks the workflow state in `error` through a dirty `req-references` validation and reprints the identical notification from `error`, and asserts `/req-continue` delegation reaches the registered `req-print-result` handler with the identical reprint. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after reprint and rejection assertions complete.
+ * @throws {AssertionError} Throws when the reprint differs from the emitted retention notification, emits the wrong severity, mutates workflow state or captured state, or the missing-retention rejection changes state.
+ * @satisfies REQ-771, REQ-776, REQ-777, REQ-778, REQ-779, REQ-780, TST-244
+ */
+test("req-print-result reprints the emitted retention notification identically from every workflow state", async () => {
+  resetNextWorkflowStateForTests();
+  resetResultRetentionStateForTests();
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const printResultCommand = pi.commands.get("req-print-result");
+    assert.ok(printResultCommand, "missing req-print-result registration");
+    assert.equal(printResultCommand!.description, REQ_PRINT_RESULT_COMMAND_DESCRIPTION);
+    assert.ok(NEXT_WORKFLOW_COMMAND_NAMES.includes("req-print-result"));
+
+    // REQ-779: no retained message yet, so the invocation emits the deterministic
+    // error notification, rejects, and mutates no workflow state.
+    const notificationsAfterStartup = ctx.__state.notifications.length;
+    await assert.rejects(
+      printResultCommand!.handler("", ctx),
+      /no retained final-output notification/,
+    );
+    const emptyStateNotification = ctx.__state.notifications.at(-1)!;
+    assert.equal(emptyStateNotification.level, "error");
+    assert.match(emptyStateNotification.message, /^ERROR: \/req-print-result/);
+    assert.equal(ctx.__state.notifications.length, notificationsAfterStartup + 1);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>idle<\/warning>/,
+    );
+
+    // Seed the captured agentic-flow outcome, then let the no-source `req-workflow`
+    // completion emit and capture its terminal retention notification (REQ-771).
+    const fullInputText = "Fix the flaky retry path in the orchestrator loop and verify every regression suite stays green";
+    const captureParse = parseAgentFinalOutput(buildFinalOutputText("Test summary.", [
+      { command: "/req-fix", text: fullInputText },
+      { command: "/req-check" },
+    ], { outcome: "All changes verified." }));
+    captureAgentFinalOutputReport(captureParse);
+    captureNextWorkflowCommands(captureParse);
+    await pi.commands.get("req-workflow")!.handler("", ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+    const retainedMessage = getRetainedResultMessage();
+    assert.ok(retainedMessage, "the no-source completion must retain its terminal notification");
+    assert.ok(retainedMessage.includes("Test summary."), "the retained message carries the captured report");
+    assert.ok(retainedMessage.includes(fullInputText.slice(0, 20)), "the retained message carries the Next-Workflow table");
+    const notificationsAfterCompletion = ctx.__state.notifications.length;
+
+    // REQ-777, REQ-778: the reprint redelivers the exact retained message with info
+    // severity from `done` and mutates no workflow state or captured state.
+    await printResultCommand!.handler("", ctx);
+    const firstReprint = ctx.__state.notifications.at(-1)!;
+    assert.equal(ctx.__state.notifications.length, notificationsAfterCompletion + 1);
+    assert.equal(firstReprint.level, "info");
+    assert.equal(firstReprint.message, retainedMessage);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>workflow ➔ done<\/warning>/,
+    );
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.equal(getRetainedResultMessage(), retainedMessage);
+    assert.deepEqual(
+      getNextWorkflowCommands().map((entry) => entry.command),
+      ["req-fix", "req-check"],
+    );
+
+    // REQ-778: runnable from the `error` state without transitions.
+    fs.writeFileSync(path.join(projectBase, "dirty.txt"), "dirty\n");
+    await assert.rejects(
+      pi.commands.get("req-references")!.handler("", ctx),
+      /Git status unclear/,
+    );
+    const notificationsAfterError = ctx.__state.notifications.length;
+    await printResultCommand!.handler("", ctx);
+    const errorReprint = ctx.__state.notifications.at(-1)!;
+    assert.equal(ctx.__state.notifications.length, notificationsAfterError + 1);
+    assert.equal(errorReprint.level, "info");
+    assert.equal(errorReprint.message, retainedMessage);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>\u001b\[5mreferences ➔ error\u001b\[25m<\/error>/,
+    );
+
+    // REQ-780: the registered handler is reachable through `/req-continue` delegation.
+    clearNextWorkflowCommands();
+    captureTestNextWorkflowCommands([{ command: "/req-print-result" }]);
+    const notificationsBeforeDelegation = ctx.__state.notifications.length;
+    await pi.commands.get("req-continue")!.handler("1", ctx);
+    const delegatedReprint = ctx.__state.notifications.at(-1)!;
+    assert.equal(ctx.__state.notifications.length, notificationsBeforeDelegation + 1);
+    assert.equal(delegatedReprint.level, "info");
+    assert.equal(delegatedReprint.message, retainedMessage);
+  } finally {
+    resetNextWorkflowStateForTests();
+    resetResultRetentionStateForTests();
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies the retained-message wipe placement mirrors the Next-Workflow array lifetime.
+ * @details Seeds one retained message plus two captured Next-Workflow entries, fails one `req-change` preflight through a staged uncommitted change, and asserts both captures survive the failed pre-checks; runs `/req-reset` from the parked `error` state and asserts both captures survive the recovery while the workflow state returns to `idle`; then cleans the repository and samples the process-scoped retention store inside the prompt-delivery fallback, asserting the dispatch-time sample is `undefined` while the array sample is empty, proving the wipe runs immediately before the `new` agentic session starts after every pre-check succeeded. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation, temporary repository mutation, and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after wipe-placement assertions complete.
+ * @throws {AssertionError} Throws when a failed pre-check or `/req-reset` drops the retained message, or the prompt dispatch observes a retained message.
+ * @satisfies REQ-772, REQ-773, REQ-774, REQ-775, TST-245
+ */
+test("retained-result wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset", async () => {
+  resetNextWorkflowStateForTests();
+  resetResultRetentionStateForTests();
+  const { projectBase } = initFixtureRepo();
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    captureRetainedResultMessage("Context retained. Current context usage: 13%.");
+    captureTestNextWorkflowCommands([
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+      { command: "/req-check" },
+    ]);
+    assert.equal(getRetainedResultMessage(), "Context retained. Current context usage: 13%.");
+
+    // REQ-775: failed slash-command pre-checks preserve the retained message.
+    fs.writeFileSync(path.join(projectBase, "uncommitted.txt"), "dirty\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "uncommitted.txt"], { cwd: projectBase, encoding: "utf8" }).status, 0);
+    await assert.rejects(
+      pi.commands.get("req-change")!.handler("Adjust docs", ctx),
+      /Git status unclear/,
+    );
+    assert.equal(getRetainedResultMessage(), "Context retained. Current context usage: 13%.");
+    assert.equal(getNextWorkflowCommands().length, 2);
+
+    // REQ-775: `/req-reset` recovery preserves the retained message while returning to idle.
+    await pi.commands.get("req-reset")!.handler("", ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>reset ➔ idle<\/warning>/,
+    );
+    assert.equal(getRetainedResultMessage(), "Context retained. Current context usage: 13%.");
+    assert.equal(getNextWorkflowCommands().length, 2);
+
+    // REQ-774: the wipe runs immediately before the `new` agentic flow dispatch,
+    // mirroring the captured Next-Workflow array lifetime.
+    fs.rmSync(path.join(projectBase, "uncommitted.txt"), { force: true });
+    assert.equal(spawnSync("git", ["reset", "--quiet"], { cwd: projectBase, encoding: "utf8" }).status, 0);
+    const dispatchSamples: Array<string | undefined> = [];
+    const originalSendUserMessage = pi.sendUserMessage.bind(pi);
+    pi.sendUserMessage = (content: unknown, options?: unknown) => {
+      dispatchSamples.push(getRetainedResultMessage());
+      originalSendUserMessage(content, options);
+    };
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    assert.deepEqual(dispatchSamples, [undefined]);
+    assert.equal(getRetainedResultMessage(), undefined);
+    assert.equal(getNextWorkflowCommands().length, 0);
+  } finally {
+    resetNextWorkflowStateForTests();
+    resetResultRetentionStateForTests();
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
