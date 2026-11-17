@@ -502,8 +502,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-385**: MUST resolve the upstream pi CLI repository by trying `https://github.com/earendil-works/pi.git` first and retrying with `https://github.com/earendil-works/pi` on clone failure.
 - **REQ-386**: MUST select the latest pi CLI release as the newest version-sorted release tag reachable from the upstream default branch and MUST fail deterministically when none is resolvable.
 - **REQ-387**: MUST read stored pi CLI versions from `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt` and MUST treat missing or empty files as `unknown`.
-- **REQ-388**: MUST print the resolved latest pi CLI version and both stored versions to stdout before requesting update confirmation.
-- **REQ-389**: MUST request update confirmation with an English message accepting `Y` and MUST synchronize only when the confirmation input is exactly `Y`, otherwise aborting without modifications.
+- **REQ-388**: MUST print the resolved latest pi CLI version and both stored versions to stdout before the automatic update eligibility decision.
+- **REQ-389**: MUST synchronize automatically without user confirmation when the stored source version is `unknown` or the resolved latest pi CLI version is greater than the stored source version under version-sorted comparison.
 - **REQ-390**: MUST fully synchronize `pi.dev-src/pi` from the upstream repository root, excluding every dot-prefixed entry, and MUST remove local entries absent upstream so the file sets match exactly.
 - **REQ-391**: MUST preserve upstream access and modification timestamps for every synchronized `pi.dev-src/pi` entry.
 - **REQ-392**: MUST synchronize `docs/pi.dev/coding-agent-docs` from `pi.dev-src/pi/packages/coding-agent/docs`, overwriting existing files and removing files absent upstream.
@@ -520,6 +520,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-754**: MUST use the commit subject `Update bundled prompts from <stored> to <resolved>` in the synchronization commit, naming both version numbers.
 - **REQ-755**: MUST NOT create a commit when the staged synchronization diff is empty and MUST log the no-change outcome instead.
 - **REQ-756**: MUST abort with a non-zero exit code and a diagnostic when the synchronization commit fails.
+- **REQ-757**: MUST terminate the pi CLI reference updater with exit code 0 without modifying any repository content when the resolved latest pi CLI version is lower than or equal to the stored source version.
+- **REQ-758**: MUST abort the pi CLI reference updater with a diagnostic when the repository root is not inside a git work tree before any synchronization modification.
+- **REQ-759**: MUST stage only the synchronized pi CLI source and documentation targets plus both version markers and MUST create exactly one commit on the current branch after successful synchronization.
+- **REQ-760**: MUST use the commit subject `change(pi-cli-src-docs-update): Update bundled read-only PI cli source code and docs from <stored> to <resolved> [useReq]` in the pi CLI reference updater synchronization commit, naming the stored source version and the resolved release version.
+- **REQ-761**: MUST NOT create the pi CLI reference updater commit when the staged synchronization diff is empty and MUST log the no-change outcome instead.
+- **REQ-762**: MUST abort the pi CLI reference updater with a non-zero exit code and a diagnostic when the synchronization commit fails.
 - **REQ-400**: MUST expose reusable context-occupancy helpers in `src/core/context-file-size.ts` that sum enabled existing context-file `cl100k_base` tokens and compute the occupancy percentage against the selected model max input context tokens.
 - **REQ-401**: MUST treat the selected model max input context as the normalized context-usage `contextWindow` value and as unknown whenever that value is missing, non-numeric, or non-positive.
 - **REQ-402**: MUST render the occupancy percentage with one decimal place and a removed trailing `.0`, yielding labels such as `36%`, `0.4%`, and `0%`.
@@ -1084,7 +1090,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/source-presence.ts` detects analyzable source presence from the configured `src-dir` git file inventory and writes the documented no-source placeholder payloads for `REFERENCES.md` and `WORKFLOW.md`.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
-- `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release.
+- `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release, applies the automatic version-sorted update gate without user confirmation, and stages the synchronized targets plus both version markers into exactly one commit on the current branch.
 - `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, removes every previous-build `dist/*.tgz` entry plus the emptied `dist/` directory, verifies that no stale `dist/*.tgz` entry survived that cleanup before preparing the dependency tree, runs the strict compilation gate, packs the npm distribution tarball into `dist/`, verifies plus summarizes the produced artifact, and removes every temporary or intermediate repository entry created by the run.
 - `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release packaging plus validation inside one `TMPDIR` temporary build directory from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, every `dist/` entry, and every pre-existing entry; it performs no `dist/` operation, verifies no `dist/` content, and removes its temporary build directory on every exit path.
 

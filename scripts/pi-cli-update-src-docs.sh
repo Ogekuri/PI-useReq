@@ -20,16 +20,27 @@
 #     line-ending characters are preserved with their committed bytes and
 #     timestamps, so repeated updates against an unchanged upstream release
 #     leave the git working tree clean. Before any modification, the
-#     updater prints the resolved latest version and the stored versions read from
+#     updater verifies that the repository root is inside a git work tree and
+#     prints the resolved latest version and the stored versions read from
 #     `docs/pi.dev/pi-cli-version.txt` and `pi.dev-src/pi-cli-version.txt`
-#     (missing or empty files report `unknown`), then requires an explicit `Y`
-#     confirmation; any other input aborts without modifications. On success, the
-#     resolved version is written into both version marker files. Runtime is
+#     (missing or empty files report `unknown`). Synchronization then runs
+#     automatically without user confirmation whenever the stored source
+#     version is `unknown` or the resolved version is strictly newer under
+#     version-sorted ordering; otherwise the updater terminates with exit code 0
+#     without modifying any repository content. After a successful
+#     synchronization, the resolved version is written into both version marker
+#     files and exactly one commit is created on the current branch staging only
+#     the synchronized source target, the three documentation targets, and the
+#     two version markers, with subject `change(pi-cli-src-docs-update): Update
+#     bundled read-only PI cli source code and docs from <stored> to <resolved>
+#     [useReq]`; an empty staged diff skips the commit with a no-change log
+#     line, and a failing commit aborts with a non-zero exit code. Runtime is
 #     dominated by one git clone plus one tag checkout and per-file copies.
-#     Side effects include temporary-directory creation, git subprocesses, and
-#     replacement of the four target directories plus the two version marker
-#     files. No other repository content is modified.
-# @satisfies DES-023, REQ-385, REQ-386, REQ-387, REQ-388, REQ-389, REQ-390, REQ-391, REQ-392, REQ-393, REQ-394, REQ-395
+#     Side effects include temporary-directory creation, git subprocesses,
+#     replacement of the four target directories, overwrite of the two version
+#     marker files, and one git staging plus commit operation. No other
+#     repository content is modified.
+# @satisfies DES-023, REQ-385, REQ-386, REQ-387, REQ-388, REQ-389, REQ-390, REQ-391, REQ-392, REQ-393, REQ-394, REQ-395, REQ-757, REQ-758, REQ-759, REQ-760, REQ-761, REQ-762
 
 set -euo pipefail
 
@@ -280,52 +291,104 @@ sync_directory() {
   log "Synchronized ${copied} file(s) into ${target_dir#"${REPO_ROOT}"/}"
 }
 
-## @brief Requests explicit user confirmation before any modification.
-## @details Prints the versions plus one English confirmation sentence, reads one
-##     line from `stdin`, and returns success only when the confirmation input is
-##     exactly `Y`; any other input, including end-of-stream input, returns
-##     failure so callers abort without modifications. Runtime is O(1) plus one
-##     user interaction. Side effects include `stdout` and `stderr` writes.
+## @brief Decides update eligibility by comparing the stored and resolved versions.
+## @details Returns success when the stored source version is `unknown` or the
+##     resolved latest version is strictly greater than the stored source
+##     version under GNU `sort -V` ordering, implemented as a strict
+##     string-inequality guard followed by a sortedness check of the two-line
+##     `stored` then `latest` sequence. Performs no I/O mutation. Runtime is
+##     O(1) plus one `sort` subprocess. Invoked only inside `if` conditions, so
+##     a failure exit status never terminates the caller under `set -e`.
+## @pre Both versions are single-line strings without surrounding whitespace.
+## @param[in] stored_version {string} Stored source version or `unknown`.
 ## @param[in] latest_version {string} Resolved upstream release version.
-## @param[in] doc_version {string} Stored version of `${DOC_VERSION_REL}`.
-## @param[in] src_version {string} Stored version of `${SRC_VERSION_REL}`.
-## @return {integer} `0` when the user confirmed with exactly `Y`; `1` otherwise.
-confirm_update() {
-  local latest_version="$1"
-  local doc_version="$2"
-  local src_version="$3"
-  local answer=""
+## @return {integer} `0` when synchronization is eligible; `1` when the resolved
+##     version is equal to or older than the stored source version.
+## @satisfies REQ-389, REQ-757
+is_update_eligible() {
+  local stored_version="$1"
+  local latest_version="$2"
+  if [ "${stored_version}" = "unknown" ]; then
+    return 0
+  fi
+  if [ "${stored_version}" = "${latest_version}" ]; then
+    return 1
+  fi
+  printf '%s\n' "${stored_version}" "${latest_version}" | sort -Vc 2>/dev/null
+}
 
-  log "Latest pi CLI release : ${latest_version}"
-  log "Stored version (${DOC_VERSION_REL}): ${doc_version}"
-  log "Stored version (${SRC_VERSION_REL}): ${src_version}"
-  log "This update replaces the read-only reference sources in ${SRC_TARGET_REL} and the documentation in docs/pi.dev with the content of the latest pi CLI release."
-  printf 'Proceed with the update? [Y/n] '
-  read -r answer || answer=""
-  [ "${answer}" = "Y" ]
+## @brief Commits the synchronized pi CLI reference sources and documentation on the current branch.
+## @details Stages only the read-only source target declared in `SRC_TARGET_REL`,
+##     the documentation targets declared in `DOC_SYNC_SPECS`, plus both version
+##     marker files, skips commit creation with a progress line when the staged
+##     diff is empty, and otherwise creates exactly one commit with subject
+##     `change(pi-cli-src-docs-update): Update bundled read-only PI cli source
+##     code and docs from <stored> to <resolved> [useReq]` on the current
+##     branch. Runtime is dominated by git subprocess execution. Side effects
+##     include git index mutation, one git commit object, and one
+##     current-branch head advance; paths outside the synchronization scope are
+##     never staged by this function.
+## @pre `${REPO_ROOT}` is inside a git work tree with a resolvable `HEAD`.
+## @param[in] stored_version {string} Stored source version before synchronization.
+## @param[in] latest_version {string} Resolved upstream release version.
+## @return {void} No return value.
+## @throws Exits through `fail(...)` when staging or commit creation fails.
+## @satisfies REQ-759, REQ-760, REQ-761, REQ-762
+commit_update() {
+  local stored_version="$1"
+  local latest_version="$2"
+
+  local spec target_paths=()
+  target_paths+=("${REPO_ROOT}/${SRC_TARGET_REL}")
+  for spec in "${DOC_SYNC_SPECS[@]}"; do
+    target_paths+=("${REPO_ROOT}/${spec#*:}")
+  done
+  target_paths+=("${REPO_ROOT}/${DOC_VERSION_REL}")
+  target_paths+=("${REPO_ROOT}/${SRC_VERSION_REL}")
+
+  git -C "${REPO_ROOT}" add -- "${target_paths[@]}" \
+    || fail "Unable to stage the synchronized pi CLI reference sources and documentation."
+  if git -C "${REPO_ROOT}" diff --cached --quiet; then
+    log "No synchronized content changed; skipping the pi CLI reference commit."
+    return 0
+  fi
+  git -C "${REPO_ROOT}" commit --quiet \
+    -m "change(pi-cli-src-docs-update): Update bundled read-only PI cli source code and docs from ${stored_version} to ${latest_version} [useReq]" \
+    || fail "Unable to commit the synchronized pi CLI reference sources and documentation."
+  log "Committed: change(pi-cli-src-docs-update): Update bundled read-only PI cli source code and docs from ${stored_version} to ${latest_version} [useReq]"
 }
 
 ## @brief Executes one full pi CLI reference update run.
-## @details Validates required tools, allocates the temporary upstream working
-##     tree, clones the pi CLI default branch, resolves and checks out the newest
-##     release tag, prints the resolved plus stored versions, requires an explicit
-##     `Y` confirmation, synchronizes the upstream repository root into the
-##     read-only source target excluding every dot-prefixed entry, synchronizes
-##     every ordered documentation pair declared in `DOC_SYNC_SPECS`, and writes
-##     the resolved version into both version marker files. Runtime is dominated
-##     by the upstream clone plus the four directory synchronizations. Side
-##     effects include temporary-directory creation and removal, git subprocesses,
-##     and replacement of the four target directories plus the two version marker
-##     files.
+## @details Validates required tools, verifies that the repository root is
+##     inside a git work tree, reads the stored version markers, allocates the
+##     temporary upstream working tree, clones the pi CLI default branch,
+##     resolves the newest release tag, prints the resolved plus stored
+##     versions, applies the automatic version-sorted gate without user
+##     confirmation and returns unchanged when the resolved version is not
+##     newer than the stored source version, checks out the resolved release
+##     tag, synchronizes the upstream repository root into the read-only source
+##     target excluding every dot-prefixed entry, synchronizes every ordered
+##     documentation pair declared in `DOC_SYNC_SPECS`, writes the resolved
+##     version into both version marker files, and commits the synchronized
+##     content on the current branch. Runtime is dominated by the upstream
+##     clone plus the four directory synchronizations. Side effects include
+##     temporary-directory creation and removal, git subprocesses, replacement
+##     of the four target directories, overwrite of the two version marker
+##     files, and one git staging plus commit operation.
 ## @return {void} No return value.
-## @throws Exits through `fail(...)` when any required tool, clone, tag
-##     resolution, or synchronization step fails.
+## @throws Exits through `fail(...)` when any required tool, work-tree probe,
+##     clone, tag resolution, synchronization, staging, or commit step fails.
+## @satisfies REQ-385, REQ-386, REQ-387, REQ-388, REQ-389, REQ-390, REQ-391, REQ-392, REQ-393, REQ-394, REQ-395, REQ-757, REQ-758, REQ-759, REQ-761, REQ-762
 main() {
   require_tool git
+  require_tool sort
   require_tool find
   require_tool mkdir
   require_tool cp
   require_tool cmp
+
+  [ "$(git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ] \
+    || fail "Repository root is not inside a git work tree: ${REPO_ROOT}"
 
   local doc_version src_version
   doc_version="$(read_version_file "${REPO_ROOT}/${DOC_VERSION_REL}")"
@@ -342,8 +405,12 @@ main() {
   local release_tag
   release_tag="$(resolve_release_tag "${repository}")"
 
-  if ! confirm_update "${release_tag}" "${doc_version}" "${src_version}"; then
-    log "Update aborted; no repository content was modified."
+  log "Latest pi CLI release : ${release_tag}"
+  log "Stored version (${DOC_VERSION_REL}): ${doc_version}"
+  log "Stored version (${SRC_VERSION_REL}): ${src_version}"
+
+  if ! is_update_eligible "${src_version}" "${release_tag}"; then
+    log "Resolved version ${release_tag} is not newer than the stored version ${src_version}; no synchronization performed."
     return 0
   fi
 
@@ -362,6 +429,8 @@ main() {
 
   printf '%s\n' "${release_tag}" > "${REPO_ROOT}/${DOC_VERSION_REL}"
   printf '%s\n' "${release_tag}" > "${REPO_ROOT}/${SRC_VERSION_REL}"
+
+  commit_update "${src_version}" "${release_tag}"
 
   log "pi CLI reference sources and documentation updated to ${release_tag}."
 }
