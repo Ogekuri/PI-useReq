@@ -196,6 +196,7 @@ import {
   type PromptErrorReplayFacts,
 } from "./core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "./core/prompt-command-catalog.js";
+import { resolvePromptCommandUserRequest } from "./core/prompt-command-args.js";
 import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./core/source-presence.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import {
@@ -4055,6 +4056,7 @@ function registerPromptCommands(
         );
         const originalThinkingLevel = resolveCurrentThinkingLevel(pi, ctx);
         try {
+          const userRequest = resolvePromptCommandUserRequest(promptName, args);
           if (promptName === "workflow") {
             validatePromptGitState(projectBase, config);
             if (!hasAnalyzableSourceFiles(projectBase, config)) {
@@ -4082,7 +4084,7 @@ function registerPromptCommands(
           }
           executionPlan = preparePromptCommandExecution(
             promptName,
-            args,
+            userRequest.requestText,
             projectBase,
             config,
             ctx.sessionManager.getSessionFile(),
@@ -4098,7 +4100,7 @@ function registerPromptCommands(
           );
           const content = renderPrompt(
             promptName,
-            args,
+            userRequest.requestText,
             projectBase,
             config,
             executionPlan,

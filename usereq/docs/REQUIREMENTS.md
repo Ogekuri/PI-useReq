@@ -132,6 +132,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-044**: MUST implement JSON parsing, verdict rendering, and file-based validation in one dedicated `src/core/result-json-validator.ts` module outside `src/index.ts` business logic.
 - **DES-045**: MUST implement the pi CLI `extensionChangelogVersions` key migration helper in `src/core/package-manager.ts` with injectable settings readers and writers outside `src/cli.ts` dispatch logic.
 - **DES-046**: MUST implement the configuration-menu occupancy-suffix alert coloring as one shared threshold helper in `src/core/context-file-size.ts` consuming the occupancy facts and reused by both configuration-menu renderers.
+- **DES-047**: MUST implement prompt-command user-request resolution covering `@` file-reference loading, the empty-input placeholder, and inline passthrough in one dedicated `src/core/` module outside `src/index.ts` business logic.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -857,6 +858,19 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-778**: MUST allow `req-print-result` execution from every workflow state without workflow dispatch, startability gate, workflow-state transition, or captured-state mutation.
 - **REQ-779**: MUST reject `req-print-result` with one deterministic error notification and MUST NOT mutate any captured state when no final-output notification message is retained.
 - **REQ-780**: MUST keep `req-print-result` eligible inside the Next-Workflow array and delegable through its registered `/req-continue` handler.
+- **REQ-781**: MUST resolve the user-request text of the `analyze`, `change`, `check`, `cover`, `fix`, `new`, `readme`, `refactor`, and `write` bundled prompt commands from raw command input before prompt-command execution preparation.
+- **REQ-782**: MUST replace `%%ARGS%%` with one fixed placeholder stating that the user input no specific request when the command input is empty or whitespace-only.
+- **REQ-783**: MUST treat command input whose first non-whitespace character is `@` as a user-request file reference and MUST load the referenced file content as the `%%ARGS%%` replacement text.
+- **REQ-784**: MUST extract the referenced file path after `@` from one double-quoted span, one single-quoted span, or the entire remaining input, and MUST unescape every `\X` sequence to the literal character `X`.
+- **REQ-785**: MUST reject an unterminated quoted file reference with one deterministic error stating the cause.
+- **REQ-786**: MUST reject a quoted file reference followed by additional non-whitespace input with one deterministic error stating the cause.
+- **REQ-787**: MUST expand a leading `~` or `~/` file path against the runtime home directory before file access.
+- **REQ-788**: MUST verify the referenced file exists as a regular file and MUST generate one deterministic error naming the file path and the cause when the check fails.
+- **REQ-789**: MUST verify the referenced file content is textual by sampling leading bytes for NUL bytes and MUST generate one deterministic error naming the file path and the cause for binary or executable content.
+- **REQ-790**: MUST load the referenced file as UTF-8 text and MUST use the verbatim loaded content as the `%%ARGS%%` replacement text.
+- **REQ-791**: MUST generate one deterministic error naming the file path when the loaded user-request file content is empty or whitespace-only.
+- **REQ-792**: MUST pass the resolved user-request text into prompt-command execution preparation and rendered prompt content while the on-screen command invocation summary keeps the raw command input.
+- **REQ-793**: MUST keep every other bundled prompt-backed command on verbatim raw-input passthrough without empty-input placeholder substitution or `@` parsing.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1096,6 +1110,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-243**: MUST verify the result-retention store captures the exact message, keeps the latest capture, wipes on demand, and pins the `/req-print-result` command description.
 - **TST-244**: MUST verify `req-print-result` reprints the emitted retention notification identically with info severity from every workflow state without dispatch, transition, or captured-state mutation, rejects deterministically without retention, and stays reachable through `/req-continue` delegation.
 - **TST-245**: MUST verify the retained-message wipe runs immediately before a `new` agentic flow dispatch and survives failed pre-checks plus `/req-reset` recovery.
+- **TST-246**: MUST verify user-request resolution replaces empty and whitespace-only input with the fixed placeholder, passes inline text through verbatim, and keeps non-covered commands on verbatim raw-input passthrough.
+- **TST-247**: MUST verify `@` file references resolve from double-quoted, single-quoted, backslash-escaped, and plain-space path spellings including `~` home-directory expansion against temporary text fixtures.
+- **TST-248**: MUST verify `@` file references generate deterministic errors naming the file path for missing files, non-regular files, binary content, and empty content.
+- **TST-249**: MUST verify `@` file references generate deterministic syntax errors for unterminated quoted paths and non-whitespace text following a quoted path, and that rendered prompts embed the resolved request text in place of `%%ARGS%%`.
 
 ## 5. Observed Component Model
 
@@ -1163,6 +1181,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   │   ├── generate-markdown.ts
 │   │   ├── next-workflow.ts
 │   │   ├── pi-usereq-tools.ts
+│   │   ├── prompt-command-args.ts
 │   │   ├── prompts.ts
 │   │   ├── req-references-command.ts
 │   │   ├── source-presence.ts
@@ -1182,6 +1201,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 │   ├── helpers.ts
 │   ├── project-source-tabs.test.ts
 │   ├── runtime-independence.test.ts
+│   ├── prompt-command-args.test.ts
 │   ├── prompt-rendering.test.ts
 │   ├── release-workflow.test.ts
 │   └── fixtures/{fixture_c.c,fixture_cpp.cpp,fixture_csharp.cs,fixture_elixir.ex,fixture_go.go,fixture_haskell.hs,fixture_java.java,fixture_javascript.js,fixture_kotlin.kt,fixture_lua.lua,fixture_perl.pl,fixture_php.php,fixture_python.py,fixture_rust.rs,fixture_scala.scala,fixture_shell.sh,fixture_swift.swift,fixture_typescript.ts,fixture_zig.zig}
@@ -1218,6 +1238,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `tests/build-script.test.ts` covers `scripts/build.sh` syntax, previous-build `dist/` cleanup across versioned tarballs, `node_modules/` and non-tarball `dist/` preservation, plus run-created intermediate artifact removal on successful and failed exits.
 - `tests/agent-final-output.test.ts` covers final-output JSON parsing, mandatory-field validation, optional-field tolerance, markdown report rendering, and completed-outcome summary resolution.
 - `tests/result-retention.test.ts` covers the process-scoped retained final-output notification capture, latest-capture replacement, wipe, byte-identical readback, and the pinned `/req-print-result` command description.
+- `tests/prompt-command-args.test.ts` covers `@` file-reference user-request resolution, the empty-input placeholder, inline and non-covered command passthrough, quoted, escaped, and plain path spellings, home-directory expansion, deterministic file-reference error causes, and rendered-prompt `%%ARGS%%` embedding.
 - Test business logic focuses on repository-owned output contracts, persistent config mutation, startup-tool activation, prompt-command worktree lifecycle correctness, and npm release workflow structure.
 
 ## 8. Evidence Matrix
@@ -1272,6 +1293,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-040 | `src/core/next-workflow.ts` :: `captureNextWorkflowCommands`, `formatNextWorkflowCommandTable`, `resolveNextWorkflowEntryIndex`, and the handler registry :: one dedicated Next-Workflow module outside `src/index.ts` business logic. |
 | DES-042 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput`, `renderAgentFinalOutputMarkdownReport`, and the process-scoped report store :: one dedicated module implementing final-output JSON parsing, validation, report rendering, and capture outside `src/index.ts` business logic. |
 | DES-046 | `src/core/context-file-size.ts` :: `CONTEXT_OCCUPANCY_MENU_ALERT_THRESHOLD_PERCENT` and `formatConfigMenuContextOccupancySuffix` :: one shared alert-threshold helper consuming the occupancy facts and reused by both configuration-menu renderers. |
+| DES-047 | `src/core/prompt-command-args.ts` :: `resolvePromptCommandUserRequest`, `parsePromptCommandFileSpec`, `expandPromptCommandHomePath`, and `PROMPT_COMMAND_EMPTY_REQUEST_PLACEHOLDER` :: one dedicated user-request resolution module outside `src/index.ts` business logic. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -1512,6 +1534,19 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-778 | `src/index.ts` :: `printResultCommandHandler` :: no `isPiUsereqWorkflowStartable` gate, no request recording, no workflow-state transition, and no capture mutation before notification delivery. |
 | REQ-779 | `src/index.ts` :: `printResultCommandHandler` missing-retention branch :: deterministic error notification plus `ReqError` throw without any captured-state mutation. |
 | REQ-780 | `src/core/next-workflow.ts` :: `NEXT_WORKFLOW_SPECIALIZED_COMMAND_NAMES` keeps `req-print-result` eligible; `src/index.ts` :: `registerReqPrintResultCommand` :: `registerNextWorkflowCommandHandler("req-print-result", ...)` for `/req-continue` delegation. |
+| REQ-781 | `src/index.ts` :: `promptCommandHandler` :: resolves `resolvePromptCommandUserRequest(...)` inside the dispatch `try` block before `preparePromptCommandExecution(...)`. |
+| REQ-782 | `src/core/prompt-command-args.ts` :: `resolvePromptCommandUserRequest` empty-input branch :: returns `PROMPT_COMMAND_EMPTY_REQUEST_PLACEHOLDER` for empty and whitespace-only input. |
+| REQ-783 | `src/core/prompt-command-args.ts` :: `resolvePromptCommandUserRequest` :: trims the input, detects the leading `@`, and returns the loaded file content as `requestText`. |
+| REQ-784 | `src/core/prompt-command-args.ts` :: `parsePromptCommandFileSpec` :: extracts double-quoted, single-quoted, and whole-remainder path spellings with `\X` unescaping. |
+| REQ-785 | `src/core/prompt-command-args.ts` :: `parsePromptCommandFileSpec` unterminated-quote branch :: `ReqError` naming the unterminated quoted path cause. |
+| REQ-786 | `src/core/prompt-command-args.ts` :: `parsePromptCommandFileSpec` trailing-text branch :: `ReqError` naming the unexpected text after the quoted path. |
+| REQ-787 | `src/core/prompt-command-args.ts` :: `expandPromptCommandHomePath` :: expands `~` and `~/` prefixes against the runtime home directory. |
+| REQ-788 | `src/core/prompt-command-args.ts` :: `loadTextualUserRequestFile` existence probes :: `ReqError` with the file path for missing files and non-regular files. |
+| REQ-789 | `src/core/prompt-command-args.ts` :: `loadTextualUserRequestFile` NUL-byte leading sample :: `ReqError` with the file path for binary or executable content. |
+| REQ-790 | `src/core/prompt-command-args.ts` :: `loadTextualUserRequestFile` :: UTF-8 `fs.readFileSync` content returned verbatim as the `%%ARGS%%` replacement. |
+| REQ-791 | `src/core/prompt-command-args.ts` :: `loadTextualUserRequestFile` empty-content branch :: `ReqError` naming the file path when the content is empty or whitespace-only. |
+| REQ-792 | `src/index.ts` :: `promptCommandHandler` :: passes `userRequest.requestText` into `preparePromptCommandExecution(...)` plus `renderPrompt(...)` while `renderPromptCommandSummary(...)` keeps the raw `args`. |
+| REQ-793 | `src/core/prompt-command-args.ts` :: `isPromptCommandFileRequestName` gate :: `resolvePromptCommandUserRequest` returns verbatim raw input for every non-covered prompt name. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1604,6 +1639,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-243 | `tests/result-retention.test.ts` :: capture, latest-capture, wipe, byte-identical readback, and pinned-description tests. |
 | TST-244 | `tests/extension-registration.test.ts` :: `req-print-result reprints the emitted retention notification identically from every workflow state` :: byte-identical info-severity reprints from `done` and `error`, deterministic empty-retention rejection, no dispatch or user-message send, no captured-state mutation, and `/req-continue` delegation. |
 | TST-245 | `tests/extension-registration.test.ts` :: `retained-result wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` :: failed pre-checks and `/req-reset` preserve the message while the dispatch-time sample observes the post-wipe `undefined`. |
+| TST-246 | `tests/prompt-command-args.test.ts` :: `resolvePromptCommandUserRequest substitutes the empty-input placeholder and passes inline and non-covered command input through verbatim` :: placeholder, inline passthrough, and raw passthrough assertions. |
+| TST-247 | `tests/prompt-command-args.test.ts` :: `quoted, escaped, and plain-space file references load textual content with home-directory expansion` :: double-quoted, single-quoted, backslash-escaped, plain-space, and `~` fixture loads. |
+| TST-248 | `tests/prompt-command-args.test.ts` :: `file references reject missing, non-regular, binary, and empty fixtures with deterministic path-naming errors` :: four `ReqError` assertions. |
+| TST-249 | `tests/prompt-command-args.test.ts` :: `quoted-path syntax errors and rendered-prompt embedding of the resolved request text` :: unterminated-quote error, trailing-text error, and `renderPrompt` `%%ARGS%%` substitution assertions. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.
