@@ -944,7 +944,7 @@ export function setPiUsereqWorkflowRequest(
  * @param[in] ctx {ExtensionContext | undefined} Optional active extension context used for the status-bar refresh; defaults to the controller's latest cached context.
  * @return {boolean} `true` when a persisted terminal state was adopted; `false` when the controller was not `idle` or the persisted state was not terminal.
  * @note Complexity: O(1) plus one optional status render.
- * @satisfies REQ-222, REQ-279, REQ-629, REQ-633, REQ-656, REQ-660
+ * @satisfies REQ-222, REQ-279, REQ-629, REQ-633, REQ-656, REQ-663
  */
 export function resynchronizePersistedTerminalWorkflowState(
   controller: PiUsereqStatusController,
@@ -974,7 +974,7 @@ export function resynchronizePersistedTerminalWorkflowState(
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-187, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421, REQ-461, REQ-660
+ * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-187, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421, REQ-461
  */
 export function updateExtensionStatus(
   controller: PiUsereqStatusController,

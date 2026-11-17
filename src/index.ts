@@ -3888,11 +3888,11 @@ function registerReqReferencesCommand(
 
 /**
  * @brief Registers the specialized `req-continue` slash command.
- * @details Registers the dedicated chain-continuation command with two argument modes (REQ-659). A parameter-less invocation performs only the printing operation (REQ-738, REQ-739): it snapshots the captured Next-Workflow array, writes the Next-Workflow section table rendered by `formatNextWorkflowCommandTable(...)` into the editor, or the documented empty-list placeholder for an empty array (REQ-741), runs from every workflow state without applying the startability gate or transitioning workflow state, emits no notification, and never mutates the captured array (REQ-740); stale replacement-session editor rejections are suppressed. A parameterized invocation requires one integer ordinal (REQ-662), resynchronizes a stale idle replacement runtime from the persisted terminal workflow state before gating so the completed flow that exists in context is observed, rejects non-startable workflow states through the shared busy-state rejection, terminates with a deterministic error without any operation and without transitioning the workflow state on an empty Next-Workflow array, selects the one-based ordinal entry, and delegates the selected pi-usereq command through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every workflow-state transition, so `/req-continue` itself never terminates with the `continue` to `done` transition. Runtime is O(n) in aggregate captured entry length for the print branch and O(1) for registration; dispatch cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, editor-text mutation for the print branch, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
+ * @details Registers the dedicated chain-continuation command with two argument modes (REQ-659). A parameter-less invocation performs only the printing operation (REQ-738, REQ-739): it snapshots the captured Next-Workflow array, writes the Next-Workflow section table rendered by `formatNextWorkflowCommandTable(...)` into the editor, or the documented empty-list placeholder for an empty array (REQ-741), runs from every workflow state without applying the startability gate or transitioning workflow state, emits no notification, and never mutates the captured array (REQ-740); stale replacement-session editor rejections are suppressed. A parameterized invocation is orchestration-transparent (REQ-660): it requires one integer ordinal (REQ-662), resynchronizes a stale idle replacement runtime from the persisted terminal workflow state before delegation so the delegated command observes exactly the workflow state it would observe on direct invocation (REQ-663, REQ-656), applies no startability gate and performs no workflow-state transition or busy-state rejection of its own, terminates with a deterministic error without any operation and without transitioning the workflow state on an empty Next-Workflow array (REQ-661), selects the one-based ordinal entry, and delegates the selected pi-usereq command through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every gate, every workflow-state transition, and every terminal outcome, so `/req-continue` itself never terminates with the `continue` to `done` transition (REQ-664). Runtime is O(n) in aggregate captured entry length for the print branch and O(1) for registration; dispatch cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, editor-text mutation for the print branch, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies DES-040, REQ-656, REQ-659, REQ-660, REQ-661, REQ-662, REQ-663, REQ-664, REQ-670, REQ-738, REQ-739, REQ-740, REQ-741, REQ-224
+ * @satisfies DES-040, REQ-656, REQ-659, REQ-660, REQ-661, REQ-662, REQ-663, REQ-664, REQ-670, REQ-738, REQ-739, REQ-740, REQ-741
  */
 function registerReqContinueCommand(
   pi: ExtensionAPI,
@@ -3919,15 +3919,16 @@ function registerReqContinueCommand(
       }
       return;
     }
+    // REQ-660: the parameterized dispatch is orchestration-transparent. It applies no
+    // startability gate, performs no workflow-state transition, and emits no busy-state
+    // rejection of its own; the delegated command owns every gate and transition exactly
+    // like a manual user invocation (REQ-663, REQ-664).
     // A replacement extension runtime bound by the closure's base-session restoration can
     // stay parked on the bootstrap `idle` state when its `session_start` fired while the
     // persisted state was still in flight; resynchronize from the authoritative
-    // process-scoped terminal state before gating so `idle` with a captured Next-Workflow
-    // array stays runnable (REQ-660, REQ-656).
+    // process-scoped terminal state before delegation so the delegated command observes
+    // exactly the workflow state it would observe on direct invocation (REQ-663, REQ-656).
     resynchronizePersistedTerminalWorkflowState(statusController, ctx);
-    if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
-      rejectNonIdleReqCommand(statusController, ctx);
-    }
     if (entries.length === 0) {
       const message = "ERROR: /req-continue found no captured Next-Workflow command from the previous agentic workflow.";
       notifyContextSafely(ctx, message, "error");

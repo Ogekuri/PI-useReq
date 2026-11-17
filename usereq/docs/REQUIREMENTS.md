@@ -307,7 +307,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, `done`, `warning`, and `error`.
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
-- **REQ-224**: MUST reject every `req-*` slash command except `req-reset` before any operation when workflow state is neither `idle` nor `done`, surface the error to pi CLI, and transition workflow state to `error`.
+- **REQ-224**: MUST reject every `req-*` slash command except `req-reset` and parameterized `req-continue` before any operation when workflow state is neither `idle` nor `done`, surface the error to pi CLI, and transition workflow state to `error`.
 - **REQ-225**: MUST make bundled prompt-backed `req-<prompt>` commands record their prompt name as the active workflow request, transition workflow state to `checking` after the workflow startability gate, and keep it there through preflight and prompt handoff preparation.
 - **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during bundled prompt-backed `req-<prompt>` preflight.
 - **REQ-227**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `running` only after required-doc checks, worktree preparation, worktree verification, and prompt-session handoff succeed.
@@ -756,7 +756,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-657**: MUST render the `/req-continue` command table after the `Context retained.` retention line, separated from it by exactly one blank line.
 - **REQ-658**: MUST quote each `/req-continue` table input text as its first 20 characters, then ` .. `, then its last 10 characters, keeping texts of 30 characters or fewer verbatim.
 - **REQ-659**: MUST register `req-continue` as a dedicated extension command with description `Continue the previous agentic workflow with a captured Next-Workflow command` and MUST NOT depend on a bundled prompt Markdown file.
-- **REQ-660**: MUST gate parameterized `req-continue` dispatch on any startable workflow state, including `idle`, whenever the Next-Workflow array holds at least one command.
+- **REQ-660**: MUST dispatch the parameterized `req-continue` ordinal entry from every workflow state without applying any startability gate or workflow-state transition.
 - **REQ-661**: MUST reject parameterized `req-continue` with an error when the Next-Workflow array is empty or the ordinal is invalid, preserving the current workflow state.
 - **REQ-662**: MUST require one integer `req-continue` parameter identifying the one-based ordinal of the Next-Workflow array entry to dispatch.
 - **REQ-663**: MUST execute the selected pi-usereq command through its registered handler with the captured input text, behaving exactly like a manual user invocation.
@@ -1052,7 +1052,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-215**: MUST verify Next-Workflow capture maps `next_commands` entries from the final-output JSON, keeps pi-usereq commands plus `/req-continue`, purges other orchestration commands, and preserves entry order.
 - **TST-216**: MUST verify the final context-retention notification renders the markdown report sections and the full-text Next-Workflow command table before the retention line and the `/req-continue` command table with the first-20/last-10 quotation after it.
 - **TST-217**: MUST verify `req-continue` registers outside the bundled prompt inventory and delegates the selected first or one-based ordinal entry through the registered handler with the captured input text.
-- **TST-218**: MUST verify `req-continue` registers outside the bundled prompt inventory, executes from `idle` and `done` whenever the Next-Workflow array holds commands, and rejects empty arrays and invalid ordinals with an error and no workflow-state transition.
+- **TST-218**: MUST verify `req-continue` registers outside the bundled prompt inventory, dispatches from `idle` and `done` without a startability gate whenever the Next-Workflow array holds commands, and rejects empty arrays and invalid ordinals with an error and no workflow-state transition.
 - **TST-219**: MUST verify fast-forward merge-failure closure re-points the pi CLI to the retained worktree, emits the retention notification plus `/req-continue` command table before the error, ends the error output with the hardcoded uniform `ERROR: ` message, and preserves the Next-Workflow array.
 - **TST-220**: MUST verify `/req-reset` preserves the captured Next-Workflow array so `/req-continue` stays executable from `idle` after recovery.
 - **TST-221**: MUST verify the Next-Workflow array is cleared immediately before prompt dispatch of a `new` agentic flow and preserved when slash-command pre-checks fail.
@@ -1431,12 +1431,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-657 | `src/index.ts` :: `notifyContextRetentionReminder` (L1292-1311) :: appends the numbered list after the retention line; `src/core/next-workflow.ts` :: `formatNextWorkflowList` (L292-300) :: one command per line. |
 | REQ-658 | `src/core/next-workflow.ts` :: `condenseNextWorkflowInputText` (L274-285) :: first 20 characters plus `...` plus last 10 characters, omitted without input text. |
 | REQ-659 | `src/index.ts` :: `registerReqContinueCommand` (L3827-3863) registers `req-continue` with `REQ_CONTINUE_COMMAND_DESCRIPTION`; `src/core/next-workflow.ts` :: `REQ_CONTINUE_COMMAND_DESCRIPTION` (L51-53) :: dedicated registration outside the bundled prompt inventory. |
-| REQ-660 | `src/index.ts` :: `continueCommandHandler` parameterized-dispatch startability gate :: `idle` dispatches with an ordinal whenever the captured array holds commands; parameter-less printing bypasses the gate per REQ-740. |
+| REQ-660 | `src/index.ts` :: `continueCommandHandler` parameterized-dispatch branch :: gate-free ordinal delegation from every workflow state after persisted-terminal resynchronization; parameter-less printing per REQ-740. |
 | REQ-661 | `src/index.ts` :: parameterized empty-array branch; `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` range and format diagnostics :: deterministic errors preserving the current workflow state. |
 | REQ-662 | `src/core/next-workflow.ts` :: `resolveNextWorkflowEntryIndex` :: mandatory integer ordinal selecting the one-based entry; empty arguments throw the mandatory-parameter diagnostic. |
 | REQ-738 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: editor delivery of the `formatNextWorkflowCommandTable(...)` output from `src/core/next-workflow.ts`. |
 | REQ-739 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: print-only path with no dispatch, workflow-state transition, notification, or array mutation. |
-| REQ-740 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch precedes terminal-state resynchronization plus the startability gate. |
+| REQ-740 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch precedes terminal-state resynchronization. |
 | REQ-741 | `src/index.ts` :: `continueCommandHandler` parameter-less print branch :: `NEXT_WORKFLOW_EMPTY_LIST_TEXT` from `src/core/next-workflow.ts` for an empty array. |
 | REQ-742 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES` plus `normalizeEnabledPiUsereqTools` :: default tuple enables every configurable custom tool and the absent-configuration fallback returns it; `src/index.ts` :: `applyConfiguredPiUsereqTools` :: persisted selections override only when present. |
 | REQ-663 | `src/index.ts` :: handler registrations (L3724, L3798, L3848, L4040) plus delegation (L3832-3842); `src/core/next-workflow.ts` :: `registerNextWorkflowCommandHandler` (L242-250) plus `resolveNextWorkflowCommandHandler` (L257-261) :: manual-invocation-equivalent dispatch. |
