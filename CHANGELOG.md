@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.17](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.17) - 2026-11-16
+## [0.109.18](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.18) - 2026-11-17
 ### ⛰️  Features
 - Update prompts.
 - Update prompts.
@@ -95,6 +95,38 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- reserve 5-column right margin in table width [useReq] *(next-workflow)*
+  REQ-749 now derives the Next-Workflow Text column wrap target as the pi CLI
+  terminal column count minus the other columns, row chrome, and a fixed
+  5-display-column right margin, so at equal console width the Next-Workflow
+  tables printed in the notification message and final-output render are
+  5 display columns narrower while staying left-aligned.
+  Implements the margin through new constant NEXT_WORKFLOW_TABLE_RIGHT_MARGIN_WIDTH
+  consumed by resolveNextWorkflowTextColumnTargetWidth; the fixed minimum 35
+  fallback and the table framing stay unchanged.
+  Updates the wrap-target and terminal-width conformance unit tests to the
+  margin-aware derivation and widens the fallback boundary coverage.
+- italicize single-quote spans with nested ANSI composition [useReq] *(agent-final-output)*
+  REQ-715 extended: single-quote-span elements join the ANSI colored markdown enumeration.; New REQ-763..REQ-767: italic single-quote spans, composed italic+code for nested inline code, apostrophe-boundary pairing, atomic protected spans, no non-code inline re-matching inside quotes.; AGENT_FINAL_OUTPUT_ANSI_PROTECTED_SPAN_PATTERN segments code and quote spans atomically; replaceAgentFinalOutputAnsiProtectedSpan and colorizeAgentFinalOutputQuotedSpan compose per-token SGR (ESC[3m text, ESC[3;36m code) so nested resets never end the italic region.; Shared colorizer applies the same styling to the Next-Workflow table (REQ-732).; WORKFLOW.md call-trace nodes updated; REFERENCES.md regenerated.; 4 new tests in tests/agent-final-output.test.ts; suite 15/15 pass; tsc and eslint clean.
+- make parameterized dispatch orchestration-transparent [useReq] *(req-continue)*
+  REQ-660 now mandates gate-free ordinal delegation from every workflow state: /req-continue applies no startability gate and performs no workflow-state transition or busy-state rejection of its own; the delegated command owns every gate, transition, and terminal outcome exactly like a manual user invocation (REQ-663, REQ-664). REQ-224 exempts parameterized req-continue from the busy-state rejection while delegated commands keep enforcing it. Persisted-terminal resynchronization is reframed as pre-delegation state observation for direct-invocation equivalence. Updated TST-218, evidence rows, WORKFLOW.md runtime model, and regenerated REFERENCES.md. Tests: req-continue suites 165/165 pass; full suite 573/574 with one pre-existing stale release-allowlist test contradicting CTN-021.
+- Auto-update pi CLI refs/docs without confirmation and commit sync [useReq] *(pi-cli-update-src-docs)*
+  REQ-388, REQ-389: print versions before the automatic gate and
+  synchronize without user confirmation when the stored source
+  version is unknown or strictly older than the latest pi CLI
+  release under version-sorted ordering.
+  REQ-757..REQ-762: exit 0 unchanged when not newer, abort outside a
+  git work tree, stage only the synchronized targets plus markers,
+  create exactly one change(pi-cli-src-docs-update) commit, skip it
+  on an empty staged diff, and abort non-zero on commit failure.
+  REQUIREMENTS.md: applied the requirement delta.
+- restrict auto-update to strictly newer versions [useReq] *(prompts-updater)*
+  REQUIREMENTS: REQ-398 now gates synchronization on the resolved latest
+  version being strictly greater than the stored version; REQ-751 skip
+  condition extended to versions lower than or equal to the stored one.
+  SOURCE: is_update_eligible() adds a strict string-inequality guard
+  before the sort -V sortedness check so equal versions skip the update;
+  header and skip-log wording updated to 'equal to or older'/'not newer'.
 - auto-update without confirmation and commit sync [useReq] *(prompts-updater)*
   REQUIREMENTS: REQ-397 prints versions before the gate decision; REQ-398
   now mandates automatic synchronization without confirmation; added
@@ -1676,7 +1708,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.17\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.17
+- \[0.109.18\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.18
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1785,4 +1817,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.17]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.17
+[0.109.18]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.18
