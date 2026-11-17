@@ -446,16 +446,16 @@ function isPiNotifyOutcomeEnabled(
 
 /**
  * @brief Detects whether one agent-end payload contains the requested stop reason.
- * @details Scans assistant messages only so prompt-end classification remains stable even when user or tool-result messages also appear in the payload. Runtime is O(m) in message count. No external state is mutated.
- * @param[in] messages {AgentEndEvent["messages"]} Agent-end message list.
+ * @details Scans assistant messages only so prompt-end classification remains stable even when user or tool-result messages also appear in the payload; one missing or non-array `messages` payload degrades to no detection instead of throwing so degenerate terminal events stay classifiable as `completed`. Runtime is O(m) in message count. No external state is mutated.
+ * @param[in] messages {AgentEndEvent["messages"] | undefined} Agent-end message list; `undefined` yields no detection.
  * @param[in] stopReason {"aborted" | "error"} Stop reason to detect.
  * @return {boolean} `true` when an assistant message carries the requested stop reason.
  */
 function hasAgentEndStopReason(
-  messages: AgentEndEvent["messages"],
+  messages: AgentEndEvent["messages"] | undefined,
   stopReason: "aborted" | "error",
 ): boolean {
-  return messages.some((message) =>
+  return (messages ?? []).some((message) =>
     typeof message === "object"
     && message !== null
     && (message as { role?: unknown }).role === "assistant"

@@ -200,9 +200,12 @@ import { resolvePromptCommandUserRequest } from "./core/prompt-command-args.js";
 import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./core/source-presence.js";
 import { resolveRuntimeGitPath } from "./core/runtime-project-paths.js";
 import {
+  clearPersistedPromptCommandFinalizationSnapshot,
   clearPersistedPromptCommandRuntimeState,
+  readPersistedPromptCommandFinalizationSnapshot,
   readPersistedPromptCommandRuntimeApi,
   readPersistedPromptCommandRuntimeState,
+  writePersistedPromptCommandFinalizationSnapshot,
   writePersistedPromptCommandRuntimeApi,
   writePersistedPromptCommandRuntimeState,
   type PersistedPromptCommandRuntimeApi,
@@ -1585,6 +1588,7 @@ async function finalizeMatchedPromptSuccess(
   statusController.state.pendingFinalizationReport = undefined;
   statusController.state.pendingPromptRequest = undefined;
   statusController.state.activePromptRequest = undefined;
+  clearPersistedPromptCommandFinalizationSnapshot();
   const terminalWorkflowState = finalization.errorMessage
     && (!finalization.cleanupSucceeded || !finalization.mergeSucceeded)
     ? "error" as const
@@ -1615,8 +1619,37 @@ async function finalizeMatchedPromptSuccess(
 }
 
 /**
+ * @brief Concatenates the text content blocks of one assistant message.
+ * @details Iterates the loosely-typed message content array, appends every `type === "text"` block carrying one string `text` field, and returns `undefined` when the message exposes no text block so callers can distinguish one text-less assistant message from one text-bearing message whose blocks concatenate to the empty string. Runtime is O(n) in block count. No external state is mutated.
+ * @param[in] message {unknown} Candidate assistant message with a loosely-typed `content` array.
+ * @return {string | undefined} Concatenated text blocks, or `undefined` when no text block exists.
+ */
+function concatenateAssistantTextBlocks(message: unknown): string | undefined {
+  if (typeof message !== "object" || message === null) {
+    return undefined;
+  }
+  const content = Array.isArray((message as { content?: unknown }).content)
+    ? (message as { content: unknown[] }).content
+    : [];
+  let output = "";
+  let sawTextBlock = false;
+  for (const block of content) {
+    if (
+      typeof block === "object"
+      && block !== null
+      && (block as { type?: unknown }).type === "text"
+      && typeof (block as { text?: unknown }).text === "string"
+    ) {
+      sawTextBlock = true;
+      output += (block as { text: string }).text;
+    }
+  }
+  return sawTextBlock ? output : undefined;
+}
+
+/**
  * @brief Extracts the final agent output text for prompt-end `%%OUTPUT%%` substitution.
- * @details Scans the `agent_end` payload messages backwards for the last assistant message and concatenates its `type === "text"` content blocks while skipping `thinking` and tool-call blocks, returning the empty string for non-agent payloads and for last assistant messages without text blocks so non-agentic command notifications never substitute stale output. Runtime is O(m + n) in message and text-block count. No external state is mutated.
+ * @details Scans the `agent_end` payload messages backwards for the last assistant message and returns the concatenation of its `type === "text"` content blocks through the shared concatenation helper, returning the empty string for non-agent payloads, missing or non-array `messages`, and last assistant messages without text blocks so non-agentic command notifications never substitute stale output. The helper returns `undefined` for one text-less last assistant message and this function degrades it to the empty string, preserving the strict last-assistant-message contract. Runtime is O(m + n) in message and text-block count. No external state is mutated.
  * @param[in] event {unknown} Raw `agent_end` lifecycle event payload.
  * @return {string} Concatenated final assistant text blocks, or the empty string when unavailable.
  * @satisfies REQ-443, REQ-444
@@ -1627,23 +1660,44 @@ function buildAgentEndOutputText(event: unknown): string {
     return "";
   }
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index] as { role?: unknown; content?: unknown } | undefined;
-    if (typeof message !== "object" || message === null || message.role !== "assistant") {
+    const message = messages[index] as { role?: unknown } | undefined;
+    if (
+      typeof message !== "object"
+      || message === null
+      || (message as { role?: unknown }).role !== "assistant"
+    ) {
       continue;
     }
-    const content = Array.isArray(message.content) ? message.content : [];
-    let output = "";
-    for (const block of content) {
-      if (
-        typeof block === "object"
-        && block !== null
-        && (block as { type?: unknown }).type === "text"
-        && typeof (block as { text?: unknown }).text === "string"
-      ) {
-        output += (block as { text: string }).text;
-      }
+    return concatenateAssistantTextBlocks(message) ?? "";
+  }
+  return "";
+}
+
+/**
+ * @brief Extracts the final-output inspection text of the terminal `agent_end` payload.
+ * @details Scans the `agent_end` payload messages backwards for the latest assistant message that exposes at least one `type === "text"` content block and returns the concatenation of its text blocks, so one final-output JSON delivered in an earlier assistant message of the same run is still parsed, captured, and reported when the terminal assistant message carries only non-text blocks such as `thinking`. Degrades to the empty string for non-agent payloads, missing or non-array `messages`, and runs whose assistant messages expose no text block at all, so the merge gate keeps treating those terminals as text-less. Unlike `buildAgentEndOutputText(...)`, this helper skips text-less trailing assistant messages and never changes the `%%OUTPUT%%` last-assistant-message contract. Runtime is O(m + n) in message and text-block count. No external state is mutated.
+ * @param[in] event {unknown} Raw `agent_end` lifecycle event payload.
+ * @return {string} Concatenated text blocks of the latest text-bearing assistant message, or the empty string when none exists.
+ * @satisfies REQ-653, REQ-654
+ */
+function buildAgentFinalOutputInspectionText(event: unknown): string {
+  const messages = (event as { messages?: unknown } | undefined)?.messages;
+  if (!Array.isArray(messages)) {
+    return "";
+  }
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index] as { role?: unknown } | undefined;
+    if (
+      typeof message !== "object"
+      || message === null
+      || (message as { role?: unknown }).role !== "assistant"
+    ) {
+      continue;
     }
-    return output;
+    const inspectionText = concatenateAssistantTextBlocks(message);
+    if (inspectionText !== undefined) {
+      return inspectionText;
+    }
   }
   return "";
 }
@@ -1803,6 +1857,12 @@ async function handleExtensionStatusEvent(
   }
   if (hookName === "agent_end") {
     const agentEndOutputText = buildAgentEndOutputText(event);
+    // Final-output inspection uses the latest text-bearing assistant message so one
+    // final-output JSON delivered before a text-less terminal assistant message is still
+    // parsed, captured, and reported (REQ-653/REQ-654), while `%%OUTPUT%%` substitution and
+    // the REQ-589 empty-text merge-eligibility shortcut keep consuming the strict
+    // last-assistant-message text above (REQ-443/REQ-444).
+    const finalOutputInspectionText = buildAgentFinalOutputInspectionText(event);
     if (statusController.config) {
       // Prompt-end effects are gated on post-update run association, not on UI-timer presence:
       // `updateExtensionStatus(...)` resolves the ended run's own duration (recovering the
@@ -1843,7 +1903,7 @@ async function handleExtensionStatusEvent(
       const outcome = classifyPromptCommandOutcome(
         event as { messages: AgentEndEvent["messages"] },
       );
-      const finalOutputParse = parseAgentFinalOutput(agentEndOutputText);
+      const finalOutputParse = parseAgentFinalOutput(finalOutputInspectionText);
       const statusMarker = resolvePromptCommandMergeGate(agentEndOutputText, finalOutputParse);
       if (outcome === "completed" && finalOutputParse.ok) {
         // Stage A (REQ-653/REQ-654/REQ-655/REQ-656/REQ-681): capture the final-output report and
@@ -1910,6 +1970,17 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationStatusMarker = statusMarker;
         statusController.state.pendingFinalizationBlockedMessage = finalOutputBlockedMessage;
         statusController.state.pendingFinalizationReport = finalOutputParse.ok ? finalOutputParse.report : undefined;
+        // `agent_settled` carries no messages payload, so the recorded terminal facts must
+        // also reach the process-scoped store: one extension rebind between the final
+        // `agent_end` and settlement loses the in-memory `pendingFinalization*` fields, and
+        // the rebound runtime recovers them from this execution-session-keyed snapshot.
+        writePersistedPromptCommandFinalizationSnapshot({
+          executionSessionFile: completionPromptRequest.executionSessionFile,
+          outcome,
+          statusMarker,
+          blockedMessage: finalOutputBlockedMessage,
+          report: finalOutputParse.ok ? finalOutputParse.report : undefined,
+        });
       } else if (shouldFinalizeMatchedSuccess) {
         // Legacy hosts never emit `agent_settled`, so no idle-waiting
         // `switchSession` deadlock exists; finalize the matched success
@@ -1944,6 +2015,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationOutcome = undefined;
         statusController.state.pendingFinalizationStatusMarker = undefined;
         statusController.state.pendingFinalizationBlockedMessage = undefined;
+        clearPersistedPromptCommandFinalizationSnapshot();
         if (debugConfig) {
           transitionPromptWorkflowState(
             statusController,
@@ -2013,6 +2085,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationStatusMarker = undefined;
         statusController.state.pendingFinalizationBlockedMessage = undefined;
         statusController.state.pendingFinalizationReport = undefined;
+        clearPersistedPromptCommandFinalizationSnapshot();
         const terminalWorkflowState = outcome === "completed" ? "done" as const : "error" as const;
         if (debugConfig) {
           transitionPromptWorkflowState(
@@ -2034,6 +2107,27 @@ async function handleExtensionStatusEvent(
   }
   if (hookName === "agent_settled") {
     const settledPromptRequest = statusController.state.activePromptRequest;
+    if (
+      settledPromptRequest !== undefined
+      && settledPromptRequest.worktreeDir !== undefined
+      && statusController.state.pendingFinalizationOutcome === undefined
+    ) {
+      // Rebind recovery: `agent_settled` carries no messages payload, so one extension
+      // rebind between the final `agent_end` and settlement leaves the restored controller
+      // without the in-memory `pendingFinalization*` facts. Adopt the process-scoped
+      // snapshot recorded at the final `agent_end` when its execution-session identity
+      // matches the restored active prompt request, so settlement still determines the
+      // terminal outcome instead of leaving the orchestration `running` forever.
+      const recoveredFinalization = readPersistedPromptCommandFinalizationSnapshot(
+        settledPromptRequest.executionSessionFile,
+      );
+      if (recoveredFinalization !== undefined) {
+        statusController.state.pendingFinalizationOutcome = recoveredFinalization.outcome;
+        statusController.state.pendingFinalizationStatusMarker = recoveredFinalization.statusMarker;
+        statusController.state.pendingFinalizationBlockedMessage = recoveredFinalization.blockedMessage;
+        statusController.state.pendingFinalizationReport = recoveredFinalization.report;
+      }
+    }
     const pendingOutcome = statusController.state.pendingFinalizationOutcome;
     const pendingStatusMarker = statusController.state.pendingFinalizationStatusMarker;
     if (
@@ -2078,6 +2172,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationStatusMarker = undefined;
         statusController.state.pendingFinalizationBlockedMessage = undefined;
         statusController.state.pendingFinalizationReport = undefined;
+        clearPersistedPromptCommandFinalizationSnapshot();
         const settledDebugConfig = statusController.config;
         if (settledDebugConfig) {
           transitionPromptWorkflowState(
@@ -2109,6 +2204,7 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationStatusMarker = undefined;
         statusController.state.pendingFinalizationBlockedMessage = undefined;
         statusController.state.pendingFinalizationReport = undefined;
+        clearPersistedPromptCommandFinalizationSnapshot();
         const settledDebugConfig = statusController.config;
         if (settledDebugConfig) {
           transitionPromptWorkflowState(

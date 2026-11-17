@@ -18,6 +18,7 @@ import type { UseReqConfig } from "./config.js";
 import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
 import type { PromptCommandExecutionPlan, PromptCommandStatusMarker } from "./prompt-command-runtime.js";
 import {
+  clearPersistedPromptCommandFinalizationSnapshot,
   readPersistedPromptCommandTerminalState,
   restorePersistedPromptCommandRuntimeStateForSession,
   writePersistedPromptCommandRuntimeState,
@@ -1017,6 +1018,13 @@ export function updateExtensionStatus(
       controller.state.pendingFinalizationBlockedMessage = undefined;
       controller.state.pendingFinalizationReport = undefined;
     }
+    if (shouldResetWorkflowState) {
+      // The persisted finalization snapshot shares the process-lifetime semantics of the
+      // captured Next-Workflow array: only the idle-reset bootstrap boundaries drop it, so
+      // one extension rebind between the final `agent_end` and `agent_settled` can still
+      // recover the recorded terminal facts after the prompt-state restore below.
+      clearPersistedPromptCommandFinalizationSnapshot();
+    }
   }
 
   restorePersistedPromptCommandState(controller.state, currentSessionFile);
@@ -1105,6 +1113,7 @@ export function updateExtensionStatus(
       controller.state.pendingFinalizationStatusMarker = undefined;
       controller.state.pendingFinalizationBlockedMessage = undefined;
       controller.state.pendingFinalizationReport = undefined;
+      clearPersistedPromptCommandFinalizationSnapshot();
       if (
         controller.state.workflowState === "checking"
         || controller.state.workflowState === "running"

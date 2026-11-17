@@ -5,7 +5,12 @@
  */
 
 import path from "node:path";
-import type { PromptCommandExecutionPlan } from "./prompt-command-runtime.js";
+import type { AgentFinalOutputReport } from "./agent-final-output.js";
+import type { PiNotifyOutcome } from "./pi-notify.js";
+import type {
+  PromptCommandExecutionPlan,
+  PromptCommandStatusMarker,
+} from "./prompt-command-runtime.js";
 
 /**
  * @brief Represents the workflow-state domain persisted across session rebinding.
@@ -236,6 +241,93 @@ export function readPersistedPromptCommandTerminalState():
     workflowState: persistedState.workflowState,
     workflowRequest: persistedState.workflowRequest,
   };
+}
+
+/**
+ * @brief Describes the deferred terminal finalization facts persisted across extension rebinding.
+ * @details Stores the terminal `agent_end` outcome, the inspected merge-gate marker, the blocked-gate diagnostic, the parsed final-output report, and the owning execution-session file so one rebound extension runtime whose in-memory controller lost the `pendingFinalization*` fields can still determine the terminal prompt-orchestration outcome at `agent_settled`. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-463, REQ-464
+ */
+export interface PersistedPromptCommandFinalizationSnapshot {
+  /** Execution-session file whose active prompt run owns the recorded terminal facts. */
+  executionSessionFile: string;
+  /** Terminal outcome of the recorded final `agent_end` event. */
+  outcome: PiNotifyOutcome;
+  /** Inspected merge-gate marker of the recorded final `agent_end` event. */
+  statusMarker: PromptCommandStatusMarker;
+  /** Blocked-gate diagnostic recorded for non-`ok` markers; `undefined` for the `ok` marker. */
+  blockedMessage: string | undefined;
+  /** Parsed final-output report of the recorded terminal output; `undefined` for invalid parses. */
+  report: AgentFinalOutputReport | undefined;
+}
+
+/**
+ * @brief Defines the global property used for deferred finalization persistence.
+ * @details The property lives on `globalThis` because `agent_settled` carries no messages payload, so the terminal facts recorded at the final `agent_end` must survive an extension rebind in the same pi host process to remain consumable at settlement. Access complexity is O(1).
+ */
+const PI_USEREQ_PROMPT_COMMAND_FINALIZATION_KEY = "__piUsereqPromptCommandFinalizationSnapshot";
+
+/**
+ * @brief Returns the process-scoped deferred finalization snapshot store.
+ * @details Lazily exposes one `globalThis` record holding at most the latest final `agent_end` terminal facts because only one worktree-backed prompt orchestration can be in flight per pi host process. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @return {PersistedPromptCommandFinalizationSnapshot | undefined} Mutable snapshot record, or `undefined` when no snapshot is stored.
+ */
+function getPersistedPromptCommandFinalizationStore(): PersistedPromptCommandFinalizationSnapshot | undefined {
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPromptCommandFinalizationSnapshot?: PersistedPromptCommandFinalizationSnapshot | undefined;
+  };
+  return globalState[PI_USEREQ_PROMPT_COMMAND_FINALIZATION_KEY];
+}
+
+/**
+ * @brief Records the deferred terminal finalization facts of the final `agent_end` event.
+ * @details Writes the supplied snapshot into the process-scoped store, resolving the owning execution-session file to an absolute path so one rebound runtime can match the snapshot identity against its restored active prompt request. Called only on the settle-deferred path where the terminal workflow-state transition belongs to `agent_settled`. Runtime is O(p) in path length. Side effect: mutates process-scoped state.
+ * @param[in] snapshot {PersistedPromptCommandFinalizationSnapshot} Terminal facts recorded at the final `agent_end` of one worktree-backed run.
+ * @return {void} No return value.
+ * @satisfies REQ-463, REQ-464
+ */
+export function writePersistedPromptCommandFinalizationSnapshot(
+  snapshot: PersistedPromptCommandFinalizationSnapshot,
+): void {
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPromptCommandFinalizationSnapshot?: PersistedPromptCommandFinalizationSnapshot | undefined;
+  };
+  globalState[PI_USEREQ_PROMPT_COMMAND_FINALIZATION_KEY] = {
+    ...snapshot,
+    executionSessionFile: path.resolve(snapshot.executionSessionFile),
+  };
+}
+
+/**
+ * @brief Reads the persisted finalization snapshot owned by one execution-session file.
+ * @details Returns the stored snapshot only when the supplied execution-session file resolves to the same absolute path as the stored owner, so stale snapshots of earlier orchestrations can never leak into a later `agent_settled` handling. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] executionSessionFile {string | undefined} Candidate execution-session file of the restored active prompt request.
+ * @return {PersistedPromptCommandFinalizationSnapshot | undefined} Matching snapshot, or `undefined` when none is stored or the identity does not match.
+ * @satisfies REQ-463, REQ-464
+ */
+export function readPersistedPromptCommandFinalizationSnapshot(
+  executionSessionFile: string | undefined,
+): PersistedPromptCommandFinalizationSnapshot | undefined {
+  if (typeof executionSessionFile !== "string" || executionSessionFile === "") {
+    return undefined;
+  }
+  const snapshot = getPersistedPromptCommandFinalizationStore();
+  return snapshot !== undefined
+    && path.resolve(snapshot.executionSessionFile) === path.resolve(executionSessionFile)
+    ? snapshot
+    : undefined;
+}
+
+/**
+ * @brief Clears the persisted deferred finalization snapshot.
+ * @details Removes the stored terminal facts so a later `agent_settled` event can never adopt a finalized orchestration's outcome; every path that clears the in-memory `pendingFinalization*` fields or crosses an idle-reset boundary must clear this snapshot too. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @return {void} No return value.
+ */
+export function clearPersistedPromptCommandFinalizationSnapshot(): void {
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPromptCommandFinalizationSnapshot?: PersistedPromptCommandFinalizationSnapshot | undefined;
+  };
+  globalState[PI_USEREQ_PROMPT_COMMAND_FINALIZATION_KEY] = undefined;
 }
 
 /**

@@ -85,6 +85,7 @@ import {
   type PromptCommandExecutionPlan,
 } from "../src/core/prompt-command-runtime.js";
 import {
+  clearPersistedPromptCommandFinalizationSnapshot,
   clearPersistedPromptCommandRuntimeState,
   readPersistedPromptCommandSessionContext,
   writePersistedPromptCommandRuntimeState,
@@ -106,6 +107,7 @@ import { showPiUsereqSettingsMenu } from "../src/core/settings-menu.js";
 import { getSupportedStaticCheckLanguageSupport } from "../src/core/static-check.js";
 import {
   captureAgentFinalOutputReport,
+  getCapturedAgentFinalOutputReport,
   parseAgentFinalOutput,
 } from "../src/core/agent-final-output.js";
 import {
@@ -9743,6 +9745,7 @@ async function startStatusMarkerClosureRun(worktreeFileName: string): Promise<St
     cleanup(): void {
       process.chdir(previousCwd);
       clearPersistedPromptCommandRuntimeState();
+      clearPersistedPromptCommandFinalizationSnapshot();
       fs.rmSync(projectBase, { recursive: true, force: true });
       fs.rmSync(executionBasePath, { recursive: true, force: true });
     },
@@ -10042,6 +10045,151 @@ test("status-marker closure inspects only the final assistant message of the ter
       run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
       "expected an earlier-message final-output JSON to remain uninspected",
     );
+  } finally {
+    run.cleanup();
+  }
+});
+
+/**
+ * @brief Verifies the closure consumes a final-output JSON delivered before a thinking-only terminal assistant message.
+ * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose earlier assistant message carries one valid final-output JSON with `result` `ok` plus one `next_commands` entry while the terminal assistant message exposes only a `thinking` content block, and settles the orchestration. The test proves the final-output inspection falls back to the latest text-bearing assistant message of the run so the parsed report and the Next-Workflow commands are captured (REQ-653, REQ-654) while the empty terminal-message text keeps the run merge-eligible (REQ-589): closure merges from restored `base-path`, deletes the worktree plus branch, renders workflow state `done`, and the captured array plus captured report expose the earlier JSON payload. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation, temporary session-file writes, and process-scoped capture mutation.
+ * @return {Promise<void>} Promise resolved after capture and merge assertions complete.
+ * @throws {AssertionError} Throws when the thinking-only terminal message discards the earlier final-output JSON or blocks the merge.
+ * @satisfies REQ-653, REQ-654, REQ-589
+ */
+test("status-marker closure captures the earlier final-output JSON when the terminal assistant message is thinking-only", async () => {
+  resetNextWorkflowStateForTests();
+  const run = await startStatusMarkerClosureRun("status-earlier-json.ts");
+  try {
+    await run.emitAgentEnd([
+      {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{
+          type: "text",
+          text: buildFinalOutputText("Delivered before the thinking-only terminal message.", [
+            { command: "req-fix", text: "Repair the occupancy alert threshold helper" },
+          ]),
+        }],
+      },
+      {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "thinking", thinking: "final internal reasoning without report text" }],
+      },
+    ]);
+    await run.pi.emit("agent_settled", {}, run.eventCtx);
+
+    assert.equal(process.cwd(), run.projectBase);
+    assert.ok(fs.existsSync(path.join(run.projectBase, "src", "status-earlier-json.ts")));
+    assert.equal(fs.existsSync(run.executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${run.worktreeName}`], {
+        cwd: run.projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
+      "expected a rendered done workflow state after the thinking-only terminal message closure",
+    );
+    const capturedCommands = getNextWorkflowCommands();
+    assert.equal(capturedCommands.length, 1, "expected the earlier final-output JSON next_commands entry to be captured");
+    assert.equal(capturedCommands[0]?.command, "req-fix");
+    assert.equal(capturedCommands[0]?.inputText, "Repair the occupancy alert threshold helper");
+    assert.equal(
+      getCapturedAgentFinalOutputReport()?.summary,
+      "Delivered before the thinking-only terminal message.",
+      "expected the earlier final-output JSON report to be captured",
+    );
+  } finally {
+    run.cleanup();
+  }
+});
+
+/**
+ * @brief Verifies a terminal `agent_end` payload without a `messages` array stays merge-eligible.
+ * @details Starts one worktree-backed `req-change` execution and emits an `agent_end` payload that omits the `messages` array entirely, then settles the orchestration. The test proves the missing array degrades to empty inspected text without throwing: outcome classification treats the payload as `completed`, the empty text keeps the run merge-eligible (REQ-589), `%%OUTPUT%%` resolves to the empty string (REQ-444), closure merges from restored `base-path`, deletes the worktree plus branch, renders workflow state `done`, and no final-output report or Next-Workflow command is captured. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after merge-eligibility assertions complete.
+ * @throws {AssertionError} Throws when the missing `messages` array aborts closure handling or captures stale state.
+ * @satisfies REQ-444, REQ-589
+ */
+test("status-marker closure stays merge-eligible when the agent_end payload carries no messages array", async () => {
+  resetNextWorkflowStateForTests();
+  const run = await startStatusMarkerClosureRun("status-no-messages.ts");
+  try {
+    await run.pi.emit("agent_end", {}, run.eventCtx);
+    await run.pi.emit("agent_settled", {}, run.eventCtx);
+
+    assert.equal(process.cwd(), run.projectBase);
+    assert.ok(fs.existsSync(path.join(run.projectBase, "src", "status-no-messages.ts")));
+    assert.equal(fs.existsSync(run.executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${run.worktreeName}`], {
+        cwd: run.projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
+      "expected a rendered done workflow state for a messages-less terminal payload",
+    );
+    assert.equal(getNextWorkflowCommands().length, 0, "expected no captured Next-Workflow command");
+    assert.equal(getCapturedAgentFinalOutputReport(), undefined, "expected no captured final-output report");
+  } finally {
+    run.cleanup();
+  }
+});
+
+/**
+ * @brief Verifies `agent_settled` closure recovers finalization state lost to extension rebinding.
+ * @details Starts one worktree-backed `req-change` execution, emits a `result` `ok` terminal `agent_end` on the originating runtime, then simulates the pi extension rebind by activating the extension on one fresh fake runtime whose in-memory controller starts empty while the process-scoped persistence survives, emits `session_start` with reason `fork` bound to the execution session so prompt-command state is restored, and settles the orchestration on the rebound runtime. The test proves the settle handler recovers the persisted finalization snapshot keyed by the execution-session file, so closure transitions through `merging` into the merge-and-delete finalization, restores `base-path`, deletes the worktree plus branch, and renders workflow state `done` even though the in-memory `pendingFinalization*` fields were lost. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation, temporary session-file writes, and process-scoped persistence mutation.
+ * @return {Promise<void>} Promise resolved after rebound closure assertions complete.
+ * @throws {AssertionError} Throws when the rebound `agent_settled` handling skips closure or leaves the workflow `running`.
+ * @satisfies REQ-279, REQ-463, REQ-464
+ */
+test("agent_settled closure recovers finalization state lost to extension rebinding", async () => {
+  resetNextWorkflowStateForTests();
+  const run = await startStatusMarkerClosureRun("status-rebound.ts");
+  try {
+    await run.emitAgentEnd([
+      {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "text", text: buildFinalOutputText("Rebound finalization.") }],
+      },
+    ]);
+
+    const reboundPi = createFakePi();
+    piUsereqExtension(reboundPi);
+    const reboundCtx = createFakeCtx(run.executionBasePath);
+    const executionSessionFile = run.commandCtx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+    reboundCtx.sessionManager.getSessionFile = () => executionSessionFile;
+    reboundCtx.sessionManager.getSessionDir = () => path.dirname(executionSessionFile);
+    reboundCtx.sessionManager.getCwd = () => run.executionBasePath;
+    reboundCtx.cwd = run.executionBasePath;
+    delete reboundCtx.switchSession;
+    await reboundPi.emit("session_start", { reason: "fork", previousSessionFile: executionSessionFile }, reboundCtx);
+    await reboundPi.emit("agent_settled", {}, reboundCtx);
+
+    assert.equal(process.cwd(), run.projectBase);
+    assert.ok(fs.existsSync(path.join(run.projectBase, "src", "status-rebound.ts")));
+    assert.equal(fs.existsSync(run.executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${run.worktreeName}`], {
+        cwd: run.projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("done", "change"))),
+      "expected the rebound runtime closure to render the done workflow state",
+    );
+    assert.equal(reboundCtx.__state.notifications.filter((entry: { level: string }) => entry.level === "error").length, 0);
   } finally {
     run.cleanup();
   }
