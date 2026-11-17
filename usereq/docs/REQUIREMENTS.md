@@ -131,6 +131,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-043**: MUST implement `--write-config` absent-default materialization plus absence-preserving `--set`/`--unset` write pruning in `src/core/config-cli.ts` reusing schema-projected defaults from `src/core/config-cli-schema.ts`.
 - **DES-044**: MUST implement JSON parsing, verdict rendering, and file-based validation in one dedicated `src/core/result-json-validator.ts` module outside `src/index.ts` business logic.
 - **DES-045**: MUST implement the pi CLI `extensionChangelogVersions` key migration helper in `src/core/package-manager.ts` with injectable settings readers and writers outside `src/cli.ts` dispatch logic.
+- **DES-046**: MUST implement the configuration-menu occupancy-suffix alert coloring as one shared threshold helper in `src/core/context-file-size.ts` consuming the occupancy facts and reused by both configuration-menu renderers.
 
 ### 3.2 Functions
 - **REQ-001**: MUST access bundled prompts, git execution instructions, templates, and guidelines from `<installation-path>/resources` without requiring user-home resource copies before prompt or tool execution.
@@ -843,6 +844,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-748**: MUST restrict the extension-changelog version-key migration to develop-channel `--upgrade` runs and MUST NOT read or write pi CLI settings during default-channel `--upgrade` runs.
 - **REQ-749**: MUST derive the Next-Workflow `Text` column wrap target as the pi CLI terminal column count minus the other columns, row chrome, and a 5-display-column right margin whenever that value reaches the fixed minimum.
 - **REQ-750**: MUST fall back the Next-Workflow `Text` column wrap target to the fixed minimum 35 display columns whenever the derived target is unavailable or below the minimum.
+- **REQ-768**: MUST render the top-level `Context Files` summary occupancy suffix with intense-red ANSI styling when its displayed one-decimal percentage exceeds 80, and without styling otherwise.
+- **REQ-769**: MUST render each `Context Files` submenu row occupancy suffix with intense-red ANSI styling when that row's displayed one-decimal percentage exceeds 80, and without styling otherwise.
+- **REQ-770**: MUST keep the occupancy suffix text unstyled on the command invocation summary and early-check diagnostic surfaces regardless of the percentage value.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1077,6 +1081,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-238**: MUST verify develop-channel `--upgrade` migrates the recorded extension-changelog version from the previous same-identity git-tagged key to the new tagged key, performs no migration without a recorded version, and preserves old entries.
 - **TST-239**: MUST verify migration read or write failures leave the `--upgrade` exit code and summary unchanged and preserve every other `<agent-dir>/settings.json` field.
 - **TST-240**: MUST verify default-channel `--upgrade` reads and writes no pi CLI settings and develop-channel source-switch runs perform the changelog-key migration.
+- **TST-241**: MUST verify occupancy facts expose the displayed numeric percentage with the suffix text unchanged for known and fallback bases.
+- **TST-242**: MUST verify the shared menu suffix helper returns the plain suffix at or below 80 displayed percent and the intense-red-wrapped suffix above 80 for both basis variants.
 
 ## 5. Observed Component Model
 
@@ -1251,6 +1257,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-039 | `src/core/source-presence.ts` :: `hasAnalyzableSourceFiles(...)` and `writeNoSourcePlaceholderDocument(...)` :: git-inventory detection plus no-source placeholder rendering reused by `req-references` and `req-workflow`. |
 | DES-040 | `src/core/next-workflow.ts` :: `captureNextWorkflowCommands`, `formatNextWorkflowCommandTable`, `resolveNextWorkflowEntryIndex`, and the handler registry :: one dedicated Next-Workflow module outside `src/index.ts` business logic. |
 | DES-042 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput`, `renderAgentFinalOutputMarkdownReport`, and the process-scoped report store :: one dedicated module implementing final-output JSON parsing, validation, report rendering, and capture outside `src/index.ts` business logic. |
+| DES-046 | `src/core/context-file-size.ts` :: `CONTEXT_OCCUPANCY_MENU_ALERT_THRESHOLD_PERCENT` and `formatConfigMenuContextOccupancySuffix` :: one shared alert-threshold helper consuming the occupancy facts and reused by both configuration-menu renderers. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -1478,6 +1485,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-698 | `src/core/static-check.ts` :: `buildStaticCheckDirScanExclusionArgs` :: `cppcheck -i`, `ruff --exclude`, `eslint --ignore-pattern` fixture-root exclusion. |
 | REQ-699 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: `scan-by-dir: true` on `cppcheck`, `ruff`, `eslint` defaults. |
 | REQ-700 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: explicit-file dispatch without directory-scan branching. |
+| REQ-768 | `src/index.ts` :: `formatContextFilesSummary` :: appends the shared-helper occupancy suffix so the top-level `Context Files` summary value wraps the suffix in intense-red ANSI styling exactly above 80 displayed percent. |
+| REQ-769 | `src/index.ts` :: `buildContextFilesMenuChoices` :: builds every submenu row value through the shared-helper occupancy suffix so each row wraps its suffix in intense-red ANSI styling exactly above 80 displayed percent. |
+| REQ-770 | `src/core/prompts.ts` :: `renderPromptCommandSummary` and `src/core/context-file-size.ts` :: `enforceContextOccupancyLimit` :: keep appending the plain unstyled `ContextOccupancyFacts.suffix` on non-menu surfaces. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1565,6 +1575,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-736 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_CUSTOM_TOOL_NAMES` :: declares exactly the twelve `req-`-prefixed configurable custom-tool names. |
 | REQ-737 | `src/index.ts` :: `registerAgentTools` plus `registerReqReferencesCommand` :: `req-references` exists once as agent tool and once as slash command in separate registries. |
 | TST-234 | `tests/extension-registration.test.ts` :: `extension registers prompt and config commands while exposing tool capabilities only as tools` validates the `req-`-prefixed tool registration set and the absence of un-prefixed legacy tool names. |
+| TST-241 | `tests/context-occupancy-menu.test.ts` :: occupancy-facts tests :: numeric displayed percentage exposure with unchanged suffix text for known and fallback bases. |
+| TST-242 | `tests/context-occupancy-menu.test.ts` :: shared-helper threshold tests :: plain suffix at or below 80 displayed percent and exact intense-red-wrapped suffix above 80 for both basis variants. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

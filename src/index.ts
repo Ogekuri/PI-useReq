@@ -99,6 +99,7 @@ import {
 } from "./core/pi-usereq-tools.js";
 import {
   computeContextOccupancyFacts,
+  formatConfigMenuContextOccupancySuffix,
   formatContextFileSize,
   measureContextFileSizes,
   measureContextFileSizesAsync,
@@ -5224,12 +5225,12 @@ async function configureStaticCheckMenu(
 
 /**
  * @brief Summarizes the `Context Files` flag state with measured sizes and context occupancy for the top-level menu value column.
- * @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
+ * @details Renders the three context-file flags as compact `name:on|off` segments in the documented order, appending `(<chars>c/<tokens>t)` measured size facts to every enabled segment, then appends the occupancy suffix computed from the enabled existing token total against the selected model max input context (`[<percent>% context]`, or `[<percent>%/1.0M* context]` with the documented fallback) whenever that total contributes tokens, wrapping the unchanged suffix in intense-red ANSI styling through the shared threshold helper when the displayed percentage exceeds the documented 80-percent menu alert threshold, while disabled segments stay plain `name:off`. Runtime is O(1) in segment count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
  * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the documented 1,000,000-token fallback.
- * @return {string} Compact `Context Files` summary string with the occupancy suffix.
- * @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405
+ * @return {string} Compact `Context Files` summary string with the threshold-styled occupancy suffix.
+ * @satisfies REQ-327, REQ-376, REQ-402, REQ-403, REQ-404, REQ-405, REQ-768
  */
 function formatContextFilesSummary(
   config: UseReqConfig,
@@ -5244,18 +5245,18 @@ function formatContextFilesSummary(
   const summary = segments.join(" \u2022 ");
   const totalTokens = sumEnabledContextFileTokens(config, sizes);
   return totalTokens > 0
-    ? `${summary} ${computeContextOccupancyFacts(totalTokens, maxContextTokens).suffix}`
+    ? `${summary} ${formatConfigMenuContextOccupancySuffix(computeContextOccupancyFacts(totalTokens, maxContextTokens))}`
     : summary;
 }
 
 /**
  * @brief Builds the shared settings-menu choices for the `Context Files` submenu.
- * @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
+ * @details Exposes one inline toggle row per context file in the documented `REQUIREMENTS.md`, `REFERENCES.md`, `WORKFLOW.md` order whose value renders `on|off • <chars>c/<tokens>t` measured size facts plus a per-file context-occupancy suffix computed from that row's measured token count against the selected model max input context (or the documented 1,000,000-token fallback), omitted for rows whose measured token count is zero, with the suffix wrapped in intense-red ANSI styling through the shared threshold helper when that row's displayed percentage exceeds the documented 80-percent menu alert threshold, followed by a value-less subtree-local `Reset defaults` row. Cycle values embed the same measured facts and per-file occupancy suffix so inline toggling keeps the size estimate visible while persisting the on|off state. Runtime is O(1) in row count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] sizes {Record<ContextFileName, ContextFileSizeFacts>} Measured context-file size facts keyed by canonical file name.
  * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the documented 1,000,000-token fallback.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered `Context Files` submenu choices.
- * @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412
+ * @satisfies REQ-327, REQ-328, REQ-333, REQ-375, REQ-403, REQ-404, REQ-406, REQ-412, REQ-769
  */
 function buildContextFilesMenuChoices(
   config: UseReqConfig,
@@ -5268,7 +5269,7 @@ function buildContextFilesMenuChoices(
     description: string,
   ): PiUsereqSettingsMenuChoice => {
     const occupancySuffix = sizes[fileName].tokens > 0
-      ? ` ${computeContextOccupancyFacts(sizes[fileName].tokens, maxContextTokens).suffix}`
+      ? ` ${formatConfigMenuContextOccupancySuffix(computeContextOccupancyFacts(sizes[fileName].tokens, maxContextTokens))}`
       : "";
     const sizedOn = `on \u2022 ${formatContextFileSize(sizes[fileName])}${occupancySuffix}`;
     const sizedOff = `off \u2022 ${formatContextFileSize(sizes[fileName])}${occupancySuffix}`;

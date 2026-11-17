@@ -9,6 +9,7 @@ import path from "node:path";
 import { DEFAULT_DOCS_DIR, type UseReqConfig } from "./config.js";
 import { normalizeRelativeDirContract } from "./path-context.js";
 import { countTextTokensAndChars, prewarmTokenCounterEncoder } from "./token-counter.js";
+import { ANSI_INTENSE_RED, wrapAnsiStyle } from "./ansi-style.js";
 import { ReqError } from "./errors.js";
 
 /**
@@ -286,17 +287,25 @@ const CONTEXT_FILE_FLAG_KEYS: Record<ContextFileName, "context-files-requirement
 
 /**
  * @brief Describes the computed context-occupancy facts of one enabled context-file set.
- * @details Stores the aggregate token total, the resolved selected-model max input context (undefined when unknown), the effective basis tokens used for the percentage, the rendered percentage label, the rendered max-context label, and the final bracketed occupancy suffix. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the aggregate token total, the resolved selected-model max input context (undefined when unknown), the effective basis tokens used for the percentage, the numeric displayed percentage value, the rendered percentage label, the rendered max-context label, and the final bracketed occupancy suffix. The interface is compile-time only and introduces no runtime cost.
  * @satisfies REQ-400
  */
 export interface ContextOccupancyFacts {
   readonly totalTokens: number;
   readonly maxContextTokens: number | undefined;
   readonly basisTokens: number;
+  readonly percent: number;
   readonly percentLabel: string;
   readonly maxLabel: string;
   readonly suffix: string;
 }
+
+/**
+ * @brief Bounds the displayed occupancy percentage above which configuration-menu suffixes render in alert color.
+ * @details The strict threshold compared against the displayed one-decimal percentage: suffixes at or below 80 percent stay unstyled while suffixes above 80 percent wrap in the documented intense-red ANSI styling. Lookup complexity is O(1).
+ * @satisfies REQ-768, REQ-769
+ */
+export const CONTEXT_OCCUPANCY_MENU_ALERT_THRESHOLD_PERCENT = 80;
 
 /**
  * @brief Sums the `cl100k_base` token estimates of every enabled existing context file.
@@ -352,7 +361,7 @@ export function formatContextOccupancyPercentLabel(percent: number): string {
 
 /**
  * @brief Computes the context-occupancy facts of one enabled context-file token total.
- * @details Resolves the effective basis from the supplied max input context or the documented 1,000,000-token fallback, derives the percentage label, derives the max label with the `*` marker only for the unknown fallback, and renders `[<percent>% context]` for a known max or `[<percent>%/1.0M* context]` for the fallback basis. Runtime is O(1). No external state is mutated.
+ * @details Resolves the effective basis from the supplied max input context or the documented 1,000,000-token fallback, derives the percentage label, derives the numeric displayed percentage from that label, derives the max label with the `*` marker only for the unknown fallback, and renders `[<percent>% context]` for a known max or `[<percent>%/1.0M* context]` for the fallback basis. Runtime is O(1). No external state is mutated.
  * @param[in] totalTokens {number} Aggregate enabled existing context-file token estimate.
  * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens; undefined selects the fallback basis.
  * @return {ContextOccupancyFacts} Computed occupancy facts including the rendered suffix.
@@ -367,13 +376,27 @@ export function computeContextOccupancyFacts(
     : undefined;
   const basisTokens = knownMax ?? CONTEXT_OCCUPANCY_FALLBACK_CONTEXT_WINDOW_TOKENS;
   const percentLabel = formatContextOccupancyPercentLabel((totalTokens / basisTokens) * 100);
+  const percent = Number.parseFloat(percentLabel);
   const maxLabel = knownMax === undefined
     ? `${formatContextWindowTokensLabel(basisTokens)}*`
     : formatContextWindowTokensLabel(knownMax);
   const suffix = knownMax === undefined
     ? `[${percentLabel}%/${maxLabel} context]`
     : `[${percentLabel}% context]`;
-  return { totalTokens, maxContextTokens: knownMax, basisTokens, percentLabel, maxLabel, suffix };
+  return { totalTokens, maxContextTokens: knownMax, basisTokens, percent, percentLabel, maxLabel, suffix };
+}
+
+/**
+ * @brief Renders the configuration-menu occupancy suffix with alert styling above the documented threshold.
+ * @details Returns the unchanged occupancy suffix text wrapped in the intense-red ANSI styling when the displayed numeric percentage strictly exceeds the documented 80-percent configuration-menu alert threshold, and returns the plain suffix otherwise so non-menu surfaces and sub-threshold menu values stay unstyled. Runtime is O(1). No external state is mutated.
+ * @param[in] facts {ContextOccupancyFacts} Computed occupancy facts supplying the displayed percentage and suffix.
+ * @return {string} Occupancy suffix wrapped in intense-red ANSI styling above the threshold, or the plain suffix.
+ * @satisfies REQ-768, REQ-769, REQ-770
+ */
+export function formatConfigMenuContextOccupancySuffix(facts: ContextOccupancyFacts): string {
+  return facts.percent > CONTEXT_OCCUPANCY_MENU_ALERT_THRESHOLD_PERCENT
+    ? wrapAnsiStyle(facts.suffix, ANSI_INTENSE_RED)
+    : facts.suffix;
 }
 
 /**
