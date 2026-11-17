@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.20](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.20) - 2026-11-17
+## [0.109.21](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.21) - 2026-11-17
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,10 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- drop redundant ERROR: prefix from merge-failure diagnostic [useReq] *(core)*
+  Remove the ERROR: severity prefix from the dynamic fast-forward merge-failure message in finalizePromptCommandMerge because the pi CLI error notification rendering already prepends Error:, so the surfaced line printed the redundant Error: ERROR: marker. The uniform REQ-667 hardcoded last line keeps its ERROR: prefix. Update the reproducer assertions in the worktree merge-failure closure test and regenerate REFERENCES.md mappings. Verification: npm test 557/557 pass; req-static-check clean.
+- recover report text and settle state after rebind [useReq] *(final-output)*
+  buildAgentFinalOutputInspectionText parses the latest text-bearing assistant message so a final-output JSON delivered before a thinking-only terminal message is captured and reported (REQ-653, REQ-654) while %%OUTPUT%% substitution and the merge gate keep the strict last-message contract (REQ-443, REQ-444, REQ-589).; hasAgentEndStopReason tolerates agent_end payloads without a messages array so outcome classification degrades to completed instead of throwing (REQ-444).; PersistedPromptCommandFinalizationSnapshot records the settle-deferred terminal facts keyed by the execution-session file so a rebound runtime recovers them at agent_settled and finalizes instead of leaving the workflow running (REQ-463, REQ-464).; tests/extension-registration.test.ts adds the thinking-only trailing assistant message reproducer, the missing messages array guard, and the rebind recovery suite.; WORKFLOW.md call-trace nodes and REFERENCES.md regenerated.
 - refresh captured report and Next-Workflow on result error [useReq] *(orchestration)*
   Gate the agent_end final-output capture on the parse outcome instead of
   the merge-gate marker so workflow-mandated result "error" terminals
@@ -103,6 +107,14 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Update bundled prompts from v0.12.16 to v0.12.18 [useReq] *(prompts)*
+- BREAKING CHANGE: Always number extraction outputs and keep find excerpts as-is [useReq] *(compress-find)*
+  REQ-012/REQ-083: compress and files-compress always prefix retained lines
+  with original source line numbers; enableLineNumbers parameter removed.
+  REQ-013/REQ-090/REQ-092: find and files-find emit as-is numbered excerpts
+  keeping comments; extraction comment-stripping logic removed.
+  REQ-039 removed: --enable-line-numbers CLI flag deleted; TST-012 updated.; Added TST-250/TST-251 plus tests/extraction-line-numbers.test.ts,
+  regenerated attended-result fixtures, updated tool registrations and README.
 - Render resolved user request in command summary header [useReq] *(prompts)*
   Render the bundled prompt-backed command invocation summary User's Request section as a standalone label line with the resolved user-request text on the immediately following line (REQ-795).
   Pass userRequest.requestText into renderPromptCommandSummary so the on-screen recap shows the effective %%ARGS%% content instead of the raw @ reference or inline input (REQ-792).
@@ -1737,7 +1749,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.20\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.20
+- \[0.109.21\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.21
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1846,4 +1858,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.20]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.20
+[0.109.21]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.21
