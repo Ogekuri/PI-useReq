@@ -29,7 +29,7 @@ test("renderPromptCommandSummary renders none for empty context files, static co
   const config = buildEmptySummaryConfig(projectBase);
   const summary = renderPromptCommandSummary("analyze", "Inspect runtime behavior", config);
   assert.match(summary, /Command: ANALYZE/);
-  assert.match(summary, /User's Request: Inspect runtime behavior/);
+  assert.match(summary, /User's Request:\nInspect runtime behavior/);
   assert.match(summary, /- context files:       none/);
   assert.match(summary, /- static code checks:  none/);
   assert.match(summary, /- enabled tools:       none/);

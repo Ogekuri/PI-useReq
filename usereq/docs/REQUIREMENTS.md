@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.172"
+version: "0.0.173"
 date: "2026-11-17"
 author: "OpenAI Codex"
 scope:
@@ -869,8 +869,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-789**: MUST verify the referenced file content is textual by sampling leading bytes for NUL bytes and MUST generate one deterministic error naming the file path and the cause for binary or executable content.
 - **REQ-790**: MUST load the referenced file as UTF-8 text and MUST use the verbatim loaded content as the `%%ARGS%%` replacement text.
 - **REQ-791**: MUST generate one deterministic error naming the file path when the loaded user-request file content is empty or whitespace-only.
-- **REQ-792**: MUST pass the resolved user-request text into prompt-command execution preparation and rendered prompt content while the on-screen command invocation summary keeps the raw command input.
+- **REQ-792**: MUST pass the resolved user-request text into the command invocation summary, prompt-command execution preparation, and rendered prompt content.
 - **REQ-793**: MUST keep every other bundled prompt-backed command on verbatim raw-input passthrough without empty-input placeholder substitution or `@` parsing.
+- **REQ-794**: MUST complete covered prompt-command user-request resolution before rendering the on-screen command invocation summary.
+- **REQ-795**: MUST render the command invocation summary `User's Request:` label alone on one line with the user-request text starting on the immediately following line.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1545,8 +1547,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-789 | `src/core/prompt-command-args.ts` :: `loadTextualUserRequestFile` NUL-byte leading sample :: `ReqError` with the file path for binary or executable content. |
 | REQ-790 | `src/core/prompt-command-args.ts` :: `loadTextualUserRequestFile` :: UTF-8 `fs.readFileSync` content returned verbatim as the `%%ARGS%%` replacement. |
 | REQ-791 | `src/core/prompt-command-args.ts` :: `loadTextualUserRequestFile` empty-content branch :: `ReqError` naming the file path when the content is empty or whitespace-only. |
-| REQ-792 | `src/index.ts` :: `promptCommandHandler` :: passes `userRequest.requestText` into `preparePromptCommandExecution(...)` plus `renderPrompt(...)` while `renderPromptCommandSummary(...)` keeps the raw `args`. |
+| REQ-792 | `src/index.ts` :: `promptCommandHandler` :: passes `userRequest.requestText` into `renderPromptCommandSummary(...)`, `preparePromptCommandExecution(...)`, plus `renderPrompt(...)`. |
 | REQ-793 | `src/core/prompt-command-args.ts` :: `isPromptCommandFileRequestName` gate :: `resolvePromptCommandUserRequest` returns verbatim raw input for every non-covered prompt name. |
+| REQ-794 | `src/index.ts` :: `promptCommandHandler` :: resolves `resolvePromptCommandUserRequest(...)` inside the dispatch `try` block before `preparePromptCommandExecution(...)` and before `renderPromptCommandSummary(...)`. |
+| REQ-795 | `src/core/prompts.ts` :: `renderPromptCommandSummary` :: renders `User's Request:` alone on one line with the user-request text starting on the immediately following line. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |

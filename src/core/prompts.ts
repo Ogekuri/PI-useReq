@@ -405,15 +405,15 @@ export const PROMPT_COMMAND_SUMMARY_CUSTOM_TYPE = "pi-usereq-prompt-command";
 
 /**
  * @brief Builds the on-screen command invocation summary for one bundled prompt-backed `req-<prompt>` command.
- * @details Renders the command name without the `req-` prefix in uppercase, the user request arguments, and the active configuration fields (resolved agentic flow, context-injection status, `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools`) so the TUI shows only a compact summary while the full rendered prompt is delivered hidden to the LLM agent. The resolved `new` or `continue` agentic flow is rendered as the first `Configuration:` bullet entry, and the `context injection` entry rendered before the `context files` entry states whether context-file injection was performed (`new` flow) or skipped (`continue` flow). When measured context-file size facts are supplied, every enabled existing context file in the `context files` field is rendered as `name(<chars>c/<tokens>t)`; when the enabled existing token total contributes tokens, the field additionally appends the `[<percent>% context]` occupancy suffix against the selected model max input context (or `[<percent>%/1.0M* context]` with the documented fallback); without facts, or for enabled missing files, the plain `name` form is rendered. Static-check languages are emitted in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order; enabled tools are emitted in documented menu order via `comparePiUsereqStartupToolNames`. The `context files`, `static code checks`, and `enabled tools` fields render the literal `none` placeholder whenever their respective enabled-item list is empty so the summary never shows a blank value. Sections are emitted in the order `Command:`, `Configuration:` with its bullet list, then `User's Request:`, each separated by one blank line. Runtime is O(l + t log t) where l is language count and t is enabled-tool count. No external state is mutated.
+ * @details Renders the command name without the `req-` prefix in uppercase, the resolved user-request text, and the active configuration fields (resolved agentic flow, context-injection status, `docs-dir`, `src-dir`, `tests-dir`, enabled context files, `AUTO_GIT_COMMIT`, effective `GIT_WORKTREE_ENABLED`, `GIT_WORKTREE_PREFIX`, enabled static-check languages, and `enabled-tools`) so the TUI shows only a compact summary while the full rendered prompt is delivered hidden to the LLM agent. The resolved `new` or `continue` agentic flow is rendered as the first `Configuration:` bullet entry, and the `context injection` entry rendered before the `context files` entry states whether context-file injection was performed (`new` flow) or skipped (`continue` flow). When measured context-file size facts are supplied, every enabled existing context file in the `context files` field is rendered as `name(<chars>c/<tokens>t)`; when the enabled existing token total contributes tokens, the field additionally appends the `[<percent>% context]` occupancy suffix against the selected model max input context (or `[<percent>%/1.0M* context]` with the documented fallback); without facts, or for enabled missing files, the plain `name` form is rendered. Static-check languages are emitted in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order; enabled tools are emitted in documented menu order via `comparePiUsereqStartupToolNames`. The `context files`, `static code checks`, and `enabled tools` fields render the literal `none` placeholder whenever their respective enabled-item list is empty so the summary never shows a blank value. Sections are emitted in the order `Command:`, `Configuration:` with its bullet list, then `User's Request:`, each separated by one blank line; the `User's Request:` section renders the label alone on one line with the user-request text starting on the immediately following line. Runtime is O(l + t log t) where l is language count and t is enabled-tool count. No external state is mutated.
  * @param[in] promptName {string} Bundled prompt name without the `req-` prefix.
- * @param[in] args {string} User request arguments passed to the slash command.
+ * @param[in] args {string} Resolved user-request text rendered verbatim as the effective `%%ARGS%%` replacement on the line following the `User's Request:` label.
  * @param[in] config {UseReqConfig} Effective project configuration supplying directory, git, static-check, and tool fields.
  * @param[in] contextFileSizes {Record<string, ContextFileSizeFacts> | undefined} Optional measured context-file size facts keyed by canonical file name, consumed for `context files` size suffixes.
  * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens consumed by the occupancy suffix; undefined selects the documented 1,000,000-token fallback.
  * @param[in] flowKind {PromptCommandFlowKind} Resolved agentic-flow kind rendered as the first `Configuration:` entry and used to derive the context-injection status.
  * @return {string} Multi-line command invocation summary text.
- * @satisfies REQ-335, REQ-336, REQ-337, REQ-338, REQ-353, REQ-377, REQ-402, REQ-403, REQ-404, REQ-407, REQ-650, REQ-651
+ * @satisfies REQ-335, REQ-336, REQ-337, REQ-338, REQ-353, REQ-377, REQ-402, REQ-403, REQ-404, REQ-407, REQ-650, REQ-651, REQ-795
  */
 export function renderPromptCommandSummary(
   promptName: string,
@@ -466,7 +466,8 @@ export function renderPromptCommandSummary(
     `- static code checks:  ${enabledLanguages}`,
     `- enabled tools:       ${enabledTools}`,
     "",
-    `User's Request: ${args}`,
+    "User's Request:",
+    args,
   ];
   return lines.join("\n");
 }
