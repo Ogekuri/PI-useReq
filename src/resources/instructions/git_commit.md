@@ -11,6 +11,7 @@
       - Set `<COMPONENT>` to the most specific component, module, or function affected. If multiple areas are touched, choose the primary one. If you cannot identify a unique component, use `core`.
       - Set `<DESCRIPTION>` to a short, clear summary in **English language** of what changed, including (when applicable) updates to: requirements/specs, source code, tests. Use present tense, avoid vague wording, and keep it under ~80 characters if possible.
       - Set `<BREAKING>` to `!` if a breaking change was implemented (a modification to an API, library, or system that breaks backward compatibility, causing dependent client applications or code to fail or behave incorrectly), set empty otherwise.
+      - Commit messages MUST NOT include unnecessary carriage return (`\r`) or line feed (`\n`) characters for fixed-width paragraph alignment.
       - Include main features added, requirements changes, or a bug-fix description adding a multi-line comment (maximum 10 lines).
          - Do not include the 'Co-authored-by' trailer or any AI attribution. A GPG-signed commit is not required.
    - Confirm the repo is clean with the `git-status` tool. If the command returns an error code or prints any text containing "ERROR", include the exact diagnostic "WARNING: Request completed with unclean git repository!" in `outcome` and emit the complete JSON response with `result` set to `error`.
