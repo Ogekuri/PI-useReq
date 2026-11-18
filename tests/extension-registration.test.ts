@@ -3788,7 +3788,7 @@ test("req-references appends a durable command-report entry that survives sessio
     assert.equal(errorReportEntries[1].data?.outcome, "error");
     assert.equal(errorReportEntries[1].data?.level, "error");
     assert.ok(errorReportEntries[1].data?.lines.some((line) => line.startsWith("error: ")));
-    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error" && /Git status unclear/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "info" && /Git status unclear/.test(entry.message)));
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -5620,7 +5620,7 @@ test("worktree-backed prompt failures keep the worktree session, retain worktree
       }).status,
       0,
     );
-    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error"
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "info"
       && /Prompt closure retained worktree .* after failed outcome\./.test(entry.message)));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
@@ -9846,10 +9846,10 @@ test("status-marker closure merges and deletes the worktree plus branch for a re
 
 /**
  * @brief Verifies a completed worktree-backed run carrying final-output JSON `result` `error` retains the worktree in `error`.
- * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block is one final-output JSON with `result` `error`, and settles the orchestration. The test proves the parsed gate blocks merge and worktree deletion, keeps the worktree directory plus branch and the execution-session context visible, renders the blinking error workflow state, and emits one worktree-retention error notification naming the JSON result. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block is one final-output JSON with `result` `error`, and settles the orchestration. The test proves the parsed gate blocks merge and worktree deletion, keeps the worktree directory plus branch and the execution-session context visible, renders the blinking error workflow state, and emits one worktree-retention blocked-gate notification naming the JSON result without the host `Error: ` prefix. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after retention assertions complete.
  * @throws {AssertionError} Throws when the `result` `error` closure merges, deletes the worktree, or hides the error state.
- * @satisfies REQ-584, REQ-586, REQ-587, TST-186
+ * @satisfies REQ-584, REQ-586, REQ-587, REQ-796, TST-186
  */
 test("status-marker closure retains the worktree and parks error for a result error final message", async () => {
   const run = await startStatusMarkerClosureRun("status-error.ts");
@@ -9882,11 +9882,11 @@ test("status-marker closure retains the worktree and parks error for a result er
     );
     assert.ok(
       run.eventCtx.__state.notifications.some(
-        (entry: { message: string; level: string }) => entry.level === "error"
+        (entry: { message: string; level: string }) => entry.level === "info"
           && /retained worktree/.test(entry.message)
           && /JSON result "error"/.test(entry.message),
       ),
-      "expected one worktree-retention error notification naming the JSON result error gate",
+      "expected one worktree-retention blocked-gate notification naming the JSON result error gate",
     );
   } finally {
     run.cleanup();
@@ -9895,10 +9895,10 @@ test("status-marker closure retains the worktree and parks error for a result er
 
 /**
  * @brief Verifies a completed worktree-backed run without one valid final-output JSON parks `error` with the diagnostic.
- * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block carries no valid final-output JSON, and settles the orchestration. The test proves the invalid output blocks merge and worktree deletion, retains the worktree directory plus branch, renders the blinking error workflow state through the shared error theme token, and emits one worktree-retention error notification carrying the JSON-contract diagnostic. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block carries no valid final-output JSON, and settles the orchestration. The test proves the invalid output blocks merge and worktree deletion, retains the worktree directory plus branch, renders the blinking error workflow state through the shared error theme token, and emits one worktree-retention blocked-gate notification carrying the JSON-contract diagnostic without the host `Error: ` prefix. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
  * @return {Promise<void>} Promise resolved after invalid-output retention assertions complete.
  * @throws {AssertionError} Throws when an invalid-output closure merges, deletes the worktree, or renders a non-error state.
- * @satisfies REQ-584, REQ-586, REQ-588, REQ-590, TST-187
+ * @satisfies REQ-584, REQ-586, REQ-588, REQ-590, REQ-796, TST-187
  */
 test("status-marker closure retains the worktree and parks error when the final output is not one valid JSON object", async () => {
   const run = await startStatusMarkerClosureRun("status-missing.ts");
@@ -9931,11 +9931,11 @@ test("status-marker closure retains the worktree and parks error when the final 
     );
     assert.ok(
       run.eventCtx.__state.notifications.some(
-        (entry: { message: string; level: string }) => entry.level === "error"
+        (entry: { message: string; level: string }) => entry.level === "info"
           && /retained worktree/.test(entry.message)
           && /not exactly one valid JSON object/.test(entry.message),
       ),
-      "expected one worktree-retention error notification carrying the JSON-contract diagnostic",
+      "expected one worktree-retention blocked-gate notification carrying the JSON-contract diagnostic",
     );
   } finally {
     run.cleanup();
@@ -10757,14 +10757,15 @@ test("req-print-result reprints the emitted retention notification identically f
     assert.ok(NEXT_WORKFLOW_COMMAND_NAMES.includes("req-print-result"));
 
     // REQ-779: no retained message yet, so the invocation emits the deterministic
-    // error notification, rejects, and mutates no workflow state.
+    // `ERROR: `-prefixed diagnostic at `info` severity (REQ-797), rejects, and mutates
+    // no workflow state.
     const notificationsAfterStartup = ctx.__state.notifications.length;
     await assert.rejects(
       printResultCommand!.handler("", ctx),
       /no retained final-output notification/,
     );
     const emptyStateNotification = ctx.__state.notifications.at(-1)!;
-    assert.equal(emptyStateNotification.level, "error");
+    assert.equal(emptyStateNotification.level, "info");
     assert.match(emptyStateNotification.message, /^ERROR: \/req-print-result/);
     assert.equal(ctx.__state.notifications.length, notificationsAfterStartup + 1);
     assert.match(
@@ -10990,7 +10991,7 @@ test("result error orchestration refreshes the captured report and req-reset ret
       ["req-check"],
     );
     const errorPrintout = ctx.__state.notifications.filter(
-      (entry: { level: string; message: string }) => entry.level === "error"
+      (entry: { level: string; message: string }) => entry.level === "info"
         && entry.message.includes("Beta flow failed."),
     ).at(-1);
     assert.ok(errorPrintout, "missing the executed flow error report notification");

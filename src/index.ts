@@ -481,7 +481,7 @@ function executeDebugToolCommand(
   const config = loadProjectConfig(commandCwd);
   if (normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED) !== "enable") {
     const message = `ERROR: /${commandName} is disabled by Debug > Enable debug commands for tools.`;
-    ctx.ui.notify(message, "error");
+    notifyContextSafely(ctx, message, "error");
     throw new ReqError(message, 1);
   }
   writeDebugToolCommandResultToEditor(ctx, commandName, operation(projectBase, config));
@@ -1278,25 +1278,37 @@ function resolveDebugProjectBase(cwd: string, statusController: PiUsereqStatusCo
 }
 
 /**
+ * @brief Detects whether one notification message already opens with a severity marker.
+ * @details Skips every leading ANSI SGR escape sequence (`ESC[...m`) so messages styled by `openAnsiStyle(...)` keep matching, then tests the remaining text against the `ERROR: ` and `Error: ` severity-marker prefixes that would duplicate the pi CLI `Error: ` error-notification prefix. Runtime is O(n) in the message prefix length. No external state is mutated.
+ * @param[in] message {string} Notification message to inspect.
+ * @return {boolean} `true` when the message begins with an `ERROR: ` or `Error: ` marker after leading ANSI escape sequences; `false` otherwise.
+ * @satisfies REQ-797
+ */
+function hasLeadingSeverityMarker(message: string): boolean {
+  return /^(?:ERROR|Error): /.test(message.replace(/^(?:\u001b\[[0-9;:?]*m)+/, ""));
+}
+
+/**
  * @brief Delivers one best-effort UI notification, deferring the payload when the context is stale.
- * @details Attempts to use the supplied extension context for UI notification delivery; when no context is available or pi raises the documented stale-extension-context error because the context was invalidated by session replacement or reload, the exact message plus severity is enqueued into the process-scoped deferred-notification replay store so one later eligible `session_start` can redeliver it on the restored context instead of losing the evidence. The payload is enqueued only on failed delivery, so already-delivered notifications are never replayed. Runtime is O(1). Side effects are limited to user notification delivery when the context is still active and process-scoped queue mutation when delivery fails.
+ * @details Attempts to use the supplied extension context for UI notification delivery; when no context is available or pi raises the documented stale-extension-context error because the context was invalidated by session replacement or reload, the exact message plus severity is enqueued into the process-scoped deferred-notification replay store so one later eligible `session_start` can redeliver it on the restored context instead of losing the evidence. The payload is enqueued only on failed delivery, so already-delivered notifications are never replayed. `error`-severity messages that already open with an `ERROR: ` or `Error: ` severity marker after leading ANSI escape sequences resolve to `info` severity before delivery and enqueue so the pi CLI renders the message verbatim without the duplicated host `Error: ` prefix while the message's embedded ANSI styling preserves the visual severity (REQ-797). Runtime is O(1) plus O(n) in the message prefix length. Side effects are limited to user notification delivery when the context is still active and process-scoped queue mutation when delivery fails.
  * @param[in] ctx {ExtensionContext | ExtensionCommandContext | undefined} Candidate UI context.
  * @param[in] message {string} Notification message.
  * @param[in] level {"info" | "warning" | "error"} Notification severity.
  * @return {boolean} `true` when the notification was delivered and `false` when delivery failed and the payload was deferred for replay.
- * @satisfies REQ-280, REQ-439, REQ-442
+ * @satisfies REQ-280, REQ-439, REQ-442, REQ-797
  */
 function notifyContextSafely(
   ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
   message: string,
   level: "info" | "warning" | "error",
 ): boolean {
+  const resolvedLevel = level === "error" && hasLeadingSeverityMarker(message) ? "info" : level;
   if (ctx === undefined) {
-    enqueueDeferredNotification(message, level);
+    enqueueDeferredNotification(message, resolvedLevel);
     return false;
   }
   try {
-    ctx.ui.notify(message, level);
+    ctx.ui.notify(message, resolvedLevel);
     return true;
   } catch (error) {
     if (isStaleExtensionContextError(error)) {
@@ -1308,24 +1320,26 @@ function notifyContextSafely(
 }
 
 /**
- * @brief Emits one ANSI-rendered final-output markdown report notification with the Next-Workflow command table.
- * @details Composes the printout through `buildAgentFinalOutputAnsiPrintout(...)` — the rounded-box ANSI report from `renderAgentFinalOutputAnsiReport(...)` plus the dynamically sized rounded Next-Workflow table from `formatNextWorkflowCommandTable(...)` — skips emission when the printout stays empty so contract-violating terminal outputs print no stale sections, and delivers the colored printout through `notifyContextSafely(...)` so stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in report and table length. Side effect is user notification delivery when the supplied context is still active.
+ * @brief Emits one merged blocked-gate notification composing the ANSI report printout and the intense-red terminal diagnostic.
+ * @details Composes the report printout through `buildAgentFinalOutputAnsiPrintout(...)` — the rounded-box ANSI report from `renderAgentFinalOutputAnsiReport(...)` plus the dynamically sized rounded Next-Workflow table from `formatNextWorkflowCommandTable(...)` — and joins it with one blank line and the diagnostic prefixed by the intense-red ANSI escape without a trailing reset so contracts pinning the exact diagnostic tail (REQ-667) stay byte-identical. The merged payload is delivered as exactly one `info`-severity notification through `notifyContextSafely(...)` so the pi CLI prints the boxed report without the host `Error: ` prefix and the pi TUI back-to-back info-notification collapse can never drop the report printout behind the diagnostic; the diagnostic positions after the report printout content per REQ-719. When the printout is empty only the diagnostic is delivered, and the emission is skipped entirely when both payloads are empty so contract-violating terminal outputs print no stale sections. Stale replacement-session contexts defer the payload into the process-scoped replay store. Runtime is O(n) in report and diagnostic length. Side effect is user notification delivery when the supplied context is still active.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @param[in] report {AgentFinalOutputReport | undefined} Parsed final-output report to print; `undefined` contributes no sections.
- * @param[in] level {"info" | "warning" | "error"} Notification severity of the report printout.
+ * @param[in] diagnosticMessage {string} Terminal diagnostic text rendered verbatim after the intense-red color escape.
  * @return {void} No return value.
- * @satisfies REQ-712, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-722, REQ-723, REQ-724, REQ-725, REQ-439, REQ-442
+ * @satisfies REQ-587, REQ-588, REQ-680, REQ-712, REQ-713, REQ-718, REQ-719, REQ-796, REQ-439, REQ-442
  */
-function notifyAgentFinalOutputReport(
+function notifyAgentFinalOutputBlockedGate(
   ctx: (ExtensionContext | ExtensionCommandContext) | undefined,
   report: AgentFinalOutputReport | undefined,
-  level: "info" | "warning" | "error",
+  diagnosticMessage: string,
 ): void {
   const printout = buildAgentFinalOutputAnsiPrintout(report, getNextWorkflowCommands());
+  const diagnostic = `${openAnsiStyle(ANSI_INTENSE_RED)}${diagnosticMessage}`;
   if (printout === "") {
+    notifyContextSafely(ctx, diagnostic, "info");
     return;
   }
-  notifyContextSafely(ctx, printout, level);
+  notifyContextSafely(ctx, `${printout}\n\n${diagnostic}`, "info");
 }
 
 /**
@@ -2002,15 +2016,10 @@ async function handleExtensionStatusEvent(
         // park the workflow in `error` with the user-facing gate diagnostic, and retain
         // the active request so `req-reset` can restore `base-path` and remove the
         // retained worktree.
-        notifyAgentFinalOutputReport(
+        notifyAgentFinalOutputBlockedGate(
           promptContext,
           finalOutputParse.ok ? finalOutputParse.report : undefined,
-          "error",
-        );
-        notifyTerminalOrchestrationDiagnostic(
-          promptContext,
           finalOutputBlockedMessage ?? `ERROR: Prompt orchestration terminated with JSON result "error".`,
-          "error",
         );
         statusController.state.activeRunBelongsToPrompt = false;
         statusController.state.pendingFinalizationOutcome = undefined;
@@ -2168,12 +2177,11 @@ async function handleExtensionStatusEvent(
         // MUST NOT run. Keep the worktree execution session visible, park the workflow in
         // `error` with the recorded gate diagnostic, and retain the active request so
         // `req-reset` can restore `base-path` and remove the retained worktree.
-        notifyAgentFinalOutputReport(ctx, statusController.state.pendingFinalizationReport, "error");
-        notifyTerminalOrchestrationDiagnostic(
+        notifyAgentFinalOutputBlockedGate(
           ctx,
+          statusController.state.pendingFinalizationReport,
           statusController.state.pendingFinalizationBlockedMessage
             ?? `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after JSON result "error".`,
-          "error",
         );
         statusController.state.activeRunBelongsToPrompt = false;
         statusController.state.pendingFinalizationOutcome = undefined;

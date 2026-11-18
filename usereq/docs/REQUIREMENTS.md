@@ -594,8 +594,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-584**: MUST extract one JSON object from the concatenated assistant text blocks of the final agent message and parse it as the final-output JSON object before worktree merge or worktree deletion in every agentic prompt orchestration.
 - **REQ-585**: MUST execute worktree merge and worktree deletion only when the parsed final-output JSON carries `result` equal to `ok`.
 - **REQ-586**: MUST NOT execute worktree merge or worktree deletion when the parsed final-output JSON carries `result` equal to `error` or violates the mandatory-field contract.
-- **REQ-587**: MUST park workflow state `error`, retain the worktree, and emit one error notification when the parsed final-output JSON carries `result` equal to `error`.
-- **REQ-588**: MUST park workflow state `error`, retain the worktree, and emit one error notification carrying the JSON-contract diagnostic when the final agent output violates the final-output JSON contract.
+- **REQ-587**: MUST park workflow state `error`, retain the worktree, and emit one blocked-gate notification per REQ-796 when the parsed final-output JSON carries `result` equal to `error`.
+- **REQ-588**: MUST park workflow state `error`, retain the worktree, and emit one blocked-gate notification per REQ-796 carrying the JSON-contract diagnostic when the final agent output violates the final-output JSON contract.
 - **REQ-589**: MUST treat a terminal agent run whose final assistant message exposes no text content block as merge-eligible.
 - **REQ-590**: MUST render `status:warning` with theme `error` plus terminal blink when supported, matching the `status:error` rendering.
 - **REQ-469**: MUST resolve the notification `%%OUTPUT%%` for completed prompt-end outcomes from the `summary` field of the parsed final-output JSON.
@@ -771,7 +771,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-677**: MUST treat `result`, `summary`, and `next_commands` as the only mandatory fields of the final-output JSON object.
 - **REQ-678**: MUST validate `result` as exactly `ok` or `error`, `summary` as a string, and `next_commands` as an array on the extracted final-output JSON object before consuming it.
 - **REQ-679**: MUST tolerate the absence of every non-mandatory report field of the final-output JSON without generating an error.
-- **REQ-680**: MUST surface one error notification informing the user whenever a completed agentic run's final agent output fails final-output JSON validation.
+- **REQ-680**: MUST surface one blocked-gate notification informing the user whenever a completed agentic run's final agent output fails final-output JSON validation.
 - **REQ-681**: MUST render one markdown section per present report field of the parsed final-output JSON before the final context-retention line.
 - **REQ-682**: MUST render the markdown sections in the fixed order Summary, Outcome, Requirement Delta, Design Delta, Implementation Delta, Verification Delta, Evidence, Assumptions, Next Workflow.
 - **REQ-683**: MUST render each markdown section as the `## **<Label>**` heading followed by the corresponding final-output JSON field value.
@@ -810,7 +810,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-716**: MUST render the `Context retained.` retention sentence with intense-white ANSI color whenever the context-usage percentage segment is present.
 - **REQ-717**: MUST render the appended context-usage percentage segment with intense-yellow ANSI color.
 - **REQ-718**: MUST render every notification reporting an `error` or `warning` prompt-orchestration termination with intense-red ANSI color.
-- **REQ-719**: MUST emit every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout, the Next-Workflow command table, the `/req-continue` command table, and the context-usage percentage line.
+- **REQ-719**: MUST position every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout content, the Next-Workflow command table, the `/req-continue` command table, and the context-usage percentage line.
 - **REQ-720**: MUST render each report section heading of the ANSI-colored report notification as a rounded box frame sized from the label length.
 - **REQ-721**: MUST wrap every box line of a section heading with the intense-yellow ANSI color.
 - **REQ-763**: MUST render each matched single-quote span, including its delimiting quote characters, in ANSI italic by wrapping every inner text token with the italic SGR parameter.
@@ -822,6 +822,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-723**: MUST render each table row with a right-aligned one-based ordinal, the command name without the `req-` prefix in uppercase, and `N/A` for absent input text.
 - **REQ-724**: MUST render each Next-Workflow table `Text` cell with the full untruncated input text, collapsing every whitespace run into one space.
 - **REQ-725**: MUST frame the table with `╭╮╰╯│─┬┴`, the double-line header separator `╞══╪══╡`, and `├──┼──┤` row separators.
+- **REQ-796**: MUST deliver every blocked-gate terminal notification as one `info`-severity UI notification composing the ANSI report printout, one blank line, and the intense-red `ERROR: ` terminal diagnostic, omitting absent parts.
+- **REQ-797**: MUST deliver every `error`-severity notification whose message begins with an `ERROR: ` or `Error: ` marker after leading ANSI escape sequences at `info` severity.
 - **REQ-726**: MUST validate every parsed JSON object against the orchestration final-output mandatory-field contract: `result` exactly `ok` or `error`, `summary` string, and `next_commands` array.
 - **REQ-727**: MUST mark each verdict record with a final-output contract verdict and list every mandatory-field violation with the violated field name and expected domain.
 - **REQ-728**: MUST classify every parsed JSON root that is not an object as final-output contract invalid with one root-type issue in the verdict record.
@@ -1471,8 +1473,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-584 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: extracts the embedded JSON object from the terminal text before parsing; `src/index.ts` :: `handleExtensionStatusEvent` :: parses before every closure decision and records the resolved gate in the `workflow_closure` debug payload. |
 | REQ-585 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandMergeGate`; `src/index.ts` :: `handleExtensionStatusEvent` :: merges and deletes the worktree only for `result` `ok` gates. |
 | REQ-586 | `src/index.ts` :: `handleExtensionStatusEvent` :: blocked gates skip `finalizeMatchedPromptSuccess` and retain the worktree. |
-| REQ-587 | `src/index.ts` :: `handleExtensionStatusEvent` :: `result` `error` parks workflow state `error` with one error notification. |
-| REQ-588 | `src/index.ts` :: `handleExtensionStatusEvent` :: invalid final-output JSON parks workflow state `error` with one JSON-contract diagnostic notification. |
+| REQ-587 | `src/index.ts` :: `handleExtensionStatusEvent` :: `result` `error` parks workflow state `error` and emits the merged `info`-severity blocked-gate notification per REQ-796. |
+| REQ-588 | `src/index.ts` :: `handleExtensionStatusEvent` :: invalid final-output JSON parks workflow state `error` with the merged blocked-gate notification carrying the JSON-contract diagnostic. |
 | REQ-589 | `src/core/prompt-command-runtime.ts` :: `resolvePromptCommandMergeGate` :: empty inspected text stays merge-eligible. |
 | REQ-590 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `warning` with the blinking `error` theme token. |
 | REQ-653 | `src/index.ts` :: `handleExtensionStatusEvent` capture block :: parses the terminal completed output through `parseAgentFinalOutput(...)` before the retention notification; `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: single-JSON-object parsing with mandatory-field validation. |
@@ -1501,7 +1503,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-677 | `src/core/agent-final-output.ts` :: mandatory-field validation inside `parseAgentFinalOutput` :: only `result`, `summary`, and `next_commands` are mandatory. |
 | REQ-678 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: validates the extracted object's `result` domain, `summary` string type, and `next_commands` array type before returning the report. |
 | REQ-679 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: optional report fields are consumed only when present as strings and their absence never errors. |
-| REQ-680 | `src/index.ts` :: `handleExtensionStatusEvent` blocked branch :: one error notification carrying the JSON-contract diagnostic for invalid terminal outputs. |
+| REQ-680 | `src/index.ts` :: `handleExtensionStatusEvent` blocked branch :: blocked-gate notification carrying the JSON-contract diagnostic for invalid terminal outputs. |
+| REQ-796 | `src/index.ts` :: `notifyAgentFinalOutputBlockedGate` :: one `info`-severity notification joining the ANSI report printout, one blank line, and the intense-red `ERROR: ` diagnostic. |
+| REQ-797 | `src/index.ts` :: `hasLeadingSeverityMarker` plus `notifyContextSafely` :: marker-prefixed `error`-severity messages resolve to `info` severity before delivery and deferred replay. |
 | REQ-710 | `src/core/agent-final-output.ts` :: `extractFinalOutputJsonObject` :: string-aware balanced-brace scan validating each candidate as a plain JSON object and returning the sole candidate or the trimmed text. |
 | REQ-711 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: zero and multi-object outcomes return unparsable text so `JSON.parse` fails with the existing JSON-contract diagnostic. |
 | REQ-681 | `src/index.ts` :: `notifyContextRetentionReminder`; `src/core/agent-final-output.ts` :: `renderAgentFinalOutputMarkdownReport` :: markdown sections render immediately before the retention line. |
