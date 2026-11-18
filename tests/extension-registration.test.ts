@@ -9743,6 +9743,55 @@ async function startStatusMarkerClosureRun(worktreeFileName: string): Promise<St
 }
 
 /**
+ * @brief Verifies intermediate reports remain unpublished until settlement.
+ * @details Emits a valid intermediate report followed by an invalid terminal report and asserts that neither report nor commands leak into process-scoped capture. Runtime is dominated by the temporary worktree fixture. Side effects include isolated fixture and process-scoped state mutation.
+ * @return {Promise<void>} Promise resolved after terminal capture assertions.
+ * @throws {AssertionError} When an intermediate report becomes visible.
+ * @satisfies REQ-463, REQ-653, REQ-656
+ */
+test("intermediate agent output remains unpublished before and after invalid settlement", async () => {
+  resetNextWorkflowStateForTests();
+  const run = await startStatusMarkerClosureRun("intermediate-capture.ts");
+  try {
+    await run.emitAgentEnd([{
+      role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("Intermediate.", [
+        { command: "req-fix", text: "Intermediate command" },
+      ]) }],
+    }]);
+    assert.equal(getCapturedAgentFinalOutputReport(), undefined);
+    assert.deepEqual(getNextWorkflowCommands(), []);
+    await run.pi.emit("agent_start", {}, run.eventCtx);
+    await run.emitAgentEnd([{
+      role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Invalid terminal output" }],
+    }]);
+    await run.pi.emit("agent_settled", {}, run.eventCtx);
+    assert.equal(getCapturedAgentFinalOutputReport(), undefined);
+    assert.deepEqual(getNextWorkflowCommands(), []);
+  } finally {
+    run.cleanup();
+    resetNextWorkflowStateForTests();
+  }
+  const failedRun = await startStatusMarkerClosureRun("intermediate-failed.ts");
+  try {
+    await failedRun.emitAgentEnd([{
+      role: "assistant", stopReason: "stop", content: [{ type: "text", text: buildFinalOutputText("Intermediate.", [
+        { command: "req-fix", text: "Intermediate command" },
+      ]) }],
+    }]);
+    await failedRun.pi.emit("agent_start", {}, failedRun.eventCtx);
+    await failedRun.emitAgentEnd([{
+      role: "assistant", stopReason: "error", content: [{ type: "text", text: "Provider failure" }],
+    }]);
+    await failedRun.pi.emit("agent_settled", {}, failedRun.eventCtx);
+    assert.equal(getCapturedAgentFinalOutputReport(), undefined);
+    assert.deepEqual(getNextWorkflowCommands(), []);
+  } finally {
+    failedRun.cleanup();
+    resetNextWorkflowStateForTests();
+  }
+});
+
+/**
  * @brief Builds the expected encoded `status` fragment of one rendered workflow state.
  * @details Reuses the fake theme encoder so assertions target the rendered `status:` field without reconstructing unrelated branch, context, elapsed, or sound fields. Runtime is O(1). No external state is mutated.
  * @param[in] workflowState {string} Workflow state expected in the rendered status bar.
