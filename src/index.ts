@@ -120,6 +120,7 @@ import {
   classifyPromptCommandOutcome,
   finalizePromptCommandExecution,
   getPromptCommandErrorContext,
+  establishPromptRunIdentity,
   preparePromptCommandExecution,
   PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE,
   reapplyPromptCommandSessionSelection,
@@ -163,7 +164,6 @@ import {
 import {
   DEBUG_PROMPT_NAMES,
   DEBUG_WORKFLOW_STATES,
-  DEFAULT_DEBUG_LOG_FILE,
   DEFAULT_DEBUG_LOG_ON_STATUS,
   DEFAULT_DEBUG_PROMPTS_ENABLED,
   DEFAULT_DEBUG_PROMPTS_LOG_PATH,
@@ -171,6 +171,7 @@ import {
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
   capturePromptProviderRequestForDebug,
+  clearActivePromptDebugRunIdentity,
   discardCapturedPromptErrorPayload,
   flushCapturedPromptErrorPayload,
   logDebugPromptContent,
@@ -180,7 +181,6 @@ import {
   logDebugToolExecution,
   normalizeDebugEnabledPrompts,
   normalizeDebugEnabledTools,
-  normalizeDebugLogFile,
   normalizeDebugLogOnStatus,
   normalizeDebugPromptsEnabled,
   normalizeDebugPromptsLogPath,
@@ -188,7 +188,6 @@ import {
   normalizeDebugToolCommandsEnabled,
   normalizeDebugWorkflowEvents,
   resolveProviderErrorFlushStatusFromMessage,
-  setRuntimeDebugEnabled,
   shouldLogDebugPromptWorkflowState,
   writeFlushedPromptProviderErrorResponse,
   type DebugLogOnStatus,
@@ -1759,8 +1758,11 @@ async function handleExtensionStatusEvent(
       // process lifetime: the idle-reset bootstrap boundaries drop it together with the
       // workflow state so stale follow-up commands never survive an extension reload.
       // REQ-773: the retained final-output notification message shares that lifetime.
+      // REQ-800: the active prompt-run debug identity shares the same lifetime so a fresh
+      // process falls back to the documented no-run debug filename prefix.
       clearNextWorkflowCommands();
       clearRetainedResultMessage();
+      clearActivePromptDebugRunIdentity();
     }
     const missingCheckers = checkDefaultCheckersAvailability(config);
     if (missingCheckers.length > 0) {
@@ -2340,15 +2342,13 @@ function getDebugToolToggleNames(): PiUsereqStartupToolName[] {
 
 /**
  * @brief Restores the debug configuration subtree to its documented defaults.
- * @details Resets runtime debug enablement in both the effective config object and the process-scoped runtime debug store, then resets log path, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config` and process-scoped runtime debug state.
+ * @details Resets the persisted local debug enablement plus log path, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, workflow-state filter, dedicated workflow-event logging, and selected tool plus prompt debug toggles without mutating unrelated settings. Runtime is O(1). Side effect: mutates `config`.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {void} No return value.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322, REQ-413, REQ-414, REQ-420, REQ-426
+ * @satisfies REQ-236, REQ-238, REQ-239, REQ-195, REQ-277, REQ-322, REQ-413, REQ-414, REQ-420
  */
 function resetDebugConfigToDefaults(config: UseReqConfig): void {
   config.DEBUG_ENABLED = "disable";
-  setRuntimeDebugEnabled("disable");
-  config.DEBUG_LOG_FILE = DEFAULT_DEBUG_LOG_FILE;
   config.DEBUG_PROMPTS_ENABLED = DEFAULT_DEBUG_PROMPTS_ENABLED;
   config.DEBUG_PROMPTS_LOG_PATH = DEFAULT_DEBUG_PROMPTS_LOG_PATH;
   config.DEBUG_STATUS_CHANGES = DEFAULT_DEBUG_STATUS_CHANGES;
@@ -2435,10 +2435,10 @@ async function selectDebugLogOnStatus(
 
 /**
  * @brief Builds the shared settings-menu choices for debug logging configuration.
- * @details Serializes global debug controls plus prompt-content debug controls, tool-wrapper command registration, workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists and dimming locked rows while debug is disabled. Runtime is O(t + p). No external state is mutated.
+ * @details Serializes global debug controls plus prompt-content debug controls, tool-wrapper command registration, workflow-state, dedicated workflow-event, per-tool, and per-prompt toggles into one submenu, deriving inventories from the canonical tool and prompt lists, dimming locked rows while debug is disabled, and appending the permanently disabled read-only `Generated log files` description row. Runtime is O(t + p). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @return {PiUsereqSettingsMenuChoice[]} Ordered debug-menu choices.
- * @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277, REQ-321, REQ-322, REQ-415
+ * @satisfies REQ-240, REQ-241, REQ-242, REQ-243, REQ-193, REQ-277, REQ-321, REQ-322, REQ-415, REQ-801
  */
 function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice[] {
   const debugEnabled = config.DEBUG_ENABLED === "enable";
@@ -2467,9 +2467,27 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         id: "debug-prompts-log-path",
         label: "Log path for prompts",
         value: config.DEBUG_PROMPTS_LOG_PATH,
-        description: "Edit the directory where dispatched prompt contents are saved as `<timestamp>-<req-command>` files. Relative paths resolve against the original project base.",
+        description: "Edit the directory where dispatched prompt contents are saved as `<project>-<branch>-<timestamp>-<req-command>` files. Relative paths resolve against the original project base.",
       },
       debugEnabled,
+    ),
+    buildDebugMenuChoice(
+      {
+        id: "debug-log-files",
+        label: "Generated log files",
+        value: "read-only",
+        description: [
+          "Debug artifacts written under the configured log path while Debug is enabled, each prefixed <project>-<branch>-<timestamp>-<req-command>:",
+          "- *-request.md: exact command invocation summary shown on screen",
+          "- *-prompt.md: exact rendered prompt delivered to the LLM agent",
+          "- *-debug.json: JSON debug entries for tool executions, prompt events, and workflow transitions",
+          "- *-error-<status>.json: raw failing provider request payload",
+          "- *-error-<status>-response.txt: finalized provider error text",
+          "- *-error-<status>-replay.json: replay sidecar with ready-to-use replay commands",
+          "- *-error-<status>-session.jsonl: execution-session snapshot consumable by `pi --fork`",
+        ].join("\n"),
+      },
+      false,
     ),
     buildDebugMenuChoice(
       {
@@ -2478,15 +2496,6 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
         value: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED),
         values: ["enable", "disable"],
         description: "Enable or disable slash-command wrappers for `req-compress`, `req-references`, `req-static-check`, `req-summarize`, and `req-tokens`.",
-      },
-      debugEnabled,
-    ),
-    buildDebugMenuChoice(
-      {
-        id: "debug-log-file",
-        label: "Log file",
-        value: config.DEBUG_LOG_FILE,
-        description: "Edit the JSON debug log file path. Relative paths resolve against the original project base.",
       },
       debugEnabled,
     ),
@@ -2549,12 +2558,12 @@ function buildDebugMenuChoices(config: UseReqConfig): PiUsereqSettingsMenuChoice
 
 /**
  * @brief Runs the interactive Debug submenu.
- * @details Lets the user toggle runtime global debug enablement (stored only in the process-scoped runtime debug store and never persisted), prompt-content debug enablement plus prompt log path, tool-wrapper command registration, debug file and workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders. Runtime depends on user interaction count. Side effects include UI updates, config mutation, process-scoped runtime debug state mutation, and optional debug command registration.
+ * @details Lets the user toggle persisted local global debug enablement, prompt-content debug enablement plus prompt log path, tool-wrapper command registration, debug workflow filters, dedicated workflow-event logging, per-tool selectors, and per-prompt selectors while preserving row focus across re-renders, and keeps the read-only `Generated log files` description row permanently disabled. Runtime depends on user interaction count. Side effects include UI updates, config mutation and persistence, and optional debug command registration.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in] ctx {ExtensionCommandContext} Active command context.
  * @param[in,out] config {UseReqConfig} Mutable configuration object.
  * @return {Promise<void>} Promise resolved when the submenu closes.
- * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323, REQ-413, REQ-414, REQ-415, REQ-420, REQ-426
+ * @satisfies REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-192, REQ-193, REQ-195, REQ-277, REQ-321, REQ-322, REQ-323, REQ-413, REQ-414, REQ-415, REQ-420, REQ-426, REQ-801
  */
 async function configureDebugMenu(
   pi: ExtensionAPI,
@@ -2579,7 +2588,6 @@ async function configureDebugMenu(
       onChange: (choiceId, newValue) => {
         if (choiceId === "debug-enabled") {
           config.DEBUG_ENABLED = newValue === "enable" ? "enable" : "disable";
-          setRuntimeDebugEnabled(config.DEBUG_ENABLED);
           onConfigChange();
           ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
           return;
@@ -2646,7 +2654,6 @@ async function configureDebugMenu(
 
     if (choice === "debug-enabled") {
       config.DEBUG_ENABLED = config.DEBUG_ENABLED === "enable" ? "disable" : "enable";
-      setRuntimeDebugEnabled(config.DEBUG_ENABLED);
       onConfigChange();
       ctx.ui.notify(`Debug ${config.DEBUG_ENABLED}`, "info");
       continue;
@@ -2654,7 +2661,6 @@ async function configureDebugMenu(
     if (choice === "reset-defaults") {
       const resetPreview: ResetConfirmationChange[] = [
         { label: "Debug", previousValue: config.DEBUG_ENABLED, nextValue: "disable" },
-        { label: "Log file", previousValue: config.DEBUG_LOG_FILE, nextValue: DEFAULT_DEBUG_LOG_FILE },
         { label: "Enable debug prompts", previousValue: normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED), nextValue: DEFAULT_DEBUG_PROMPTS_ENABLED },
         { label: "Log path for prompts", previousValue: config.DEBUG_PROMPTS_LOG_PATH, nextValue: DEFAULT_DEBUG_PROMPTS_LOG_PATH },
         { label: "Enable debug commands for tools", previousValue: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED), nextValue: DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED },
@@ -2698,15 +2704,6 @@ async function configureDebugMenu(
         config.DEBUG_PROMPTS_LOG_PATH = normalizeDebugPromptsLogPath(value);
         onConfigChange();
         ctx.ui.notify(`Debug prompt log path set to ${config.DEBUG_PROMPTS_LOG_PATH}`, "info");
-      }
-      continue;
-    }
-    if (choice === "debug-log-file") {
-      const value = await ctx.ui.input("Log file", config.DEBUG_LOG_FILE);
-      if (value !== undefined) {
-        config.DEBUG_LOG_FILE = normalizeDebugLogFile(value);
-        onConfigChange();
-        ctx.ui.notify(`Debug log file set to ${config.DEBUG_LOG_FILE}`, "info");
       }
       continue;
     }
@@ -4151,6 +4148,7 @@ function registerPromptCommands(
         const projectBase = getProjectBase(commandCwd);
         const config = loadProjectConfig(commandCwd);
         const maxContextTokens = resolveModelContextWindowTokens(statusController.state.contextUsage);
+        establishPromptRunIdentity(projectBase, config, promptName);
         setPiUsereqWorkflowRequest(statusController, promptName, ctx);
         transitionPromptWorkflowState(
           statusController,

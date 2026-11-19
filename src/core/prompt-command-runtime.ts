@@ -19,6 +19,7 @@ import {
 import {
   logDebugPromptEvent,
   logDebugPromptWorkflowEvent,
+  setActivePromptDebugRunIdentity,
   type DebugWorkflowState,
 } from "./debug-runtime.js";
 import { type PromptCommandName } from "./prompt-command-catalog.js";
@@ -1257,14 +1258,14 @@ export function validatePromptGitState(projectBase: string, config?: UseReqConfi
     throwPromptGitStatusError();
   }
   const porcelainStatus = runCapture(["git", "status", "--porcelain"], gitRoot);
-  const ignoredStatusPaths = new Set<string>();
+  const ignoredStatusPathPrefixes = new Set<string>();
   if (config) {
-    const configuredLogPath = path.isAbsolute(config.DEBUG_LOG_FILE)
-      ? path.normalize(config.DEBUG_LOG_FILE)
-      : path.resolve(projectBase, config.DEBUG_LOG_FILE);
+    const configuredLogPath = path.isAbsolute(config.DEBUG_PROMPTS_LOG_PATH)
+      ? path.normalize(config.DEBUG_PROMPTS_LOG_PATH)
+      : path.resolve(projectBase, config.DEBUG_PROMPTS_LOG_PATH);
     const relativeLogPath = path.relative(gitRoot, configuredLogPath);
     if (relativeLogPath !== "" && !relativeLogPath.startsWith("..") && !path.isAbsolute(relativeLogPath)) {
-      ignoredStatusPaths.add(relativeLogPath.split(path.sep).join("/"));
+      ignoredStatusPathPrefixes.add(relativeLogPath.split(path.sep).join("/"));
     }
   }
   const residualStatusLines = porcelainStatus.stdout
@@ -1272,8 +1273,10 @@ export function validatePromptGitState(projectBase: string, config?: UseReqConfi
     .map((line) => line.trimEnd())
     .filter((line) => line !== "")
     .filter((line) => {
-      const statusPath = line.slice(3).split(" -> ").at(-1)?.split(path.sep).join("/") ?? "";
-      return !ignoredStatusPaths.has(statusPath);
+      const statusPath = (line.slice(3).split(" -> ").at(-1)?.split(path.sep).join("/") ?? "").replace(/\/+$/u, "");
+      return ![...ignoredStatusPathPrefixes].some(
+        (prefix) => statusPath === prefix || statusPath.startsWith(`${prefix}/`),
+      );
     });
   if (porcelainStatus.error || porcelainStatus.status !== 0 || residualStatusLines.length > 0) {
     throwPromptGitStatusError();
@@ -1338,21 +1341,110 @@ function getNextPromptWorktreeExecutionId(): string {
 }
 
 /**
- * @brief Builds the prompt-command worktree name without invoking agent-tool executors.
- * @details Combines the normalized persisted worktree prefix, repository basename, sanitized current branch, and timestamp execution identifier into the dedicated prompt-command worktree name. Runtime is O(1) plus git execution cost. Side effects include process spawning.
+ * @brief Describes the shared run token consumed by worktree naming and debug filename prefixes.
+ * @details Stores the repository basename, the raw and sanitized current branch, the monotonic `YYYYMMDDHHMMSS` execution identifier, and the `<project>-<sanitized-branch>-<executionId>` log prefix so worktree naming and REQ-798 debug filename prefixes derive from identical components. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-206, REQ-798
+ */
+interface PromptRunIdentity {
+  projectName: string;
+  branchName: string;
+  sanitizedBranchName: string;
+  executionId: string;
+  logPrefix: string;
+}
+
+/**
+ * @brief Builds the shared prompt-run identity for worktree naming and debug filename prefixes.
+ * @details Combines the repository basename, the sanitized current branch, and one monotonic `YYYYMMDDHHMMSS` execution identifier into the run log prefix, and establishes the process-scoped active debug run identity so every debug artifact of the run filenames itself with the exact worktree-name components. Runtime is O(1) plus one git execution. Side effects include process spawning and process-scoped debug state mutation.
  * @param[in] gitRoot {string} Absolute runtime git root.
  * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name of the starting run.
+ * @return {PromptRunIdentity} Shared run identity for worktree naming and debug prefixes.
+ * @satisfies REQ-206, REQ-798, REQ-799
+ */
+function buildPromptRunIdentity(
+  gitRoot: string,
+  config: UseReqConfig,
+  promptName: PromptCommandName,
+): PromptRunIdentity {
+  const projectName = path.basename(gitRoot);
+  const branchName = resolveCurrentPromptBranchName(gitRoot);
+  const sanitizedBranchName = sanitizePromptWorktreeBranchName(branchName);
+  const executionId = getNextPromptWorktreeExecutionId();
+  const logPrefix = `${projectName}-${sanitizedBranchName}-${executionId}`;
+  setActivePromptDebugRunIdentity(promptName, logPrefix);
+  return { projectName, branchName, sanitizedBranchName, executionId, logPrefix };
+}
+
+/**
+ * @brief Defines the process-scoped pending prompt-run identity slot.
+ * @details Holds the identity established at prompt dispatch until the matching `preparePromptCommandExecution(...)` consumes it for worktree naming, so preflight debug writes and the worktree name share identical components. Access complexity is O(1).
+ * @satisfies REQ-798, REQ-799
+ */
+const PI_USEREQ_PENDING_PROMPT_RUN_IDENTITY_KEY = "__piUsereqPendingPromptRunIdentity";
+
+/**
+ * @brief Establishes the shared prompt-run identity at dispatch time.
+ * @details Builds the run identity from the dispatch project base and immediately publishes it to the process-scoped debug run-identity store so every debug write of the run, including preflight workflow-state transitions fired before execution preparation, filenames itself with the REQ-798 prefix, and caches it for the matching `preparePromptCommandExecution(...)` so the generated worktree name reuses the identical components. Runtime is O(1) plus git execution. Side effects include process spawning and process-scoped state mutation.
+ * @param[in] projectBase {string} Absolute dispatch project base.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name of the dispatching run.
+ * @return {void} No return value.
+ * @satisfies REQ-798, REQ-799
+ */
+export function establishPromptRunIdentity(
+  projectBase: string,
+  config: UseReqConfig,
+  promptName: PromptCommandName,
+): void {
+  const gitRoot = resolveRuntimeGitPath(projectBase) ?? projectBase;
+  const identity = buildPromptRunIdentity(gitRoot, config, promptName);
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPendingPromptRunIdentity?: { promptName: PromptCommandName; identity: PromptRunIdentity };
+  };
+  globalState[PI_USEREQ_PENDING_PROMPT_RUN_IDENTITY_KEY] = { promptName, identity };
+}
+
+/**
+ * @brief Consumes the pending prompt-run identity for one matching execution preparation.
+ * @details Returns the cached identity established at dispatch when its prompt name matches and clears the slot so later preparations never reuse a stale identity, and otherwise builds one fresh identity. Runtime is O(1) plus git execution for the fresh path. Side effects include process-scoped state mutation and process spawning on the fresh path.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name of the preparing run.
+ * @param[in] gitRoot {string} Absolute runtime git root.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PromptRunIdentity} Shared run identity for worktree naming and debug prefixes.
+ * @satisfies REQ-798, REQ-799
+ */
+function consumePromptRunIdentity(
+  promptName: PromptCommandName,
+  gitRoot: string,
+  config: UseReqConfig,
+): PromptRunIdentity {
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPendingPromptRunIdentity?: { promptName: PromptCommandName; identity: PromptRunIdentity };
+  };
+  const pending = globalState[PI_USEREQ_PENDING_PROMPT_RUN_IDENTITY_KEY];
+  if (pending && pending.promptName === promptName) {
+    globalState[PI_USEREQ_PENDING_PROMPT_RUN_IDENTITY_KEY] = undefined;
+    return pending.identity;
+  }
+  return buildPromptRunIdentity(gitRoot, config, promptName);
+}
+
+/**
+ * @brief Builds the prompt-command worktree name without invoking agent-tool executors.
+ * @details Combines the normalized persisted worktree prefix with the shared run-identity log prefix so the worktree name embeds exactly the components reused by REQ-798 debug filename prefixes. Runtime is O(1). No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] runIdentity {PromptRunIdentity} Shared run identity built at preflight.
  * @return {string} Generated worktree and branch name.
  * @throws {ReqError} Throws when the generated name is invalid.
  * @satisfies REQ-206, REQ-220
  */
-function buildPromptWorktreeName(gitRoot: string, config: UseReqConfig): string {
-  const projectName = path.basename(gitRoot);
-  const branchName = resolveCurrentPromptBranchName(gitRoot);
-  const sanitizedBranchName = sanitizePromptWorktreeBranchName(branchName);
+function buildPromptWorktreeName(
+  config: UseReqConfig,
+  runIdentity: PromptRunIdentity,
+): string {
   const worktreePrefix = normalizeGitWorktreePrefix(config.GIT_WORKTREE_PREFIX);
-  const executionId = getNextPromptWorktreeExecutionId();
-  const worktreeName = `${worktreePrefix}${projectName}-${sanitizedBranchName}-${executionId}`;
+  const worktreeName = `${worktreePrefix}${runIdentity.logPrefix}`;
   if (!validatePromptWorktreeName(worktreeName)) {
     throw new ReqError(`ERROR: Invalid worktree/branch name: ${worktreeName}.`, 1);
   }
@@ -1705,7 +1797,7 @@ export function validatePromptRequiredDocs(
 
 /**
  * @brief Prepares prompt-command execution for one bundled prompt.
- * @details Runs slash-command-owned git validation, enforces the context-occupancy early check against the selected model max input context, enforces the prompt-specific required-doc matrix, resolves persisted origin and execution session files, applies the effective worktree policy, generates and verifies a dedicated worktree when enabled, and returns the execution plan consumed by prompt rendering plus lifecycle hooks. Worktree-backed execution reuses the active session directory for the forked session file. Runtime is dominated by git subprocesses, worktree creation, and optional session-file cloning. Side effects include worktree creation, session-file creation, filesystem reads, and optional prompt debug-log writes.
+ * @details Runs slash-command-owned git validation, enforces the context-occupancy early check against the selected model max input context, enforces the prompt-specific required-doc matrix, resolves persisted origin and execution session files, establishes the shared run identity consumed by worktree naming and REQ-798 debug filename prefixes, applies the effective worktree policy, generates and verifies a dedicated worktree when enabled, and returns the execution plan consumed by prompt rendering plus lifecycle hooks. Worktree-backed execution reuses the active session directory for the forked session file. Runtime is dominated by git subprocesses, worktree creation, and optional session-file cloning. Side effects include worktree creation, session-file creation, filesystem reads, and optional prompt debug-log writes.
  * @param[in] promptName {PromptCommandName} Bundled prompt identifier.
  * @param[in] promptArgs {string} Raw prompt argument string.
  * @param[in] projectBase {string} Absolute current project base.
@@ -1719,7 +1811,7 @@ export function validatePromptRequiredDocs(
  * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens consumed by the early occupancy check; undefined selects the documented 1,000,000-token fallback.
  * @return {PromptCommandExecutionPlan} Prepared execution plan.
  * @throws {ReqError} Throws when repository validation, the context-occupancy early check, required-doc validation, worktree creation, or session preparation fails.
- * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271, REQ-366, REQ-408, REQ-409, REQ-410, REQ-411
+ * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271, REQ-366, REQ-408, REQ-409, REQ-410, REQ-411, REQ-798, REQ-799
  */
 export function preparePromptCommandExecution(
   promptName: PromptCommandName,
@@ -1742,6 +1834,7 @@ export function preparePromptCommandExecution(
     projectBase,
   );
   setRuntimeGitPath(gitPath);
+  const runIdentity = consumePromptRunIdentity(promptName, gitPath, config);
   validatePromptRequiredDocs(promptName, projectBase, config, debugOptions);
   const staticWorktreePaths = resolveWorktreePaths(projectBase, gitPath, "");
   const gitWorktreeEnabled = resolveEffectiveGitWorktreeEnabled(
@@ -1754,7 +1847,7 @@ export function preparePromptCommandExecution(
       promptName,
       promptArgs,
       gitPath,
-      branchName: resolveCurrentPromptBranchName(gitPath),
+      branchName: runIdentity.branchName,
       basePath: projectBase,
       contextPath: projectBase,
       parentPath: staticWorktreePaths.parentPath,
@@ -1765,7 +1858,7 @@ export function preparePromptCommandExecution(
       originalThinkingLevel,
     };
   }
-  const worktreeDir = buildPromptWorktreeName(gitPath, config);
+  const worktreeDir = buildPromptWorktreeName(config, runIdentity);
   const worktreePaths = createPromptWorktree(
     projectBase,
     gitPath,

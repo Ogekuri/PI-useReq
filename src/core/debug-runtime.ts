@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Declares debug inventories, normalizers, and JSON log persistence helpers.
- * @details Centralizes debug-menu selector inventories, config-field normalization, the process-scoped runtime debug-enable state, workflow-status gating, append-only JSON log writing for tool, prompt, and dedicated workflow debug events, process-scoped capture of the exact `before_provider_request` provider payload for active prompt runs, and error-stage provider payload dumps gated by `after_provider_response` error statuses. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
+ * @details Centralizes debug-menu selector inventories, config-field normalization, the process-scoped active prompt-run identity consumed by debug filename prefixes, workflow-status gating, append-only JSON log writing for tool, prompt, and dedicated workflow debug events, process-scoped capture of the exact `before_provider_request` provider payload for active prompt runs, and error-stage provider payload dumps gated by `after_provider_response` error statuses. Runtime is dominated by JSON serialization plus filesystem I/O during log writes. Side effects include directory creation and file overwrite when debug entries are appended.
  */
 
 import fs from "node:fs";
@@ -25,54 +25,113 @@ import {
 export const DEFAULT_DEBUG_ENABLED = "disable" as const;
 
 /**
- * @brief Describes the process-scoped runtime debug-enable state persisted across session rebinds.
- * @details Stores the user-toggled runtime `Debug` flag on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` while the hosting process persists across those operations; the flag therefore survives ctrl+N session forks and `req-reset` but resets to `disable` when a fresh pi CLI process starts. The interface is compile-time only and introduces no runtime cost.
- * @satisfies REQ-236, REQ-426
+ * @brief Describes the active prompt-run identity used by debug filename prefixes.
+ * @details Pairs the `<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` log prefix derived from the REQ-206 worktree-name components with the invokable `req-*` command name of the run that established it, so every debug artifact written during or after the run stays attributable to exactly one worktree execution. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-798
  */
-interface ProcessScopedDebugEnabledStore {
-  runtimeDebugEnabled: "enable" | "disable" | undefined;
+export interface PromptDebugRunIdentity {
+  logPrefix: string;
+  commandName: string;
 }
 
 /**
- * @brief Returns the process-scoped runtime debug-enable store.
- * @details Lazily initializes one `globalThis` record so session rebinds reuse the toggled runtime debug mode instead of resetting it to the persisted default. Runtime is O(1). Side effect: initializes process-scoped state on first access.
- * @return {ProcessScopedDebugEnabledStore} Mutable process-scoped runtime debug store.
+ * @brief Describes the process-scoped active prompt-run identity store persisted across session rebinds.
+ * @details Stores the latest established run identity on `globalThis` because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload` between prompt dispatch, tool execution, worktree merge, and session-shutdown handling, while the hosting process persists across those operations; later workflow events therefore still correlate with the run that produced them. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-798, REQ-799
  */
-function getProcessScopedDebugEnabledStore(): ProcessScopedDebugEnabledStore {
-  const globalScope = globalThis as typeof globalThis & { __piUsereqDebugEnabledStore?: ProcessScopedDebugEnabledStore };
-  if (!globalScope.__piUsereqDebugEnabledStore) {
-    globalScope.__piUsereqDebugEnabledStore = { runtimeDebugEnabled: undefined };
+interface ProcessScopedPromptDebugRunIdentityStore {
+  activeRunIdentity: PromptDebugRunIdentity | undefined;
+}
+
+/**
+ * @brief Returns the process-scoped active prompt-run identity store.
+ * @details Lazily initializes one `globalThis` record so session rebinds reuse the latest run identity instead of discarding it. Runtime is O(1). Side effect: initializes process-scoped state on first access.
+ * @return {ProcessScopedPromptDebugRunIdentityStore} Mutable process-scoped run-identity store.
+ */
+function getProcessScopedPromptDebugRunIdentityStore(): ProcessScopedPromptDebugRunIdentityStore {
+  const globalScope = globalThis as typeof globalThis & { __piUsereqPromptDebugRunIdentityStore?: ProcessScopedPromptDebugRunIdentityStore };
+  if (!globalScope.__piUsereqPromptDebugRunIdentityStore) {
+    globalScope.__piUsereqPromptDebugRunIdentityStore = { activeRunIdentity: undefined };
   }
-  return globalScope.__piUsereqDebugEnabledStore;
+  return globalScope.__piUsereqPromptDebugRunIdentityStore;
 }
 
 /**
- * @brief Resolves the runtime debug-enable mode for the current pi host process.
- * @details Returns the process-scoped toggled value when present and the documented `disable` default otherwise, so every fresh pi CLI process starts with debug logging disabled regardless of any stale persisted payload. Runtime is O(1). No external state is mutated.
- * @return {"enable" | "disable"} Effective runtime debug-enable mode.
- * @satisfies REQ-236
- */
-export function getRuntimeDebugEnabled(): "enable" | "disable" {
-  return getProcessScopedDebugEnabledStore().runtimeDebugEnabled ?? DEFAULT_DEBUG_ENABLED;
-}
-
-/**
- * @brief Stores one user-toggled runtime debug-enable mode for the current pi host process.
- * @details Mutates only the process-scoped runtime store so `Debug` menu toggles survive session rebinds without reaching persisted local or global configuration files. Runtime is O(1). Side effect: mutates process-scoped runtime state.
- * @param[in] runtimeDebugEnabled {"enable" | "disable"} Next runtime debug-enable mode.
+ * @brief Establishes the active prompt-run identity for debug filename prefixes.
+ * @details Stores the supplied `<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` log prefix plus the invokable `req-*` command name so every subsequent debug write of the run filenames its artifacts with the exact worktree-name components. Runtime is O(1). Side effect: mutates process-scoped runtime state.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name of the starting run.
+ * @param[in] logPrefix {string} Run log prefix built from the REQ-206 worktree-name components.
  * @return {void} No return value.
- * @satisfies REQ-236, REQ-426
+ * @satisfies REQ-798, REQ-799
  */
-export function setRuntimeDebugEnabled(runtimeDebugEnabled: "enable" | "disable"): void {
-  getProcessScopedDebugEnabledStore().runtimeDebugEnabled = runtimeDebugEnabled;
+export function setActivePromptDebugRunIdentity(promptName: PromptCommandName, logPrefix: string): void {
+  getProcessScopedPromptDebugRunIdentityStore().activeRunIdentity = {
+    logPrefix,
+    commandName: getDebugPromptName(promptName),
+  };
 }
 
 /**
- * @brief Defines the default debug log file value.
- * @details New configurations write debug JSON entries to `/tmp/PI-useReq.json` unless the user overrides the path. Access complexity is O(1).
- * @satisfies CTN-013, REQ-237
+ * @brief Resolves the active prompt-run identity for the current pi host process.
+ * @details Returns the latest established run identity or `undefined` when no bundled `req-*` prompt run has started in this host process yet. Runtime is O(1). No external state is mutated.
+ * @return {PromptDebugRunIdentity | undefined} Active run identity when one exists.
+ * @satisfies REQ-798
  */
-export const DEFAULT_DEBUG_LOG_FILE = "/tmp/PI-useReq.json";
+export function getActivePromptDebugRunIdentity(): PromptDebugRunIdentity | undefined {
+  return getProcessScopedPromptDebugRunIdentityStore().activeRunIdentity;
+}
+
+/**
+ * @brief Discards the active prompt-run identity.
+ * @details Clears the process-scoped run identity when one fresh pi CLI host process starts so debug writes from the new process never inherit the prefix of a run from a previous process. Runtime is O(1). Side effect: mutates process-scoped runtime state.
+ * @return {void} No return value.
+ * @satisfies REQ-800
+ */
+export function clearActivePromptDebugRunIdentity(): void {
+  getProcessScopedPromptDebugRunIdentityStore().activeRunIdentity = undefined;
+}
+
+/**
+ * @brief Formats one write-time timestamp as the `YYYYMMDDHHMMSS` run-prefix component.
+ * @details Zero-pads calendar fields to their canonical widths and joins every segment without separators so fallback debug filename prefixes stay lexicographically sortable and shape-identical to the REQ-206 worktree execution identifier. Runtime is O(1). No external state is mutated.
+ * @param[in] date {Date} Write-time timestamp to encode.
+ * @return {string} `YYYYMMDDHHMMSS` timestamp component.
+ * @satisfies REQ-800
+ */
+export function formatPromptDebugRunTimestamp(date: Date): string {
+  const pad = (value: number, length = 2): string => String(value).padStart(length, "0");
+  return [
+    pad(date.getFullYear(), 4),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join("");
+}
+
+/**
+ * @brief Builds the fallback debug filename prefix for entries written without an active run identity.
+ * @details Combines the project-base basename, the literal `unknown` branch token, and the write-time `YYYYMMDDHHMMSS` timestamp so debug entries raised outside any bundled `req-*` prompt run still receive a deterministic prefix-shaped filename. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
+ * @return {string} Fallback `<project-base-basename>-unknown-<YYYYMMDDHHMMSS>` prefix.
+ * @satisfies REQ-800
+ */
+export function resolveFallbackPromptDebugRunPrefix(projectBase: string, date = new Date()): string {
+  return `${path.basename(path.resolve(projectBase))}-unknown-${formatPromptDebugRunTimestamp(date)}`;
+}
+
+/**
+ * @brief Resolves the effective debug filename prefix for one project base.
+ * @details Returns the active run-identity prefix when one exists and the REQ-800 fallback prefix otherwise. Runtime is O(1) plus path normalization for the fallback. No external state is mutated.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @return {string} Effective debug filename prefix.
+ * @satisfies REQ-798, REQ-800
+ */
+function resolveActivePromptDebugRunPrefix(projectBase: string): string {
+  return getActivePromptDebugRunIdentity()?.logPrefix ?? resolveFallbackPromptDebugRunPrefix(projectBase);
+}
 
 /**
  * @brief Defines the default workflow-transition logging mode.
@@ -233,21 +292,6 @@ export function normalizeDebugEnabled(value: unknown): "enable" | "disable" {
 }
 
 /**
- * @brief Normalizes one persisted debug log file value.
- * @details Accepts only non-empty strings, trims surrounding whitespace, and falls back to `DEFAULT_DEBUG_LOG_FILE` when the candidate is absent or blank. Runtime is O(n) in path length. No external state is mutated.
- * @param[in] value {unknown} Candidate persisted debug-log file payload.
- * @return {string} Canonical debug-log file value.
- * @satisfies REQ-237
- */
-export function normalizeDebugLogFile(value: unknown): string {
-  if (typeof value !== "string") {
-    return DEFAULT_DEBUG_LOG_FILE;
-  }
-  const trimmedValue = value.trim();
-  return trimmedValue === "" ? DEFAULT_DEBUG_LOG_FILE : trimmedValue;
-}
-
-/**
  * @brief Normalizes one persisted workflow-transition logging flag.
  * @details Accepts only the documented `enable|disable` values and falls back to `DEFAULT_DEBUG_STATUS_CHANGES` for all other payloads. Runtime is O(1). No external state is mutated.
  * @param[in] value {unknown} Candidate persisted workflow-transition logging payload.
@@ -382,21 +426,6 @@ export function matchesDebugWorkflowState(
 }
 
 /**
- * @brief Resolves the absolute debug log file path for one project base.
- * @details Preserves absolute configured paths and otherwise resolves relative values against the original project base so prompt-worktree cleanup cannot discard accumulated debug evidence. Runtime is O(p) in path length. No external state is mutated.
- * @param[in] projectBase {string} Absolute original project base path.
- * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {string} Absolute debug log path.
- * @satisfies REQ-237
- */
-export function resolveDebugLogPath(projectBase: string, config: UseReqConfig): string {
-  const configuredPath = normalizeDebugLogFile(config.DEBUG_LOG_FILE);
-  return path.isAbsolute(configuredPath)
-    ? path.normalize(configuredPath)
-    : path.resolve(projectBase, configuredPath);
-}
-
-/**
  * @brief Resolves the absolute debug prompt log directory for one project base.
  * @details Preserves absolute configured paths and otherwise resolves relative values against the original project base so prompt-worktree cleanup cannot discard accumulated prompt debug evidence. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] projectBase {string} Absolute original project base path.
@@ -409,6 +438,48 @@ export function resolveDebugPromptsLogPath(projectBase: string, config: UseReqCo
   return path.isAbsolute(configuredPath)
     ? path.normalize(configuredPath)
     : path.resolve(projectBase, configuredPath);
+}
+
+/**
+ * @brief Defines the JSON debug log filename command suffix.
+ * @details Appended after the run prefix and command token so the per-run JSON debug log stays distinguishable from markdown and error-stage artifacts. Access complexity is O(1).
+ * @satisfies REQ-237
+ */
+export const DEBUG_JSON_LOG_FILE_SUFFIX = "debug";
+
+/**
+ * @brief Builds the per-run JSON debug log filename.
+ * @details Combines the debug filename prefix, the command token, and the `debug` suffix so tool, prompt, and workflow JSON entries of one run accumulate into one harmoniously prefixed `.json` file. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Active or fallback debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name or fallback entry name.
+ * @return {string} JSON debug log filename in the `<run-prefix>-<command>-debug.json` shape.
+ * @satisfies REQ-237, REQ-798
+ */
+export function formatDebugJsonLogFileName(logPrefix: string, commandName: string): string {
+  return `${logPrefix}-${commandName}-${DEBUG_JSON_LOG_FILE_SUFFIX}.json`;
+}
+
+/**
+ * @brief Resolves the absolute JSON debug log file path for one project base.
+ * @details Joins the resolved `DEBUG_PROMPTS_LOG_PATH` directory with the per-run `<run-prefix>-<command>-debug.json` filename, using the active run identity when present and the REQ-800 fallback prefix plus the supplied entry name otherwise. Runtime is O(p) in path length. No external state is mutated.
+ * @param[in] projectBase {string} Absolute original project base path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @param[in] fallbackCommandName {string} Entry name used as the command token when no run identity is active.
+ * @return {string} Absolute JSON debug log file path.
+ * @satisfies REQ-237, REQ-798, REQ-800
+ */
+export function resolveDebugJsonLogFilePath(
+  projectBase: string,
+  config: UseReqConfig,
+  fallbackCommandName: string,
+): string {
+  const identity = getActivePromptDebugRunIdentity();
+  const logPrefix = identity?.logPrefix ?? resolveFallbackPromptDebugRunPrefix(projectBase);
+  const commandName = identity?.commandName ?? fallbackCommandName;
+  return path.join(
+    resolveDebugPromptsLogPath(projectBase, config),
+    formatDebugJsonLogFileName(logPrefix, commandName),
+  );
 }
 
 /**
@@ -540,19 +611,20 @@ function normalizeDebugValue(value: unknown): unknown {
 }
 
 /**
- * @brief Appends one normalized debug log entry to the configured JSON log file.
- * @details Loads the existing JSON array when present, falls back to an empty array for missing or invalid files, appends the normalized entry, and rewrites the full file with a trailing newline. Runtime is dominated by JSON parse plus serialization and filesystem I/O. Side effects include directory creation and file overwrite.
+ * @brief Appends one normalized debug log entry to the per-run JSON debug log file.
+ * @details Resolves the `<run-prefix>-<command>-debug.json` path inside the configured prompt log directory, loads the existing JSON array when present, falls back to an empty array for missing or invalid files, appends the normalized entry, and rewrites the full file with a trailing newline. Runtime is dominated by JSON parse plus serialization and filesystem I/O. Side effects include directory creation and file overwrite.
  * @param[in] projectBase {string} Absolute original project base path.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] entry {DebugLogEntry} Candidate debug log entry.
  * @return {boolean} `true` when the entry is written successfully; `false` when filesystem writing fails.
+ * @satisfies REQ-237, REQ-798, REQ-800
  */
 function appendDebugLogEntry(
   projectBase: string,
   config: UseReqConfig,
   entry: DebugLogEntry,
 ): boolean {
-  const logPath = resolveDebugLogPath(projectBase, config);
+  const logPath = resolveDebugJsonLogFilePath(projectBase, config, entry.name);
   try {
     let entries: unknown[] = [];
     if (fs.existsSync(logPath)) {
@@ -690,68 +762,48 @@ export function logDebugPromptWorkflowEvent(
 }
 
 /**
- * @brief Formats one write-time timestamp as the `YYYYMMDDHHMMSSmmm` prompt debug prefix.
- * @details Zero-pads calendar fields to their canonical widths, appends three millisecond digits, and joins every segment without separators so generated prompt debug filenames stay lexicographically sortable and collision-resistant within one second. Runtime is O(1). No external state is mutated.
- * @param[in] date {Date} Write-time timestamp to encode.
- * @return {string} `YYYYMMDDHHMMSSmmm` timestamp prefix.
- * @satisfies REQ-417
- */
-export function formatPromptDebugTimestamp(date: Date): string {
-  const pad = (value: number, length = 2): string => String(value).padStart(length, "0");
-  return [
-    pad(date.getFullYear(), 4),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-    pad(date.getHours()),
-    pad(date.getMinutes()),
-    pad(date.getSeconds()),
-    pad(date.getMilliseconds(), 3),
-  ].join("");
-}
-
-/**
- * @brief Builds one prompt debug filename for one bundled prompt.
- * @details Combines the write-time `YYYYMMDDHHMMSSmmm` timestamp with the invokable `req-*` command name so every saved file can be replayed from the pi CLI and attributed to the originating `/req-*` prompt. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
- * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
- * @return {string} Prompt debug filename in the `<timestamp>-<req-command>` shape.
- * @satisfies REQ-417
+ * @brief Builds one prompt debug filename base for one run prefix.
+ * @details Combines the active `<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` run prefix with the invokable `req-*` command name so every saved file can be replayed from the pi CLI and attributed to the originating `/req-*` prompt and its worktree execution. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Active or fallback debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
+ * @return {string} Prompt debug filename base in the `<run-prefix>-<req-command>` shape.
+ * @satisfies REQ-417, REQ-798
  */
 export function formatPromptDebugFileName(
-  promptName: PromptCommandName,
-  date = new Date(),
+  logPrefix: string,
+  commandName: string,
 ): string {
-  return `${formatPromptDebugTimestamp(date)}-${getDebugPromptName(promptName)}`;
+  return `${logPrefix}-${commandName}`;
 }
 
 /**
- * @brief Builds one command-invocation summary debug filename for one bundled prompt.
- * @details Appends the `-request.md` suffix to the shared `<timestamp>-<req-command>` base so every saved command invocation summary stays attributable to the originating `/req-*` prompt, with the `.md` extension coherent with the persisted markdown summary content per REQ-435. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
- * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
- * @return {string} Prompt debug filename in the `<timestamp>-<req-command>-request.md` shape.
- * @satisfies REQ-417, REQ-427, REQ-435
+ * @brief Builds one command-invocation summary debug filename for one run prefix.
+ * @details Appends the `-request.md` suffix to the shared `<run-prefix>-<req-command>` base so every saved command invocation summary stays attributable to the originating `/req-*` prompt run, with the `.md` extension coherent with the persisted markdown summary content per REQ-435. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Active or fallback debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
+ * @return {string} Prompt debug filename in the `<run-prefix>-<req-command>-request.md` shape.
+ * @satisfies REQ-417, REQ-427, REQ-435, REQ-798
  */
 export function formatPromptDebugRequestFileName(
-  promptName: PromptCommandName,
-  date = new Date(),
+  logPrefix: string,
+  commandName: string,
 ): string {
-  return `${formatPromptDebugFileName(promptName, date)}-request.md`;
+  return `${formatPromptDebugFileName(logPrefix, commandName)}-request.md`;
 }
 
 /**
- * @brief Builds one dispatched-prompt content debug filename for one bundled prompt.
- * @details Appends the `-prompt.md` suffix to the shared `<timestamp>-<req-command>` base so every saved initial LLM prompt stays attributable to the originating `/req-*` prompt, with the `.md` extension coherent with the persisted markdown prompt content per REQ-435. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
- * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
- * @return {string} Prompt debug filename in the `<timestamp>-<req-command>-prompt.md` shape.
- * @satisfies REQ-417, REQ-418, REQ-435
+ * @brief Builds one dispatched-prompt content debug filename for one run prefix.
+ * @details Appends the `-prompt.md` suffix to the shared `<run-prefix>-<req-command>` base so every saved initial LLM prompt stays attributable to the originating `/req-*` prompt run, with the `.md` extension coherent with the persisted markdown prompt content per REQ-435. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Active or fallback debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
+ * @return {string} Prompt debug filename in the `<run-prefix>-<req-command>-prompt.md` shape.
+ * @satisfies REQ-417, REQ-418, REQ-435, REQ-798
  */
 export function formatPromptDebugPromptFileName(
-  promptName: PromptCommandName,
-  date = new Date(),
+  logPrefix: string,
+  commandName: string,
 ): string {
-  return `${formatPromptDebugFileName(promptName, date)}-prompt.md`;
+  return `${formatPromptDebugFileName(logPrefix, commandName)}-prompt.md`;
 }
 
 /**
@@ -789,14 +841,14 @@ function writePromptDebugFile(
 
 /**
  * @brief Writes one command invocation summary debug file when prompt debug logging is enabled.
- * @details Persists the exact summary text displayed on screen into one `<timestamp>-<req-command>-request.md` file so the `/req-*` invocation headers survive beside the dispatched prompt. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+ * @details Persists the exact summary text displayed on screen into one `<run-prefix>-<req-command>-request.md` file so the `/req-*` invocation headers survive beside the dispatched prompt. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
  * @param[in] projectBase {string} Absolute original project base path.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] workflowState {DebugWorkflowState} Current workflow state; excluded from gating per REQ-416.
  * @param[in] promptName {PromptCommandName} Bundled prompt name.
  * @param[in] requestText {string} Exact command invocation summary text displayed on screen.
  * @return {boolean} `true` when the request file is written; otherwise `false`.
- * @satisfies REQ-416, REQ-417, REQ-427, REQ-428, REQ-435
+ * @satisfies REQ-416, REQ-417, REQ-427, REQ-428, REQ-435, REQ-798
  */
 export function logDebugPromptRequest(
   projectBase: string,
@@ -810,21 +862,24 @@ export function logDebugPromptRequest(
     config,
     workflowState,
     promptName,
-    formatPromptDebugRequestFileName(promptName),
+    formatPromptDebugRequestFileName(
+      resolveActivePromptDebugRunPrefix(projectBase),
+      getDebugPromptName(promptName),
+    ),
     requestText,
   );
 }
 
 /**
  * @brief Writes one dispatched prompt content file when prompt debug logging is enabled.
- * @details Persists the exact rendered prompt content delivered through `sendMessage` or `sendUserMessage` into one `<timestamp>-<req-command>-prompt.md` file so the send can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
+ * @details Persists the exact rendered prompt content delivered through `sendMessage` or `sendUserMessage` into one `<run-prefix>-<req-command>-prompt.md` file so the send can be replayed from the pi CLI without pi-usereq installed. Runtime is dominated by one directory creation plus one file write when enabled and O(1) otherwise. Side effects include directory creation and file creation only for enabled matching entries.
  * @param[in] projectBase {string} Absolute original project base path.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] workflowState {DebugWorkflowState} Current workflow state; excluded from gating per REQ-416.
  * @param[in] promptName {PromptCommandName} Bundled prompt name.
  * @param[in] content {string} Exact rendered prompt content delivered through `sendMessage` or `sendUserMessage`.
  * @return {boolean} `true` when the prompt content file is written; otherwise `false`.
- * @satisfies REQ-416, REQ-417, REQ-418, REQ-428, REQ-435
+ * @satisfies REQ-416, REQ-417, REQ-418, REQ-428, REQ-435, REQ-798
  */
 export function logDebugPromptContent(
   projectBase: string,
@@ -833,7 +888,10 @@ export function logDebugPromptContent(
   promptName: PromptCommandName,
   content: string,
 ): boolean {
-  const fileName = formatPromptDebugPromptFileName(promptName);
+  const fileName = formatPromptDebugPromptFileName(
+    resolveActivePromptDebugRunPrefix(projectBase),
+    getDebugPromptName(promptName),
+  );
   const written = writePromptDebugFile(
     projectBase,
     config,
@@ -866,14 +924,15 @@ export interface PromptErrorReplayFacts {
 
 /**
  * @brief Describes one process-scoped captured provider request payload bound to an active prompt run.
- * @details Pairs the bundled prompt name, the serialization of the exact `before_provider_request` payload, the original project base, the resolved prompt log directory, the dispatched prompt debug filename of the same run, and the captured replay facts so a later `after_provider_response` or `message_end` error status can dump the failing request verbatim, its provider error text, and one replay sidecar without live controller state, cached configuration, or live provider objects. The interface is compile-time only and introduces no runtime cost.
- * @satisfies REQ-421, REQ-429, REQ-430
+ * @details Pairs the bundled prompt name, the serialization of the exact `before_provider_request` payload, the original project base, the resolved prompt log directory, the capturing run log prefix, the dispatched prompt debug filename of the same run, and the captured replay facts so a later `after_provider_response` or `message_end` error status can dump the failing request verbatim, its provider error text, and one replay sidecar without live controller state, cached configuration, or live provider objects. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-421, REQ-423, REQ-429, REQ-430, REQ-798
  */
 interface CapturedPromptErrorPayload {
   promptName: PromptCommandName;
   payloadText: string;
   projectBase: string;
   logDirectory: string;
+  logPrefix: string;
   promptDebugFile: string | undefined;
   replayFacts: PromptErrorReplayFacts;
 }
@@ -918,88 +977,88 @@ function getProcessScopedPromptErrorCaptureStore(): ProcessScopedPromptErrorCapt
 }
 
 /**
- * @brief Builds the shared extensionless provider error base filename for one bundled prompt.
- * @details Combines the write-time `YYYYMMDDHHMMSSmmm` timestamp, the invokable `req-*` command name, and the failing provider response status into the `<timestamp>-<req-command>-error-<status>` base shape so every saved error-stage prompt artifact stays attributable to the originating `/req-*` prompt and its session error code. This extensionless base is the suffix-attachment anchor for the `-response.txt`, `-replay.json`, and `-session.jsonl` variants; the flushed raw provider-request JSON payload appends its content-coherent `.json` extension through `formatPromptDebugErrorPayloadFileName(...)`. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @brief Builds the shared extensionless provider error base filename for one captured run.
+ * @details Combines the capturing run prefix, the invokable `req-*` command name, and the failing provider response status into the `<run-prefix>-<req-command>-error-<status>` base shape so every saved error-stage prompt artifact stays attributable to the originating `/req-*` prompt run and its session error code. This extensionless base is the suffix-attachment anchor for the `-response.txt`, `-replay.json`, and `-session.jsonl` variants; the flushed raw provider-request JSON payload appends its content-coherent `.json` extension through `formatPromptDebugErrorPayloadFileName(...)`. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Capturing run debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
- * @param[in] date {Date} Write-time timestamp. Defaults to the current wall-clock time.
- * @return {string} Extensionless provider error base filename in the `<timestamp>-<req-command>-error-<status>` shape.
- * @satisfies REQ-423
+ * @return {string} Extensionless provider error base filename in the `<run-prefix>-<req-command>-error-<status>` shape.
+ * @satisfies REQ-423, REQ-798
  */
 export function formatPromptDebugErrorFileName(
-  promptName: PromptCommandName,
+  logPrefix: string,
+  commandName: string,
   errorCode: number,
-  date = new Date(),
 ): string {
-  return `${formatPromptDebugTimestamp(date)}-${getDebugPromptName(promptName)}-error-${errorCode}`;
+  return `${logPrefix}-${commandName}-error-${errorCode}`;
 }
 
 /**
- * @brief Builds one provider error payload debug filename for one bundled prompt.
- * @details Appends the `.json` extension to the shared extensionless `<timestamp>-<req-command>-error-<status>` base so the flushed raw provider-request JSON payload keeps a filename extension coherent with its JSON content per REQ-435 while staying attributable to the exact failing request. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @brief Builds one provider error payload debug filename for one captured run.
+ * @details Appends the `.json` extension to the shared extensionless `<run-prefix>-<req-command>-error-<status>` base so the flushed raw provider-request JSON payload keeps a filename extension coherent with its JSON content per REQ-435 while staying attributable to the exact failing request. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Capturing run debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
- * @param[in] date {Date} Write-time timestamp shared with the sibling error artifacts. Defaults to the current wall-clock time.
- * @return {string} Provider error payload filename in the `<timestamp>-<req-command>-error-<status>.json` shape.
- * @satisfies REQ-423, REQ-431, REQ-435
+ * @return {string} Provider error payload filename in the `<run-prefix>-<req-command>-error-<status>.json` shape.
+ * @satisfies REQ-423, REQ-431, REQ-435, REQ-798
  */
 export function formatPromptDebugErrorPayloadFileName(
-  promptName: PromptCommandName,
+  logPrefix: string,
+  commandName: string,
   errorCode: number,
-  date = new Date(),
 ): string {
-  return `${formatPromptDebugErrorFileName(promptName, errorCode, date)}.json`;
+  return `${formatPromptDebugErrorFileName(logPrefix, commandName, errorCode)}.json`;
 }
 
 /**
- * @brief Builds one provider error response debug filename for one bundled prompt.
- * @details Appends the `-response.txt` suffix to the shared extensionless `<timestamp>-<req-command>-error-<status>` shape so the persisted plain-text provider error message keeps a filename extension coherent with its text content per REQ-435 and stays attributable to the exact failing request payload file written with the identical write-time timestamp. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @brief Builds one provider error response debug filename for one captured run.
+ * @details Appends the `-response.txt` suffix to the shared extensionless `<run-prefix>-<req-command>-error-<status>` shape so the persisted plain-text provider error message keeps a filename extension coherent with its text content per REQ-435 and stays attributable to the exact failing request payload file written with the identical capturing run prefix. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Capturing run debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
- * @param[in] date {Date} Write-time timestamp shared with the payload file. Defaults to the current wall-clock time.
- * @return {string} Provider error response filename in the `<timestamp>-<req-command>-error-<status>-response.txt` shape.
- * @satisfies REQ-423, REQ-429, REQ-435
+ * @return {string} Provider error response filename in the `<run-prefix>-<req-command>-error-<status>-response.txt` shape.
+ * @satisfies REQ-423, REQ-429, REQ-435, REQ-798
  */
 export function formatPromptDebugErrorResponseFileName(
-  promptName: PromptCommandName,
+  logPrefix: string,
+  commandName: string,
   errorCode: number,
-  date = new Date(),
 ): string {
-  return `${formatPromptDebugErrorFileName(promptName, errorCode, date)}-response.txt`;
+  return `${formatPromptDebugErrorFileName(logPrefix, commandName, errorCode)}-response.txt`;
 }
 
 /**
- * @brief Builds one provider error replay sidecar debug filename for one bundled prompt.
- * @details Appends the `-replay.json` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the persisted replay metadata sidecar stays attributable to the exact failing request payload file written with the identical write-time timestamp. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @brief Builds one provider error replay sidecar debug filename for one captured run.
+ * @details Appends the `-replay.json` suffix to the shared `<run-prefix>-<req-command>-error-<status>` shape so the persisted replay metadata sidecar stays attributable to the exact failing request payload file written with the identical capturing run prefix. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Capturing run debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
- * @param[in] date {Date} Write-time timestamp shared with the payload file. Defaults to the current wall-clock time.
- * @return {string} Provider error replay sidecar filename in the `<timestamp>-<req-command>-error-<status>-replay.json` shape.
- * @satisfies REQ-423, REQ-430
+ * @return {string} Provider error replay sidecar filename in the `<run-prefix>-<req-command>-error-<status>-replay.json` shape.
+ * @satisfies REQ-423, REQ-430, REQ-798
  */
 export function formatPromptDebugErrorReplayFileName(
-  promptName: PromptCommandName,
+  logPrefix: string,
+  commandName: string,
   errorCode: number,
-  date = new Date(),
 ): string {
-  return `${formatPromptDebugErrorFileName(promptName, errorCode, date)}-replay.json`;
+  return `${formatPromptDebugErrorFileName(logPrefix, commandName, errorCode)}-replay.json`;
 }
 
 /**
- * @brief Builds one provider error session-snapshot debug filename for one bundled prompt.
- * @details Appends the `-session.jsonl` suffix to the shared `<timestamp>-<req-command>-error-<status>` shape so the byte-for-byte execution-session copy stays attributable to the exact failing request payload file written with the identical write-time timestamp and remains directly consumable by `pi --fork` without files outside the prompt log directory. Runtime is O(1). No external state is mutated.
- * @param[in] promptName {PromptCommandName} Bundled prompt name.
+ * @brief Builds one provider error session-snapshot debug filename for one captured run.
+ * @details Appends the `-session.jsonl` suffix to the shared `<run-prefix>-<req-command>-error-<status>` shape so the byte-for-byte execution-session copy stays attributable to the exact failing request payload file written with the identical capturing run prefix and remains directly consumable by `pi --fork` without files outside the prompt log directory. Runtime is O(1). No external state is mutated.
+ * @param[in] logPrefix {string} Capturing run debug filename prefix.
+ * @param[in] commandName {string} Invokable `req-*` command name.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
- * @param[in] date {Date} Write-time timestamp shared with the payload file. Defaults to the current wall-clock time.
- * @return {string} Provider error session-snapshot filename in the `<timestamp>-<req-command>-error-<status>-session.jsonl` shape.
- * @satisfies REQ-423, REQ-432
+ * @return {string} Provider error session-snapshot filename in the `<run-prefix>-<req-command>-error-<status>-session.jsonl` shape.
+ * @satisfies REQ-423, REQ-432, REQ-798
  */
 export function formatPromptDebugErrorSessionFileName(
-  promptName: PromptCommandName,
+  logPrefix: string,
+  commandName: string,
   errorCode: number,
-  date = new Date(),
 ): string {
-  return `${formatPromptDebugErrorFileName(promptName, errorCode, date)}-session.jsonl`;
+  return `${formatPromptDebugErrorFileName(logPrefix, commandName, errorCode)}-session.jsonl`;
 }
 
 /**
@@ -1102,12 +1161,14 @@ export function capturePromptProviderRequestForDebug(
     return;
   }
   const logDirectory = resolveDebugPromptsLogPath(projectBase, config);
+  const logPrefix = resolveActivePromptDebugRunPrefix(projectBase);
   const dispatchedPromptFile = getProcessScopedPromptErrorCaptureStore().dispatchedPromptDebugFiles.get(promptName);
   getProcessScopedPromptErrorCaptureStore().capturedPromptErrorPayload = {
     promptName,
     payloadText: serializePromptProviderPayload(payload),
     projectBase,
     logDirectory,
+    logPrefix,
     promptDebugFile: dispatchedPromptFile === undefined ? undefined : path.join(logDirectory, dispatchedPromptFile),
     replayFacts: {
       ...replayFacts,
@@ -1197,11 +1258,11 @@ function buildPromptErrorReplaySidecarText(
 
 /**
  * @brief Writes the captured provider request payload plus its response text and replay sidecar as error-stage prompt debug files.
- * @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<timestamp>-<req-command>-error-<status>.json` file that stays raw provider-request JSON usable with `curl --data @`, the provider error text into one identically timestamped `-response.txt` file when supplied, one identically timestamped byte-for-byte `-session.jsonl` copy of the retained execution session so `pi --fork` can resume the exact failing state from the prompt log directory alone, and the replay sidecar into one identically timestamped `-replay.json` file inside the captured log directory beside the initial dispatched prompt artifacts. Records the flushed location so a later finalized `message_end` error message can still append the `-response.txt` file when `after_provider_response` fired first without error text. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus at most four file writes when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
+ * @details Consumes the process-scoped capture, discards it after every write attempt so stale payloads never reach later runs, rejects failing statuses below 400, and writes the exact captured payload into one `<run-prefix>-<req-command>-error-<status>.json` file that stays raw provider-request JSON usable with `curl --data @`, appending the REQ-802 `-retry-<n>` base suffix when the same run already flushed a same-status set, the provider error text into one identically prefixed `-response.txt` file when supplied, one identically prefixed byte-for-byte `-session.jsonl` copy of the retained execution session so `pi --fork` can resume the exact failing state from the prompt log directory alone, and the replay sidecar into one identically prefixed `-replay.json` file inside the captured log directory beside the initial dispatched prompt artifacts. Records the flushed location so a later finalized `message_end` error message can still append the `-response.txt` file when `after_provider_response` fired first without error text. All write inputs come from the capture itself, so the flush requires no live workflow state, cached configuration, or active controller prompt request. Runtime is dominated by one directory creation plus at most four file writes when a capture exists and O(1) otherwise. Side effects include directory creation and file creation only when a capture exists and the status is an error status.
  * @param[in] errorCode {number} Failing provider response status, such as `400`.
  * @param[in] errorResponseText {string | undefined} Finalized provider error message text when already available; the `-response` file is written later when omitted.
  * @return {boolean} `true` when the provider error payload file set is written; otherwise `false`.
- * @satisfies REQ-422, REQ-423, REQ-424, REQ-425, REQ-429, REQ-430, REQ-431, REQ-432, REQ-433, REQ-435
+ * @satisfies REQ-422, REQ-423, REQ-424, REQ-425, REQ-429, REQ-430, REQ-431, REQ-432, REQ-433, REQ-435, REQ-798, REQ-802
  */
 export function flushCapturedPromptErrorPayload(errorCode: number, errorResponseText?: string): boolean {
   const captureStore = getProcessScopedPromptErrorCaptureStore();
@@ -1210,8 +1271,15 @@ export function flushCapturedPromptErrorPayload(errorCode: number, errorResponse
   if (!captured || !Number.isFinite(errorCode) || errorCode < 400) {
     return false;
   }
-  const writeTime = new Date();
-  const payloadFileName = formatPromptDebugErrorPayloadFileName(captured.promptName, errorCode, writeTime);
+  const commandName = getDebugPromptName(captured.promptName);
+  const canonicalErrorBase = formatPromptDebugErrorFileName(captured.logPrefix, commandName, errorCode);
+  let errorBase = canonicalErrorBase;
+  let retryAttempt = 1;
+  while (fs.existsSync(path.join(captured.logDirectory, `${errorBase}.json`))) {
+    retryAttempt += 1;
+    errorBase = `${canonicalErrorBase}-retry-${retryAttempt}`;
+  }
+  const payloadFileName = `${errorBase}.json`;
   try {
     fs.mkdirSync(captured.logDirectory, { recursive: true });
     fs.writeFileSync(
@@ -1222,16 +1290,16 @@ export function flushCapturedPromptErrorPayload(errorCode: number, errorResponse
     if (typeof errorResponseText === "string" && errorResponseText.length > 0) {
       writePromptProviderErrorResponseFile(
         captured.logDirectory,
-        formatPromptDebugErrorResponseFileName(captured.promptName, errorCode, writeTime),
+        `${errorBase}-response.txt`,
         errorResponseText,
       );
     }
     const sessionSnapshotFileName = copyPromptErrorSessionSnapshotFile(
       captured,
-      formatPromptDebugErrorSessionFileName(captured.promptName, errorCode, writeTime),
+      `${errorBase}-session.jsonl`,
     );
     fs.writeFileSync(
-      path.join(captured.logDirectory, formatPromptDebugErrorReplayFileName(captured.promptName, errorCode, writeTime)),
+      path.join(captured.logDirectory, `${errorBase}-replay.json`),
       buildPromptErrorReplaySidecarText(captured, payloadFileName, sessionSnapshotFileName),
       "utf8",
     );
@@ -1239,7 +1307,7 @@ export function flushCapturedPromptErrorPayload(errorCode: number, errorResponse
       promptName: captured.promptName,
       errorCode,
       logDirectory: captured.logDirectory,
-      baseFileName: formatPromptDebugErrorFileName(captured.promptName, errorCode, writeTime),
+      baseFileName: errorBase,
     };
     return true;
   } catch {

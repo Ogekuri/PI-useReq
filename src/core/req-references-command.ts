@@ -67,32 +67,32 @@ function runCapture(command: string[], cwd: string): SpawnSyncReturns<string> {
 }
 
 /**
- * @brief Builds the set of git-status paths ignored for cleanliness checks.
- * @details Reuses the configured debug-log path exception already honored by prompt-command git validation so extension-owned debug artifacts do not block `req-references` execution or post-commit cleanliness verification. Runtime is O(p) in path length. No external state is mutated.
+ * @brief Builds the set of git-status path prefixes ignored for cleanliness checks.
+ * @details Reuses the configured prompt log directory exception already honored by prompt-command git validation so extension-owned debug artifacts do not block `req-references` execution or post-commit cleanliness verification. Runtime is O(p) in path length. No external state is mutated.
  * @param[in] projectBase {string} Absolute project base path.
  * @param[in] gitRoot {string} Absolute git root path.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {Set<string>} Slash-normalized relative paths ignored during git-status evaluation.
+ * @return {Set<string>} Slash-normalized relative path prefixes ignored during git-status evaluation.
  */
 function buildIgnoredGitStatusPaths(
   projectBase: string,
   gitRoot: string,
   config: UseReqConfig,
 ): Set<string> {
-  const ignoredStatusPaths = new Set<string>();
-  const configuredLogPath = path.isAbsolute(config.DEBUG_LOG_FILE)
-    ? path.normalize(config.DEBUG_LOG_FILE)
-    : path.resolve(projectBase, config.DEBUG_LOG_FILE);
+  const ignoredStatusPathPrefixes = new Set<string>();
+  const configuredLogPath = path.isAbsolute(config.DEBUG_PROMPTS_LOG_PATH)
+    ? path.normalize(config.DEBUG_PROMPTS_LOG_PATH)
+    : path.resolve(projectBase, config.DEBUG_PROMPTS_LOG_PATH);
   const relativeLogPath = path.relative(gitRoot, configuredLogPath);
   if (relativeLogPath !== "" && !relativeLogPath.startsWith("..") && !path.isAbsolute(relativeLogPath)) {
-    ignoredStatusPaths.add(relativeLogPath.split(path.sep).join("/"));
+    ignoredStatusPathPrefixes.add(relativeLogPath.split(path.sep).join("/"));
   }
-  return ignoredStatusPaths;
+  return ignoredStatusPathPrefixes;
 }
 
 /**
  * @brief Lists residual git-status rows after ignored extension-owned paths are filtered out.
- * @details Executes `git status --porcelain`, drops the configured debug-log path when present inside the active repository, and returns all remaining staged or unstaged rows used for post-commit cleanliness verification. Runtime is dominated by one git subprocess plus O(n) parsing in status-line count. Side effects include subprocess creation.
+ * @details Executes `git status --porcelain`, drops the configured prompt log directory contents when present inside the active repository, and returns all remaining staged or unstaged rows used for post-commit cleanliness verification. Runtime is dominated by one git subprocess plus O(n) parsing in status-line count. Side effects include subprocess creation.
  * @param[in] projectBase {string} Absolute project base path.
  * @param[in] gitRoot {string} Absolute git root path.
  * @param[in] config {UseReqConfig} Effective project configuration.
@@ -108,14 +108,16 @@ function listResidualGitStatusLines(
   if (statusResult.error || statusResult.status !== 0) {
     throw new ReqError("ERROR: Unable to inspect git repository cleanliness after req-references commit.", 1);
   }
-  const ignoredStatusPaths = buildIgnoredGitStatusPaths(projectBase, gitRoot, config);
+  const ignoredStatusPathPrefixes = buildIgnoredGitStatusPaths(projectBase, gitRoot, config);
   return statusResult.stdout
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter((line) => line !== "")
     .filter((line) => {
-      const statusPath = line.slice(3).split(" -> ").at(-1)?.split(path.sep).join("/") ?? "";
-      return !ignoredStatusPaths.has(statusPath);
+      const statusPath = (line.slice(3).split(" -> ").at(-1)?.split(path.sep).join("/") ?? "").replace(/\/+$/u, "");
+      return ![...ignoredStatusPathPrefixes].some(
+        (prefix) => statusPath === prefix || statusPath.startsWith(`${prefix}/`),
+      );
     });
 }
 

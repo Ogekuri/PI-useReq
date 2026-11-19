@@ -30,7 +30,6 @@ import {
 } from "../src/core/config.js";
 import {
   DEBUG_PROMPT_NAMES,
-  DEFAULT_DEBUG_LOG_FILE,
   DEFAULT_DEBUG_LOG_ON_STATUS,
   DEFAULT_DEBUG_PROMPTS_ENABLED,
   DEFAULT_DEBUG_PROMPTS_LOG_PATH,
@@ -44,7 +43,6 @@ import {
   logDebugPromptContent,
   normalizeDebugPromptsLogPath,
   discardCapturedPromptErrorPayload,
-  setRuntimeDebugEnabled,
   shouldLogDebugPromptContent,
 } from "../src/core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "../src/core/prompt-command-catalog.js";
@@ -791,7 +789,7 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
     editorText: "",
     statuses: new Map<string, string>(),
     notifications: [] as Array<{ message: string; level: string }>,
-    selectCalls: [] as Array<{ title: string; items: string[]; selectedChoiceId?: string }>,
+    selectCalls: [] as Array<{ title: string; items: string[]; selectedChoiceId?: string; choices?: unknown[] }>,
     customRenderLines: [] as string[][],
     waitForIdleCalls: 0,
     newSessions: [] as Array<{ messages: string[] }>,
@@ -916,6 +914,7 @@ function createFakeCtx(cwd: string, plan: FakeCtxPlan = { selects: [] }, options
           title: bridge.title,
           items: bridge.choices.map((choice) => choice.label),
           selectedChoiceId: bridge.selectedChoiceId,
+          choices: bridge.choices.map((choice) => ({ ...choice })),
         });
         if (response === undefined) {
           bridge.cancel();
@@ -2273,7 +2272,6 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
     selects: [
       "Debug",
       "Debug",
-      "Log file",
       "Enable debug commands for tools",
       "Log on status",
       "any",
@@ -2284,7 +2282,6 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
       "Save and close",
       "Save and close",
     ],
-    inputs: ["logs/debug-output.json"],
   });
 
   await command!.handler("", ctx);
@@ -2292,18 +2289,18 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   const renderedInitialDebugMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
   const persistedConfig = readProjectConfigJson(cwd);
   const debugCalls = ctx.__state.selectCalls.filter((call: { title: string; items: string[]; selectedChoiceId?: string }) => call.title === "Debug");
-  assert.match(renderedInitialDebugMenu, /<dim>Log file/);
+  assert.match(renderedInitialDebugMenu, /<dim>Generated log files/);
   assert.match(renderedInitialDebugMenu, /<dim>Enable debug commands for tools/);
   assert.ok(
-    renderedInitialDebugMenu.indexOf("<dim>Enable debug commands for tools")
-      < renderedInitialDebugMenu.indexOf("<dim>Log file"),
+    renderedInitialDebugMenu.indexOf("<dim>Generated log files")
+      < renderedInitialDebugMenu.indexOf("<dim>Enable debug commands for tools"),
   );
   assert.match(renderedInitialDebugMenu, /<dim>Log on status/);
   assert.match(renderedInitialDebugMenu, /<dim>Status changes/);
   assert.match(renderedInitialDebugMenu, /<dim>Workflow events/);
   assert.match(renderedInitialDebugMenu, /<dim>req-compress/);
-  assert.equal(persistedConfig.DEBUG_ENABLED, undefined);
-  assert.equal(persistedConfig.DEBUG_LOG_FILE, "logs/debug-output.json");
+  assert.equal(persistedConfig.DEBUG_ENABLED, "enable");
+  assert.equal(Object.hasOwn(persistedConfig, "DEBUG_LOG_FILE"), false);
   assert.equal(persistedConfig.DEBUG_TOOL_COMMANDS_ENABLED, "enable");
   assert.equal(persistedConfig.DEBUG_STATUS_CHANGES, "enable");
   assert.equal(persistedConfig.DEBUG_WORKFLOW_EVENTS, "enable");
@@ -2316,28 +2313,26 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_TOOLS, ["req-files-tokens"]);
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_PROMPTS, ["req-analyze"]);
   assert.equal(debugCalls[1]?.selectedChoiceId, "debug-enabled");
-  assert.equal(debugCalls[2]?.selectedChoiceId, "debug-log-file");
-  assert.equal(debugCalls[3]?.selectedChoiceId, "debug-tool-commands-enabled");
-  assert.equal(debugCalls[4]?.selectedChoiceId, "debug-log-on-status");
-  assert.equal(debugCalls[5]?.selectedChoiceId, "debug-status-changes");
-  assert.equal(debugCalls[6]?.selectedChoiceId, "debug-workflow-events");
-  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-tool:req-files-tokens");
-  assert.equal(debugCalls[8]?.selectedChoiceId, "debug-prompt:req-analyze");
+  assert.equal(debugCalls[2]?.selectedChoiceId, "debug-tool-commands-enabled");
+  assert.equal(debugCalls[3]?.selectedChoiceId, "debug-log-on-status");
+  assert.equal(debugCalls[4]?.selectedChoiceId, "debug-status-changes");
+  assert.equal(debugCalls[5]?.selectedChoiceId, "debug-workflow-events");
+  assert.equal(debugCalls[6]?.selectedChoiceId, "debug-tool:req-files-tokens");
+  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-prompt:req-analyze");
 
   const resetCtx = createFakeCtx(cwd, {
     selects: ["Debug", "Reset defaults", "Approve reset", "Save and close"],
   });
   await command!.handler("", resetCtx);
   const resetConfig = readProjectConfigJson(cwd);
-  assert.equal(resetConfig.DEBUG_ENABLED, undefined);
-  assert.equal(resetConfig.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
+  assert.equal(resetConfig.DEBUG_ENABLED, "disable");
+  assert.equal(Object.hasOwn(resetConfig, "DEBUG_LOG_FILE"), false);
   assert.equal(resetConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.equal(resetConfig.DEBUG_STATUS_CHANGES, "disable");
   assert.equal(resetConfig.DEBUG_WORKFLOW_EVENTS, DEFAULT_DEBUG_WORKFLOW_EVENTS);
   assert.equal(resetConfig.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
   assert.deepEqual(resetConfig.DEBUG_ENABLED_TOOLS, []);
   assert.deepEqual(resetConfig.DEBUG_ENABLED_PROMPTS, []);
-  setRuntimeDebugEnabled("disable");
 });
 
 test("debug menu rows derive from canonical tool and prompt inventories", async () => {
@@ -2357,8 +2352,8 @@ test("debug menu rows derive from canonical tool and prompt inventories", async 
     "Debug",
     "Enable debug prompts",
     "Log path for prompts",
+    "Generated log files",
     "Enable debug commands for tools",
-    "Log file",
     "Log on status",
     "Status changes",
     "Workflow events",
@@ -2373,6 +2368,21 @@ test("debug menu rows derive from canonical tool and prompt inventories", async 
     DEBUG_PROMPT_NAMES,
     PROMPT_COMMAND_NAMES.map((promptName) => `req-${promptName}`),
   );
+  const debugMenuCall = ctx.__state.selectCalls.find((call: { title: string }) => call.title === "Debug");
+  const generatedLogFilesRow = (debugMenuCall?.choices ?? []).find(
+    (choice: { id?: string }) => choice.id === "debug-log-files",
+  ) as { disabled?: boolean; labelTone?: string; valueTone?: string; description?: string } | undefined;
+  assert.ok(generatedLogFilesRow, "the Generated log files row exists");
+  assert.equal(generatedLogFilesRow.disabled, true);
+  assert.equal(generatedLogFilesRow.labelTone, "dim");
+  assert.equal(generatedLogFilesRow.valueTone, "dim");
+  assert.match(generatedLogFilesRow.description ?? "", /\*-request\.md/);
+  assert.match(generatedLogFilesRow.description ?? "", /\*-prompt\.md/);
+  assert.match(generatedLogFilesRow.description ?? "", /\*-debug\.json/);
+  assert.match(generatedLogFilesRow.description ?? "", /\*-error-<status>\.json/);
+  assert.match(generatedLogFilesRow.description ?? "", /\*-error-<status>-response\.txt/);
+  assert.match(generatedLogFilesRow.description ?? "", /\*-error-<status>-replay\.json/);
+  assert.match(generatedLogFilesRow.description ?? "", /\*-error-<status>-session\.jsonl/);
 });
 
 test("tool debug logging honors global enablement and workflow-status filters", async () => {
@@ -2380,11 +2390,11 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   fs.mkdirSync(path.dirname(getProjectConfigPath(idleBase)), { recursive: true });
   saveFixtureConfigs(idleBase, {
     ...getDefaultConfig(idleBase),
-    DEBUG_LOG_FILE: "tool-debug.json",
+    DEBUG_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "debug-logs",
     DEBUG_LOG_ON_STATUS: "any",
     DEBUG_ENABLED_TOOLS: ["bash"],
   });
-  setRuntimeDebugEnabled("enable");
   const idlePi = createFakePi();
   piUsereqExtension(idlePi);
   const idleCtx = createFakeCtx(idleBase);
@@ -2396,7 +2406,11 @@ test("tool debug logging honors global enablement and workflow-status filters", 
     details: { stdout: "idle" },
     isError: false,
   }, idleCtx);
-  const idleLog = JSON.parse(fs.readFileSync(path.join(idleBase, "tool-debug.json"), "utf8"));
+  const idleLogDir = path.join(idleBase, "debug-logs");
+  const idleLogFiles = fs.readdirSync(idleLogDir).filter((fileName) => fileName.endsWith("-bash-debug.json"));
+  assert.equal(idleLogFiles.length, 1);
+  assert.match(idleLogFiles[0]!, /^pi-usereq-tool-debug-idle-[^-]+-unknown-\d{14}-bash-debug\.json$/u);
+  const idleLog = JSON.parse(fs.readFileSync(path.join(idleLogDir, idleLogFiles[0]!), "utf8"));
   assert.equal(idleLog.length, 1);
   assert.equal(idleLog[0].category, "tool");
   assert.equal(idleLog[0].name, "bash");
@@ -2411,7 +2425,8 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   const runningFixture = initFixtureRepo();
   writeProjectConfigOverrides(runningFixture.projectBase, {
     GIT_WORKTREE_ENABLED: "disable",
-    DEBUG_LOG_FILE: "tool-debug.json",
+    DEBUG_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "debug-logs",
     DEBUG_LOG_ON_STATUS: "running",
     DEBUG_ENABLED_TOOLS: ["req-files-tokens"],
   });
@@ -2426,7 +2441,7 @@ test("tool debug logging honors global enablement and workflow-status filters", 
     details: { summary: { counted_file_count: 1 } },
     isError: false,
   }, runningCtx);
-  assert.equal(fs.existsSync(path.join(runningFixture.projectBase, "tool-debug.json")), false);
+  assert.equal(fs.existsSync(path.join(runningFixture.projectBase, "debug-logs")), false);
   const runningCommand = runningPi.commands.get("req-implement");
   assert.ok(runningCommand);
   await runningCommand!.handler("debug tools", runningCtx);
@@ -2437,7 +2452,11 @@ test("tool debug logging honors global enablement and workflow-status filters", 
     details: { summary: { counted_file_count: 1 } },
     isError: false,
   }, runningCtx);
-  const runningLog = JSON.parse(fs.readFileSync(path.join(runningFixture.projectBase, "tool-debug.json"), "utf8"));
+  const runningLogDir = path.join(runningFixture.projectBase, "debug-logs");
+  const runningLogFiles = fs.readdirSync(runningLogDir).filter((fileName) => fileName.endsWith("-req-implement-debug.json"));
+  assert.equal(runningLogFiles.length, 1);
+  assert.match(runningLogFiles[0]!, /^pi-usereq-repo-[^-]+-[^-]+-\d{14}-req-implement-debug\.json$/u);
+  const runningLog = JSON.parse(fs.readFileSync(path.join(runningLogDir, runningLogFiles[0]!), "utf8"));
   assert.equal(runningLog.length, 1);
   assert.equal(runningLog[0].workflow_state, "running");
   assert.equal(runningLog[0].name, "req-files-tokens");
@@ -2446,11 +2465,10 @@ test("tool debug logging honors global enablement and workflow-status filters", 
   fs.mkdirSync(path.dirname(getProjectConfigPath(disabledBase)), { recursive: true });
   saveFixtureConfigs(disabledBase, {
     ...getDefaultConfig(disabledBase),
-    DEBUG_LOG_FILE: "tool-debug.json",
+    DEBUG_PROMPTS_LOG_PATH: "debug-logs",
     DEBUG_LOG_ON_STATUS: "any",
     DEBUG_ENABLED_TOOLS: ["bash"],
   });
-  setRuntimeDebugEnabled("disable");
   const disabledPi = createFakePi();
   piUsereqExtension(disabledPi);
   const disabledCtx = createFakeCtx(disabledBase);
@@ -2462,7 +2480,7 @@ test("tool debug logging honors global enablement and workflow-status filters", 
     details: { stdout: "disabled" },
     isError: false,
   }, disabledCtx);
-  assert.equal(fs.existsSync(path.join(disabledBase, "tool-debug.json")), false);
+  assert.equal(fs.existsSync(path.join(disabledBase, "debug-logs")), false);
 });
 
 test("prompt debug logging captures failing and successful prompt orchestration entries", async () => {
@@ -2474,13 +2492,13 @@ test("prompt debug logging captures failing and successful prompt orchestration 
     0,
   );
   writeProjectConfigOverrides(failingFixture.projectBase, {
-    DEBUG_LOG_FILE: "prompt-debug.json",
+    DEBUG_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "debug-logs",
     DEBUG_STATUS_CHANGES: "enable",
     DEBUG_WORKFLOW_EVENTS: "enable",
     DEBUG_LOG_ON_STATUS: "any",
     DEBUG_ENABLED_PROMPTS: ["req-change"],
   });
-  setRuntimeDebugEnabled("enable");
   const failingPi = createFakePi();
   piUsereqExtension(failingPi);
   const failingCtx = createFakeCtx(failingFixture.projectBase);
@@ -2490,12 +2508,16 @@ test("prompt debug logging captures failing and successful prompt orchestration 
   await assert.rejects(async () => {
     await failingCommand!.handler("debug prompt", failingCtx);
   }, /Git status unclear|WORKFLOW\.md/);
-  const failingLog = JSON.parse(fs.readFileSync(path.join(failingFixture.projectBase, "prompt-debug.json"), "utf8"));
+  const failingLogDir = path.join(failingFixture.projectBase, "debug-logs");
+  const failingLogFiles = fs.readdirSync(failingLogDir).filter((fileName) => fileName.endsWith("-req-change-debug.json"));
+  assert.equal(failingLogFiles.length, 1);
+  const failingLog = JSON.parse(fs.readFileSync(path.join(failingLogDir, failingLogFiles[0]!), "utf8"));
   assert.ok(failingLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "error"));
 
   const successFixture = initFixtureRepo();
   writeProjectConfigOverrides(successFixture.projectBase, {
-    DEBUG_LOG_FILE: "prompt-debug.json",
+    DEBUG_ENABLED: "enable",
+    DEBUG_PROMPTS_LOG_PATH: "debug-logs",
     DEBUG_STATUS_CHANGES: "enable",
     DEBUG_WORKFLOW_EVENTS: "enable",
     DEBUG_LOG_ON_STATUS: "any",
@@ -2525,7 +2547,12 @@ test("prompt debug logging captures failing and successful prompt orchestration 
     messages: [{ role: "assistant", stopReason: "end_turn" }],
   }, successCtx);
   await successPi.emit("agent_settled", {}, successCtx);
-  const successLog = JSON.parse(fs.readFileSync(path.join(successFixture.projectBase, "prompt-debug.json"), "utf8"));
+  const successLogDir = path.join(successFixture.projectBase, "debug-logs");
+  const successLogFiles = fs.readdirSync(successLogDir).filter((fileName) => fileName.endsWith("-req-implement-debug.json"));
+  assert.equal(successLogFiles.length, 1);
+  const successWorktreeName = worktreeMatch?.[1] ?? "";
+  assert.equal(successLogFiles[0], `${successWorktreeName.replace(/^PI-useReq-/u, "")}-req-implement-debug.json`);
+  const successLog = JSON.parse(fs.readFileSync(path.join(successLogDir, successLogFiles[0]!), "utf8"));
   assert.ok(successLog.some((entry: any) => entry.action === "required_docs_check" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "worktree_create" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_activation" && entry.result?.success === true));
@@ -2535,7 +2562,6 @@ test("prompt debug logging captures failing and successful prompt orchestration 
   assert.ok(successLog.some((entry: any) => entry.action === "worktree_delete" && entry.result?.success === true));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "merging"));
   assert.ok(successLog.some((entry: any) => entry.action === "workflow_state" && entry.result?.workflow_state === "done"));
-  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2564,10 +2590,11 @@ test("debug menu persists prompt content logging settings and resets them to def
   assert.equal(persistedConfig.DEBUG_PROMPTS_ENABLED, "enable");
   assert.equal(persistedConfig.DEBUG_PROMPTS_LOG_PATH, "logs/saved-prompts");
   const debugCalls = ctx.__state.selectCalls.filter((call: any) => call.title === "Debug");
-  assert.deepEqual(debugCalls[0]?.items?.slice(0, 4), [
+  assert.deepEqual(debugCalls[0]?.items?.slice(0, 5), [
     "Debug",
     "Enable debug prompts",
     "Log path for prompts",
+    "Generated log files",
     "Enable debug commands for tools",
   ]);
 
@@ -2582,17 +2609,17 @@ test("debug menu persists prompt content logging settings and resets them to def
 
 /**
  * @brief Verifies gated prompt content debug file writes for dispatched prompts.
- * @details Covers the end-to-end write of the exact delivered prompt into one `<timestamp>-req-implement` file under the configured prompt log path when global debug plus prompt debug logging are enabled, the absence of any prompt log directory when global debug is disabled, the workflow-state gating contract, and the trailing-slash-stripping path normalizer plus the `YYYYMMDDHHMMSSmmm` filename shape.
- * @satisfies TST-144
+ * @details Covers the end-to-end write of the exact delivered prompt into one `<run-prefix>-req-implement-prompt.md` file under the configured prompt log path when global debug plus prompt debug logging are enabled, the prefix equality with the created worktree name minus the configured worktree prefix, the absence of any prompt log directory when global debug is disabled, the workflow-state gating contract, and the trailing-slash-stripping path normalizer.
+ * @satisfies TST-144, TST-252
  */
 test("prompt content debug logging saves dispatched prompts gated by debug enablement", async () => {
   const activeFixture = initFixtureRepo();
   writeProjectConfigOverrides(activeFixture.projectBase, {
+    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("enable");
   const activePi = createFakePi();
   piUsereqExtension(activePi);
   const activeCtx = createFakeCtx(activeFixture.projectBase);
@@ -2607,11 +2634,17 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
   const savedPromptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt.md"));
   assert.ok(savedRequestFile);
   assert.ok(savedPromptFile);
-  assert.match(savedRequestFile!, /^\d{17}-req-implement-request\.md$/u);
-  assert.match(savedPromptFile!, /^\d{17}-req-implement-prompt\.md$/u);
+  const promptText = String(activePi.sentUserMessages.at(-1)?.content ?? "");
+  const runWorktreeName = promptText.match(/created worktree-dir `([^`]+)`/)?.[1] ?? "";
+  const runLogPrefix = runWorktreeName.replace(/^PI-useReq-/u, "");
+  assert.ok(runLogPrefix.length > 0, promptText);
+  assert.equal(savedRequestFile, `${runLogPrefix}-req-implement-request.md`);
+  assert.equal(savedPromptFile, `${runLogPrefix}-req-implement-prompt.md`);
+  assert.match(savedRequestFile!, /-\d{14}-req-implement-request\.md$/u);
+  assert.match(savedPromptFile!, /-\d{14}-req-implement-prompt\.md$/u);
   assert.equal(
-    formatPromptDebugFileName("implement", new Date(2026, 0, 2, 3, 4, 5, 6)),
-    "20260102030405006-req-implement",
+    formatPromptDebugFileName("GAlias-work-20261119083733", "req-analyze"),
+    "GAlias-work-20261119083733-req-analyze",
   );
   const savedPromptText = fs.readFileSync(path.join(promptLogDir, savedPromptFile!), "utf8");
   const deliveredPromptText = String(activePi.sentUserMessages.at(-1)?.content ?? "");
@@ -2634,7 +2667,6 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("disable");
   const disabledPi = createFakePi();
   piUsereqExtension(disabledPi);
   const disabledCtx = createFakeCtx(disabledFixture.projectBase);
@@ -2653,11 +2685,11 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
 test("provider error payload debug logging saves failing request payload beside initial prompt", async () => {
   const fixture = initFixtureRepo();
   writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("enable");
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(fixture.projectBase);
@@ -2692,9 +2724,9 @@ test("provider error payload debug logging saves failing request payload beside 
     savedFiles.includes(`${errorPayloadBase}-session.jsonl`),
     "the flush writes the byte-for-byte execution-session snapshot beside the payload",
   );
-  assert.match(initialPromptFile, /^\d{17}-req-implement-prompt\.md$/u);
-  assert.match(errorPayloadFile, /^\d{17}-req-implement-error-400\.json$/u);
-  assert.match(replaySidecarFile, /^\d{17}-req-implement-error-400-replay\.json$/u);
+  assert.match(initialPromptFile, /-\d{14}-req-implement-prompt\.md$/u);
+  assert.match(errorPayloadFile, /-\d{14}-req-implement-error-400\.json$/u);
+  assert.match(replaySidecarFile, /-\d{14}-req-implement-error-400-replay\.json$/u);
   assert.equal(
     savedFiles.some((fileName) => fileName.endsWith("-response.txt")),
     false,
@@ -2705,10 +2737,9 @@ test("provider error payload debug logging saves failing request payload beside 
     providerPayload,
   );
   assert.equal(
-    formatPromptDebugErrorFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
-    "20260102030405006-req-implement-error-400",
+    formatPromptDebugErrorFileName("GAlias-work-20261119083733", "req-implement", 400),
+    "GAlias-work-20261119083733-req-implement-error-400",
   );
-  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2721,11 +2752,11 @@ test("provider error payload debug logging saves failing request payload beside 
 test("provider error debug logging writes response text and replay sidecar beside flushed payload", async () => {
   const fixture = initFixtureRepo();
   writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("enable");
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(fixture.projectBase);
@@ -2761,7 +2792,7 @@ test("provider error debug logging writes response text and replay sidecar besid
   const savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 6);
   const promptFile = savedFiles.find((fileName) => fileName.endsWith("-prompt.md"));
-  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400\.json$/u.test(fileName));
+  const errorPayloadFile = savedFiles.find((fileName) => /-\d{14}-req-implement-error-400\.json$/u.test(fileName));
   const responseFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-response.txt"));
   const sessionSnapshotFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-session.jsonl"));
   const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
@@ -2779,12 +2810,12 @@ test("provider error debug logging writes response text and replay sidecar besid
     providerPayload,
   );
   assert.equal(
-    formatPromptDebugErrorResponseFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
-    "20260102030405006-req-implement-error-400-response.txt",
+    formatPromptDebugErrorResponseFileName("GAlias-work-20261119083733", "req-implement", 400),
+    "GAlias-work-20261119083733-req-implement-error-400-response.txt",
   );
   assert.equal(
-    formatPromptDebugErrorReplayFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
-    "20260102030405006-req-implement-error-400-replay.json",
+    formatPromptDebugErrorReplayFileName("GAlias-work-20261119083733", "req-implement", 400),
+    "GAlias-work-20261119083733-req-implement-error-400-replay.json",
   );
   const replaySidecar = JSON.parse(
     fs.readFileSync(path.join(promptLogDir, replaySidecarFile), "utf8"),
@@ -2810,7 +2841,6 @@ test("provider error debug logging writes response text and replay sidecar besid
     replayCommands.piFork,
     `pi --fork '${path.join(promptLogDir, sessionSnapshotFile)}' --model 'openai/gpt-astra-latest' --thinking high`,
   );
-  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2823,11 +2853,11 @@ test("provider error debug logging writes response text and replay sidecar besid
 test("provider error debug logging snapshots the execution session for log-local fork replay", async () => {
   const fixture = initFixtureRepo();
   writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("enable");
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(fixture.projectBase);
@@ -2866,7 +2896,7 @@ test("provider error debug logging snapshots the execution session for log-local
   }, ctx);
   const savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 5);
-  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400\.json$/u.test(fileName));
+  const errorPayloadFile = savedFiles.find((fileName) => /-\d{14}-req-implement-error-400\.json$/u.test(fileName));
   const errorPayloadBase = errorPayloadFile!.replace(/\.json$/u, "");
   const sessionSnapshotFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-session.jsonl"));
   const replaySidecarFile = savedFiles.find((fileName) => fileName.endsWith("-error-400-replay.json"));
@@ -2874,7 +2904,7 @@ test("provider error debug logging snapshots the execution session for log-local
   assert.ok(sessionSnapshotFile);
   assert.ok(replaySidecarFile);
   assert.equal(sessionSnapshotFile, `${errorPayloadBase}-session.jsonl`);
-  assert.match(sessionSnapshotFile, /^\d{17}-req-implement-error-400-session\.jsonl$/u);
+  assert.match(sessionSnapshotFile, /-\d{14}-req-implement-error-400-session\.jsonl$/u);
   const replaySidecar = JSON.parse(
     fs.readFileSync(path.join(promptLogDir, replaySidecarFile), "utf8"),
   ) as Record<string, unknown>;
@@ -2889,10 +2919,9 @@ test("provider error debug logging snapshots the execution session for log-local
     `pi --fork '${path.join(promptLogDir, sessionSnapshotFile)}' --model 'openai/gpt-astra-latest' --thinking high`,
   );
   assert.equal(
-    formatPromptDebugErrorSessionFileName("implement", 400, new Date(2026, 0, 2, 3, 4, 5, 6)),
-    "20260102030405006-req-implement-error-400-session.jsonl",
+    formatPromptDebugErrorSessionFileName("GAlias-work-20261119083733", "req-implement", 400),
+    "GAlias-work-20261119083733-req-implement-error-400-session.jsonl",
   );
-  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2905,11 +2934,11 @@ test("provider error debug logging snapshots the execution session for log-local
 test("provider error debug logging appends response text after an after_provider_response flush", async () => {
   const fixture = initFixtureRepo();
   writeProjectConfigOverrides(fixture.projectBase, {
+    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("enable");
   const pi = createFakePi();
   piUsereqExtension(pi);
   const ctx = createFakeCtx(fixture.projectBase);
@@ -2940,7 +2969,7 @@ test("provider error debug logging appends response text after an after_provider
   }, ctx);
   savedFiles = fs.readdirSync(promptLogDir).sort();
   assert.equal(savedFiles.length, 6);
-  const errorPayloadFile = savedFiles.find((fileName) => /^\d{17}-req-implement-error-400\.json$/u.test(fileName));
+  const errorPayloadFile = savedFiles.find((fileName) => /-\d{14}-req-implement-error-400\.json$/u.test(fileName));
   const errorPayloadBase = errorPayloadFile!.replace(/\.json$/u, "");
   assert.ok(errorPayloadFile);
   assert.ok(
@@ -2958,7 +2987,6 @@ test("provider error debug logging appends response text after an after_provider
   await pi.emit("agent_end", {
     messages: [{ role: "assistant", stopReason: "error" }],
   }, ctx);
-  setRuntimeDebugEnabled("disable");
 });
 
 /**
@@ -2973,7 +3001,6 @@ test("provider error payload debug logging stays silent when disabled or status 
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("disable");
   const disabledPi = createFakePi();
   piUsereqExtension(disabledPi);
   const disabledCtx = createFakeCtx(disabledFixture.projectBase);
@@ -2992,11 +3019,11 @@ test("provider error payload debug logging stays silent when disabled or status 
 
   const belowFixture = initFixtureRepo();
   writeProjectConfigOverrides(belowFixture.projectBase, {
+    DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
-  setRuntimeDebugEnabled("enable");
   const belowPi = createFakePi();
   piUsereqExtension(belowPi);
   const belowCtx = createFakeCtx(belowFixture.projectBase);
@@ -3014,9 +3041,8 @@ test("provider error payload debug logging stays silent when disabled or status 
   const belowLogDir = path.join(belowFixture.projectBase, "logs", "saved-prompts");
   const belowFiles = fs.readdirSync(belowLogDir).sort();
   assert.equal(belowFiles.length, 2);
-  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-request\.md$/u.test(fileName)));
-  assert.ok(belowFiles.some((fileName) => /^\d{17}-req-implement-prompt\.md$/u.test(fileName)));
-  setRuntimeDebugEnabled("disable");
+  assert.ok(belowFiles.some((fileName) => /-\d{14}-req-implement-request\.md$/u.test(fileName)));
+  assert.ok(belowFiles.some((fileName) => /-\d{14}-req-implement-prompt\.md$/u.test(fileName)));
 });
 
 /**
@@ -3029,11 +3055,11 @@ test("provider error payload debug logging survives the switchSession extension 
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
       DEBUG_PROMPTS_ENABLED: "enable",
       DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts",
       DEBUG_ENABLED_PROMPTS: ["req-implement"],
     });
-    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -3097,13 +3123,13 @@ test("provider error payload debug logging survives the switchSession extension 
 
     const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
     const savedFiles = fs.readdirSync(promptLogDir).sort();
-    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400.json"));
+    const errorPayloadFiles = savedFiles.filter((fileName) => /-error-400(-retry-\d+)?\.json$/u.test(fileName));
     assert.equal(
       errorPayloadFiles.length,
       2,
       `expected two -error-400.json files beside [${savedFiles.join(", ")}]`,
     );
-    assert.match(errorPayloadFiles[0]!, /^\d{17}-req-implement-error-400\.json$/u);
+    assert.match(errorPayloadFiles[0]!, /-\d{14}-req-implement-error-400(-retry-\d+)?\.json$/u);
     const errorPayloadMarkers = errorPayloadFiles.map((fileName) =>
       String(JSON.parse(fs.readFileSync(path.join(promptLogDir, fileName), "utf8")).messages[0]?.content),
     ).sort();
@@ -3116,7 +3142,6 @@ test("provider error payload debug logging survives the switchSession extension 
       messages: [{ role: "assistant", stopReason: "error", content: [] }],
     }, reboundCtx);
   } finally {
-    setRuntimeDebugEnabled("disable");
     discardCapturedPromptErrorPayload();
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -3133,11 +3158,11 @@ test("provider error payload debug logging survives the host compact-and-retry a
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
+      DEBUG_ENABLED: "enable",
       DEBUG_PROMPTS_ENABLED: "enable",
       DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts",
       DEBUG_ENABLED_PROMPTS: ["req-implement"],
     });
-    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -3213,7 +3238,7 @@ test("provider error payload debug logging survives the host compact-and-retry a
 
     const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
     const savedFiles = fs.readdirSync(promptLogDir).sort();
-    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400.json"));
+    const errorPayloadFiles = savedFiles.filter((fileName) => /-error-400(-retry-\d+)?\.json$/u.test(fileName));
     assert.equal(
       errorPayloadFiles.length,
       2,
@@ -3227,7 +3252,6 @@ test("provider error payload debug logging survives the host compact-and-retry a
       "error payload request fail-2",
     ]);
   } finally {
-    setRuntimeDebugEnabled("disable");
     discardCapturedPromptErrorPayload();
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -3273,12 +3297,12 @@ test("provider error payload capture follows base config when the worktree check
     // config file, exactly like the real `/tmp/PI-useReq` setup that produced the defect.
     const localConfigPath = getProjectConfigPath(projectBase);
     const localConfig = JSON.parse(fs.readFileSync(localConfigPath, "utf8")) as Record<string, unknown>;
+    localConfig.DEBUG_ENABLED = "enable";
     localConfig.DEBUG_PROMPTS_ENABLED = "enable";
     localConfig.DEBUG_PROMPTS_LOG_PATH = "logs/saved-prompts";
     localConfig.DEBUG_ENABLED_PROMPTS = ["req-implement"];
     fs.writeFileSync(localConfigPath, `${JSON.stringify(localConfig, null, 2)}\n`, "utf8");
 
-    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -3340,7 +3364,7 @@ test("provider error payload capture follows base config when the worktree check
 
     const promptLogDir = path.join(projectBase, "logs", "saved-prompts");
     const savedFiles = fs.readdirSync(promptLogDir).sort();
-    const errorPayloadFiles = savedFiles.filter((fileName) => fileName.endsWith("-error-400.json"));
+    const errorPayloadFiles = savedFiles.filter((fileName) => /-error-400(-retry-\d+)?\.json$/u.test(fileName));
     assert.equal(
       errorPayloadFiles.length,
       1,
@@ -3352,7 +3376,6 @@ test("provider error payload capture follows base config when the worktree check
     );
     assert.match(errorPayloadText, /error payload request fail/u);
   } finally {
-    setRuntimeDebugEnabled("disable");
     discardCapturedPromptErrorPayload();
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -6674,13 +6697,13 @@ test("switch-triggered session_shutdown preserves prompt state for same-runtime 
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_ENABLED: "enable",
+      DEBUG_PROMPTS_LOG_PATH: "debug-logs",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
-    setRuntimeDebugEnabled("enable");
     const pi = createFakePi();
     piUsereqExtension(pi);
     const ctx = createFakeCtx(projectBase);
@@ -6701,7 +6724,9 @@ test("switch-triggered session_shutdown preserves prompt state for same-runtime 
     assert.ok(worktreeMatch, promptText);
     const executionBasePath = worktreeMatch?.[2] ?? "";
 
-    const activationLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    const activationLogFiles = fs.readdirSync(path.join(projectBase, "debug-logs")).filter((fileName) => fileName.endsWith("-req-change-debug.json"));
+    assert.equal(activationLogFiles.length, 1);
+    const activationLog = JSON.parse(fs.readFileSync(path.join(projectBase, "debug-logs", activationLogFiles[0]!), "utf8"));
     const shutdownEntry = activationLog.find((entry: any) => entry.action === "workflow_session_shutdown");
     assert.equal(shutdownEntry?.workflow_state, "checking");
     assert.equal(shutdownEntry?.result?.preserve_prompt_command_state, true);
@@ -6738,7 +6763,6 @@ test("switch-triggered session_shutdown preserves prompt state for same-runtime 
     assert.equal(fs.existsSync(executionBasePath), false);
     assert.equal(ctx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
-    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -6756,13 +6780,13 @@ test("replacement-session runtime resynchronizes persisted running state before 
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_ENABLED: "enable",
+      DEBUG_PROMPTS_LOG_PATH: "debug-logs",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
-    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -6815,7 +6839,9 @@ test("replacement-session runtime resynchronizes persisted running state before 
     }, reboundCtx);
     await reboundPi!.emit("agent_settled", {}, reboundCtx);
 
-    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    const debugLogFiles = fs.readdirSync(path.join(projectBase, "debug-logs")).filter((fileName) => fileName.endsWith("-req-change-debug.json"));
+    assert.equal(debugLogFiles.length, 1);
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "debug-logs", debugLogFiles[0]!), "utf8"));
     assert.ok(
       debugLog.some(
         (entry: any) => entry.action === "workflow_closure"
@@ -6828,7 +6854,6 @@ test("replacement-session runtime resynchronizes persisted running state before 
     assert.equal(fs.existsSync(path.join(projectBase, "src", "rebound-running.ts")), true);
     assert.equal(reboundCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
-    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -6846,13 +6871,13 @@ test("replacement-session prompt delivery persists running before async sendUser
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_ENABLED: "enable",
+      DEBUG_PROMPTS_LOG_PATH: "debug-logs",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
-    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -6961,7 +6986,9 @@ test("replacement-session prompt delivery persists running before async sendUser
     }, reboundCtx);
     await reboundPi!.emit("agent_settled", {}, reboundCtx);
 
-    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    const debugLogFiles = fs.readdirSync(path.join(projectBase, "debug-logs")).filter((fileName) => fileName.endsWith("-req-change-debug.json"));
+    assert.equal(debugLogFiles.length, 1);
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "debug-logs", debugLogFiles[0]!), "utf8"));
     assert.ok(
       debugLog.some(
         (entry: any) => entry.action === "workflow_closure"
@@ -6978,7 +7005,6 @@ test("replacement-session prompt delivery persists running before async sendUser
     assert.equal(fs.existsSync(path.join(projectBase, "src", "delayed-running.ts")), true);
     assert.equal(reboundCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
-    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -6996,13 +7022,13 @@ test("replacement-session prompt delivery persists running before async sendUser
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_ENABLED: "enable",
+      DEBUG_PROMPTS_LOG_PATH: "debug-logs",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
-    setRuntimeDebugEnabled("enable");
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(projectBase);
@@ -7122,7 +7148,9 @@ test("replacement-session prompt delivery persists running before async sendUser
     ]);
     assert.equal(handlerOutcome.error, undefined);
 
-    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    const debugLogFiles = fs.readdirSync(path.join(projectBase, "debug-logs")).filter((fileName) => fileName.endsWith("-req-change-debug.json"));
+    assert.equal(debugLogFiles.length, 1);
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "debug-logs", debugLogFiles[0]!), "utf8"));
     assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
     assert.ok(debugLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
     assert.equal(process.cwd(), projectBase);
@@ -7137,7 +7165,6 @@ test("replacement-session prompt delivery persists running before async sendUser
     );
     assert.equal(reboundCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
-    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -7412,13 +7439,13 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_ENABLED: "enable",
+      DEBUG_PROMPTS_LOG_PATH: "debug-logs",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
-    setRuntimeDebugEnabled("enable");
     const pi = createFakePi();
     piUsereqExtension(pi);
     const commandCtx = createFakeCtx(projectBase);
@@ -7469,7 +7496,9 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     }, eventCtx);
     await pi.emit("agent_settled", {}, eventCtx);
 
-    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    const debugLogFiles = fs.readdirSync(path.join(projectBase, "debug-logs")).filter((fileName) => fileName.endsWith("-req-change-debug.json"));
+    assert.equal(debugLogFiles.length, 1);
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "debug-logs", debugLogFiles[0]!), "utf8"));
     assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
     assert.ok(debugLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
     assert.equal(process.cwd(), projectBase);
@@ -7485,7 +7514,6 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     );
     assert.equal(eventCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
-    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -7503,13 +7531,13 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
   const previousCwd = process.cwd();
   try {
     writeProjectConfigOverrides(projectBase, {
-      DEBUG_LOG_FILE: "prompt-debug.json",
+      DEBUG_ENABLED: "enable",
+      DEBUG_PROMPTS_LOG_PATH: "debug-logs",
       DEBUG_STATUS_CHANGES: "enable",
       DEBUG_WORKFLOW_EVENTS: "enable",
       DEBUG_LOG_ON_STATUS: "any",
       DEBUG_ENABLED_PROMPTS: ["req-change"],
     });
-    setRuntimeDebugEnabled("enable");
     const pi = createFakePi();
     piUsereqExtension(pi);
     const commandCtx = createFakeCtx(projectBase);
@@ -7559,7 +7587,9 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     }, eventCtx);
     await pi.emit("agent_settled", {}, eventCtx);
 
-    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "prompt-debug.json"), "utf8"));
+    const debugLogFiles = fs.readdirSync(path.join(projectBase, "debug-logs")).filter((fileName) => fileName.endsWith("-req-change-debug.json"));
+    assert.equal(debugLogFiles.length, 1);
+    const debugLog = JSON.parse(fs.readFileSync(path.join(projectBase, "debug-logs", debugLogFiles[0]!), "utf8"));
     assert.ok(debugLog.some((entry: any) => entry.action === "workflow_restore" && entry.result?.success === true));
     assert.ok(debugLog.some((entry: any) => entry.action === "merge" && entry.result?.success === true));
     assert.equal(process.cwd(), projectBase);
@@ -7575,7 +7605,6 @@ test("worktree-backed closure merges from base-path when end-of-session timing a
     );
     assert.equal(eventCtx.__state.notifications.filter((entry: { message: string; level: string }) => entry.level === "error").length, 0);
   } finally {
-    setRuntimeDebugEnabled("disable");
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -8220,7 +8249,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   ], "enable"));
   assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([], "disable"));
   assert.equal(config.DEBUG_ENABLED, "disable");
-  assert.equal(config.DEBUG_LOG_FILE, DEFAULT_DEBUG_LOG_FILE);
+  assert.equal(Object.hasOwn(config, "DEBUG_LOG_FILE"), false);
   assert.equal(config.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.equal(config.DEBUG_WORKFLOW_EVENTS, DEFAULT_DEBUG_WORKFLOW_EVENTS);
   assert.equal(config.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
@@ -11026,3 +11055,4 @@ test("result error orchestration refreshes the captured report and req-reset ret
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
+

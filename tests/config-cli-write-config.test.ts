@@ -62,7 +62,8 @@ test("write-config materializes only absent defaults and preserves persisted val
   assert.equal(localPayload["docs-dir"], "usereq/docs");
   assert.equal(localPayload["tests-dir"], "tests");
   assert.deepEqual(localPayload["src-dir"], ["src"]);
-  assert.equal(localPayload.DEBUG_LOG_FILE, "/tmp/PI-useReq.json");
+  assert.equal(localPayload.DEBUG_ENABLED, "disable");
+  assert.equal(Object.hasOwn(localPayload, "DEBUG_LOG_FILE"), false);
   const localStaticCheck = localPayload["static-check"] as Record<string, Record<string, unknown>>;
   assert.equal(localStaticCheck.C.enabled, "enable");
   assert.equal(localStaticCheck.Lua.enabled, "disable");
