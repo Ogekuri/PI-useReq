@@ -140,6 +140,8 @@ editor; a parameterized `/req-continue` delegates to the selected captured comma
 
 Bundled prompts substitute project-derived values through `%%` placeholders, including `%%SRC_PATHS%%` (configured source directories), `%%ARGS%%` (command arguments), `%%PROMPT%%` (command name), `%%COMMIT%%` (git commit or read-only instruction), and `%%CONTEXT_FILES%%` (the canonical docs, when the corresponding context-file toggles are enabled in the settings menu).
 
+The prompt-backed commands `/req-analyze`, `/req-change`, `/req-check`, `/req-cover`, `/req-fix`, `/req-new`, `/req-readme`, `/req-refactor`, and `/req-write` resolve their User Request from the raw command input: empty (or whitespace-only) input substitutes a fixed placeholder stating that no specific request was given; input whose first non-whitespace character is `@` is treated as a file reference — the referenced text file's content becomes the request text (the path may be double-quoted, single-quoted, backslash-escaped, or plain; a leading `~` expands to the home directory; missing files, non-regular files, binary content, and empty files are rejected with deterministic errors naming the file path); any other input passes through verbatim. All other prompt-backed commands keep verbatim raw-input passthrough.
+
 
 ## Default Workflow
 
@@ -238,40 +240,40 @@ and the project-local `.pi-usereq.json` files.
 The extension registers the following agent tools (available to the LLM inside pi). All parameters are exposed through the pi tool-call contract; `FILE` entries may be project-relative or absolute paths. Compressed and search outputs always prefix every code-block line with its original source line number; search excerpts reproduce matched construct source lines as-is, including comments.
 
 - Count tokens and chars for the given files
-  `files-tokens FILE [FILE ...]`
+  `req-files-tokens FILE [FILE ...]`
 
 - Generate LLM summary markdown for the given files
-  `files-summarize FILE [FILE ...]`
+  `req-files-summarize FILE [FILE ...]`
 
 - Generate compressed output for the given files
-  `files-compress FILE [FILE ...]`
+  `req-files-compress FILE [FILE ...]`
 
 - Find and extract specific constructs from the given files
-  `files-search TAG PATTERN FILE [FILE ...]`
+  `req-files-search TAG PATTERN FILE [FILE ...]`
 
 - Run static analysis on the given files using the checkers configured for their extensions
-  `files-static-check FILE [FILE ...]`
+  `req-files-static-check FILE [FILE ...]`
 
 - Count tokens and chars for the canonical docs in the configured `docs-dir` (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`)
-  `tokens`
+  `req-tokens`
 
 - Generate LLM summary markdown for the configured `src-dir` directories
-  `summarize`
+  `req-summarize`
 
 - Generate `REFERENCES.md` from the configured `src-dir` directories and overwrite `<docs-dir>/REFERENCES.md`
-  `references`
+  `req-references`
 
 - Generate compressed output for the configured `src-dir` directories
-  `compress`
+  `req-compress`
 
 - Find and extract specific constructs from the configured `src-dir` directories
-  `search TAG PATTERN`
+  `req-search TAG PATTERN`
 
 - Run static analysis on the configured `src-dir` plus `tests-dir` selections (excluding `fixtures/`)
-  `static-check`
+  `req-static-check`
 
 - Validate inline JSON text and/or JSON files against the final-output JSON contract (`result` must be `ok` or `error`, `summary` a string, `next_commands` an array) and return a monolithic markdown verdict
-  `result-json-validator [content] [files FILE [FILE ...]]`
+  `req-result-json-validator [content] [files FILE [FILE ...]]`
 
 The set of startup tools active for a project is configurable through `Enable tools` in the
 [settings menu](#settings-menu-pi-usereq).
@@ -390,7 +392,7 @@ The extension plays a bundled sound effect when a prompt ends (completed, interr
 
 #### Status Bar
 
-The extension renders a status field in the pi status line showing: extension identity, workflow state (`idle`/`checking`/`running`/`merging`/`done`/`error`, prefixed with the active request name while an orchestration runs, e.g. `analyze ➔ running`), current branch, context usage, elapsed run time, and the active sound level.
+The extension renders a status field in the pi status line showing: extension identity, workflow state (`idle`/`checking`/`running`/`merging`/`done`/`warning`/`error`, prefixed with the active request name while an orchestration runs, e.g. `analyze ➔ running`), current branch, context-usage gauge, elapsed timers (running orchestration, accumulated context, and session total), and the active sound level.
 
 #### Debug
 
@@ -450,7 +452,7 @@ This section describes the Git behavior of the `req-*` commands. The commands ow
   - Each `req-*` prompt command runs git validation and the required-document checks, then (when `Auto git commit` and `Git worktree` are enabled) creates an isolated **git worktree and branch** named `<GIT_WORKTREE_PREFIX><project>-<branch>-<YYYYMMDDHHMMSS>` (default prefix `PI-useReq-`), switches the session into it, and executes the prompt there.
   - On success with a final-output JSON object carrying `result` `ok` in the final agent output, the extension restores the original `base-path` session, applies a stash-assisted fast-forward merge of the worktree branch, and deletes the worktree and branch.
   - A completed run whose final output carries `result` `error`, or that violates the final-output JSON contract (no parsable JSON object, or missing/invalid `result`, `summary`, or `next_commands`), parks the workflow in `error` with a diagnostic and **keeps** the worktree and branch so the produced artifacts can be inspected or recovered: run `/req-reset` to restore the original base path and force-remove the generated worktrees and branches. Interrupted, failed, aborted, or incomplete runs also retain the worktree execution session and park the workflow in `error`.
-  - `/req-references` regenerates `<docs-dir>/REFERENCES.md`, stages only that file, and commits it with the fixed message `docs(references): Update REFERENCES.md document. [useReq]` whenever the regenerated content differs from `HEAD`; when the content already matches, the commit is skipped and the run still reports success. Completed runs notify whether the references file changed and whether the commit was created or skipped.
+  - `/req-references` regenerates `<docs-dir>/REFERENCES.md`, stages only that file, and commits it with the fixed message `docs(references): Update REFERENCES.md document. [useReq]` whenever the regenerated content differs from `HEAD`; when the content already matches, the commit is skipped and the run still reports success. Completed runs notify whether the references file changed and whether the commit was created or skipped. When the configured `src-dir` inventory holds no supported source file, `/req-references` writes a documented no-source placeholder directive into `REFERENCES.md` instead of extracting references; `/req-workflow` behaves the same for `WORKFLOW.md` and completes without dispatching a prompt.
   - With `Auto git commit = enable` (default), every prompt receives structured commit instructions and commits follow the message template `<TYPE>(<COMPONENT>)<BREAKING>: <DESCRIPTION> [useReq]`. With `Auto git commit = disable`, prompts receive a read-only git restriction and worktree orchestration is forced off.
   - The extension never rewrites git history; destructive cleanup is limited to generated worktrees and branches: successful closure and command-side rollback remove only the run's own worktree, while `/req-reset` force-removes every matching generated worktree and branch (see above).
 
