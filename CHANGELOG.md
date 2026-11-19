@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.24](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.24) - 2026-11-19
+## [0.109.25](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.25) - 2026-11-19
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,8 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- Freeze terminal-adopted elapsed timers and gate live ticker [useReq] *(extension-status)*
+  Terminal workflow-state adoptions (resynchronize/session_start restore) now freeze stale in-flight elapsed records through freezeAdoptedTerminalOrchestrationElapsed (REQ-803, REQ-804).; The live elapsed ticker stops for any non-in-flight workflow state, so terminal-adopted controllers never keep ticking (REQ-808); REQ-809 record preservation is unchanged.; Add reproducer test covering both adoption surfaces; update the rebound-timer assertion.; Update WORKFLOW.md call traces; regenerate REFERENCES.md.
 - freeze rebound elapsed timers at orchestration end [useReq] *(extension-status)*
   Adopt the process-scoped frozen timer facts into a replacement runtime whose in-memory in-flight orchestration start was closed by another instance, so the elapsed timers stop at the terminal transition instead of ticking past it and the accumulated durations stay intact for the next orchestration (REQ-803, REQ-804, REQ-808, REQ-159, REQ-809). Add one failing-then-passing reproducer test for the rebound-runtime timer freeze and resume, and realign the WORKFLOW.md call trace plus the regenerated REFERENCES.md.
 - publish only settled agent reports [useReq] *(orchestration)*
@@ -1775,7 +1777,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.24\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.24
+- \[0.109.25\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.25
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1884,4 +1886,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.24]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.24
+[0.109.25]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.25
