@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.22](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.22) - 2026-11-19
+## [0.109.23](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.23) - 2026-11-19
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,8 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- freeze rebound elapsed timers at orchestration end [useReq] *(extension-status)*
+  Adopt the process-scoped frozen timer facts into a replacement runtime whose in-memory in-flight orchestration start was closed by another instance, so the elapsed timers stop at the terminal transition instead of ticking past it and the accumulated durations stay intact for the next orchestration (REQ-803, REQ-804, REQ-808, REQ-159, REQ-809). Add one failing-then-passing reproducer test for the rebound-runtime timer freeze and resume, and realign the WORKFLOW.md call trace plus the regenerated REFERENCES.md.
 - publish only settled agent reports [useReq] *(orchestration)*
 - drop redundant ERROR: prefix from merge-failure diagnostic [useReq] *(core)*
   Remove the ERROR: severity prefix from the dynamic fast-forward merge-failure message in finalizePromptCommandMerge because the pi CLI error notification rendering already prepends Error:, so the surfaced line printed the redundant Error: ERROR: marker. The uniform REQ-667 hardcoded last line keeps its ERROR: prefix. Update the reproducer assertions in the worktree merge-failure closure test and regenerate REFERENCES.md mappings. Verification: npm test 557/557 pass; req-static-check clean.
@@ -1772,7 +1774,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.22\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.22
+- \[0.109.23\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.23
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1881,4 +1883,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.22]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.22
+[0.109.23]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.23
