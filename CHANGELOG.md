@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.21](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.21) - 2026-11-17
+## [0.109.22](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.22) - 2026-11-19
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,7 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- publish only settled agent reports [useReq] *(orchestration)*
 - drop redundant ERROR: prefix from merge-failure diagnostic [useReq] *(core)*
   Remove the ERROR: severity prefix from the dynamic fast-forward merge-failure message in finalizePromptCommandMerge because the pi CLI error notification rendering already prepends Error:, so the surfaced line printed the redundant Error: ERROR: marker. The uniform REQ-667 hardcoded last line keeps its ERROR: prefix. Update the reproducer assertions in the worktree merge-failure closure test and regenerate REFERENCES.md mappings. Verification: npm test 557/557 pass; req-static-check clean.
 - recover report text and settle state after rebind [useReq] *(final-output)*
@@ -107,6 +108,28 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: refactor elapsed status bar into orchestration running/context/session timers [useReq] *(extension-status)*
+  Replace per-agent-run elapsed counters with three orchestration timers:
+  running_timer restarts per orchestration and freezes at terminal states,
+  context_timer resets only on empty-context orchestration starts, and
+  session_timer accumulates for the whole pi client process lifetime; all
+  three tick concurrently through one shared 1-second update logic and
+  persist across session replacement. Update REQ-123/124/125/159/187/217,
+  add REQ-803..REQ-810 plus TST-255, and realign WORKFLOW.md, REFERENCES.md,
+  and the status-bar and pushover timer tests.
+- run-prefixed debug logs and persisted Debug flag [useReq] *(debug)*
+  Debug files use the <project>-<branch>-<timestamp>-<command> run prefix shared with the worktree name (REQ-798..REQ-802).; DEBUG_ENABLED now persists in local configuration, default disable (REQ-236, REQ-426).; Removed the configurable JSON log filename; JSON entries append to <prefix>-<command>-debug.json under the prompts log path (REQ-237).; Added the read-only Generated log files description row to the Debug menu (REQ-801).; Updated REQUIREMENTS, WORKFLOW, REFERENCES, README, and unit tests.
+- Print blocked-gate report and ERROR diagnostics without doubled Error prefix [useReq] *(orchestration)*
+  REQ-796: deliver the blocked-gate terminal notification as one info-severity
+  notification composing the ANSI report printout, one blank line, and the
+  intense-red ERROR diagnostic, so the boxed report prints without the host
+  "Error: " prefix and survives info-notification collapse.
+  REQ-797: resolve error-severity notifications whose message opens with an
+  ERROR:/Error: marker to info severity so the pi CLI never prints
+  "Error: ERROR: ..." doubled markers.
+  REQ-587/REQ-588/REQ-680/REQ-719 requirement wording updated; stale test
+  severity assertions aligned; WORKFLOW.md call-traces and REFERENCES.md
+  regenerated.
 - Update bundled prompts from v0.12.16 to v0.12.18 [useReq] *(prompts)*
 - BREAKING CHANGE: Always number extraction outputs and keep find excerpts as-is [useReq] *(compress-find)*
   REQ-012/REQ-083: compress and files-compress always prefix retained lines
@@ -1749,7 +1772,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.21\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.21
+- \[0.109.22\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.22
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1858,4 +1881,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.21]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.21
+[0.109.22]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.22
