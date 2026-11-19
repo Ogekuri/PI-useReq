@@ -223,6 +223,26 @@ function persistElapsedState(state: PiUsereqStatusState): void {
 }
 
 /**
+ * @brief Reconciles one rebound controller's stale in-flight elapsed state with the process-scoped store.
+ * @details Extension runtimes rebound mid-orchestration restore the in-flight orchestration start from the process-scoped store at `session_start`, but the initiating runtime may close that orchestration afterwards on its own controller while writing the frozen timer facts into the shared store. Without reconciliation the rebound controller keeps ticking its stale in-memory start past the terminal boundary, renders growing elapsed timers beside an adopted terminal workflow state, and its hook-end persistence would overwrite the frozen store values with still-growing accumulators. The helper adopts the persisted frozen timer facts only when the controller still tracks an in-flight orchestration that the store reports as closed, so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration. Runtime is O(1). Side effects include in-memory state mutation.
+ * @param[in,out] controller {PiUsereqStatusController} Mutable status controller whose stale in-flight elapsed state is healed in place.
+ * @return {boolean} `true` when stale in-flight elapsed facts were adopted from the store; `false` when the controller and the store already agree.
+ * @note Complexity: O(1).
+ * @satisfies REQ-159, REQ-803, REQ-804, REQ-808, REQ-809
+ */
+function reconcileReboundOrchestrationElapsedState(controller: PiUsereqStatusController): boolean {
+  const store = getPiUsereqStatusPersistenceStore();
+  if (
+    controller.state.orchestrationStartMs !== undefined
+    && store.orchestrationStartMs === undefined
+  ) {
+    restorePersistedElapsedState(controller.state);
+    return true;
+  }
+  return false;
+}
+
+/**
  * @brief Persists the in-flight agent-run prompt-ownership flag into the process-scoped store.
  * @details Mirrors the ownership flag computed at `agent_start` onto `globalThis` so a terminal hook on a replacement extension instance can recover the ended run's prompt association after the in-memory flag was cleared by session replacement or fault-injected state loss. Runtime is O(1). Side effect: mutates process-scoped state.
  * @param[in] state {PiUsereqStatusState} Controller state carrying the in-flight run facts.
@@ -1075,13 +1095,13 @@ export function resynchronizePersistedTerminalWorkflowState(
 
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start` and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start` and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, reconciles that rebound controller's stale in-flight elapsed timers by adopting the persisted frozen timer facts whenever the process-scoped store reports the orchestration closed so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
  * @param[in] ctx {ExtensionContext} Active extension context.
  * @return {void} No return value.
- * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-187, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421, REQ-461, REQ-807, REQ-809
+ * @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-187, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421, REQ-461, REQ-803, REQ-804, REQ-807, REQ-808, REQ-809
  */
 export function updateExtensionStatus(
   controller: PiUsereqStatusController,
@@ -1143,6 +1163,11 @@ export function updateExtensionStatus(
 
   restorePersistedPromptCommandState(controller.state, currentSessionFile);
   if (hookName !== "session_start") {
+    // A replacement runtime bound while an orchestration was in flight keeps ticking its
+    // stale in-memory start after the initiating runtime closed the orchestration in the
+    // process-scoped store; adopt the persisted frozen timer facts first so live ticking
+    // stops at the orchestration end and the hook-end persist keeps the frozen store values.
+    reconcileReboundOrchestrationElapsedState(controller);
     // A replacement runtime bound while the persisted state was still in flight missed the
     // one-shot terminal restore inside session_start handling; adopt the persisted terminal
     // transition on the next intercepted hook so post-switch terminal transitions stay

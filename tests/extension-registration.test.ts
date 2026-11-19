@@ -8186,6 +8186,92 @@ test("elapsed timers persist across new-session rebinding and reload closes in-f
   }
 });
 
+test("rebound runtime freezes elapsed timers adopted from a terminal orchestration closed by another instance", async () => {
+  // REQ-803/REQ-804/REQ-808/REQ-159/REQ-809: when the initiating runtime closes the
+  // orchestration at its terminal workflow transition, a replacement runtime bound while the
+  // orchestration was in flight must stop its live ticking by adopting the frozen
+  // process-scoped timer facts, keep the accumulated durations intact, and resume counting
+  // only when a new orchestration starts.
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
+  const originalDateNow = Date.now;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let nowMs = 0;
+  const intervalCallbacks: Array<() => void> = [];
+  const clearedHandles: Array<number> = [];
+  Date.now = () => nowMs;
+  globalThis.setInterval = ((callback: TimerHandler) => {
+    intervalCallbacks.push(callback as () => void);
+    return intervalCallbacks.length;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((handle: ReturnType<typeof setInterval>) => {
+    clearedHandles.push(Number(handle));
+  }) as unknown as typeof clearInterval;
+
+  try {
+    const initiatingPi = createFakePi();
+    piUsereqExtension(initiatingPi);
+    const initiatingCtx = createFakeCtx(cwd);
+    await initiatingPi.emit("session_start", { reason: "startup" }, initiatingCtx);
+    await initiatingPi.commands.get("req-analyze")!.handler("Inspect src", initiatingCtx);
+    nowMs = 61_000;
+    await initiatingPi.emit("agent_start", {}, initiatingCtx);
+
+    // Replacement runtime binds while the orchestration is in flight: it restores the
+    // in-flight start timestamp and keeps ticking.
+    const reboundPi = createFakePi();
+    piUsereqExtension(reboundPi);
+    const reboundCtx = createFakeCtx(cwd);
+    await reboundPi.emit("session_start", { reason: "new" }, reboundCtx);
+
+    // The initiating runtime terminates the orchestration: `running_timer` freezes at the
+    // executed duration and the duration is absorbed into the context plus session
+    // accumulators.
+    nowMs = 65_000;
+    await initiatingPi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, initiatingCtx);
+
+    // The rebound runtime observes the persisted terminal transition on its next non-
+    // session_start hook: its live timers must freeze at the closed values instead of
+    // ticking past the orchestration end.
+    nowMs = 125_000;
+    await reboundPi.emit("context", {}, reboundCtx);
+    assert.equal(
+      reboundCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 1:05 ⚑ 1:05 ⌛︎1:05",
+      }),
+    );
+    assert.ok(clearedHandles.length >= 2, "rebound live ticker must stop after orchestration end");
+
+    // A new orchestration on the rebound runtime resumes counting: `running_timer` restarts
+    // from zero while the context and session accumulators carry the closed duration.
+    reboundCtx.sessionManager.appendMessage({ role: "user", content: "Continue with the change." });
+    await reboundPi.commands.get("req-change")!.handler("Adjust docs", reboundCtx);
+    assert.match(
+      reboundCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 1:05 ⌛︎1:05<\/warning>/,
+    );
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("session_start enables default custom tools and default embedded tools only", async () => {
   const cwd = createTempDir("pi-usereq-default-tools-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
