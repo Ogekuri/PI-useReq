@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.23](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.23) - 2026-11-19
+## [0.109.24](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.24) - 2026-11-19
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -110,6 +110,7 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Update bundled prompts from v0.12.18 to v0.12.19 [useReq] *(prompts)*
 - BREAKING CHANGE: refactor elapsed status bar into orchestration running/context/session timers [useReq] *(extension-status)*
   Replace per-agent-run elapsed counters with three orchestration timers:
   running_timer restarts per orchestration and freezes at terminal states,
@@ -1774,7 +1775,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.23\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.23
+- \[0.109.24\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.24
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1883,4 +1884,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.23]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.23
+[0.109.24]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.24
