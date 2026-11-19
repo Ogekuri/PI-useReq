@@ -8254,7 +8254,9 @@ test("rebound runtime freezes elapsed timers adopted from a terminal orchestrati
         et: "⏱︎ 1:05 ⚑ 1:05 ⌛︎1:05",
       }),
     );
-    assert.ok(clearedHandles.length >= 2, "rebound live ticker must stop after orchestration end");
+    // The initiating runtime's ticker is cleared at the terminal transition; the rebound
+    // runtime must not keep (or start) a live ticker for the adopted terminal workflow state.
+    assert.ok(clearedHandles.length >= 1, "rebound live ticker must stop after orchestration end");
 
     // A new orchestration on the rebound runtime resumes counting: `running_timer` restarts
     // from zero while the context and session accumulators carry the closed duration.
@@ -8263,6 +8265,142 @@ test("rebound runtime freezes elapsed timers adopted from a terminal orchestrati
     assert.match(
       reboundCtx.__state.statuses.get("pi-usereq") ?? "",
       /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 1:05 ⌛︎1:05<\/warning>/,
+    );
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies terminal workflow-state adoptions freeze stale in-flight elapsed timers.
+ * @details Seeds one initiating orchestration whose shared elapsed record is still in flight, persists a terminal prompt-command transition without closing that record, and drives the two terminal-adoption surfaces: a rebound `session_start` that adopts the persisted terminal state while restoring the in-flight record, and a non-session_start hook whose `resynchronizePersistedTerminalWorkflowState` adoption runs while the controller still holds the restored in-flight start. Both adoptions must freeze `running_timer` at the absorbed duration, keep the context plus session accumulators consistent, and never start a live ticker for the terminal workflow state, so the elapsed timers stop advancing after the orchestration terminated.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when a terminal-adopted controller keeps a live ticker or renders growing elapsed timers.
+ * @satisfies REQ-803, REQ-804, REQ-808
+ */
+test("terminal workflow adoptions freeze stale in-flight elapsed timers and stop the live ticker", async () => {
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
+  const originalDateNow = Date.now;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let nowMs = 0;
+  const intervalCallbacks: Array<() => void> = [];
+  Date.now = () => nowMs;
+  globalThis.setInterval = ((callback: TimerHandler) => {
+    intervalCallbacks.push(callback as () => void);
+    return intervalCallbacks.length;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((handle: ReturnType<typeof setInterval>) => {
+    void handle;
+  }) as unknown as typeof clearInterval;
+
+  try {
+    // Seed the shared state: one initiating orchestration in flight since `nowMs === 0`.
+    const initiatingPi = createFakePi();
+    piUsereqExtension(initiatingPi);
+    const initiatingCtx = createFakeCtx(cwd);
+    await initiatingPi.emit("session_start", { reason: "startup" }, initiatingCtx);
+    await initiatingPi.commands.get("req-analyze")!.handler("Inspect src", initiatingCtx);
+
+    // Divergence seed: the initiating instance persists the terminal prompt-command
+    // transition while the shared elapsed record is still in flight (start `0`).
+    nowMs = 122_000;
+    writePersistedPromptCommandRuntimeState({
+      workflowState: "done",
+      workflowRequest: "analyze",
+      pendingPromptRequest: undefined,
+      activePromptRequest: undefined,
+    });
+    const tickerCountBeforeRebound = intervalCallbacks.length;
+
+    // Scenario A: a rebound `session_start` adopts the persisted terminal state while
+    // restoring the still-in-flight elapsed record; the adopted controller must freeze
+    // at the absorbed duration and must not start a live ticker.
+    const reboundPi = createFakePi();
+    piUsereqExtension(reboundPi);
+    const reboundCtx = createFakeCtx(cwd);
+    await reboundPi.emit("session_start", { reason: "fork" }, reboundCtx);
+    assert.equal(
+      reboundCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 2:02 ⚑ 2:02 ⌛︎2:02",
+      }),
+    );
+    assert.equal(
+      intervalCallbacks.length,
+      tickerCountBeforeRebound,
+      "terminal-adopted session_start must not start a live ticker",
+    );
+    nowMs = 183_000;
+    await reboundPi.emit("context", {}, reboundCtx);
+    assert.equal(
+      reboundCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 2:02 ⚑ 2:02 ⌛︎2:02",
+      }),
+    );
+
+    // Scenario B: a rebound runtime restores the in-flight record on `session_start`
+    // (terminal transition not yet persisted), then adopts the persisted terminal state
+    // on a later non-session_start hook; the adoption must freeze the record and stop
+    // ticking instead of advancing the elapsed timers past the orchestration end.
+    const seedingPi = createFakePi();
+    piUsereqExtension(seedingPi);
+    const seedingCtx = createFakeCtx(cwd);
+    await seedingPi.emit("session_start", { reason: "startup" }, seedingCtx);
+    nowMs = 244_000;
+    await seedingPi.commands.get("req-analyze")!.handler("Inspect src again", seedingCtx);
+    const tickerCountBeforeAdoption = intervalCallbacks.length;
+    const latePi = createFakePi();
+    piUsereqExtension(latePi);
+    const lateCtx = createFakeCtx(cwd);
+    await latePi.emit("session_start", { reason: "resume" }, lateCtx);
+    writePersistedPromptCommandRuntimeState({
+      workflowState: "done",
+      workflowRequest: "analyze",
+      pendingPromptRequest: undefined,
+      activePromptRequest: undefined,
+    });
+    nowMs = 366_000;
+    await latePi.emit("context", {}, lateCtx);
+    assert.equal(
+      lateCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 2:02 ⚑ 2:02 ⌛︎2:02",
+      }),
+    );
+    nowMs = 427_000;
+    await latePi.emit("context", {}, lateCtx);
+    assert.equal(
+      lateCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 2:02 ⚑ 2:02 ⌛︎2:02",
+      }),
+    );
+    assert.equal(
+      intervalCallbacks.length,
+      tickerCountBeforeAdoption,
+      "terminal adoption must not start a live ticker",
     );
   } finally {
     Date.now = originalDateNow;
