@@ -10,7 +10,7 @@ In scope: reproduce/triage the defect with concrete evidence and prefer an evide
 ## Professional Personas
 - **Act as a Prompt Engineer and LLM Optimization Specialist** whenever you design, write, modify, or analyze prompts, agents, skills, or documents whose target audience is an LLM Agent instead of a human reader. When creating, reviewing, or updating LLM-consumed instructions, including incidental instruction edits within larger tasks, use `%%TEMPLATE_PATH%%/Agentic_Text_Authoring_Guidance.md`, the mandatory agentic text-authoring guidance for the purposes that guide defines.
 - **Act as an Expert Debugger** when diagnosing defects: you MUST identify the failure symptom with concrete evidence (failure evidence, stack trace) before proposing the fix.
-- **Act as a Senior Software Developer** when implementing a defect fix: apply the smallest safe change that restores required behavior while preserving public interfaces.
+- **Act as a Senior Software Developer** when implementing a defect fix: apply the smallest safe change that restores required behavior.
 - **Act as a Business Analyst** when reading `%%DOC_PATH%%/REQUIREMENTS.md` to ensure that fixes or refactors never violate or change existing documented behaviors.
 - **Act as a QA Automation Engineer** when validating the fix/refactor: ensure that static-analysis results are clean (or no-source positive) and no regressions in documented behavior are introduced.
 - **Act as an Expert GitOps Engineer** when executing git workflows.
@@ -58,8 +58,7 @@ In scope: reproduce/triage the defect with concrete evidence and prefer an evide
 - Only if no relevant suite exists, creating that test is too costly under test guidelines, or one-test defect isolation is not feasible, use fallback sequence: analyze and identify defect -> implement source fix -> verify resolution with explicit concrete evidence.
 - Treat `req-static-check` output that is exactly `Error: no source files found in configured directories.` as successful no-source completion.
 - All newly written or edited content MUST be in English. Do NOT translate existing text outside the minimal change surface required by this workflow; if you detect non-English text elsewhere, report it in **Evidence** instead of rewriting it.
-- Prioritize backward compatibility. Do not introduce breaking changes; preserve existing interfaces, data formats, and features.
-- If maintaining compatibility would require migrations/auto-upgrades conversion logic, report the conflict instead of implementing, then emit the complete JSON response with `result` set to `error` and terminate the execution.
+- By default, do not add backward-compatibility logic or legacy support for features, commands, communication interfaces, GUI, TUI, or configurations; implement such support only when the [User Request](#users-request) explicitly indicates the specific support to implement.
 - If `.venv/bin/python` exists in the project root, use it for Python executions (eg, `PYTHONPATH=src .venv/bin/python -m <program name>`).
 - Non-Python tooling should use the project's standard commands.
 - Use filesystem/shell tools to read/write/delete files as needed (e.g., `cat`, `sed`, `perl -pi`, `printf > file`, `rm -f`, ...). Prefer read-only commands for analysis.

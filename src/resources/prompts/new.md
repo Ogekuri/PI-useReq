@@ -1,16 +1,16 @@
 # Implement a new requirement and make the corresponding source code changes
 
 ## Purpose
-Introduce a new, backwards-compatible capability by first extending the normative SRS (`%%DOC_PATH%%/REQUIREMENTS.md`) with the new requirement(s), then implementing and verifying the corresponding code/test changes with strict traceability to requirement IDs so downstream LLM Agents MUST reason over the new feature deterministically.
+Introduce a new capability by first extending the normative SRS (`%%DOC_PATH%%/REQUIREMENTS.md`) with the new requirement(s), then implementing and verifying the corresponding code/test changes with strict traceability to requirement IDs so downstream LLM Agents MUST reason over the new feature deterministically.
 
 ## Scope
-In scope: patch-style updates to `%%DOC_PATH%%/REQUIREMENTS.md` that add the new feature requirements, an implementation plan, code/test changes under %%SRC_PATHS%% and %%TEST_PATH%%, verification via the `req-static-check` tool, requirements evidence checks, and conditional execution of existing unit tests using language-specific test-suite priority policy, updates to `%%DOC_PATH%%/WORKFLOW.md` and `%%DOC_PATH%%/REFERENCES.md`, and a clean git commit. Out of scope: breaking changes, migrations/compatibility conversions, or any feature work not captured as explicit requirements (report conflicts and terminate per prompt rules).
+In scope: patch-style updates to `%%DOC_PATH%%/REQUIREMENTS.md` that add the new feature requirements, an implementation plan, code/test changes under %%SRC_PATHS%% and %%TEST_PATH%%, verification via the `req-static-check` tool, requirements evidence checks, and conditional execution of existing unit tests using language-specific test-suite priority policy, updates to `%%DOC_PATH%%/WORKFLOW.md` and `%%DOC_PATH%%/REFERENCES.md`, and a clean git commit. Out of scope: migrations/compatibility conversions not explicitly requested by the user, or any feature work not captured as explicit requirements (report conflicts and terminate per prompt rules).
 
 
 ## Professional Personas
 - **Act as a Prompt Engineer and LLM Optimization Specialist** whenever you design, write, modify, or analyze prompts, agents, skills, or documents whose target audience is an LLM Agent instead of a human reader. When creating, reviewing, or updating LLM-consumed instructions, including incidental instruction edits within larger tasks, use `%%TEMPLATE_PATH%%/Agentic_Text_Authoring_Guidance.md`, the mandatory agentic text-authoring guidance for the purposes that guide defines.
 - **Act as a Business Analyst** when generating **Requirement Delta** and during requirements analysis and update: your priority is requirement integrity, atomic description of changes, and ensuring no logical conflicts in `%%DOC_PATH%%/REQUIREMENTS.md`.
-- **Act as a Senior System Architect** when generating the **Implementation Delta**: translate requirements into a robust, modular, and non-breaking technical implementation plan.
+- **Act as a Senior System Architect** when generating the **Implementation Delta**: translate requirements into a robust and modular technical implementation plan.
 - **Act as a Senior Software Developer** during implementation: implement the planned changes with high-quality, idiomatic code that maps strictly to Requirement IDs.
 - **Act as a QA Engineer** during verification and testing: verify compliance with zero leniency, using mandatory code evidence and strict fix loops based on static-analysis findings to ensure stability.
 - **Act as an Expert GitOps Engineer** when executing git workflows.
@@ -54,8 +54,7 @@ In scope: patch-style updates to `%%DOC_PATH%%/REQUIREMENTS.md` that add the new
 - Propose changes based only on the requirements, user request, and repository evidence. Every proposed code change MUST reference at least one requirement ID or explicit text in user request.
 - Use `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, and `%%DOC_PATH%%/REFERENCES.md` as the primary technical inputs; keep decisions traceable to requirements and repository evidence.
 - All newly written or edited content MUST be in English. Do NOT translate existing text outside the minimal change surface required by this workflow; if you detect non-English text elsewhere, report it in **Evidence** instead of rewriting it.
-- Prioritize backward compatibility. Do not introduce breaking changes; preserve existing interfaces, data formats, and features.
-- If maintaining compatibility would require migrations/auto-upgrades conversion logic, report the conflict instead of implementing, then emit the complete JSON response with `result` set to `error` and terminate the execution.
+- By default, do not add backward-compatibility logic or legacy support for features, commands, communication interfaces, GUI, TUI, or configurations; implement such support only when the [User Request](#users-request) explicitly indicates the specific support to implement.
 - If `.venv/bin/python` exists in the project root, use it for Python executions (eg, `PYTHONPATH=src .venv/bin/python -m <program name>`).
 - Non-Python tooling should use the project's standard commands.
 - Use filesystem/shell tools to read/write/delete files as needed (e.g., `cat`, `sed`, `perl -pi`, `printf > file`, `rm -f`, ...). Prefer read-only commands for analysis.
