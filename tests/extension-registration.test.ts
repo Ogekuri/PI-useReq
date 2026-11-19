@@ -3726,7 +3726,7 @@ test("req-references updates REFERENCES.md with a direct commit workflow and no 
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -3952,7 +3952,7 @@ test("req-references surfaces git-validation and reference-generation failures w
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     assert.equal(
@@ -4016,7 +4016,7 @@ test("req-references surfaces git-validation and reference-generation failures w
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     assert.equal(
@@ -4216,7 +4216,7 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -4289,7 +4289,7 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -4377,7 +4377,7 @@ test("req-reset switches the main worktree off generated branches before removin
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -4444,7 +4444,7 @@ test("req-reset removes generated worktrees when invoked from inside a leftover 
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -4711,7 +4711,7 @@ test("prompt commands capture checking before handoff and running at prompt inje
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     assert.equal(
@@ -4724,7 +4724,7 @@ test("prompt commands capture checking before handoff and running at prompt inje
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     assert.equal(
@@ -4737,7 +4737,7 @@ test("prompt commands capture checking before handoff and running at prompt inje
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -4781,7 +4781,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -4804,7 +4804,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -4827,7 +4827,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -4845,7 +4845,7 @@ test("req commands except req-reset reject non-idle workflow state and transitio
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -4895,7 +4895,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -4918,7 +4918,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -4957,7 +4957,7 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -4976,6 +4976,10 @@ test("worktree-backed prompt finalization still succeeds after a busy-command re
 test("workflow status renders request tokens and the done terminal default", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
+  const originalDateNow = Date.now;
+  // The elapsed timers measure orchestration wall time, so freeze the clock to keep the
+  // rendered `M:SS` values deterministic across real git validation latency.
+  Date.now = () => 0;
   try {
     writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
     const pi = createFakePi();
@@ -4998,7 +5002,7 @@ test("workflow status renders request tokens and the done terminal default", asy
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     await pi.emit("agent_start", {}, ctx);
@@ -5015,7 +5019,7 @@ test("workflow status renders request tokens and the done terminal default", asy
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -5030,7 +5034,7 @@ test("workflow status renders request tokens and the done terminal default", asy
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     await pi.emit("agent_start", {}, ctx);
@@ -5047,7 +5051,7 @@ test("workflow status renders request tokens and the done terminal default", asy
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -5062,7 +5066,7 @@ test("workflow status renders request tokens and the done terminal default", asy
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     await pi.emit("session_start", { reason: "reload" }, ctx);
@@ -5071,6 +5075,7 @@ test("workflow status renders request tokens and the done terminal default", asy
       /<accent>status:<\/accent><warning>idle<\/warning>/,
     );
   } finally {
+    Date.now = originalDateNow;
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
@@ -5102,7 +5107,7 @@ test("prompt commands abort when git validation fails", async () => {
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -5655,7 +5660,7 @@ test("worktree-backed prompt failures keep the worktree session, retain worktree
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 0:00 ⌛︎0:00",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
   } finally {
@@ -6956,7 +6961,7 @@ test("replacement-session prompt delivery persists running before async sendUser
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
     assert.equal(
@@ -6969,7 +6974,7 @@ test("replacement-session prompt delivery persists running before async sendUser
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
     );
 
@@ -7700,7 +7705,7 @@ test("session_start applies configured pi-usereq startup tools", async () => {
       testsDir: "tests",
       srcDir: ["src", "foobar"],
       contextFilledCells: 0,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
     }),
   );
 });
@@ -7746,7 +7751,7 @@ test("session_start renders the 0-percent context icon when context usage is emp
       srcDir: ["src"],
       contextFilledCells: 0,
       contextPercent: 0,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
     }),
   );
 });
@@ -7782,7 +7787,7 @@ test("direct status rerenders refresh the context gauge after context reset", ()
       srcDir: ["src"],
       contextFilledCells: 10,
       contextPercent: 91,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
     }),
   );
 
@@ -7798,7 +7803,7 @@ test("direct status rerenders refresh the context gauge after context reset", ()
       srcDir: ["src"],
       contextFilledCells: 0,
       contextPercent: null,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
     }),
   );
 });
@@ -7894,7 +7899,7 @@ test("context hook refreshes context usage and rounds progress cells upward", as
       srcDir: ["src"],
       contextFilledCells: 2,
       contextPercent: 19.1,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
     }),
   );
 });
@@ -7932,7 +7937,7 @@ test("context hook applies warning-colored quarter-threshold gauge icons below t
         srcDir: ["src"],
         contextFilledCells: Math.ceil(percent / 10),
         contextPercent: percent,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       }),
       `unexpected context icon at ${percent}%`,
     );
@@ -7961,7 +7966,7 @@ test("context hook renders the error full context icon when usage exceeds ninety
       srcDir: ["src"],
       contextFilledCells: 10,
       contextPercent: 91,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
     }),
   );
 });
@@ -8003,15 +8008,20 @@ test("status overflow-threshold context icon uses only CLI-supported theme token
       srcDir: ["src"],
       contextFilledCells: 10,
       contextPercent: 100,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
     }),
   );
 });
 
-test("agent timing status updates et while preserving accumulated completed runtime", async () => {
-  const cwd = createTempDir("pi-usereq-timing-status-");
-  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
-
+test("orchestration elapsed timers tick live, restart per orchestration, and accumulate per context and session", async () => {
+  // REQ-803/REQ-805/REQ-807/REQ-808/REQ-810/TST-255: the three elapsed timers start at zero
+  // together, tick concurrently through one shared live update logic while an orchestration is
+  // in flight, restart `running_timer` from zero on every new orchestration, keep
+  // `context_timer` counting across orchestrations launched on an already-present context,
+  // accumulate `session_timer` without reset, and absorb aborted orchestrations into the
+  // accumulators (REQ-159).
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
   const originalDateNow = Date.now;
   const originalSetInterval = globalThis.setInterval;
   const originalClearInterval = globalThis.clearInterval;
@@ -8033,33 +8043,23 @@ test("agent timing status updates et while preserving accumulated completed runt
     const ctx = createFakeCtx(cwd);
 
     await pi.emit("session_start", { reason: "startup" }, ctx);
-    await pi.emit("agent_start", {}, ctx);
-    assert.equal(
-      ctx.__state.statuses.get("pi-usereq"),
-      buildExpectedFakeStatusText({
-        basePath: buildExpectedFakeBasePath(cwd),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
-        contextFilledCells: 0,
-        et: "⏱︎ 0:00 ⚑ --:-- ⌛︎--:--",
-      }),
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00<\/warning>/,
     );
 
+    // First orchestration on the empty context: the three timers count in unison.
+    await pi.commands.get("req-analyze")!.handler("Inspect src", ctx);
+    await pi.emit("agent_start", {}, ctx);
     nowMs = 61_000;
     intervalCallbacks[0]!();
-    assert.equal(
-      ctx.__state.statuses.get("pi-usereq"),
-      buildExpectedFakeStatusText({
-        basePath: buildExpectedFakeBasePath(cwd),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
-        contextFilledCells: 0,
-        et: "⏱︎ 1:01 ⚑ --:-- ⌛︎--:--",
-      }),
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
 
+    await pi.emit("agent_start", {}, ctx);
+    nowMs = 65_000;
     await pi.emit("agent_end", {
       messages: [
         {
@@ -8072,18 +8072,26 @@ test("agent timing status updates et while preserving accumulated completed runt
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
         basePath: buildExpectedFakeBasePath(cwd),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 1:01 ⌛︎1:01",
+        et: "⏱︎ 1:05 ⚑ 1:05 ⌛︎1:05",
       }),
     );
 
-    nowMs = 120_000;
+    // Second orchestration on the already-present context: `running_timer` restarts from zero
+    // while `context_timer` keeps counting and `session_timer` accumulates without reset.
+    ctx.sessionManager.appendMessage({ role: "user", content: "Continue with the change." });
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
     await pi.emit("agent_start", {}, ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 1:05 ⌛︎1:05<\/warning>/,
+    );
+
     nowMs = 125_000;
+    await pi.emit("agent_start", {}, ctx);
     await pi.emit("agent_end", {
       messages: [
         {
@@ -8096,12 +8104,11 @@ test("agent timing status updates et while preserving accumulated completed runt
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
+        workflowState: "error",
+        workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(cwd),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 1:01 ⌛︎1:01",
+        et: "⏱︎ 1:00 ⚑ 2:05 ⌛︎2:05",
       }),
     );
     assert.ok(clearedHandles.length >= 2);
@@ -8109,12 +8116,18 @@ test("agent timing status updates et while preserving accumulated completed runt
     Date.now = originalDateNow;
     globalThis.setInterval = originalSetInterval;
     globalThis.clearInterval = originalClearInterval;
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
 
-test("elapsed counters persist across new-session rebinding and reset on reload", async () => {
-  const cwd = createTempDir("pi-usereq-timing-rebind-");
-  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+test("elapsed timers persist across new-session rebinding and reload closes in-flight orchestrations", async () => {
+  // REQ-807/REQ-809/REQ-217/TST-063: elapsed accumulators survive `/new` rebinding because the
+  // process-scoped store restores them, `session_timer` never resets during the process
+  // lifetime, and `reload` closes an in-flight orchestration by freezing `running_timer` and
+  // absorbing its duration into `context_timer` plus `session_timer` instead of resetting any
+  // timer.
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
   const originalDateNow = Date.now;
   let nowMs = 0;
   Date.now = () => nowMs;
@@ -8124,6 +8137,7 @@ test("elapsed counters persist across new-session rebinding and reset on reload"
     piUsereqExtension(firstPi);
     const firstCtx = createFakeCtx(cwd);
     await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+    await firstPi.commands.get("req-analyze")!.handler("Inspect src", firstCtx);
     await firstPi.emit("agent_start", {}, firstCtx);
     nowMs = 61_000;
     await firstPi.emit("agent_end", {
@@ -8135,6 +8149,10 @@ test("elapsed counters persist across new-session rebinding and reset on reload"
         },
       ],
     }, firstCtx);
+    assert.match(
+      firstCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+    );
     await firstPi.emit("session_shutdown", {}, firstCtx);
 
     const newPi = createFakePi();
@@ -8144,36 +8162,27 @@ test("elapsed counters persist across new-session rebinding and reset on reload"
       reason: "new",
       previousSessionFile: "/tmp/previous-session.jsonl",
     }, newCtx);
-    assert.equal(
-      newCtx.__state.statuses.get("pi-usereq"),
-      buildExpectedFakeStatusText({
-        basePath: buildExpectedFakeBasePath(cwd),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
-        contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 1:01 ⌛︎1:01",
-      }),
+    assert.match(
+      newCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
-    await newPi.emit("session_shutdown", {}, newCtx);
 
+    // In-flight orchestration on the replacement: `reload` must close it and keep every timer
+    // monotonic instead of resetting any accumulator.
+    await newPi.commands.get("req-change")!.handler("Adjust docs", newCtx);
+    await newPi.emit("agent_start", {}, newCtx);
+    nowMs = 120_000;
     const reloadPi = createFakePi();
     piUsereqExtension(reloadPi);
     const reloadCtx = createFakeCtx(cwd);
     await reloadPi.emit("session_start", { reason: "reload" }, reloadCtx);
-    assert.equal(
-      reloadCtx.__state.statuses.get("pi-usereq"),
-      buildExpectedFakeStatusText({
-        basePath: buildExpectedFakeBasePath(cwd),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
-        contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
-      }),
+    assert.match(
+      reloadCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 0:59 ⚑ 0:59 ⌛︎2:00<\/warning>/,
     );
   } finally {
     Date.now = originalDateNow;
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
 
@@ -8408,7 +8417,7 @@ test("configuration menu can persist notify and boot-sound settings without chan
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       sound: "none",
     }),
   );
@@ -8465,7 +8474,7 @@ test("configuration menu can persist pushover settings", async () => {
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       sound: "none",
     }),
   );
@@ -8611,9 +8620,10 @@ test("agent_end pushover reports the ended run's own duration after mid-run run-
 });
 
 test("prompt-end pushover renders unbounded minute durations for long uninterrupted runs", async () => {
-  // Minutes stay unbounded above 59: a six-hour run must render `360:00` and a 24-hour run
-  // `1440:00` in the pushed title, with both durations accumulated into the completed counters
-  // (REQ-125, REQ-159, REQ-187).
+  // Minutes stay unbounded above 59: a six-hour orchestration must render `360:00` and a
+  // 24-hour orchestration `1440:00` in the pushed title, with both durations accumulated into
+  // the context plus session timers across orchestrations launched on the already-present
+  // context (REQ-125, REQ-159, REQ-187, REQ-803, REQ-805).
   const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
   writeProjectConfigOverrides(cwd, {
     GIT_WORKTREE_ENABLED: "disable",
@@ -8652,10 +8662,13 @@ test("prompt-end pushover renders unbounded minute durations for long uninterrup
         workflowRequest: "analyze",
         basePath: buildExpectedFakeBasePath(cwd),
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 360:00 ⌛︎360:00",
+        et: "⏱︎ 360:00 ⚑ 360:00 ⌛︎360:00",
       }),
     );
 
+    // The second orchestration launches on the already-present context, so `context_timer`
+    // keeps counting from the first orchestration while `running_timer` restarts from zero.
+    ctx.sessionManager.appendMessage({ role: "user", content: "Continue with the change." });
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
     await pi.emit("agent_start", {}, ctx);
     nowMs = 108_000_000;
@@ -8674,7 +8687,7 @@ test("prompt-end pushover renders unbounded minute durations for long uninterrup
         workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(cwd),
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 1440:00 ⌛︎1800:00",
+        et: "⏱︎ 1440:00 ⚑ 1800:00 ⌛︎1800:00",
       }),
     );
   } finally {
@@ -8747,12 +8760,13 @@ test("agent_end pushover recovers the run duration and prompt state on a fresh c
   }
 });
 
-test("agent_end pushover reports the aborted run's own duration and preserves completed counters", async () => {
-  // Run A completes in two minutes and populates the completed counters. Run B is aborted one
-  // minute after the in-memory run timer is lost mid-run: the pushed notification must report
-  // run B's own `1:00` with the `aborted` result token, while the `⚑` and `⌛︎` counters keep
-  // run A's `2:00` because escape-triggered cancellation must not overwrite them (REQ-125,
-  // REQ-159, REQ-187, REQ-199).
+test("agent_end pushover reports the aborted orchestration elapsed and keeps timers accumulating", async () => {
+  // Orchestration A completes in two minutes and populates the elapsed timers. Orchestration B
+  // is aborted one minute after the in-memory orchestration timer is lost mid-run: the pushed
+  // notification must report orchestration B's own `1:00` elapsed with the `aborted` result
+  // token, while the escape-triggered cancellation still accumulates into `context_timer` plus
+  // `session_timer` because every executed workflow counts (REQ-125, REQ-159, REQ-187,
+  // REQ-199, REQ-803).
   const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
   writeProjectConfigOverrides(cwd, {
     GIT_WORKTREE_ENABLED: "disable",
@@ -8782,6 +8796,9 @@ test("agent_end pushover reports the aborted run's own duration and preserves co
     }, ctx);
     assert.equal(recorder.requests.length, 1);
     // Run B: aborted with the in-memory run timer lost mid-run.
+    // Run B launches on the already-present context, so `context_timer` keeps counting from
+    // run A's completed duration (REQ-805).
+    ctx.sessionManager.appendMessage({ role: "user", content: "Continue with the change." });
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
     await pi.emit("agent_start", {}, ctx);
     nowMs = 150_000;
@@ -8804,7 +8821,7 @@ test("agent_end pushover reports the aborted run's own duration and preserves co
         workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(cwd),
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ 2:00 ⌛︎2:00",
+        et: "⏱︎ 1:00 ⚑ 3:00 ⌛︎3:00",
       }),
     );
   } finally {
@@ -8920,11 +8937,11 @@ test("agent_end pushover suppresses unassociated prompt ends from pending, dupli
   }
 });
 
-test("agent_end pushover reports each retried agent segment's own duration", async () => {
-  // Overflow compact-and-retry restarts the agent run after `agent_end`: each start/end segment
-  // is an independent `M:SS` measurement boundary for `%%TIME%%`, both non-aborted segments
-  // accumulate into the completed counters, and matched-success closure stays deferred until
-  // `agent_settled` (REQ-159, REQ-187, REQ-354).
+test("agent_end pushover reports the shared orchestration elapsed across retried agent segments", async () => {
+  // Overflow compact-and-retry restarts the agent run after `agent_end`: both segments belong
+  // to one still-running orchestration, so each `%%TIME%%` report carries the shared
+  // orchestration elapsed instead of a per-segment duration, and matched-success closure stays
+  // deferred until `agent_settled` (REQ-159, REQ-187, REQ-354, REQ-803, REQ-808).
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
@@ -8972,7 +8989,8 @@ test("agent_end pushover reports each retried agent segment's own duration", asy
         `change @ ${buildExpectedNotifyBasePath(projectBase)} [1:00]`,
       );
 
-      // Segment 2: the retried agent run restarts without a new pending request.
+      // Segment 2: the retried agent run restarts without a new pending request, and the
+      // orchestration elapsed keeps counting across the restart boundary.
       await pi.emit("agent_start", {}, eventCtx);
       nowMs = 150_000;
       await pi.emit("agent_end", {
@@ -8981,7 +8999,7 @@ test("agent_end pushover reports each retried agent segment's own duration", asy
       assert.equal(recorder.requests.length, 2);
       assert.equal(
         new URLSearchParams(recorder.requests[1]?.body ?? "").get("title"),
-        `change @ ${buildExpectedNotifyBasePath(projectBase)} [1:30]`,
+        `change @ ${buildExpectedNotifyBasePath(projectBase)} [2:30]`,
       );
 
       // Settlement finalizes the deferred matched-success closure.
@@ -9228,7 +9246,7 @@ test("pushover global enable controls status and suppresses delivery when disabl
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       sound: "none",
     }),
   );
@@ -9500,7 +9518,7 @@ test("sound toggle shortcut cycles active runtime pi-notify sound levels without
         testsDir: "tests",
         srcDir: ["src"],
         contextFilledCells: 0,
-        et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
         sound: expectedSound,
       }),
     );
@@ -9533,7 +9551,7 @@ test("session_start loads the active runtime sound from persisted boot config", 
       testsDir: "tests",
       srcDir: ["src"],
       contextFilledCells: 0,
-      et: "⏱︎ --:-- ⚑ --:-- ⌛︎--:--",
+      et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
       sound: "mid",
     }),
   );

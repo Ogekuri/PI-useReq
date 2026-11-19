@@ -241,7 +241,7 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.match(status, new RegExp(`<accent>branch:<\\/accent><warning>⎇ ${escapedBranch}<\\/warning>`));
     assert.doesNotMatch(status, /<accent>current-path:<\/accent>/);
     assert.match(status, /<accent>context:<\/accent><warning>▕_▏<\/warning>/);
-    assert.match(status, /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
+    assert.match(status, /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00<\/warning>/);
     assert.match(status, /<accent>sound:<\/accent><warning>none<\/warning>/);
     assert.doesNotMatch(status, /<accent>beep:<\/accent>/);
     assert.doesNotMatch(status, /<accent>pushover:<\/accent>/);
@@ -307,7 +307,7 @@ test("replayCommand captures interactive UI side effects", async () => {
     assert.deepEqual(report.activeTools, []);
     assert.ok(report.ui.notifications.some((entry) => entry.message === "Disabled all configurable active tools"));
     assert.doesNotMatch(report.ui.statuses["pi-usereq"] ?? "", /<accent>tools:<\/accent>/);
-    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>elapsed:<\/accent><warning>⏱︎ --:-- ⚑ --:-- ⌛︎--:--<\/warning>/);
+    assert.match(report.ui.statuses["pi-usereq"] ?? "", /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00<\/warning>/);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }

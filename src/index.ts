@@ -1892,12 +1892,12 @@ async function handleExtensionStatusEvent(
       const livePromptEndRequest = statusController.state.activePromptRequest;
       const liveNotifyRequest = livePromptEndRequest !== undefined
         && statusController.state.activeRunBelongsToPrompt
-        && statusController.state.endedRunDurationMs !== undefined
+        && statusController.state.endedOrchestrationElapsedMs !== undefined
         ? {
             promptName: livePromptEndRequest.promptName,
             promptArgs: livePromptEndRequest.promptArgs,
             basePath: livePromptEndRequest.basePath,
-            completionTimeMs: statusController.state.endedRunDurationMs,
+            completionTimeMs: statusController.state.endedOrchestrationElapsedMs,
             agentOutput: agentEndOutputText,
           }
         : undefined;

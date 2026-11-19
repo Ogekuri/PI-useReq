@@ -238,9 +238,17 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-283**: MUST resolve `branch` from the current `context-path` git HEAD during every status-bar rebuild so worktree switches and base-path restoration update immediately.
 - **REQ-284**: MUST render `context` immediately after `branch` with separator ` • ` and one fixed-width gauge icon.
 - **REQ-122**: MUST map `context` usage to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands.
-- **REQ-123**: MUST render `elapsed` immediately after `context` as `⏱︎ <active> ⚑ <last> ⌛︎<total>`.
-- **REQ-124**: MUST render `⏱︎ --:--` when no prompt is active, and `⚑ --:--` plus `⌛︎--:--` until the corresponding timers receive a normally completed prompt duration.
-- **REQ-125**: MUST render timed `elapsed` segments as `M:SS`, keep minutes unbounded above 59, zero-pad seconds to two digits, and preserve `⚑` plus `⌛︎` when escape-triggered cancellation ends the active run.
+- **REQ-123**: MUST render `elapsed` immediately after `context` as `⏱︎ <running_timer> ⚑ <context_timer> ⌛︎<session_timer>`.
+- **REQ-124**: MUST render every elapsed timer from zero as `M:SS` and MUST NOT render unset elapsed placeholders.
+- **REQ-125**: MUST render timed `elapsed` segments as `M:SS`, keep minutes unbounded above 59, and zero-pad seconds to two digits.
+- **REQ-803**: MUST start `running_timer` at zero when a new orchestration starts, tick it live while the orchestration is in flight, and keep its frozen final value after the orchestration reaches a terminal state.
+- **REQ-804**: MUST treat a workflow-state transition from a non-in-flight state into `checking` or `running` as orchestration start, and from `checking|running|merging` into `done|warning|error|idle` as orchestration end.
+- **REQ-805**: MUST reset `context_timer` to zero when an orchestration starts on an empty context and MUST continue `context_timer` from its accumulated value when the context already holds session entries.
+- **REQ-806**: MUST detect an empty context at orchestration start when the active session exposes zero session entries.
+- **REQ-807**: MUST start `session_timer` at zero at pi client start and MUST NOT reset it during the process lifetime.
+- **REQ-808**: MUST update `running_timer`, `context_timer`, and `session_timer` concurrently through one shared live update logic while an orchestration is in flight.
+- **REQ-809**: MUST preserve elapsed-timer accumulators and the in-flight orchestration record across session replacement within the same pi process.
+- **REQ-810**: MUST NOT render `running_timer` above `context_timer` nor `context_timer` above `session_timer`.
 - **REQ-126**: MUST render `context` gauge icons below 90 percent with the same non-error theme token used by `status`, and theme `error` at 90 percent or above.
 - **REQ-127**: MUST render `context` as non-blinking theme `error` `▕█▏` when normalized usage is `>=90-<100` percent.
 - **REQ-233**: MUST render `context` as blinking theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is supported.
@@ -276,7 +284,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-184**: MUST persist Pushover event toggles in keys `notify-pushover-on-completed`, `notify-pushover-on-interrupted`, and `notify-pushover-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
 - **REQ-185**: MUST persist `Pushover title` defaulting to `%%PROMT%% @ %%BASE%% [%%TIME%%]` and `Pushover text` defaulting to `%%RESULT%%\n%%OUTPUT%%`.
 - **REQ-186**: MUST substitute `%%PROMT%%`, `%%BASE%%`, `%%TIME%%`, `%%ARGS%%`, `%%OUTPUT%%`, and `%%RESULT%%` at runtime inside `Pushover title` and `Pushover text`.
-- **REQ-187**: MUST render `%%BASE%%` as static `base-path` relative to user home using `~/...` form and `%%TIME%%` as final elapsed `M:SS`.
+- **REQ-187**: MUST render `%%BASE%%` as static `base-path` relative to user home using `~/...` form and `%%TIME%%` as the current orchestration elapsed `M:SS` captured at the terminal agent event.
 - **REQ-188**: MUST label notification-event rows as `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
 - **REQ-190**: MUST label top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Context Files`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, `Debug`, `Show local configuration`, and `Show global configuration`.
 - **REQ-191**: MUST order top-level rows as `Document directory`, `Source-code directories`, `Unit tests directory`, `Context Files`, `Auto git commit`, `Git worktree`, `Worktree prefix`, `Language static code checkers`, `Enable tools`, `Notifications`, and `Debug`.
@@ -338,8 +346,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-258**: MUST verify worktree deletion by confirming absence from `git worktree list`, absence from `git branch` list, and absence of the worktree filesystem path.
 - **REQ-220**: MUST keep `req-<prompt>` implementations independent from extension custom-tool executors so prompt-command source remains unchanged when custom tools are removed.
 - **REQ-210**: MUST define custom `renderResult` for every agent-tool registration, keep collapsed tool rows compact with essential invocation parameters plus result status, and reveal full monolithic tool text only when the tool row is expanded.
-- **REQ-159**: MUST increase `Σ` by each normally completed prompt duration and MUST NOT change `Σ` on escape-triggered cancellation.
-- **REQ-217**: MUST reset `⚑` plus `⌛︎` only during `session_start` with reason `startup` or `reload`.
+- **REQ-159**: MUST accumulate every executed orchestration duration into `context_timer` plus `session_timer`, including escape-triggered cancellation.
+- **REQ-217**: MUST reset elapsed timers to zero during `session_start` reason `startup` and close an in-flight orchestration during `session_start` reason `reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`.
 - **REQ-173**: MUST optimize every affected agent-tool response by reusing Python-compatible monolithic renderer structure, preserving source-leading tabs in source-derived text, and omitting mirrored JSON bodies, duplicate facts, and caller-known request echoes.
 - **REQ-010**: MUST count tokens with `js-tiktoken` `cl100k_base`, count characters and lines, and make `req-files-tokens` return the Python-compatible pack-summary text through `content[0].text`.
 - **REQ-011**: MUST make `req-files-summarize` analyze supported source files and return the Python-compatible summary markdown through `content[0].text`.
@@ -908,11 +916,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` plus `%%OUTPUT%%` for enabled prompt-end outcomes.
 - **TST-049**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
 - **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` plus `%%OUTPUT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
-- **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` preserves `⚑` plus `⌛︎` across escape-triggered cancellation.
+- **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` timers accumulate executed orchestrations across escape-triggered cancellation.
+- **TST-255**: MUST verify `running_timer` restarts per orchestration, `context_timer` resets only on empty-context orchestration starts, and `session_timer` accumulates without reset.
 - **TST-062**: MUST verify `Show local configuration` saves pending local and global config, closes the active configuration menu tree, and writes persisted `<base-path>/.pi-usereq.json` text into the editor.
 - **TST-109**: MUST verify `Show global configuration` saves pending local and global config, closes the active configuration menu tree, and writes persisted `~/.config/pi-usereq/config.json` text into the editor.
 - **TST-111**: MUST verify `Show local configuration` and `Show global configuration` render `~`-relative config paths with the settings-list `dim` value style.
-- **TST-063**: MUST verify `⚑` plus `⌛︎` survive `session_start` reason `new` and reset on `session_start` reason `reload`.
+- **TST-063**: MUST verify elapsed timers survive `session_start` reason `new`, reset to zero on `session_start` reason `startup`, and close an in-flight orchestration on `session_start` reason `reload`.
 - **TST-045**: MUST verify default configuration enables auto git commit, disables debug, notify, and Pushover globally, initializes sound to `none`, and persists the documented notify and Pushover templates.
 - **TST-051**: MUST verify sound routing honors the active runtime sound state and completed/interrupted/failed sound toggles.
 - **TST-035**: MUST verify unavailable or 0-percent context usage renders `▕_▏` with the same non-error theme token used by `status`.
