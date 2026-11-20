@@ -14,6 +14,12 @@ import {
 import { buildParityReport, type SdkContractSnapshot } from "../scripts/lib/sdk-smoke.js";
 import { loadConfig } from "../src/core/config.js";
 import { PI_USEREQ_STATUS_HOOK_NAMES } from "../src/core/extension-status.js";
+import {
+  buildPiHostVersionWarningMessage,
+  comparePiHostVersions,
+  MINIMUM_SUPPORTED_PI_HOST_VERSION,
+  resolvePiHostVersionFromModule,
+} from "../src/core/pi-host-version.js";
 import { initFixtureRepo, saveFixtureConfigs } from "./helpers.js";
 
 /**
@@ -251,7 +257,19 @@ test("replaySessionStart captures active tools, statuses, and cwd semantics", as
     assert.doesNotMatch(status, /<accent>tests:<\/accent>/);
     assert.doesNotMatch(status, /<accent>git:<\/accent>/);
     assert.doesNotMatch(status, /<accent>tools:<\/accent>/);
-    assert.equal(report.ui.notifications.length, 0);
+    // REQ-457 mandates exactly one warning notification during session_start when the
+    // probed pi CLI host resolves below MINIMUM_SUPPORTED_PI_HOST_VERSION, and REQ-458
+    // keeps every other session_start outcome notification-free; assert the documented
+    // contract instead of an environment-dependent zero-notification expectation.
+    const detectedPiHostVersion = await import("@earendil-works/pi-coding-agent")
+      .then((piHostModule) => resolvePiHostVersionFromModule(piHostModule))
+      .catch(() => undefined);
+    const expectedSessionStartNotifications =
+      detectedPiHostVersion !== undefined &&
+      comparePiHostVersions(detectedPiHostVersion, MINIMUM_SUPPORTED_PI_HOST_VERSION) < 0
+        ? [{ level: "warning", message: buildPiHostVersionWarningMessage(detectedPiHostVersion) }]
+        : [];
+    assert.deepEqual(report.ui.notifications, expectedSessionStartNotifications);
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
