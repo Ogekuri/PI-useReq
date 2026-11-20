@@ -4894,7 +4894,7 @@ import type { UseReqConfig } from "./config.js";
 ### fn `function parsePiHostSemanticVersion(value: string): [number, number, number] | undefined` (L70-86)
 - @brief Parses one version string into its leading numeric semantic triple.
 - @details Splits the input on dot separators, parses at most three leading integer components while ignoring pre-release suffixes and build metadata, and returns `undefined` when the first component is not a non-negative integer. Missing trailing components default to `0`. Runtime is O(n) in version length. No external state is mutated.
-- @param[in] value {string} Candidate version string such as `1.5.2` or `1.5.2-beta.1`.
+- @param[in] value {string} Candidate version string such as `1.6.0` or `1.6.0-beta.1`.
 - @return {[number, number, number] | undefined} `[major, minor, patch]` triple, or `undefined` when the version carries no numeric leading component.
 
 ### fn `export function comparePiHostVersions(left: string, right: string): number` (L95-107)
