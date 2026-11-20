@@ -8,7 +8,7 @@ import {
   renderAgentFinalOutputMarkdownReport,
   resetAgentFinalOutputStateForTests,
 } from "../src/core/agent-final-output.js";
-import { ANSI_CODE, ANSI_ITALIC } from "../src/core/ansi-style.js";
+import { ANSI_CODE, ANSI_INTENSE_WHITE, ANSI_ITALIC } from "../src/core/ansi-style.js";
 import { formatNextWorkflowCommandTable } from "../src/core/next-workflow.js";
 import { getDefaultConfig } from "../src/core/config.js";
 import {
@@ -475,4 +475,44 @@ test("ANSI colorizer applies single-quote span styling to the rendered Next-Work
   const colored = colorizeAgentFinalOutputMarkdownText(table);
   assert.ok(colored.includes("\u001b[3m'quoted'\u001b[0m"), "the shared colorizer must style single-quote spans inside Next-Workflow table cells");
   assert.equal(colored.replace(/\u001b\[[0-9;]*m/g, ""), table, "every source character of the table must survive the coloring");
+});
+
+/**
+ * @brief Verifies the `Summary` report-section body renders plain text with the intense-white base foreground while every other surface keeps unchanged styling.
+ * @details Colorizes one report containing the `Summary` heading with plain, code-span, single-quote-span, and fenced body content followed by an `Outcome` section and one Next-Workflow command table, asserting Summary plain segments carry the intense-white escape pair, quote spans compose intense white with italic, code spans and fenced lines keep only the code color, the Outcome body and table stay free of the intense-white styling, the heading boxes keep intense yellow, and every non-heading source character survives the coloring while headings render as their rounded box frames.
+ * @return {void} Promise-less assertions executed synchronously.
+ * @throws {AssertionError} Throws when the Summary body misses the intense-white base, any other surface gains the styling, or the text mutates.
+ * @satisfies REQ-811, REQ-812, TST-256
+ */
+test("ANSI colorizer renders the Summary section body in intense white", () => {
+  const report = [
+    "## **Summary**",
+    "Plain summary text with `code` and 'quoted' text.",
+    "```",
+    "fenced 'code' line",
+    "```",
+    "After fence plain text.",
+    "",
+    "## **Outcome**",
+    "Plain outcome text.",
+    "",
+    "╭────┬───────────────┬──────╮",
+    "│ N. │ Next Workflow │ Text │",
+    "╰────┴───────────────┴──────╯",
+  ].join("\n");
+  const colored = colorizeAgentFinalOutputMarkdownText(report);
+  assert.ok(colored.includes(`\u001b[${ANSI_INTENSE_WHITE}mPlain summary text with \u001b[0m`), "Summary plain text before the code span must carry the intense-white escape pair");
+  assert.ok(colored.includes(`\u001b[${ANSI_CODE}m\`code\`\u001b[0m`), "the Summary inline code span must keep its own code color");
+  assert.ok(colored.includes(`\u001b[${ANSI_INTENSE_WHITE}m and \u001b[0m`), "Summary plain text between inline elements must carry the intense-white escape pair");
+  assert.ok(colored.includes(`\u001b[${ANSI_INTENSE_WHITE};${ANSI_ITALIC}m'quoted'\u001b[0m`), "the Summary single-quote span must compose intense white with italic");
+  assert.ok(colored.includes(`\u001b[${ANSI_CODE}mfenced 'code' line\u001b[0m`), "fenced Summary content must keep only the code escape pair");
+  assert.ok(!colored.includes(`\u001b[${ANSI_INTENSE_WHITE}mfenced`), "fenced Summary content must stay free of the intense-white styling");
+  assert.ok(colored.includes(`\u001b[${ANSI_INTENSE_WHITE}mAfter fence plain text.\u001b[0m`), "Summary body after the fence must resume the intense-white base");
+  assert.ok(colored.includes("\u001b[93m│ Summary │\u001b[0m"), "the Summary heading box must keep the intense-yellow styling");
+  assert.ok(!colored.includes(`\u001b[${ANSI_INTENSE_WHITE}mPlain outcome`), "the Outcome body must stay free of the intense-white styling");
+  assert.ok(!colored.includes(`\u001b[${ANSI_INTENSE_WHITE}m│ N. │`), "the Next-Workflow table text must stay free of the intense-white styling");
+  const expectedPlain = report
+    .replace(/^## \*\*Summary\*\*$/m, "╭─────────╮\n│ Summary │\n╰─────────╯")
+    .replace(/^## \*\*Outcome\*\*$/m, "╭─────────╮\n│ Outcome │\n╰─────────╯");
+  assert.equal(colored.replace(/\u001b\[[0-9;]*m/g, ""), expectedPlain, "every source character outside escape sequences and heading box substitutions must survive the coloring");
 });

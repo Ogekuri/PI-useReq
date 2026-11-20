@@ -1,11 +1,11 @@
 /**
  * @file
  * @brief Implements final-output JSON extraction, parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture.
- * @details Extracts the one embedded JSON object from the terminal assistant text of one completed agentic prompt run, parses it as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, converts that block into ANSI-colored text with intense-yellow `## **<Label>**` headings plus colored markdown links, fenced code, inline code, bold, italic, underlined, and single-quote-span elements, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
- * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-763, REQ-764, REQ-765, REQ-766, REQ-767
+ * @details Extracts the one embedded JSON object from the terminal assistant text of one completed agentic prompt run, parses it as exactly one final-output JSON object, validates the mandatory `result`, `summary`, and `next_commands` fields, normalizes optional report fields and `next_commands` entries, renders the captured report fields as the fixed-order markdown section block printed before the final context-retention line, converts that block into ANSI-colored text with intense-yellow `## **<Label>**` headings, an intense-white `Summary`-section body base, plus colored markdown links, fenced code, inline code, bold, italic, underlined, and single-quote-span elements, and stores the latest parsed report in one process-scoped store that survives extension rebinds so the retention notification of a successor session renders the report of the completed flow. Runtime is O(n) in output length per parse and O(1) per store access. Side effects are limited to process-scoped state mutation; no configuration file is written.
+ * @satisfies DES-042, REQ-584, REQ-677, REQ-678, REQ-679, REQ-680, REQ-681, REQ-682, REQ-683, REQ-684, REQ-710, REQ-711, REQ-713, REQ-714, REQ-715, REQ-720, REQ-721, REQ-763, REQ-764, REQ-765, REQ-766, REQ-767, REQ-811, REQ-812
  */
 
-import { ANSI_BOLD, ANSI_CODE, ANSI_INTENSE_YELLOW, ANSI_ITALIC, ANSI_LINK, ANSI_UNDERLINE, wrapAnsiStyle } from "./ansi-style.js";
+import { ANSI_BOLD, ANSI_CODE, ANSI_INTENSE_WHITE, ANSI_INTENSE_YELLOW, ANSI_ITALIC, ANSI_LINK, ANSI_UNDERLINE, wrapAnsiStyle } from "./ansi-style.js";
 import { measureDisplayWidth } from "./config-cli-render.js";
 
 /**
@@ -112,6 +112,13 @@ export const AGENT_FINAL_OUTPUT_REPORT_FIELDS: readonly AgentFinalOutputReportFi
   { field: "assumptions", label: "Assumptions" },
   { field: "next_workflow", label: "Next Workflow" },
 ];
+
+/**
+ * @brief Heading label identifying the report section whose body renders with the intense-white base foreground.
+ * @details Matches the `Summary` heading label emitted by `AGENT_FINAL_OUTPUT_REPORT_FIELDS` so the shared ANSI colorizer can scope the intense-white body styling to that section only while every other section body and non-report payload keep the terminal default foreground. Access complexity is O(1).
+ * @satisfies REQ-811, REQ-812
+ */
+const AGENT_FINAL_OUTPUT_SUMMARY_SECTION_LABEL = "Summary";
 
 /**
  * @brief Tests whether one candidate value is a plain JSON object.
@@ -388,6 +395,79 @@ function colorizeAgentFinalOutputQuotedSpan(span: string): string {
 }
 
 /**
+ * @brief Composes the intense-white base foreground into one single-quote span rendering inside the `Summary` body.
+ * @details Splits the span on the inline-code-span pattern, styles each code-span token with the combined intense-white, italic, and code SGR parameter list, and styles every remaining token, including the delimiting quote characters, with the combined intense-white and italic parameter list, so per-token styling closes each escape region before the next token and a nested code reset never terminates the enclosing white-and-italic region.
+ * @param[in] span {string} Matched single-quote span including its delimiting quote characters.
+ * @return {string} ANSI-colored span where plain tokens print intense white plus italic and enclosed inline code prints intense white plus italic plus code.
+ * @satisfies REQ-811, REQ-763, REQ-764, REQ-767
+ */
+function colorizeAgentFinalOutputSummaryQuotedSpan(span: string): string {
+  return span
+    .split(AGENT_FINAL_OUTPUT_ANSI_CODE_SPAN_PATTERN)
+    .map((token, tokenIndex) =>
+      tokenIndex % 2 === 1
+        ? wrapAnsiStyle(token, `${ANSI_INTENSE_WHITE};${ANSI_ITALIC};${ANSI_CODE}`)
+        : wrapAnsiStyle(token, `${ANSI_INTENSE_WHITE};${ANSI_ITALIC}`),
+    )
+    .join("");
+}
+
+/**
+ * @brief Renders one protected span inside the `Summary` body with its inline-element styling preserved.
+ * @details Dispatches single-quote spans onto the intense-white composed quote renderer so the white base combines with the italic emphasis per token, and routes every remaining protected span through the shared inline dispatcher so inline code, links, bold, underline, and plain italic keep their own colors inside the `Summary` body.
+ * @param[in] segment {string} Matched protected span, either an inline code span or a single-quote span.
+ * @return {string} ANSI-colored rendering of the protected span.
+ * @satisfies REQ-811, REQ-812, REQ-715
+ */
+function colorizeAgentFinalOutputSummaryProtectedSpan(segment: string): string {
+  if (segment.startsWith("'")) {
+    return colorizeAgentFinalOutputSummaryQuotedSpan(segment);
+  }
+  return replaceAgentFinalOutputAnsiInline(segment);
+}
+
+/**
+ * @brief Styles every plain text run between inline markdown elements of one `Summary` body segment with the intense-white foreground.
+ * @details Walks the inline-element matches of the segment, wraps every unmatched gap in the intense-white escape pair, renders every matched inline element through the shared inline dispatcher, and joins the tokens so inline elements keep their own colors while the surrounding plain text reads bright white.
+ * @param[in] segment {string} Plain markdown segment outside protected spans.
+ * @return {string} ANSI-colored segment.
+ * @satisfies REQ-811, REQ-812, REQ-715
+ */
+function colorizeAgentFinalOutputSummaryPlainSegment(segment: string): string {
+  const styledTokens: string[] = [];
+  let cursor = 0;
+  for (let match = AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN.exec(segment); match !== null; match = AGENT_FINAL_OUTPUT_ANSI_INLINE_PATTERN.exec(segment)) {
+    if (match.index > cursor) {
+      styledTokens.push(wrapAnsiStyle(segment.slice(cursor, match.index), ANSI_INTENSE_WHITE));
+    }
+    styledTokens.push(replaceAgentFinalOutputAnsiInline(match[0]));
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < segment.length) {
+    styledTokens.push(wrapAnsiStyle(segment.slice(cursor), ANSI_INTENSE_WHITE));
+  }
+  return styledTokens.join("");
+}
+
+/**
+ * @brief Colorizes one non-fence body line of the `Summary` report section with the intense-white base foreground.
+ * @details Splits the line on the protected-span pattern, styles protected spans through the `Summary` dispatcher, styles every plain segment through the intense-white plain-segment renderer, and joins the segments so the `Summary` body reads brighter than every other report section body while inline and quote-span styling stays per-token composed.
+ * @param[in] line {string} Plain markdown line following the `## **Summary**` heading.
+ * @return {string} ANSI-colored line.
+ * @satisfies REQ-811, REQ-812, REQ-715, REQ-763, REQ-764, REQ-765, REQ-766, REQ-767
+ */
+function colorizeAgentFinalOutputSummaryBodyLine(line: string): string {
+  return line
+    .split(AGENT_FINAL_OUTPUT_ANSI_PROTECTED_SPAN_PATTERN)
+    .map((segment, segmentIndex) =>
+      segmentIndex % 2 === 1
+        ? colorizeAgentFinalOutputSummaryProtectedSpan(segment)
+        : colorizeAgentFinalOutputSummaryPlainSegment(segment),
+    )
+    .join("");
+}
+
+/**
  * @brief Renders one report section label as a rounded box frame sized from the label length.
  * @details Emits three lines framing the label with one leading and one trailing space: `╭` plus a dash run plus `╮`, `│` plus the padded label plus `│`, and `╰` plus the dash run plus `╯`, where the dash run equals the label display width plus two and every character comes from the mandated rounded box-drawing set. Runtime is O(n) in label length. No external state is mutated.
  * @param[in] label {string} Report section label rendered inside the frame.
@@ -420,14 +500,15 @@ function colorizeAgentFinalOutputInlineLine(line: string): string {
 
 /**
  * @brief Converts one rendered markdown report or table into ANSI-colored text.
- * @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, and applies inline markdown coloring to every remaining line through `colorizeAgentFinalOutputInlineLine(...)` so protected inline code and single-quote spans color atomically and every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm. Runtime is O(n) in text length. No external state is mutated.
+ * @details Replaces every `## **<Label>**` heading with its rounded box frame whose lines print in intense yellow, keeps fenced code blocks plus their fence lines in the code color across the fence state machine, tracks the current section label from the heading lines so only the `Summary` section body routes through the intense-white body renderer, and applies inline markdown coloring to every remaining line through `colorizeAgentFinalOutputInlineLine(...)` or `colorizeAgentFinalOutputSummaryBodyLine(...)` so protected inline code and single-quote spans color atomically and every source character outside the replaced headings stays present; shared by the report-section renderer and the Next-Workflow command table so both payloads use the identical formatting algorithm while table text, carrying no heading lines, keeps the terminal default foreground. Runtime is O(n) in text length. No external state is mutated.
  * @param[in] text {string} Plain markdown report or plain table text produced by the fixed-order renderer or the Next-Workflow table builder.
  * @return {string} ANSI-colored text.
- * @satisfies REQ-713, REQ-714, REQ-715, REQ-732, REQ-763, REQ-764
+ * @satisfies REQ-713, REQ-714, REQ-715, REQ-732, REQ-763, REQ-764, REQ-811, REQ-812
  */
 export function colorizeAgentFinalOutputMarkdownText(text: string): string {
   const renderedLines: string[] = [];
   let insideFence = false;
+  let insideSummaryBody = false;
   for (const line of text.split("\n")) {
     if (line.trimStart().startsWith("```")) {
       insideFence = !insideFence;
@@ -440,9 +521,14 @@ export function colorizeAgentFinalOutputMarkdownText(text: string): string {
     }
     if (/^##\s+\*\*([^*]+)\*\*$/.test(line)) {
       const headingLabel = line.replace(/^##\s+\*\*/, "").replace(/\*\*$/, "");
+      insideSummaryBody = headingLabel === AGENT_FINAL_OUTPUT_SUMMARY_SECTION_LABEL;
       for (const boxLine of renderAgentFinalOutputSectionTitleBox(headingLabel)) {
         renderedLines.push(wrapAnsiStyle(boxLine, ANSI_INTENSE_YELLOW));
       }
+      continue;
+    }
+    if (insideSummaryBody) {
+      renderedLines.push(colorizeAgentFinalOutputSummaryBodyLine(line));
       continue;
     }
     renderedLines.push(colorizeAgentFinalOutputInlineLine(line));

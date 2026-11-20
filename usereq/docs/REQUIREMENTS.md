@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.174"
+version: "0.0.175"
 date: "2026-11-20"
 author: "OpenAI Codex"
 scope:
@@ -821,6 +821,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-719**: MUST position every notification reporting an `error` or `warning` prompt-orchestration termination after the markdown report printout content, the Next-Workflow command table, the `/req-continue` command table, and the context-usage percentage line.
 - **REQ-720**: MUST render each report section heading of the ANSI-colored report notification as a rounded box frame sized from the label length.
 - **REQ-721**: MUST wrap every box line of a section heading with the intense-yellow ANSI color.
+- **REQ-811**: MUST render every plain-text body segment of the final-output report `Summary` section with the intense-white ANSI foreground color.
+- **REQ-812**: MUST keep fenced code, inline elements, other report-section bodies, section headings, and Next-Workflow table text free of the `Summary`-body intense-white styling.
 - **REQ-763**: MUST render each matched single-quote span, including its delimiting quote characters, in ANSI italic by wrapping every inner text token with the italic SGR parameter.
 - **REQ-764**: MUST render each inline code span inside a single-quote span with combined italic and code SGR parameters so nested color escapes stay preserved.
 - **REQ-765**: MUST match single-quote spans only when the opening quote is not preceded by a word character and the closing quote is not followed by a word character.
@@ -1136,6 +1138,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-252**: MUST verify every debug file carries the `<project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` prefix matching the created worktree name minus the configured worktree prefix, for worktree-enabled and worktree-disabled runs.
 - **TST-253**: MUST verify JSON debug entries append into one `<run-prefix>-<command>-debug.json` file under `DEBUG_PROMPTS_LOG_PATH`, and entries without an active run identity use the REQ-800 fallback prefix.
 - **TST-254**: MUST verify the `Generated log files` row renders permanently disabled and dimmed with a description covering every generated debug file kind.
+- **TST-256**: MUST verify the report colorizer renders `Summary`-section plain body text in intense white while headings, fences, inline elements, other bodies, and the Next-Workflow table keep unchanged styling.
 
 ## 5. Observed Component Model
 
@@ -1578,6 +1581,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-800 | `src/core/debug-runtime.ts` :: `resolveFallbackPromptDebugRunPrefix` :: derives the no-active-run fallback debug filename prefix. |
 | REQ-801 | `src/index.ts` :: `buildDebugMenuChoices` :: renders the permanently disabled, dimmed `Generated log files` description row. |
 | REQ-802 | `src/core/debug-runtime.ts` :: `flushCapturedPromptErrorPayload` :: appends the `-retry-<n>` base suffix for repeated same-status error flushes of one run. |
+| REQ-811 | `src/core/agent-final-output.ts` :: `colorizeAgentFinalOutputSummaryBodyLine` :: styles `Summary`-section plain body segments with the intense-white ANSI foreground. |
+| REQ-812 | `src/core/agent-final-output.ts` :: `colorizeAgentFinalOutputMarkdownText` :: scopes the intense-white styling to the `Summary` heading state so fences, other bodies, headings, and table text stay unchanged. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1679,6 +1684,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-252 | `tests/extension-registration.test.ts` :: debug filename prefix assertions equalling the created worktree name minus the configured worktree prefix for worktree-enabled and worktree-disabled runs. |
 | TST-253 | `tests/extension-registration.test.ts` :: JSON debug log file shape assertions for `<run-prefix>-<command>-debug.json` plus the no-active-run fallback prefix. |
 | TST-254 | `tests/extension-registration.test.ts` :: `Generated log files` disabled-row and description assertions inside the Debug submenu inventory. |
+| TST-256 | `tests/agent-final-output.test.ts` :: `ANSI colorizer renders the Summary section body in intense white` :: Summary-body white base, unchanged boxes, fences, inline elements, other bodies, and table text. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.
