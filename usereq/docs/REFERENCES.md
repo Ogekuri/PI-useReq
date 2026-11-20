@@ -3138,7 +3138,7 @@ import { getInstallationPath } from "./path-context.js";
 
 ---
 
-# extension-status.ts | TypeScript | 1312L | 61 symbols | 8 imports | 110 comments
+# extension-status.ts | TypeScript | 1368L | 63 symbols | 8 imports | 118 comments
 > Path: `src/core/extension-status.ts`
 - @brief Tracks pi-usereq extension status state and renders status-bar telemetry.
 - @details Centralizes hook interception, context-usage snapshots, active-branch lookup, run timing, and deterministic status-bar formatting for the pi-usereq extension. Runtime
@@ -3197,31 +3197,31 @@ latest extension context used for rendering, and the interval handle used
 for live elapsed-time refreshes. Compile-time only and introduces no runtime
 cost.
 
-### iface `interface PiUsereqStatusPersistenceStore` (L161-167)
+### iface `interface PiUsereqStatusPersistenceStore` (L161-169)
 - @brief Stores the process-scoped elapsed-timer snapshot reused across session replacement.
 - @details Preserves the frozen running-timer value, the context and session accumulated orchestration durations, and the in-flight orchestration start timestamp so `/new`, `/resume`, and `/fork` can restore elapsed counters after the extension runtime is rebound. The `activeRunBelongsToPrompt` flag is agent-run-scoped: it is written only at `agent_start` and cleared only at terminal agent events, so a terminal hook on a replacement runtime can recover the ended run's prompt association when the in-memory flag was cleared mid-run. Compile-time only and introduces no runtime cost.
 
-### fn `function getPiUsereqStatusPersistenceStore(): PiUsereqStatusPersistenceStore` (L181-193)
+### fn `function getPiUsereqStatusPersistenceStore(): PiUsereqStatusPersistenceStore` (L183-196)
 - @brief Returns the process-scoped elapsed-timer persistence store.
 - @details Lazily initializes one internal `globalThis` record because pi rebinds extension modules for `/new`, `/resume`, `/fork`, and `/reload`, but the hosting process persists across those operations. Runtime is O(1). Side effect: initializes internal process-scoped state on first access.
 - @return {PiUsereqStatusPersistenceStore} Mutable persistence record.
 - @note Design rationale: required to preserve elapsed counters across session replacement without writing session-global menu state into project configuration.
 
-### fn `function restorePersistedElapsedState(state: PiUsereqStatusState): void` (L202-208)
+### fn `function restorePersistedElapsedState(state: PiUsereqStatusState): void` (L205-211)
 - @brief Restores persisted elapsed-timer facts into one mutable status snapshot.
 - @details Copies the process-scoped frozen running-timer value, context and session accumulated orchestration durations, and in-flight orchestration start timestamp into the supplied controller state so rebinding events can continue showing and ticking prior counters. The agent-run-scoped ownership flag is intentionally not restored because terminal agent events recover it directly from the process-scoped store. Runtime is O(1). Side effect: mutates `state`.
 - @param[in,out] state {PiUsereqStatusState} Mutable status state.
 - @return {void} No return value.
 - @satisfies REQ-809
 
-### fn `function persistElapsedState(state: PiUsereqStatusState): void` (L217-223)
+### fn `function persistElapsedState(state: PiUsereqStatusState): void` (L220-226)
 - @brief Persists elapsed-timer facts from one mutable status snapshot.
 - @details Copies the frozen running-timer value, context and session accumulated orchestration durations, and in-flight orchestration start timestamp into the process-scoped store so later extension instances can restore them after session replacement. The agent-run-scoped ownership flag is intentionally not mirrored here because shutdown handling clears the in-memory flag while the run record must survive for terminal-event recovery. Runtime is O(1). Side effect: mutates internal process-scoped state.
 - @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
 - @return {void} No return value.
 - @satisfies REQ-809
 
-### fn `function reconcileReboundOrchestrationElapsedState(controller: PiUsereqStatusController): boolean` (L233-243)
+### fn `function reconcileReboundOrchestrationElapsedState(controller: PiUsereqStatusController): boolean` (L236-246)
 - @brief Reconciles one rebound controller's stale in-flight elapsed state with the process-scoped store.
 - @details Extension runtimes rebound mid-orchestration restore the in-flight orchestration start from the process-scoped store at `session_start`, but the initiating runtime may close that orchestration afterwards on its own controller while writing the frozen timer facts into the shared store. Without reconciliation the rebound controller keeps ticking its stale in-memory start past the terminal boundary, renders growing elapsed timers beside an adopted terminal workflow state, and its hook-end persistence would overwrite the frozen store values with still-growing accumulators. The helper adopts the persisted frozen timer facts only when the controller still tracks an in-flight orchestration that the store reports as closed, so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration. Runtime is O(1). Side effects include in-memory state mutation.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller whose stale in-flight elapsed state is healed in place.
@@ -3229,7 +3229,7 @@ cost.
 - @note Complexity: O(1).
 - @satisfies REQ-159, REQ-803, REQ-804, REQ-808, REQ-809
 
-### fn `function freezeAdoptedTerminalOrchestrationElapsed(controller: PiUsereqStatusController): void` (L253-264)
+### fn `function freezeAdoptedTerminalOrchestrationElapsed(controller: PiUsereqStatusController): void` (L256-267)
 - @brief Freezes one controller's stale in-flight elapsed record after a terminal workflow-state adoption.
 - @details Terminal workflow states can be adopted directly from the process-scoped prompt-command persistence (`resynchronizePersistedTerminalWorkflowState` and the `session_start` terminal restore) without driving `applyOrchestrationElapsedLifecycle`, so a controller that restored an in-flight `orchestrationStartMs` before the adoption keeps computing growing elapsed timers and feeding a live ticker after the orchestration terminated. This helper runs the store-based reconciliation first (adopting the authoritative frozen facts when the store reports the orchestration closed) and otherwise closes the stale record locally through `closeInFlightOrchestration`, freezing `running_timer` and absorbing the executed duration into the context plus session accumulators. Genuinely in-flight workflow states return unchanged so REQ-809 record preservation stays intact. Later authoritative writes converge because every writer stores absolute frozen values computed from the same shared bases. Runtime is O(1). Side effects include in-memory state mutation, process-scoped persistence updates, and optional footer renders through the reconciliation path.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller whose adopted terminal elapsed record is frozen in place.
@@ -3237,106 +3237,124 @@ cost.
 - @satisfies REQ-159, REQ-803, REQ-804, REQ-808, REQ-809
 - @post `controller.state.orchestrationStartMs === undefined` whenever the workflow state is terminal and a stale in-flight record existed; genuinely in-flight states are untouched.
 
-### fn `function persistActiveRunOwnership(state: PiUsereqStatusState): void` (L273-275)
+### fn `function persistActiveRunOwnership(state: PiUsereqStatusState): void` (L276-278)
 - @brief Persists the in-flight agent-run prompt-ownership flag into the process-scoped store.
 - @details Mirrors the ownership flag computed at `agent_start` onto `globalThis` so a terminal hook on a replacement extension instance can recover the ended run's prompt association after the in-memory flag was cleared by session replacement or fault-injected state loss. Runtime is O(1). Side effect: mutates process-scoped state.
 - @param[in] state {PiUsereqStatusState} Controller state carrying the in-flight run facts.
 - @return {void} No return value.
 - @satisfies REQ-187, REQ-809
 
-### fn `function clearPersistedActiveRunOwnership(): void` (L283-285)
+### fn `function clearPersistedActiveRunOwnership(): void` (L286-288)
 - @brief Clears the process-scoped in-flight agent-run ownership record.
 - @details Removes the persisted prompt-ownership flag after a terminal hook so later terminal events without their own `agent_start` can never borrow another run's prompt association. Runtime is O(1). Side effect: mutates process-scoped state.
 - @return {void} No return value.
 - @satisfies REQ-809
 
-### fn `function persistPromptCommandState(state: PiUsereqStatusState): void` (L293-300)
+### fn `function persistPromptCommandState(state: PiUsereqStatusState): void` (L296-303)
 - @brief Mirrors one controller prompt state into the process-scoped persistence store.
 - @details Persists the current workflow state, the active orchestration request token, plus the pending and active prompt execution plans so prompt orchestration can survive session replacement. Runtime is O(1). Side effect: mutates process-scoped prompt-command persistence state.
 - @param[in] state {PiUsereqStatusState} Current controller state snapshot.
 - @return {void} No return value.
 
-### fn `export function shouldPreservePromptCommandStateOnShutdown(state: PiUsereqStatusState): boolean` (L309-312)
+### fn `export function shouldPreservePromptCommandStateOnShutdown(state: PiUsereqStatusState): boolean` (L312-315)
 - @brief Detects whether `session_shutdown` must preserve prompt-command state.
 - @details Keeps both the in-memory controller prompt state and the process-scoped prompt execution plan intact while pi switches from the original session into the forked execution session, because the old extension instance can keep running the initiating command handler after `session_shutdown` fires and before the replacement session fully takes over. Runtime is O(1). No external state is mutated.
 - @param[in] state {PiUsereqStatusState} Controller state before shutdown mutation.
 - @return {boolean} `true` when prompt-command state must survive the shutdown event.
 - @satisfies REQ-278
 
-### fn `function restorePersistedPromptCommandState(` (L321-333)
+### fn `function restorePersistedPromptCommandState(` (L324-336)
 - @brief Restores prompt-command persistence into one fresh controller when the active session matches.
 - @details Rehydrates workflow state, the active request token, and pending or active prompt execution plans only when the current session file targets the persisted execution session created for prompt orchestration. Runtime is O(1). Side effect: mutates `state` when persisted prompt state is available.
 - @param[in] sessionFile {string | undefined} Current active session file.
 - @param[in,out] state {PiUsereqStatusState} Mutable controller state.
 - @return {void} No return value.
 
-### fn `function getContextSessionFile(ctx: ExtensionContext): string | undefined` (L341-345)
+### fn `function getContextSessionFile(ctx: ExtensionContext): string | undefined` (L344-348)
 - @brief Resolves the active session file exposed by one extension context.
 - @details Reads the session-manager session-file getter when available so prompt-command persistence can be resynchronized on every lifecycle hook after session replacement. Runtime is O(1). No external state is mutated.
 - @param[in] ctx {ExtensionContext} Active extension context.
 - @return {string | undefined} Current session file when available.
 
-### fn `export function isStaleExtensionContextError(error: unknown): boolean` (L354-357)
+### fn `export function isStaleExtensionContextError(error: unknown): boolean` (L357-360)
 - @brief Detects stale extension-context access after session replacement.
 - @details Matches the guarded pi runtime error emitted when one invalidated extension context, command context, or replacement-session context is accessed after session replacement or reload. Runtime is O(n) in message length only when an error is supplied. No external state is mutated.
 - @param[in] error {unknown} Candidate thrown value.
 - @return {boolean} `true` when the value matches the stale-extension-context runtime error.
 - @satisfies REQ-280
 
-### fn `function shouldCloseInFlightOrchestrationOnSessionStart(event: unknown): boolean` (L366-369)
+### fn `function shouldCloseInFlightOrchestrationOnSessionStart(event: unknown): boolean` (L369-372)
 - @brief Detects whether a `session_start` event must close an in-flight orchestration.
 - @details Treats `reload` as a hard orchestration boundary that freezes `running_timer` and absorbs the in-flight duration into `context_timer` plus `session_timer`, while `new`, `resume`, and `fork` keep the in-flight orchestration ticking across the rebind. Runtime is O(1). No external state is mutated.
 - @param[in] event {unknown} Session-start payload.
 - @return {boolean} `true` when an in-flight orchestration must close.
 - @satisfies REQ-217
 
-### fn `function isSessionStartReasonStartup(event: unknown): boolean` (L378-380)
+### fn `function isSessionStartReasonStartup(event: unknown): boolean` (L381-383)
 - @brief Detects whether a `session_start` event is the pi process bootstrap boundary.
 - @details Matches the `startup` reason, which pi emits exactly once per host process before any command can run. Runtime is O(1). No external state is mutated.
 - @param[in] event {unknown} Session-start payload.
 - @return {boolean} `true` when the event marks pi client start.
 - @satisfies REQ-807
 
-### fn `function resetPiUsereqElapsedTimerState(state: PiUsereqStatusState): void` (L389-401)
+### fn `function isSessionStartReasonNewSession(event: unknown): boolean` (L392-394)
+- @brief Detects whether a `session_start` event marks the `/new` fresh-context boundary.
+- @details Matches the `new` reason, which the pi host emits exactly once per session replacement that creates a brand-new empty session, so the extension can record the authoritative empty-context fact consumed by the next orchestration-start `context_timer` reset decision. Runtime is O(1). No external state is mutated.
+- @param[in] event {unknown} Session-start payload.
+- @return {boolean} `true` when the event starts a new, empty session context.
+- @satisfies REQ-805, REQ-806
+
+### fn `function markPendingEmptyContextReset(): void` (L402-404)
+- @brief Records the one-shot empty-context reset fact at the `/new` session-start boundary.
+- @details Stores the fact into the process-scoped elapsed persistence store so the next orchestration-start decision treats the current context as fresh even when the command-time session-entry probe cannot report the fresh-session emptiness. The flag is a decision input only: it never mutates any timer accumulator at recording time, so REQ-809 accumulator preservation across session replacement stays intact. Runtime is O(1). Side effect: mutates process-scoped persistence state.
+- @return {void} No return value.
+- @satisfies REQ-805, REQ-806, REQ-809
+
+### fn `function consumePendingEmptyContextReset(): boolean` (L412-417)
+- @brief Consumes the one-shot empty-context reset fact recorded at the `/new` boundary.
+- @details Reads and clears the process-scoped fact so exactly one orchestration start can honor it; the one-shot semantics prevent a stale fact recorded before an earlier flow from restarting `context_timer` for a later flow running on an already-populated context. Runtime is O(1). Side effect: mutates process-scoped persistence state.
+- @return {boolean} `true` when the fact was pending and is now consumed.
+- @satisfies REQ-805, REQ-806
+
+### fn `function resetPiUsereqElapsedTimerState(state: PiUsereqStatusState): void` (L426-438)
 - @brief Re-establishes the process-fresh elapsed-timer state at pi client start.
 - @details Zeroes every elapsed-timer field in the supplied state and resets the process-scoped persistence store to its fresh defaults, anchoring `session_timer`, `context_timer`, and `running_timer` to zero at pi client start. The `startup` reason fires exactly once per pi host process before any orchestration can run, so this reset is a no-op in production and restores deterministic timer isolation for runtime rebinds that replay the bootstrap boundary. Runtime is O(1). Side effects include mutable state reset and process-scoped persistence reset.
 - @param[in,out] state {PiUsereqStatusState} Mutable status state.
 - @return {void} No return value.
 - @satisfies REQ-807
 
-### fn `export function isPiUsereqContextEmptyAtOrchestrationStart(` (L410-416)
+### fn `export function isPiUsereqContextEmptyAtOrchestrationStart(` (L447-463)
 - @brief Detects whether the active context is empty at orchestration start.
-- @details Reads the session-entry count exposed by the active extension context: zero visible session entries (or an unreadable session surface) mark an empty context, so the starting orchestration must restart `context_timer` from zero; any positive entry count marks an already-present context. Runtime is O(1). No external state is mutated.
+- @details Reads the session-entry count exposed by the active extension context through a throw-safe probe: the non-copying `sessionManager.getEntryCount()` count is preferred when the runtime exposes it, the `sessionManager.getEntries()` list length is the fallback, and every unreadable surface — a guarded stale accessor that throws, a missing session manager, or a missing probe method — marks an empty context per the documented probe contract, so the starting orchestration must restart `context_timer` from zero; any positive entry count marks an already-present context. Runtime is O(1). No external state is mutated.
 - @param[in] ctx {ExtensionContext | undefined} Active extension context captured at orchestration start.
 - @return {boolean} `true` when the orchestration starts on an empty context.
 - @satisfies REQ-805, REQ-806
 
-- fn `const entries = (ctx as { sessionManager?: { getEntries?: () => unknown[] } } | undefined)` (L413)
-### fn `function startPiUsereqOrchestrationElapsed(` (L427-438)
+### fn `function startPiUsereqOrchestrationElapsed(` (L474-486)
 - @brief Starts the elapsed-timer lifecycle for one new orchestration.
-- @details Resets `running_timer` to zero and stamps the shared in-flight orchestration start timestamp, resets `context_timer` to zero only when the orchestration starts on an empty context, leaves `session_timer` accumulation untouched, and mirrors every timer fact into the process-scoped persistence store. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
+- @details Resets `running_timer` to zero and stamps the shared in-flight orchestration start timestamp, resets `context_timer` to zero when the orchestration starts on an empty context — detected through the live session-entry probe or through the one-shot `/new` boundary fact recorded at the session replacement that created the current empty context, consumed exactly once so a stale fact can never restart the timer for a later flow on a populated context — leaves `session_timer` accumulation untouched, and mirrors every timer fact into the process-scoped persistence store. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
 - @param[in] ctx {ExtensionContext | undefined} Active extension context used for empty-context detection.
 - @param[in] nowMs {number} Wall-clock orchestration start timestamp in milliseconds.
 - @param[in,out] state {PiUsereqStatusState} Mutable status state.
 - @return {void} No return value.
 - @satisfies REQ-803, REQ-805, REQ-806, REQ-807
 
-### fn `function closeInFlightOrchestration(state: PiUsereqStatusState, nowMs: number): void` (L448-459)
+### fn `function closeInFlightOrchestration(state: PiUsereqStatusState, nowMs: number): void` (L496-508)
 - @brief Closes the in-flight orchestration and freezes all elapsed timers.
-- @details Computes the executed orchestration duration, freezes `running_timer` at that final value, absorbs the duration into the `context_timer` and `session_timer` accumulators regardless of the terminal outcome, clears the in-flight start timestamp, and mirrors every timer fact into the process-scoped persistence store. No-op when no orchestration is in flight. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
+- @details Computes the executed orchestration duration, freezes `running_timer` at that final value, absorbs the duration into the `context_timer` and `session_timer` accumulators regardless of the terminal outcome, clears the in-flight start timestamp, invalidates the one-shot `/new` empty-context reset fact because the closed orchestration proves the current context holds session entries, and mirrors every timer fact into the process-scoped persistence store. No-op when no orchestration is in flight. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
 - @param[in] nowMs {number} Current wall-clock time in milliseconds.
 - @param[in,out] state {PiUsereqStatusState} Mutable status state.
 - @return {void} No return value.
-- @satisfies REQ-159, REQ-803, REQ-807
+- @satisfies REQ-159, REQ-803, REQ-805, REQ-807
 
-### fn `function isPiUsereqWorkflowStateInFlight(workflowState: PiUsereqWorkflowState): boolean` (L468-472)
+### fn `function isPiUsereqWorkflowStateInFlight(workflowState: PiUsereqWorkflowState): boolean` (L517-521)
 - @brief Tests whether one workflow state admits an in-flight orchestration.
 - @details Accepts exactly `checking`, `running`, and `merging` as the in-flight orchestration states. Runtime is O(1). No external state is mutated.
 - @param[in] workflowState {PiUsereqWorkflowState} Candidate workflow state.
 - @return {boolean} `true` when the state marks an in-flight orchestration.
 - @satisfies REQ-804
 
-### fn `function applyOrchestrationElapsedLifecycle(` (L484-503)
+### fn `function applyOrchestrationElapsedLifecycle(` (L533-552)
 - @brief Drives the elapsed-timer lifecycle across one workflow-state transition.
 - @details Applies the orchestration-start rule (non-in-flight state entering `checking` or `running` restarts `running_timer` from zero and applies the empty-context `context_timer` reset) and the orchestration-end rule (in-flight state entering `done`, `warning`, `error`, or `idle` freezes `running_timer` and accumulates the executed duration into `context_timer` plus `session_timer`). Runtime is O(1). Side effects include mutable timer-state mutation and process-scoped persistence updates.
 - @param[in] previousState {PiUsereqWorkflowState} Workflow state before the transition.
@@ -3346,21 +3364,21 @@ cost.
 - @return {void} No return value.
 - @satisfies REQ-159, REQ-803, REQ-804, REQ-805, REQ-806, REQ-807
 
-### fn `export function shouldResetWorkflowStateOnSessionStart(event: unknown): boolean` (L512-515)
+### fn `export function shouldResetWorkflowStateOnSessionStart(event: unknown): boolean` (L561-564)
 - @brief Detects whether a `session_start` event must reset the workflow state to `idle`.
 - @details Treats `startup` and `reload` as workflow-reset boundaries so prompt-orchestration state never leaks across boot or extension reload, while non-reset session-start reasons preserve the persisted terminal orchestration outcome. Runtime is O(1). No external state is mutated.
 - @param[in] event {unknown} Session-start payload.
 - @return {boolean} `true` when workflow state must reset to `idle`.
 - @satisfies REQ-009, REQ-221, REQ-633
 
-### fn `export function isPiUsereqWorkflowStartable(workflowState: PiUsereqWorkflowState): boolean` (L524-526)
+### fn `export function isPiUsereqWorkflowStartable(workflowState: PiUsereqWorkflowState): boolean` (L573-575)
 - @brief Tests whether one workflow state admits a new orchestration.
 - @details Accepts the request-less bootstrap `idle` state and the successful terminal `done` state, so a subsequent orchestration can transition `done` into `running` without an intervening reset while `warning` and `error` keep requiring an explicit `/req-reset`. Runtime is O(1). No external state is mutated.
 - @param[in] workflowState {PiUsereqWorkflowState} Candidate workflow state.
 - @return {boolean} `true` when a new orchestration may start from the supplied state.
 - @satisfies REQ-635
 
-### fn `function createStatusThemeAdapter(theme: RawStatusTheme): StatusThemeAdapter` (L536-545)
+### fn `function createStatusThemeAdapter(theme: RawStatusTheme): StatusThemeAdapter` (L585-594)
 - @brief Builds the normalized theme adapter used by pi-usereq status formatters.
 - @details Precomputes label, value, foreground, and separator renderers so
 status formatting remains stable across real TUI themes and deterministic
@@ -3368,16 +3386,16 @@ test doubles. Runtime is O(1). No external state is mutated.
 - @param[in] theme {RawStatusTheme} Raw theme implementation from `ctx.ui.theme`.
 - @return {StatusThemeAdapter} Normalized status-theme adapter.
 
-### fn `const colorize = (color: StatusForegroundColor, text: string): string =>` (L537-544)
+### fn `const colorize = (color: StatusForegroundColor, text: string): string =>` (L586-593)
 
-### fn `function resolveStatusBranchValue(ctx: ExtensionContext): string` (L561-563)
+### fn `function resolveStatusBranchValue(ctx: ExtensionContext): string` (L610-612)
 - @brief Resolves the active git branch value rendered in the status bar.
 - @details Reads the current branch from the active context working directory on every status render so worktree switches and restored base-session renders expose the latest branch immediately. The returned token stays prefix-free because the documented `⎇ ` display prefix is applied by `buildPiUsereqStatusText(...)`. Runtime is dominated by git execution when the working directory belongs to a repository. Side effects include subprocess creation.
 - @param[in] ctx {ExtensionContext} Active extension context.
 - @return {string} Active branch name or `unknown` when unavailable.
 - @satisfies REQ-121, REQ-283
 
-### fn `function normalizeContextUsage(` (L574-591)
+### fn `function normalizeContextUsage(` (L623-640)
 - @brief Normalizes one raw context-usage snapshot.
 - @details Preserves the runtime token and context-window counts, derives a
 percentage when the runtime omits it, clamps negative percentages to `0`,
@@ -3386,14 +3404,14 @@ external state is mutated.
 - @param[in] contextUsage {ContextUsage | undefined} Raw runtime snapshot.
 - @return {ContextUsage | undefined} Normalized snapshot.
 
-### fn `export function resolveModelContextWindowTokens(` (L600-607)
+### fn `export function resolveModelContextWindowTokens(` (L649-656)
 - @brief Resolves the selected model max input context tokens from one normalized context-usage snapshot.
 - @details Accepts only finite positive `contextWindow` numbers so missing, non-numeric, and non-positive runtime values degrade to `undefined`, which every context-occupancy consumer treats as the documented unknown basis. Runtime is O(1). No external state is mutated.
 - @param[in] contextUsage {ContextUsage | undefined} Normalized context-usage snapshot from the status controller state.
 - @return {number | undefined} Selected model max input context tokens, or undefined when unknown.
 - @satisfies REQ-401
 
-### fn `function refreshContextUsage(` (L619-624)
+### fn `function refreshContextUsage(` (L668-673)
 - @brief Refreshes the stored context-usage snapshot from the active extension context.
 - @details Calls `ctx.getContextUsage()` on every intercepted event so the
 controller retains the newest context-usage facts available from the pi
@@ -3403,14 +3421,14 @@ runtime. Runtime is O(1). Side effect: mutates `state.contextUsage`.
 - @return {void} No return value.
 - @satisfies REQ-118, REQ-119
 
-### fn `function resolveContextUsageIconText(` (L633-650)
+### fn `function resolveContextUsageIconText(` (L682-699)
 - @brief Resolves the icon text for one normalized context-usage snapshot.
 - @details Maps context usage to one fixed-width icon band so footer rendering remains compact and deterministic across the documented `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands. Unavailable usage degrades to the `0%` icon. Runtime is O(1). No external state is mutated.
 - @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
 - @return {string} Fixed-width gauge icon text.
 - @satisfies REQ-122, REQ-284
 
-### fn `function formatContextUsageBar(` (L660-672)
+### fn `function formatContextUsageBar(` (L709-721)
 - @brief Formats one icon-based context-usage gauge.
 - @details Renders the documented gauge icon with the same non-error status-value theme token used by `status` below `90%`, switches to theme `error` for `>=90%`, and enables terminal blink only for `>=100%`. Runtime is O(1). No external state is mutated.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
@@ -3418,7 +3436,7 @@ runtime. Runtime is O(1). Side effect: mutates `state.contextUsage`.
 - @return {string} Rendered fixed-width gauge icon.
 - @satisfies REQ-122, REQ-126, REQ-127, REQ-128, REQ-233, REQ-284
 
-### fn `function formatStatusDuration(durationMs: number): string` (L683-688)
+### fn `function formatStatusDuration(durationMs: number): string` (L732-737)
 - @brief Formats one elapsed-duration value as `M:SS`.
 - @details Floors the input to whole seconds, keeps minutes unbounded above 59,
 and zero-pads seconds to two digits. Runtime is O(1). No external state is
@@ -3427,7 +3445,7 @@ mutated.
 - @return {string} Duration rendered as `M:SS`.
 - @satisfies REQ-125
 
-### fn `function resolveElapsedTimerSnapshot(` (L698-710)
+### fn `function resolveElapsedTimerSnapshot(` (L747-759)
 - @brief Resolves the three elapsed-timer values for one status render.
 - @details Computes the shared in-flight orchestration elapsed once, derives `running_timer` from the in-flight elapsed or the frozen final value, and adds the same in-flight elapsed to the `context_timer` and `session_timer` accumulated bases so all three timers advance concurrently while an orchestration runs and hold `running_timer <= context_timer <= session_timer`. Runtime is O(1). No external state is mutated.
 - @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
@@ -3435,7 +3453,7 @@ mutated.
 - @return {{ runningMs: number; contextMs: number; sessionMs: number }} Resolved elapsed-timer durations in milliseconds.
 - @satisfies REQ-803, REQ-808, REQ-810
 
-### fn `function formatElapsedStatusValue(` (L724-730)
+### fn `function formatElapsedStatusValue(` (L773-779)
 - @brief Formats the consolidated `elapsed` status-bar value.
 - @details Emits the running-orchestration segment `⏱︎ <running_timer>`, the
 current-context segment `⚑ <context_timer>`, and the process-lifetime
@@ -3447,7 +3465,7 @@ is mutated.
 - @return {string} Consolidated `elapsed` field value.
 - @satisfies REQ-123, REQ-124, REQ-125, REQ-803, REQ-810
 
-### fn `function formatStatusField(` (L741-747)
+### fn `function formatStatusField(` (L790-796)
 - @brief Formats one standard status-bar field.
 - @details Renders the field label in accent color and the value in warning
 color. Runtime is O(n) in combined text length. No external state is mutated.
@@ -3456,7 +3474,7 @@ color. Runtime is O(n) in combined text length. No external state is mutated.
 - @param[in] value {string} Unstyled field value.
 - @return {string} Rendered status-field fragment.
 
-### fn `function formatRenderedStatusField(` (L759-765)
+### fn `function formatRenderedStatusField(` (L808-814)
 - @brief Formats one pre-rendered status-bar field value.
 - @details Preserves the accent-colored field label while allowing callers to
 provide a custom styled value such as the context-usage bar. Runtime is O(n)
@@ -3466,7 +3484,7 @@ in combined text length. No external state is mutated.
 - @param[in] renderedValue {string} Pre-rendered field value.
 - @return {string} Rendered status-field fragment.
 
-### fn `function formatWorkflowStateValue(` (L783-795)
+### fn `function formatWorkflowStateValue(` (L832-844)
 - @brief Formats the rendered workflow-state value for the `status` field.
 - @details Uses the standard warning-colored value renderer for neutral states, emits a blinking `error`-colored value for `status:error`, and emits the identical blinking `error`-colored value for `status:warning` so orchestration warnings match the documented error styling. When an active orchestration request token exists, the value renders as `<request> ➔ <state>` joined by `PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR`, which carries one space before and after the arrow; otherwise it renders the bare `<state>`, so the bootstrap `idle` state stays request-less while `done` renders through the non-error value convention. Runtime is O(n) in text length. No external state is mutated.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
@@ -3475,7 +3493,7 @@ in combined text length. No external state is mutated.
 - @return {string} Rendered workflow-state value.
 - @satisfies REQ-112, REQ-223, REQ-590, REQ-632, REQ-633, REQ-638
 
-### fn `function resolvePiUsereqRuntimeSoundLevel(` (L805-810)
+### fn `function resolvePiUsereqRuntimeSoundLevel(` (L854-859)
 - @brief Resolves the active runtime sound level used by status and notify flows.
 - @details Prefers the mutable runtime sound state, then falls back to the cached persisted boot value, and finally defaults to `none` before `session_start` loads configuration. Runtime is O(1). No external state is mutated.
 - @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
@@ -3483,14 +3501,14 @@ in combined text length. No external state is mutated.
 - @return {PiNotifySoundLevel} Active runtime sound level.
 - @satisfies REQ-180, REQ-285
 
-### fn `function formatExtensionIdentityStatusField(` (L819-824)
+### fn `function formatExtensionIdentityStatusField(` (L868-873)
 - @brief Formats the runtime extension identity prefix for the status bar.
 - @details Reads cached installation package metadata and renders the package name plus `v<version>` using the same accent-label and warning-value token split used by standard non-error status fields. Runtime is O(n) in rendered text length. No external state is mutated.
 - @param[in] theme {StatusThemeAdapter} Normalized status theme.
 - @return {string} Rendered extension identity prefix.
 - @satisfies REQ-112, REQ-120
 
-### fn `function buildPiUsereqStatusText(` (L837-862)
+### fn `function buildPiUsereqStatusText(` (L886-911)
 - @brief Builds the full single-line pi-usereq status-bar payload.
 - @details Renders the runtime extension identity prefix before status, then renders status, branch, context, elapsed, and sound fields with dim bullet separators, workflow-state highlighting, the `⎇ `-prefixed branch value, the documented icon-based context gauge, and the active runtime sound level instead of the persisted boot value. Runtime is O(1). No external state is mutated.
 - @param[in] config {UseReqConfig} Effective project configuration.
@@ -3501,7 +3519,7 @@ in combined text length. No external state is mutated.
 - @return {string} Single-line status-bar text.
 - @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-156, REQ-159, REQ-180, REQ-222, REQ-223, REQ-233, REQ-283, REQ-284
 
-### fn `function stopStatusTicker(controller: PiUsereqStatusController): void` (L872-877)
+### fn `function stopStatusTicker(controller: PiUsereqStatusController): void` (L921-926)
 - @brief Stops the live elapsed-time ticker when it is active.
 - @details Clears the interval handle and resets the stored timer reference so
 subsequent runs can reinitialize live status refreshes deterministically.
@@ -3509,7 +3527,7 @@ Runtime is O(1). Side effect: mutates `controller.tickHandle`.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
 
-### fn `function syncPiUsereqStatusTicker(` (L893-921)
+### fn `function syncPiUsereqStatusTicker(` (L942-970)
 - @brief Synchronizes the live elapsed-time ticker with the in-flight orchestration.
 - @details Starts a 1-second render ticker while an orchestration is in flight
 so `running_timer`, `context_timer`, and `session_timer` advance concurrently,
@@ -3523,13 +3541,13 @@ interval disposal, and footer-status mutation on timer ticks.
 - @return {void} No return value.
 - @satisfies REQ-123, REQ-803, REQ-808
 
-### fn `export function createPiUsereqStatusController(): PiUsereqStatusController` (L929-954)
+### fn `export function createPiUsereqStatusController(): PiUsereqStatusController` (L978-1003)
 - @brief Creates an empty pi-usereq status controller.
 - @details Initializes the mutable status snapshot, including empty prompt-request tracking, an undefined active orchestration request token for the request-less bootstrap `idle` state, and an unset runtime sound level that later loads from persisted config during `session_start`, and starts with no config, no context, and no live ticker. Runtime is O(1). No external state is mutated.
 - @return {PiUsereqStatusController} New status controller.
 - @satisfies DES-010
 
-### fn `export function setPiUsereqStatusConfig(` (L967-972)
+### fn `export function setPiUsereqStatusConfig(` (L1016-1021)
 - @brief Stores the effective project configuration used by status rendering.
 - @details Replaces the controller's cached configuration so later status
 renders reuse the latest docs, tests, source-path, and persisted pi-notify
@@ -3540,14 +3558,14 @@ mutates `controller.config`.
 - @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
 
-### fn `export function getPiUsereqRuntimeSoundLevel(` (L981-985)
+### fn `export function getPiUsereqRuntimeSoundLevel(` (L1030-1034)
 - @brief Returns the active runtime sound level tracked by the status controller.
 - @details Exposes the in-memory runtime sound state so shortcut handlers and prompt-end notification dispatch can stay decoupled from the persisted boot value stored in global configuration. Runtime is O(1). No external state is mutated.
 - @param[in] controller {PiUsereqStatusController} Mutable status controller.
 - @return {PiNotifySoundLevel} Active runtime sound level.
 - @satisfies REQ-180, REQ-285
 
-### fn `export function setPiUsereqRuntimeSoundLevel(` (L996-1006)
+### fn `export function setPiUsereqRuntimeSoundLevel(` (L1045-1055)
 - @brief Stores one new runtime sound level and refreshes the status bar.
 - @details Mutates only the in-memory runtime sound state so shortcut-driven sound changes do not update persisted local or global configuration, then re-renders the footer when an active extension context is available. Runtime is O(1). Side effect: mutates `controller.state.runtimeSoundLevel` and may update `ctx.ui` status.
 - @param[in] runtimeSoundLevel {PiNotifySoundLevel} Next active runtime sound level.
@@ -3556,7 +3574,7 @@ mutates `controller.config`.
 - @return {void} No return value.
 - @satisfies REQ-180, REQ-286, REQ-287
 
-### fn `export function renderPiUsereqStatus(` (L1016-1047)
+### fn `export function renderPiUsereqStatus(` (L1065-1096)
 - @brief Renders the current pi-usereq status bar into the active UI context.
 - @details Updates the controller's latest context pointer, refreshes the live `getContextUsage()` snapshot for direct render call sites that do not pass through `updateExtensionStatus(...)`, and writes the single-line status text only when configuration is available, including the runtime extension identity prefix, active branch field, documented icon-based context gauge, and active runtime sound level. When pi has already invalidated the supplied context after session replacement or reload, the helper clears the stale cached context and returns without surfacing the stale-instance exception. Runtime is O(1) plus git execution for branch refresh. Side effect: mutates `controller.state.contextUsage` and `ctx.ui` status when the context is still active.
 - @param[in] ctx {ExtensionContext} Active extension context.
@@ -3564,7 +3582,7 @@ mutates `controller.config`.
 - @return {void} No return value.
 - @satisfies REQ-118, REQ-119, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-159, REQ-180, REQ-233, REQ-280, REQ-283, REQ-284
 
-### fn `export function setPiUsereqWorkflowState(` (L1058-1072)
+### fn `export function setPiUsereqWorkflowState(` (L1107-1121)
 - @brief Transitions the prompt-orchestration workflow state and refreshes the status bar.
 - @details Mutates the tracked workflow state after driving the elapsed-timer lifecycle across the transition (orchestration start restarts `running_timer` from zero and applies the empty-context `context_timer` reset; orchestration end freezes `running_timer` and accumulates the executed duration into `context_timer` plus `session_timer`), synchronizes the live ticker with the resulting in-flight state, preserves the latest extension context when available, and re-renders the single-line footer immediately so internal command transitions and pi lifecycle transitions stay visible to the user. Runtime is O(1). Side effect: mutates workflow state, elapsed-timer state, and may update `ctx.ui` status.
 - @param[in] workflowState {PiUsereqWorkflowState} Next workflow state.
@@ -3573,7 +3591,7 @@ mutates `controller.config`.
 - @return {void} No return value.
 - @satisfies REQ-159, REQ-221, REQ-222, REQ-223, REQ-803, REQ-804, REQ-805, REQ-806
 
-### fn `export function setPiUsereqWorkflowRequest(` (L1083-1094)
+### fn `export function setPiUsereqWorkflowRequest(` (L1132-1143)
 - @brief Stores the active orchestration request token and refreshes the status bar.
 - @details Records the processed slash-command name without the `req-` prefix in the process-scoped runtime state before the orchestration enters `checking` or `running`, then re-renders the single-line footer so the `<request> ➔ <state>` status value becomes visible immediately. Runtime is O(1). Side effect: mutates workflow request state and may update `ctx.ui` status.
 - @param[in] workflowRequest {string} Active request token without the `req-` prefix.
@@ -3582,7 +3600,7 @@ mutates `controller.config`.
 - @return {void} No return value.
 - @satisfies REQ-630, REQ-631, REQ-637
 
-### fn `export function resynchronizePersistedTerminalWorkflowState(` (L1105-1124)
+### fn `export function resynchronizePersistedTerminalWorkflowState(` (L1154-1173)
 - @brief Resynchronizes one stale idle controller from the persisted terminal workflow state.
 - @details Extension runtimes are rebound by every pi session replacement (`switchSession`, `/new`, `/resume`, `/fork`, `/reload`), and the replacement instance receives `session_start` synchronously during the switch. When the switch happens inside prompt-orchestration closure, the process-scoped persistence still holds the non-terminal in-flight state of the initiating instance, so the replacement controller skips both restore branches (the session-scoped plan restore and the terminal-state restore) and stays parked on the bootstrap `idle` state even after the initiating instance persists its terminal `done`, `warning`, or `error` transition. This helper adopts that authoritative persisted terminal state into a controller that still reports `idle`, updating the request token and refreshing the status bar, so command-side gates observe the completed agentic flow that exists in context. Terminal adoption additionally freezes a stale in-flight elapsed record through `freezeAdoptedTerminalOrchestrationElapsed(...)` so the adopted controller renders frozen timers and never keeps a live ticker. Every legitimate idle boundary keeps the persisted store non-terminal (fresh bootstrap default, `clearPersistedPromptCommandRuntimeState` after `/req-reset`, and the `session_start` `startup|reload` reset whose hook-end persist overwrites the store), so the adoption can never resurrect a reset state. The mutation is intentionally persist-free because the process-scoped store already holds exactly the adopted facts; the next intercepted hook mirrors the healed controller back unchanged. Runtime is O(1) plus one optional status render. No external state is mutated.
 - @param[in] ctx {ExtensionContext | undefined} Optional active extension context used for the status-bar refresh; defaults to the controller's latest cached context.
@@ -3591,9 +3609,9 @@ mutates `controller.config`.
 - @note Complexity: O(1) plus one optional status render.
 - @satisfies REQ-222, REQ-279, REQ-629, REQ-633, REQ-656, REQ-663
 
-### fn `export function updateExtensionStatus(` (L1136-1296)
+### fn `export function updateExtensionStatus(` (L1185-1352)
 - @brief Updates mutable status state for one intercepted lifecycle hook.
-- @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start` and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, reconciles that rebound controller's stale in-flight elapsed timers by adopting the persisted frozen timer facts whenever the process-scoped store reports the orchestration closed so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration, and freezes a terminal-adopted controller's stale in-flight elapsed record at the `session_start` terminal restore so adopted terminal states never keep ticking, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+- @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start`, records the one-shot `/new` empty-context reset fact consumed by the next orchestration-start `context_timer` decision, and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, reconciles that rebound controller's stale in-flight elapsed timers by adopting the persisted frozen timer facts whenever the process-scoped store reports the orchestration closed so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration, and freezes a terminal-adopted controller's stale in-flight elapsed record at the `session_start` terminal restore so adopted terminal states never keep ticking, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
 - @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
 - @param[in] event {unknown} Hook payload forwarded from the wrapper.
 - @param[in] ctx {ExtensionContext} Active extension context.
@@ -3601,7 +3619,7 @@ mutates `controller.config`.
 - @return {void} No return value.
 - @satisfies REQ-009, REQ-117, REQ-118, REQ-119, REQ-123, REQ-124, REQ-125, REQ-159, REQ-169, REQ-187, REQ-217, REQ-221, REQ-278, REQ-279, REQ-280, REQ-285, REQ-421, REQ-461, REQ-803, REQ-804, REQ-807, REQ-808, REQ-809
 
-### fn `export function disposePiUsereqStatusController(` (L1307-1312)
+### fn `export function disposePiUsereqStatusController(` (L1363-1368)
 - @brief Disposes the pi-usereq status controller.
 - @details Stops the live ticker, clears the cached context pointer, and leaves
 the last captured status snapshot available for inspection until the
@@ -3621,59 +3639,61 @@ limited to interval disposal and in-memory state mutation.
 |`PiUsereqWorkflowState`|type||116||
 |`PiUsereqStatusState`|iface||122-141|export interface PiUsereqStatusState|
 |`PiUsereqStatusController`|iface||150-155|export interface PiUsereqStatusController|
-|`PiUsereqStatusPersistenceStore`|iface||161-167|interface PiUsereqStatusPersistenceStore|
-|`getPiUsereqStatusPersistenceStore`|fn||181-193|function getPiUsereqStatusPersistenceStore(): PiUsereqSta...|
-|`restorePersistedElapsedState`|fn||202-208|function restorePersistedElapsedState(state: PiUsereqStat...|
-|`persistElapsedState`|fn||217-223|function persistElapsedState(state: PiUsereqStatusState):...|
-|`reconcileReboundOrchestrationElapsedState`|fn||233-243|function reconcileReboundOrchestrationElapsedState(contro...|
-|`freezeAdoptedTerminalOrchestrationElapsed`|fn||253-264|function freezeAdoptedTerminalOrchestrationElapsed(contro...|
-|`persistActiveRunOwnership`|fn||273-275|function persistActiveRunOwnership(state: PiUsereqStatusS...|
-|`clearPersistedActiveRunOwnership`|fn||283-285|function clearPersistedActiveRunOwnership(): void|
-|`persistPromptCommandState`|fn||293-300|function persistPromptCommandState(state: PiUsereqStatusS...|
-|`shouldPreservePromptCommandStateOnShutdown`|fn||309-312|export function shouldPreservePromptCommandStateOnShutdow...|
-|`restorePersistedPromptCommandState`|fn||321-333|function restorePersistedPromptCommandState(|
-|`getContextSessionFile`|fn||341-345|function getContextSessionFile(ctx: ExtensionContext): st...|
-|`isStaleExtensionContextError`|fn||354-357|export function isStaleExtensionContextError(error: unkno...|
-|`shouldCloseInFlightOrchestrationOnSessionStart`|fn||366-369|function shouldCloseInFlightOrchestrationOnSessionStart(e...|
-|`isSessionStartReasonStartup`|fn||378-380|function isSessionStartReasonStartup(event: unknown): boo...|
-|`resetPiUsereqElapsedTimerState`|fn||389-401|function resetPiUsereqElapsedTimerState(state: PiUsereqSt...|
-|`isPiUsereqContextEmptyAtOrchestrationStart`|fn||410-416|export function isPiUsereqContextEmptyAtOrchestrationStart(|
-|`entries`|fn||413|const entries = (ctx as { sessionManager?: { getEntries?:...|
-|`startPiUsereqOrchestrationElapsed`|fn||427-438|function startPiUsereqOrchestrationElapsed(|
-|`closeInFlightOrchestration`|fn||448-459|function closeInFlightOrchestration(state: PiUsereqStatus...|
-|`isPiUsereqWorkflowStateInFlight`|fn||468-472|function isPiUsereqWorkflowStateInFlight(workflowState: P...|
-|`applyOrchestrationElapsedLifecycle`|fn||484-503|function applyOrchestrationElapsedLifecycle(|
-|`shouldResetWorkflowStateOnSessionStart`|fn||512-515|export function shouldResetWorkflowStateOnSessionStart(ev...|
-|`isPiUsereqWorkflowStartable`|fn||524-526|export function isPiUsereqWorkflowStartable(workflowState...|
-|`createStatusThemeAdapter`|fn||536-545|function createStatusThemeAdapter(theme: RawStatusTheme):...|
-|`colorize`|fn||537-544|const colorize = (color: StatusForegroundColor, text: str...|
-|`resolveStatusBranchValue`|fn||561-563|function resolveStatusBranchValue(ctx: ExtensionContext):...|
-|`normalizeContextUsage`|fn||574-591|function normalizeContextUsage(|
-|`resolveModelContextWindowTokens`|fn||600-607|export function resolveModelContextWindowTokens(|
-|`refreshContextUsage`|fn||619-624|function refreshContextUsage(|
-|`resolveContextUsageIconText`|fn||633-650|function resolveContextUsageIconText(|
-|`formatContextUsageBar`|fn||660-672|function formatContextUsageBar(|
-|`formatStatusDuration`|fn||683-688|function formatStatusDuration(durationMs: number): string|
-|`resolveElapsedTimerSnapshot`|fn||698-710|function resolveElapsedTimerSnapshot(|
-|`formatElapsedStatusValue`|fn||724-730|function formatElapsedStatusValue(|
-|`formatStatusField`|fn||741-747|function formatStatusField(|
-|`formatRenderedStatusField`|fn||759-765|function formatRenderedStatusField(|
-|`formatWorkflowStateValue`|fn||783-795|function formatWorkflowStateValue(|
-|`resolvePiUsereqRuntimeSoundLevel`|fn||805-810|function resolvePiUsereqRuntimeSoundLevel(|
-|`formatExtensionIdentityStatusField`|fn||819-824|function formatExtensionIdentityStatusField(|
-|`buildPiUsereqStatusText`|fn||837-862|function buildPiUsereqStatusText(|
-|`stopStatusTicker`|fn||872-877|function stopStatusTicker(controller: PiUsereqStatusContr...|
-|`syncPiUsereqStatusTicker`|fn||893-921|function syncPiUsereqStatusTicker(|
-|`createPiUsereqStatusController`|fn||929-954|export function createPiUsereqStatusController(): PiUsere...|
-|`setPiUsereqStatusConfig`|fn||967-972|export function setPiUsereqStatusConfig(|
-|`getPiUsereqRuntimeSoundLevel`|fn||981-985|export function getPiUsereqRuntimeSoundLevel(|
-|`setPiUsereqRuntimeSoundLevel`|fn||996-1006|export function setPiUsereqRuntimeSoundLevel(|
-|`renderPiUsereqStatus`|fn||1016-1047|export function renderPiUsereqStatus(|
-|`setPiUsereqWorkflowState`|fn||1058-1072|export function setPiUsereqWorkflowState(|
-|`setPiUsereqWorkflowRequest`|fn||1083-1094|export function setPiUsereqWorkflowRequest(|
-|`resynchronizePersistedTerminalWorkflowState`|fn||1105-1124|export function resynchronizePersistedTerminalWorkflowState(|
-|`updateExtensionStatus`|fn||1136-1296|export function updateExtensionStatus(|
-|`disposePiUsereqStatusController`|fn||1307-1312|export function disposePiUsereqStatusController(|
+|`PiUsereqStatusPersistenceStore`|iface||161-169|interface PiUsereqStatusPersistenceStore|
+|`getPiUsereqStatusPersistenceStore`|fn||183-196|function getPiUsereqStatusPersistenceStore(): PiUsereqSta...|
+|`restorePersistedElapsedState`|fn||205-211|function restorePersistedElapsedState(state: PiUsereqStat...|
+|`persistElapsedState`|fn||220-226|function persistElapsedState(state: PiUsereqStatusState):...|
+|`reconcileReboundOrchestrationElapsedState`|fn||236-246|function reconcileReboundOrchestrationElapsedState(contro...|
+|`freezeAdoptedTerminalOrchestrationElapsed`|fn||256-267|function freezeAdoptedTerminalOrchestrationElapsed(contro...|
+|`persistActiveRunOwnership`|fn||276-278|function persistActiveRunOwnership(state: PiUsereqStatusS...|
+|`clearPersistedActiveRunOwnership`|fn||286-288|function clearPersistedActiveRunOwnership(): void|
+|`persistPromptCommandState`|fn||296-303|function persistPromptCommandState(state: PiUsereqStatusS...|
+|`shouldPreservePromptCommandStateOnShutdown`|fn||312-315|export function shouldPreservePromptCommandStateOnShutdow...|
+|`restorePersistedPromptCommandState`|fn||324-336|function restorePersistedPromptCommandState(|
+|`getContextSessionFile`|fn||344-348|function getContextSessionFile(ctx: ExtensionContext): st...|
+|`isStaleExtensionContextError`|fn||357-360|export function isStaleExtensionContextError(error: unkno...|
+|`shouldCloseInFlightOrchestrationOnSessionStart`|fn||369-372|function shouldCloseInFlightOrchestrationOnSessionStart(e...|
+|`isSessionStartReasonStartup`|fn||381-383|function isSessionStartReasonStartup(event: unknown): boo...|
+|`isSessionStartReasonNewSession`|fn||392-394|function isSessionStartReasonNewSession(event: unknown): ...|
+|`markPendingEmptyContextReset`|fn||402-404|function markPendingEmptyContextReset(): void|
+|`consumePendingEmptyContextReset`|fn||412-417|function consumePendingEmptyContextReset(): boolean|
+|`resetPiUsereqElapsedTimerState`|fn||426-438|function resetPiUsereqElapsedTimerState(state: PiUsereqSt...|
+|`isPiUsereqContextEmptyAtOrchestrationStart`|fn||447-463|export function isPiUsereqContextEmptyAtOrchestrationStart(|
+|`startPiUsereqOrchestrationElapsed`|fn||474-486|function startPiUsereqOrchestrationElapsed(|
+|`closeInFlightOrchestration`|fn||496-508|function closeInFlightOrchestration(state: PiUsereqStatus...|
+|`isPiUsereqWorkflowStateInFlight`|fn||517-521|function isPiUsereqWorkflowStateInFlight(workflowState: P...|
+|`applyOrchestrationElapsedLifecycle`|fn||533-552|function applyOrchestrationElapsedLifecycle(|
+|`shouldResetWorkflowStateOnSessionStart`|fn||561-564|export function shouldResetWorkflowStateOnSessionStart(ev...|
+|`isPiUsereqWorkflowStartable`|fn||573-575|export function isPiUsereqWorkflowStartable(workflowState...|
+|`createStatusThemeAdapter`|fn||585-594|function createStatusThemeAdapter(theme: RawStatusTheme):...|
+|`colorize`|fn||586-593|const colorize = (color: StatusForegroundColor, text: str...|
+|`resolveStatusBranchValue`|fn||610-612|function resolveStatusBranchValue(ctx: ExtensionContext):...|
+|`normalizeContextUsage`|fn||623-640|function normalizeContextUsage(|
+|`resolveModelContextWindowTokens`|fn||649-656|export function resolveModelContextWindowTokens(|
+|`refreshContextUsage`|fn||668-673|function refreshContextUsage(|
+|`resolveContextUsageIconText`|fn||682-699|function resolveContextUsageIconText(|
+|`formatContextUsageBar`|fn||709-721|function formatContextUsageBar(|
+|`formatStatusDuration`|fn||732-737|function formatStatusDuration(durationMs: number): string|
+|`resolveElapsedTimerSnapshot`|fn||747-759|function resolveElapsedTimerSnapshot(|
+|`formatElapsedStatusValue`|fn||773-779|function formatElapsedStatusValue(|
+|`formatStatusField`|fn||790-796|function formatStatusField(|
+|`formatRenderedStatusField`|fn||808-814|function formatRenderedStatusField(|
+|`formatWorkflowStateValue`|fn||832-844|function formatWorkflowStateValue(|
+|`resolvePiUsereqRuntimeSoundLevel`|fn||854-859|function resolvePiUsereqRuntimeSoundLevel(|
+|`formatExtensionIdentityStatusField`|fn||868-873|function formatExtensionIdentityStatusField(|
+|`buildPiUsereqStatusText`|fn||886-911|function buildPiUsereqStatusText(|
+|`stopStatusTicker`|fn||921-926|function stopStatusTicker(controller: PiUsereqStatusContr...|
+|`syncPiUsereqStatusTicker`|fn||942-970|function syncPiUsereqStatusTicker(|
+|`createPiUsereqStatusController`|fn||978-1003|export function createPiUsereqStatusController(): PiUsere...|
+|`setPiUsereqStatusConfig`|fn||1016-1021|export function setPiUsereqStatusConfig(|
+|`getPiUsereqRuntimeSoundLevel`|fn||1030-1034|export function getPiUsereqRuntimeSoundLevel(|
+|`setPiUsereqRuntimeSoundLevel`|fn||1045-1055|export function setPiUsereqRuntimeSoundLevel(|
+|`renderPiUsereqStatus`|fn||1065-1096|export function renderPiUsereqStatus(|
+|`setPiUsereqWorkflowState`|fn||1107-1121|export function setPiUsereqWorkflowState(|
+|`setPiUsereqWorkflowRequest`|fn||1132-1143|export function setPiUsereqWorkflowRequest(|
+|`resynchronizePersistedTerminalWorkflowState`|fn||1154-1173|export function resynchronizePersistedTerminalWorkflowState(|
+|`updateExtensionStatus`|fn||1185-1352|export function updateExtensionStatus(|
+|`disposePiUsereqStatusController`|fn||1363-1368|export function disposePiUsereqStatusController(|
 
 
 ---

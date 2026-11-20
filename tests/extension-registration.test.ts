@@ -8120,6 +8120,179 @@ test("orchestration elapsed timers tick live, restart per orchestration, and acc
   }
 });
 
+test("new agentic flow after /new restarts the context timer from zero on the empty context", async () => {
+  // REQ-805/REQ-806/TST-255: after `/new` (session_start reason `new`) rebinds the runtime on
+  // a fresh empty session while the process-scoped store still carries the previous context's
+  // accumulated orchestration durations, the first orchestration launched on that empty
+  // context must detect the empty session-entry surface and restart `context_timer` from zero
+  // while `session_timer` keeps its process-lifetime accumulation.
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
+  const originalDateNow = Date.now;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let nowMs = 0;
+  const intervalCallbacks: Array<() => void> = [];
+  Date.now = () => nowMs;
+  globalThis.setInterval = ((callback: TimerHandler) => {
+    intervalCallbacks.push(callback as () => void);
+    return intervalCallbacks.length;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((handle: ReturnType<typeof setInterval>) => {
+    void handle;
+  }) as unknown as typeof clearInterval;
+
+  try {
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(cwd);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+    await firstPi.commands.get("req-analyze")!.handler("Inspect src", firstCtx);
+    nowMs = 61_000;
+    await firstPi.emit("agent_start", {}, firstCtx);
+    await firstPi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, firstCtx);
+    assert.match(
+      firstCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+    );
+
+    // `/new` rebinds the runtime on a fresh empty session; the process-scoped store keeps the
+    // previous context's accumulated durations visible until the next orchestration starts.
+    const newPi = createFakePi();
+    piUsereqExtension(newPi);
+    const newCtx = createFakeCtx(cwd);
+    await newPi.emit("session_start", {
+      reason: "new",
+      previousSessionFile: "/tmp/previous-session.jsonl",
+    }, newCtx);
+    assert.match(
+      newCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+    );
+
+    // First orchestration on the empty context: `context_timer` must restart from zero while
+    // `session_timer` keeps accumulating the process-lifetime total.
+    await newPi.commands.get("req-analyze")!.handler("Inspect src again", newCtx);
+    await newPi.emit("agent_start", {}, newCtx);
+    nowMs = 62_000;
+    intervalCallbacks[1]!();
+    assert.match(
+      newCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 0:01 ⚑ 0:01 ⌛︎1:02<\/warning>/,
+    );
+
+    nowMs = 122_000;
+    await newPi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, newCtx);
+    assert.equal(
+      newCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "done",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 1:01 ⚑ 1:01 ⌛︎2:02",
+      }),
+    );
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("new agentic flow after /new resets the context timer even when the command-time entry probe misreports", async () => {
+  // REQ-805/REQ-806/TST-255: the `/new` session replacement is the authoritative boundary that
+  // starts a new, empty context. The first orchestration launched after it must restart
+  // `context_timer` from zero even when the live command-time session-entry probe cannot report
+  // the fresh-session emptiness (for example a stale session-manager surface resolved through
+  // the command context), because the context-timer accumulator otherwise carries the previous
+  // context's total into the new context forever.
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
+  const originalDateNow = Date.now;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let nowMs = 0;
+  const intervalCallbacks: Array<() => void> = [];
+  Date.now = () => nowMs;
+  globalThis.setInterval = ((callback: TimerHandler) => {
+    intervalCallbacks.push(callback as () => void);
+    return intervalCallbacks.length;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((handle: ReturnType<typeof setInterval>) => {
+    void handle;
+  }) as unknown as typeof clearInterval;
+
+  try {
+    const firstPi = createFakePi();
+    piUsereqExtension(firstPi);
+    const firstCtx = createFakeCtx(cwd);
+    await firstPi.emit("session_start", { reason: "startup" }, firstCtx);
+    await firstPi.commands.get("req-analyze")!.handler("Inspect src", firstCtx);
+    nowMs = 61_000;
+    await firstPi.emit("agent_start", {}, firstCtx);
+    await firstPi.emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          stopReason: "stop",
+          content: [],
+        },
+      ],
+    }, firstCtx);
+    assert.match(
+      firstCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+    );
+
+    // `/new` rebinds the runtime on a fresh empty session, but the command context handed to
+    // the first flow misreports the session-entry surface as already-populated.
+    const newPi = createFakePi();
+    piUsereqExtension(newPi);
+    const newCtx = createFakeCtx(cwd);
+    newCtx.sessionManager.getEntries = () => [
+      { id: "stale-entry", type: "message", message: { role: "user", content: "stale" } },
+    ];
+    await newPi.emit("session_start", {
+      reason: "new",
+      previousSessionFile: "/tmp/previous-session.jsonl",
+    }, newCtx);
+
+    // First orchestration on the empty context: the `/new` boundary fact must force the
+    // `context_timer` restart while `session_timer` keeps accumulating.
+    await newPi.commands.get("req-analyze")!.handler("Inspect src again", newCtx);
+    await newPi.emit("agent_start", {}, newCtx);
+    nowMs = 62_000;
+    intervalCallbacks[1]!();
+    assert.match(
+      newCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>elapsed:<\/accent><warning>⏱︎ 0:01 ⚑ 0:01 ⌛︎1:02<\/warning>/,
+    );
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("elapsed timers persist across new-session rebinding and reload closes in-flight orchestrations", async () => {
   // REQ-807/REQ-809/REQ-217/TST-063: elapsed accumulators survive `/new` rebinding because the
   // process-scoped store restores them, `session_timer` never resets during the process

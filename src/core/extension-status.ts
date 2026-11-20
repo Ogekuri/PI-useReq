@@ -164,6 +164,8 @@ interface PiUsereqStatusPersistenceStore {
   sessionBaseMs: number;
   orchestrationStartMs: number | undefined;
   activeRunBelongsToPrompt: boolean;
+  /** One-shot fact recorded at the `/new` session-start boundary: the next orchestration starts on a fresh, empty context and must restart `context_timer` from zero. */
+  pendingEmptyContextReset: boolean;
 }
 
 /**
@@ -188,6 +190,7 @@ function getPiUsereqStatusPersistenceStore(): PiUsereqStatusPersistenceStore {
     sessionBaseMs: 0,
     orchestrationStartMs: undefined,
     activeRunBelongsToPrompt: false,
+    pendingEmptyContextReset: false,
   };
   return globalState[PI_USEREQ_STATUS_PERSISTENCE_KEY]!;
 }
@@ -380,6 +383,40 @@ function isSessionStartReasonStartup(event: unknown): boolean {
 }
 
 /**
+ * @brief Detects whether a `session_start` event marks the `/new` fresh-context boundary.
+ * @details Matches the `new` reason, which the pi host emits exactly once per session replacement that creates a brand-new empty session, so the extension can record the authoritative empty-context fact consumed by the next orchestration-start `context_timer` reset decision. Runtime is O(1). No external state is mutated.
+ * @param[in] event {unknown} Session-start payload.
+ * @return {boolean} `true` when the event starts a new, empty session context.
+ * @satisfies REQ-805, REQ-806
+ */
+function isSessionStartReasonNewSession(event: unknown): boolean {
+  return (event as { reason?: unknown }).reason === "new";
+}
+
+/**
+ * @brief Records the one-shot empty-context reset fact at the `/new` session-start boundary.
+ * @details Stores the fact into the process-scoped elapsed persistence store so the next orchestration-start decision treats the current context as fresh even when the command-time session-entry probe cannot report the fresh-session emptiness. The flag is a decision input only: it never mutates any timer accumulator at recording time, so REQ-809 accumulator preservation across session replacement stays intact. Runtime is O(1). Side effect: mutates process-scoped persistence state.
+ * @return {void} No return value.
+ * @satisfies REQ-805, REQ-806, REQ-809
+ */
+function markPendingEmptyContextReset(): void {
+  getPiUsereqStatusPersistenceStore().pendingEmptyContextReset = true;
+}
+
+/**
+ * @brief Consumes the one-shot empty-context reset fact recorded at the `/new` boundary.
+ * @details Reads and clears the process-scoped fact so exactly one orchestration start can honor it; the one-shot semantics prevent a stale fact recorded before an earlier flow from restarting `context_timer` for a later flow running on an already-populated context. Runtime is O(1). Side effect: mutates process-scoped persistence state.
+ * @return {boolean} `true` when the fact was pending and is now consumed.
+ * @satisfies REQ-805, REQ-806
+ */
+function consumePendingEmptyContextReset(): boolean {
+  const store = getPiUsereqStatusPersistenceStore();
+  const pending = store.pendingEmptyContextReset === true;
+  store.pendingEmptyContextReset = false;
+  return pending;
+}
+
+/**
  * @brief Re-establishes the process-fresh elapsed-timer state at pi client start.
  * @details Zeroes every elapsed-timer field in the supplied state and resets the process-scoped persistence store to its fresh defaults, anchoring `session_timer`, `context_timer`, and `running_timer` to zero at pi client start. The `startup` reason fires exactly once per pi host process before any orchestration can run, so this reset is a no-op in production and restores deterministic timer isolation for runtime rebinds that replay the bootstrap boundary. Runtime is O(1). Side effects include mutable state reset and process-scoped persistence reset.
  * @param[in,out] state {PiUsereqStatusState} Mutable status state.
@@ -402,7 +439,7 @@ function resetPiUsereqElapsedTimerState(state: PiUsereqStatusState): void {
 
 /**
  * @brief Detects whether the active context is empty at orchestration start.
- * @details Reads the session-entry count exposed by the active extension context: zero visible session entries (or an unreadable session surface) mark an empty context, so the starting orchestration must restart `context_timer` from zero; any positive entry count marks an already-present context. Runtime is O(1). No external state is mutated.
+ * @details Reads the session-entry count exposed by the active extension context through a throw-safe probe: the non-copying `sessionManager.getEntryCount()` count is preferred when the runtime exposes it, the `sessionManager.getEntries()` list length is the fallback, and every unreadable surface — a guarded stale accessor that throws, a missing session manager, or a missing probe method — marks an empty context per the documented probe contract, so the starting orchestration must restart `context_timer` from zero; any positive entry count marks an already-present context. Runtime is O(1). No external state is mutated.
  * @param[in] ctx {ExtensionContext | undefined} Active extension context captured at orchestration start.
  * @return {boolean} `true` when the orchestration starts on an empty context.
  * @satisfies REQ-805, REQ-806
@@ -410,14 +447,24 @@ function resetPiUsereqElapsedTimerState(state: PiUsereqStatusState): void {
 export function isPiUsereqContextEmptyAtOrchestrationStart(
   ctx: ExtensionContext | undefined,
 ): boolean {
-  const entries = (ctx as { sessionManager?: { getEntries?: () => unknown[] } } | undefined)
-    ?.sessionManager?.getEntries?.();
-  return !Array.isArray(entries) || entries.length === 0;
+  try {
+    const sessionManager = (ctx as { sessionManager?: unknown } | undefined)?.sessionManager as
+      | { getEntryCount?: () => unknown; getEntries?: () => unknown }
+      | undefined;
+    const entryCount = sessionManager?.getEntryCount?.();
+    if (typeof entryCount === "number" && Number.isFinite(entryCount)) {
+      return entryCount <= 0;
+    }
+    const entries = sessionManager?.getEntries?.();
+    return !Array.isArray(entries) || entries.length === 0;
+  } catch {
+    return true;
+  }
 }
 
 /**
  * @brief Starts the elapsed-timer lifecycle for one new orchestration.
- * @details Resets `running_timer` to zero and stamps the shared in-flight orchestration start timestamp, resets `context_timer` to zero only when the orchestration starts on an empty context, leaves `session_timer` accumulation untouched, and mirrors every timer fact into the process-scoped persistence store. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
+ * @details Resets `running_timer` to zero and stamps the shared in-flight orchestration start timestamp, resets `context_timer` to zero when the orchestration starts on an empty context — detected through the live session-entry probe or through the one-shot `/new` boundary fact recorded at the session replacement that created the current empty context, consumed exactly once so a stale fact can never restart the timer for a later flow on a populated context — leaves `session_timer` accumulation untouched, and mirrors every timer fact into the process-scoped persistence store. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
  * @param[in,out] state {PiUsereqStatusState} Mutable status state.
  * @param[in] ctx {ExtensionContext | undefined} Active extension context used for empty-context detection.
  * @param[in] nowMs {number} Wall-clock orchestration start timestamp in milliseconds.
@@ -431,7 +478,8 @@ function startPiUsereqOrchestrationElapsed(
 ): void {
   state.orchestrationStartMs = nowMs;
   state.runningFinalMs = 0;
-  if (isPiUsereqContextEmptyAtOrchestrationStart(ctx)) {
+  const pendingEmptyContextReset = consumePendingEmptyContextReset();
+  if (pendingEmptyContextReset || isPiUsereqContextEmptyAtOrchestrationStart(ctx)) {
     state.contextBaseMs = 0;
   }
   persistElapsedState(state);
@@ -439,11 +487,11 @@ function startPiUsereqOrchestrationElapsed(
 
 /**
  * @brief Closes the in-flight orchestration and freezes all elapsed timers.
- * @details Computes the executed orchestration duration, freezes `running_timer` at that final value, absorbs the duration into the `context_timer` and `session_timer` accumulators regardless of the terminal outcome, clears the in-flight start timestamp, and mirrors every timer fact into the process-scoped persistence store. No-op when no orchestration is in flight. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
+ * @details Computes the executed orchestration duration, freezes `running_timer` at that final value, absorbs the duration into the `context_timer` and `session_timer` accumulators regardless of the terminal outcome, clears the in-flight start timestamp, invalidates the one-shot `/new` empty-context reset fact because the closed orchestration proves the current context holds session entries, and mirrors every timer fact into the process-scoped persistence store. No-op when no orchestration is in flight. Runtime is O(1). Side effects include mutable state mutation and process-scoped persistence update.
  * @param[in,out] state {PiUsereqStatusState} Mutable status state.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {void} No return value.
- * @satisfies REQ-159, REQ-803, REQ-807
+ * @satisfies REQ-159, REQ-803, REQ-805, REQ-807
  */
 function closeInFlightOrchestration(state: PiUsereqStatusState, nowMs: number): void {
   const orchestrationStartMs = state.orchestrationStartMs;
@@ -455,6 +503,7 @@ function closeInFlightOrchestration(state: PiUsereqStatusState, nowMs: number): 
   state.runningFinalMs = durationMs;
   state.contextBaseMs += durationMs;
   state.sessionBaseMs += durationMs;
+  getPiUsereqStatusPersistenceStore().pendingEmptyContextReset = false;
   persistElapsedState(state);
 }
 
@@ -1125,7 +1174,7 @@ export function resynchronizePersistedTerminalWorkflowState(
 
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start` and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, reconciles that rebound controller's stale in-flight elapsed timers by adopting the persisted frozen timer facts whenever the process-scoped store reports the orchestration closed so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration, and freezes a terminal-adopted controller's stale in-flight elapsed record at the `session_start` terminal restore so adopted terminal states never keep ticking, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start`, records the one-shot `/new` empty-context reset fact consumed by the next orchestration-start `context_timer` decision, and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, reconciles that rebound controller's stale in-flight elapsed timers by adopting the persisted frozen timer facts whenever the process-scoped store reports the orchestration closed so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration, and freezes a terminal-adopted controller's stale in-flight elapsed record at the `session_start` terminal restore so adopted terminal states never keep ticking, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
@@ -1157,6 +1206,13 @@ export function updateExtensionStatus(
         // duration is frozen into `running_timer` and absorbed into the context plus session
         // accumulators instead of ticking forever.
         closeInFlightOrchestration(controller.state, nowMs);
+      }
+      if (isSessionStartReasonNewSession(event)) {
+        // REQ-805/REQ-806: the `/new` replacement starts a brand-new empty context, so the next
+        // orchestration must restart `context_timer` from zero even when the command-time
+        // session-entry probe cannot report the fresh-session emptiness. The fact is a
+        // decision input only: no accumulator is mutated here, preserving REQ-809.
+        markPendingEmptyContextReset();
       }
     }
     controller.state.runtimeSoundLevel = controller.config?.["notify-sound"]
