@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.27](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.27) - 2026-11-20
+## [0.109.28](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.28) - 2026-11-20
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,10 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- Accept mandated pi-host version warning in session-start replay [useReq] *(debug-harness)*
+  The session-start offline replay test required zero notifications, but REQ-457 mandates exactly one pi CLI host compatibility warning when the installed pi-coding-agent resolves below 1.6.0 (observed with a stale node_modules tree at 1.5.2 while package-lock.json pins 1.6.0). The assertion now derives the expected notification set from the installed SDK version through buildPiHostVersionWarningMessage and comparePiHostVersions and requires every other notification to stay absent per REQ-458. Verified under both 1.5.2 (reproducer now passes) and 1.6.0 trees; full suite 563/563. No source or requirements changes.
+- Align render signature with pi-tui Component contract [useReq] *(settings-menu)*
+  Return a mutable string[] copy from the settings-menu component render method so the strict tsc --noEmit pre-release gate passes against the released pi-tui ^1.6.0 Component.render(width): string[] declaration while remaining assignable to the newer read-only SoT contract. Runtime rendering output and the offline settings-menu bridge behavior are unchanged; references document regenerated.
 - match render return type to pi-tui Component [useReq] *(settings-menu)*
   Narrow the settings-menu custom component render member from readonly
   string[] to string[] so it satisfies the pi-tui Component.render(width):
@@ -120,6 +124,12 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Update .galias.conf file. *(config)*
+- BREAKING CHANGE: move debug configuration to global scope with enable defaults [useReq] *(config)*
+  Move every DEBUG_* field (DEBUG_ENABLED, DEBUG_PROMPTS_ENABLED, DEBUG_PROMPTS_LOG_PATH, DEBUG_STATUS_CHANGES, DEBUG_WORKFLOW_EVENTS, DEBUG_TOOL_COMMANDS_ENABLED, DEBUG_LOG_ON_STATUS, DEBUG_ENABLED_TOOLS, DEBUG_ENABLED_PROMPTS) from the local project scope to the global configuration scope, satisfying updated CTN-013, CTN-019, REQ-236, REQ-426, REQ-413, and REQ-414.
+  Flip persisted defaults to enable for DEBUG_PROMPTS_ENABLED, DEBUG_STATUS_CHANGES, DEBUG_WORKFLOW_EVENTS, and DEBUG_TOOL_COMMANDS_ENABLED while keeping the global DEBUG_ENABLED flag defaulted to disable (CTN-013, CTN-019, REQ-254, REQ-277, REQ-413, REQ-420).
+  Fix the debug enable normalizers to accept the explicit disable value instead of collapsing it into the default, a latent defect surfaced by the new enable defaults, and align the configuration CLI schema Local/Global sections plus the settings-menu render signature with the pi-tui 1.6.0 Component contract.
+  Update aligned unit tests for the new scope, defaults, and CLI tree shape; regenerate REFERENCES.md and refresh the WORKFLOW.md runtime model.
 - Render Summary report body in intense white [useReq] *(agent-final-output)*
   Add REQ-811/REQ-812: style the final-output report Summary section body with the intense-white ANSI foreground while headings, fenced code, inline elements, other section bodies, and the Next-Workflow table keep their unchanged styling.
   Implement section tracking in colorizeAgentFinalOutputMarkdownText with per-token SGR composition for Summary quote spans and plain segments.
@@ -1799,7 +1809,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.27\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.27
+- \[0.109.28\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.28
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1908,4 +1918,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.27]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.27
+[0.109.28]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.28
