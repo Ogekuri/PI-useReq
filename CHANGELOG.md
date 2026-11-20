@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.26](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.26) - 2026-11-20
+## [0.109.27](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.27) - 2026-11-20
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,12 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- match render return type to pi-tui Component [useReq] *(settings-menu)*
+  Narrow the settings-menu custom component render member from readonly
+  string[] to string[] so it satisfies the pi-tui Component.render(width):
+  string[] contract; strict tsc --noEmit (CTN-006) passes again and the
+  pre-release gate stage 2 (REQ-491/REQ-492) is unblocked. Type-only fix,
+  no runtime behavior change. Regenerate usereq/docs/REFERENCES.md.
 - Restart context timer on new contexts after /new [useReq] *(extension-status)*
   REQ-805/REQ-806: the elapsed context_timer must restart from zero whenever an orchestration starts on a new, empty context (for example after /new). Record a one-shot empty-context reset fact at the /new session-start boundary, consume it at the next orchestration start, invalidate it when an orchestration closes, harden the empty-context probe (throw-safe, non-copying getEntryCount preferred) so unreadable session surfaces degrade to empty per contract, and cover both the plain /new flow and the misreporting-probe failure mode with reproducer tests.
 - Freeze terminal-adopted elapsed timers and gate live ticker [useReq] *(extension-status)*
@@ -114,6 +120,20 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Render Summary report body in intense white [useReq] *(agent-final-output)*
+  Add REQ-811/REQ-812: style the final-output report Summary section body with the intense-white ANSI foreground while headings, fenced code, inline elements, other section bodies, and the Next-Workflow table keep their unchanged styling.
+  Implement section tracking in colorizeAgentFinalOutputMarkdownText with per-token SGR composition for Summary quote spans and plain segments.
+  Update ANSI-exact retention notification tests and add TST-256 coverage; regenerate WORKFLOW.md call traces and REFERENCES.md.
+- Add debug mode.
+- Raise minimum pi CLI to v1.6.0 [useReq] *(extension-compat)*
+  Analyzed the pi CLI v1.5.2 to v1.6.0 update in read-only docs/pi.dev and pi.dev-src.
+  Extension API surface is additive only (ExtensionRuntimeState.reportError); lifecycle
+  event names and builtin tool inventory are unchanged. Adapted settings-menu component
+  render to the new readonly string[] pi-tui Component contract. Raised
+  MINIMUM_SUPPORTED_PI_HOST_VERSION to 1.6.0 and peer dependencies to ^1.6.0 with a
+  synced lockfile. Updated REQ-457, REQ-458, REQ-460 and section 5.2 evidence.
+  Verification: tsc --noEmit clean, req-static-check clean, npm test 562/562 passed.
+- Update bundled read-only PI cli source code and docs from v1.5.2 to v1.6.0 [useReq] *(pi-cli-src-docs-update)*
 - Update bundled prompts from v0.12.18 to v0.12.19 [useReq] *(prompts)*
 - BREAKING CHANGE: refactor elapsed status bar into orchestration running/context/session timers [useReq] *(extension-status)*
   Replace per-agent-run elapsed counters with three orchestration timers:
@@ -1779,7 +1799,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.26\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.26
+- \[0.109.27\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.27
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1888,4 +1908,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.26]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.26
+[0.109.27]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.27
