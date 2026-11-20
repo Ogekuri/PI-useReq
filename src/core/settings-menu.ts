@@ -281,7 +281,7 @@ export async function showPiUsereqSettingsMenu(
     rebuildMenu(options.initialSelectedId);
 
     const component: PiUsereqSettingsMenuComponent = {
-      render(width: number): readonly string[] {
+      render(width: number): string[] {
         return container.render(width);
       },
       invalidate(): void {
