@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.175"
+version: "0.0.176"
 date: "2026-11-20"
 author: "OpenAI Codex"
 scope:
@@ -66,12 +66,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **CTN-010**: MUST execute offline harness flows without requiring pi.dev services or `docs/pi.dev/agent-document-manifest.json`.
 - **CTN-011**: MUST store bundled prompt, instruction, template, and guideline resources under `src/resources/{prompts,instructions,templates,guidelines}` and install them under `<installation-path>/resources/{prompts,instructions,templates,guidelines}`.
 - **CTN-012**: MUST NOT persist derived `base-path`, `git-path`, `parent-path`, `base-dir`, `context-path`, `worktree-dir`, or `worktree-path` in local or global configuration files.
-- **CTN-013**: MUST default persisted local `DEBUG_ENABLED=disable`, `DEBUG_PROMPTS_ENABLED=disable`, `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq`, `DEBUG_STATUS_CHANGES=disable`, `DEBUG_WORKFLOW_EVENTS=disable`, `DEBUG_LOG_ON_STATUS=running`, `DEBUG_ENABLED_TOOLS=[]`, and `DEBUG_ENABLED_PROMPTS=[]`, and MUST NOT persist any configurable debug JSON log filename.
+- **CTN-013**: MUST default persisted global `DEBUG_ENABLED=disable`, `DEBUG_PROMPTS_ENABLED=enable`, `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq`, `DEBUG_STATUS_CHANGES=enable`, `DEBUG_WORKFLOW_EVENTS=enable`, `DEBUG_LOG_ON_STATUS=running`, `DEBUG_ENABLED_TOOLS=[]`, and `DEBUG_ENABLED_PROMPTS=[]`, and MUST NOT persist any configurable debug JSON log filename.
 - **CTN-014**: MUST serialize every configured or derived path without a trailing `/`.
 - **CTN-015**: MUST reserve `*-path` names for absolute paths and `*-dir` names for relative paths.
 - **CTN-016**: MUST NOT modify any path under `docs/` during analysis, implementation, verification, or bug fixing.
 - **CTN-017**: MUST NOT modify any path under `pi.dev-src/` in any way, because those pi CLI client sources are permanently read-only.
-- **CTN-019**: MUST persist local `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
+- **CTN-019**: MUST persist global `DEBUG_TOOL_COMMANDS_ENABLED` with allowed values `enable` and `disable`, defaulting to `enable`.
 - **CTN-020**: MUST declare `tsx` as a runtime `package.json` dependency so `node --import tsx` package scripts, the `postinstall` checker installer, and the `.ts` extension entry resolve on clean consumer installs.
 - **CTN-021**: MUST declare a `files` allowlist in `package.json` restricted to runtime-required `src/`, `scripts/`, and the pi CLI boot-changelog `CHANGELOG.md` so npm consumer installs exclude the `tests/` directory.
 - **CTN-022**: MUST NOT persist the selected model provider, model identifier, or thinking level in local or global pi-usereq configuration files.
@@ -174,13 +174,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-065**: MUST make `scripts/pi-usereq-debug.sh tool` accept `--args <text>` by forwarding a JSON object through `--params`, while preserving direct `--params <json>` passthrough.
 - **REQ-006**: MUST provide a `pi-usereq` menu that edits project directories, git automation, static-check settings, tools, notifications, and debug settings, and saves every change immediately.
 - **REQ-314**: MUST expose `Show local configuration` and `Show global configuration` in the `pi-usereq` menu.
-- **REQ-236**: MUST persist local `DEBUG_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`, so toggled debug enablement survives pi CLI process restarts.
-- **REQ-426**: MUST persist `DEBUG_ENABLED` only in local configuration and MUST NOT persist it into global configuration files.
+- **REQ-236**: MUST persist global `DEBUG_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`, so toggled debug enablement survives pi CLI process restarts.
+- **REQ-426**: MUST persist `DEBUG_ENABLED` only in global configuration and MUST NOT persist it into local configuration files.
 - **REQ-237**: MUST write JSON debug entries into one `<run-prefix>-<command>-debug.json` file inside the resolved `DEBUG_PROMPTS_LOG_PATH` directory without any user-configurable debug log filename.
 - **REQ-238**: MUST persist `DEBUG_LOG_ON_STATUS` with allowed values `any`, `idle`, `checking`, `running`, `merging`, and `error`, defaulting to `running`.
 - **REQ-239**: MUST persist enabled debug-tool names and enabled debug-prompt names as normalized arrays defaulting to empty.
-- **REQ-254**: MUST persist `DEBUG_STATUS_CHANGES` with allowed values `enable` and `disable`, defaulting to `disable`.
-- **REQ-277**: MUST persist `DEBUG_WORKFLOW_EVENTS` with allowed values `enable` and `disable`, defaulting to `disable`.
+- **REQ-254**: MUST persist `DEBUG_STATUS_CHANGES` with allowed values `enable` and `disable`, defaulting to `enable`.
+- **REQ-277**: MUST persist `DEBUG_WORKFLOW_EVENTS` with allowed values `enable` and `disable`, defaulting to `enable`.
 - **REQ-240**: MUST provide a `Debug` submenu with rows `Debug`, `Enable debug prompts`, `Log path for prompts`, `Generated log files`, `Log on status`, `Status changes`, `Workflow events`, and per-item toggles for custom tools, embedded tools, and `req-*` prompts.
 - **REQ-241**: MUST dim and disable every `Debug` submenu row except `Debug` whenever `DEBUG_ENABLED=disable`.
 - **REQ-242**: MUST derive per-tool debug rows from `PI_USEREQ_CUSTOM_TOOL_NAMES` and `PI_USEREQ_EMBEDDED_TOOL_NAMES`.
@@ -548,8 +548,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-410**: MUST surface one early-check error diagnostic listing every enabled existing context file as `name(<chars>c/<tokens>t)`, the aggregate token total, and the occupancy suffix.
 - **REQ-411**: MUST create no worktree and dispatch no prompt message when the context-occupancy early check fails.
 - **REQ-412**: MUST omit a `Context Files` submenu row occupancy suffix when that row's measured file token count is zero.
-- **REQ-413**: MUST persist local `DEBUG_PROMPTS_ENABLED` with allowed values `enable` and `disable`, defaulting to `disable`.
-- **REQ-414**: MUST persist local `DEBUG_PROMPTS_LOG_PATH` as a non-empty trailing-slash-free path defaulting to `/tmp/PI-useReq`, and MUST resolve relative values against the original project base when writing prompt debug files.
+- **REQ-413**: MUST persist global `DEBUG_PROMPTS_ENABLED` with allowed values `enable` and `disable`, defaulting to `enable`.
+- **REQ-414**: MUST persist global `DEBUG_PROMPTS_LOG_PATH` as a non-empty trailing-slash-free path defaulting to `/tmp/PI-useReq`, and MUST resolve relative values against the original project base when writing prompt debug files.
 - **REQ-415**: MUST render `Enable debug prompts` and `Log path for prompts` in `Debug` immediately after `Debug` and before `Enable debug commands for tools`.
 - **REQ-416**: MUST gate prompt-content debug logging on `DEBUG_ENABLED=enable` plus `DEBUG_PROMPTS_ENABLED=enable` only, exempt from the `DEBUG_LOG_ON_STATUS` workflow-state filter.
 - **REQ-417**: MUST name dispatched-prompt debug files `<run-prefix>-<req-command>-request.md` and `<run-prefix>-<req-command>-prompt.md` using the active REQ-798 run prefix and the invokable `req-*` command name.
@@ -557,7 +557,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-427**: MUST write the exact command invocation summary text displayed on screen into the `-request` debug file for every dispatched bundled `req-<prompt>` command.
 - **REQ-428**: MUST save both the `-request` and `-prompt` debug files for every dispatched bundled `req-<prompt>` command whenever prompt debug logging is enabled.
 - **REQ-419**: MUST document in `README.md` the replay commands that replicate saved prompt deliveries, saved provider error payloads via `curl --data @`, and retained execution sessions via `pi --fork` outside pi-usereq.
-- **REQ-420**: MUST restore `DEBUG_PROMPTS_ENABLED=disable` and `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq` when the `Debug` subtree `Reset defaults` is approved.
+- **REQ-420**: MUST restore `DEBUG_PROMPTS_ENABLED=enable` and `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq` when the `Debug` subtree `Reset defaults` is approved.
 - **REQ-421**: MUST capture the exact provider request payload from `before_provider_request` only while a bundled `req-*` prompt run is active and prompt debug logging is enabled, storing everything needed to write the error-stage file later.
 - **REQ-422**: MUST write the latest captured provider request payload under `DEBUG_PROMPTS_LOG_PATH` whenever `after_provider_response` reports a response status >= 400 and a captured payload exists, without requiring live workflow state or cached configuration.
 - **REQ-423**: MUST name each saved provider error payload file `<run-prefix>-<req-command>-error-<status>.json` from the capturing run prefix, invokable command name, and failing response status.
@@ -1004,7 +1004,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-121**: MUST verify bundled prompt-backed `req-<prompt>` commands deliver the full rendered prompt content through the fallback `sendUserMessage` channel when the runtime does not expose `sendMessage`.
 - **TST-059**: MUST verify every agent-tool registration defines custom `renderResult` and that compact rendering shows essential invocation parameters while expanded rendering avoids fallback raw-content display.
 - **TST-086**: MUST verify bundled prompt-backed `req-<prompt>` commands abort before prompt dispatch when the persisted execution-session header cwd or `process.cwd()` differs from the expected execution path, and abort before merge when persisted execution-session header metadata or verified worktree artifacts diverge, while stale pre-switch context probes alone do not abort.
-- **TST-113**: MUST verify default local configuration persists `DEBUG_TOOL_COMMANDS_ENABLED=disable`, and the `Debug` submenu renders `Enable debug commands for tools` before `Log file`.
+- **TST-113**: MUST verify default global configuration persists `DEBUG_TOOL_COMMANDS_ENABLED=enable`, and the `Debug` submenu renders `Enable debug commands for tools` before `Log file`.
 - **TST-114**: MUST verify the `Debug` submenu persists `DEBUG_TOOL_COMMANDS_ENABLED` through immediate-save, reset, and focus-preserving re-render flows.
 - **TST-115**: MUST verify extension activation registers `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` only when `DEBUG_TOOL_COMMANDS_ENABLED=enable`.
 - **TST-116**: MUST verify `debug-compress`, `debug-references`, `debug-static-check`, `debug-summarize`, and `debug-tokens` write the same `content[0].text` as `req-compress`, `req-references`, `req-static-check`, `req-summarize`, and `req-tokens`, and reject execution when disabled.
@@ -1025,9 +1025,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-140**: MUST verify `src/core/context-file-size.ts` reports `exists=false` with zero metrics for missing context files and exact character plus `cl100k_base` token counts for existing files.
 - **TST-141**: MUST verify the `Context Files` submenu rows render `<chars>c/<tokens>t` size facts with per-row token-derived occupancy suffixes, and the top-level summary renders measured size facts from context files.
 - **TST-142**: MUST verify the command invocation summary `context files` field renders size suffixes only for enabled existing context files.
-- **TST-143**: MUST verify default local configuration persists `DEBUG_PROMPTS_ENABLED=disable` plus `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq`, and the `Debug` submenu renders `Enable debug prompts` then `Log path for prompts` between `Debug` and `Enable debug commands for tools`.
+- **TST-143**: MUST verify default global configuration persists `DEBUG_PROMPTS_ENABLED=enable` plus `DEBUG_PROMPTS_LOG_PATH=/tmp/PI-useReq`, and the `Debug` submenu renders `Enable debug prompts` then `Log path for prompts` between `Debug` and `Enable debug commands for tools`.
 - **TST-144**: MUST verify prompt debug logging writes `<run-prefix>-req-<prompt>-request.md` plus `<run-prefix>-req-<prompt>-prompt.md` files containing the exact summary and rendered prompt under `DEBUG_PROMPTS_LOG_PATH` only when `DEBUG_ENABLED=enable` plus `DEBUG_PROMPTS_ENABLED=enable`.
-- **TST-148**: MUST verify local configuration persists `DEBUG_ENABLED`, global configuration omits it, and fresh processes resolve the persisted `DEBUG_ENABLED` value.
+- **TST-148**: MUST verify global configuration persists `DEBUG_ENABLED`, local configuration omits it, and fresh processes resolve the persisted `DEBUG_ENABLED` value.
 - **TST-149**: MUST verify the `-error-<status>.json` file is written beside the `-request.md` and `-prompt.md` files whenever a dispatched `req-<prompt>` run receives a provider response status >= 400.
 - **TST-150**: MUST verify the `-error-<status>-response.txt` file persists the provider error message text beside the flushed `-error-<status>.json` payload file.
 - **TST-151**: MUST verify the `-error-<status>-replay.json` sidecar carries provider, baseUrl, model id, thinking level, contextWindow, maxTokens, execution session file, and replay command lines.
@@ -1073,7 +1073,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-181**: MUST verify rectangular configuration tables with aligned borders across Unicode and escaped-newline cells.
 - **TST-182**: MUST verify `--get`, `--set`, and `--unset` JSON semantics, index bounds, reset rules, and no mutation on rejected operations.
 - **TST-183**: MUST verify `--print-raw` byte preservation plus global-config bootstrapping without overwriting an existing file.
-- **TST-184**: MUST verify `--info Global` renders `Global`-level detail prefixes `│   `, non-last leaf `│   │   `, last leaf `│       `, and last `Local` leaf eight spaces.
+- **TST-184**: MUST verify `--info` renders `Global`-level detail prefixes `│   `, non-last leaf `│   │   `, last leaf `│       `, and the last `Local` detail line eight spaces.
 - **TST-185**: MUST verify a completed worktree-backed run whose final assistant text is final-output JSON with `result` `ok` merges, deletes the worktree plus branch, and returns workflow state `done`.
 - **TST-186**: MUST verify a completed worktree-backed run whose final-output JSON carries `result` `error` performs no merge or worktree deletion and parks workflow state `error`.
 - **TST-187**: MUST verify a completed worktree-backed run whose final assistant text violates the final-output JSON contract performs no merge or worktree deletion and parks `error` with one diagnostic.
@@ -1354,7 +1354,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-438 | `src/index.ts` :: `registerReqReferencesCommand` :: emits one created/skipped commit notification for every completed run. |
 | REQ-005 | `src/index.ts` :: `runToolCommand`, `formatResultForEditor`, `showToolResult` :: writes combined output into the editor and notifies `completed` or `failed`. |
 | REQ-006 | `src/index.ts` :: `buildPiUsereqMenuChoices` and `configurePiUsereq` :: expose directories, git automation, static-check, tools, notifications, debug settings, reset, save, and `Show configuration`. |
-| REQ-236 | `src/core/config.ts` :: `getDefaultConfig`, `loadConfig`, and `buildPersistedLocalConfig` :: persist local `DEBUG_ENABLED` with default `disable`. |
+| REQ-236 | `src/core/config.ts` :: `getDefaultConfig`, `loadConfig`, and `buildPersistedGlobalConfig` :: persist global `DEBUG_ENABLED` with default `disable`. |
 | REQ-237 | `src/core/debug-runtime.ts` :: `appendDebugLogEntry` and `resolveDebugPromptsLogPath` :: derive the per-run `<run-prefix>-<command>-debug.json` JSON debug log file inside the prompt log directory. |
 | REQ-238 | `src/core/config.ts` :: `getDefaultConfig`, `loadConfig`, and `buildPersistedConfig`; `src/index.ts` :: `configureDebugMenu` :: persist and edit `DEBUG_LOG_ON_STATUS`. |
 | REQ-239 | `src/core/config.ts` :: `getDefaultConfig`, `loadConfig`, and `buildPersistedConfig`; `src/core/debug-runtime.ts` :: `normalizeDebugEnabledTools`, `normalizeDebugEnabledPrompts` :: persist normalized debug selector arrays. |

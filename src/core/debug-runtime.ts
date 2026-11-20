@@ -135,31 +135,31 @@ function resolveActivePromptDebugRunPrefix(projectBase: string): string {
 
 /**
  * @brief Defines the default workflow-transition logging mode.
- * @details New configs suppress `workflow_state` entries until the user explicitly enables status-change logging. Access complexity is O(1).
+ * @details New global configs emit `workflow_state` entries without any further opt-in; users disable status-change logging explicitly from the `Debug` submenu. Access complexity is O(1).
  * @satisfies CTN-013, REQ-254
  */
-export const DEFAULT_DEBUG_STATUS_CHANGES = "disable" as const;
+export const DEFAULT_DEBUG_STATUS_CHANGES = "enable" as const;
 
 /**
  * @brief Defines the default dedicated workflow-event logging mode.
- * @details New configs suppress session-activation, restoration, closure, and shutdown workflow debug entries until the user explicitly enables workflow-event logging. Access complexity is O(1).
+ * @details New global configs emit session-activation, restoration, closure, and shutdown workflow debug entries without any further opt-in; users disable workflow-event logging explicitly from the `Debug` submenu. Access complexity is O(1).
  * @satisfies CTN-013, REQ-277
  */
-export const DEFAULT_DEBUG_WORKFLOW_EVENTS = "disable" as const;
+export const DEFAULT_DEBUG_WORKFLOW_EVENTS = "enable" as const;
 
 /**
  * @brief Defines the default debug-tool command-wrapper mode.
- * @details New configs suppress debug slash-command wrappers for selected built-in tools until the user explicitly enables them from the `Debug` submenu. Access complexity is O(1).
+ * @details New global configs register debug slash-command wrappers for selected built-in tools without any further opt-in; users disable the wrappers explicitly from the `Debug` submenu. Access complexity is O(1).
  * @satisfies CTN-019, REQ-322
  */
-export const DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED = "disable" as const;
+export const DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED = "enable" as const;
 
 /**
  * @brief Defines the default debug-prompt content logging mode.
- * @details New configs do not save dispatched prompt content until the user explicitly enables prompt debug logging from the `Debug` submenu. Access complexity is O(1).
- * @satisfies CTN-013, REQ-413
+ * @details New global configs are ready to save dispatched prompt content; the writes stay suppressed until the global `Debug` flag is also enabled because `shouldLogDebugPromptContent(...)` gates on both flags. Access complexity is O(1).
+ * @satisfies CTN-013, REQ-413, REQ-416
  */
-export const DEFAULT_DEBUG_PROMPTS_ENABLED = "disable" as const;
+export const DEFAULT_DEBUG_PROMPTS_ENABLED = "enable" as const;
 
 /**
  * @brief Defines the default debug prompt log path.
@@ -288,7 +288,7 @@ const DEBUG_PROMPT_NAME_SET = new Set<string>(DEBUG_PROMPT_NAMES);
  * @satisfies REQ-236
  */
 export function normalizeDebugEnabled(value: unknown): "enable" | "disable" {
-  return value === "enable" ? "enable" : DEFAULT_DEBUG_ENABLED;
+  return value === "enable" || value === "disable" ? value : DEFAULT_DEBUG_ENABLED;
 }
 
 /**
@@ -299,7 +299,7 @@ export function normalizeDebugEnabled(value: unknown): "enable" | "disable" {
  * @satisfies REQ-254
  */
 export function normalizeDebugStatusChanges(value: unknown): DebugStatusChanges {
-  return value === "enable" ? "enable" : DEFAULT_DEBUG_STATUS_CHANGES;
+  return value === "enable" || value === "disable" ? value : DEFAULT_DEBUG_STATUS_CHANGES;
 }
 
 /**
@@ -310,7 +310,7 @@ export function normalizeDebugStatusChanges(value: unknown): DebugStatusChanges 
  * @satisfies REQ-277
  */
 export function normalizeDebugWorkflowEvents(value: unknown): DebugWorkflowEvents {
-  return value === "enable" ? "enable" : DEFAULT_DEBUG_WORKFLOW_EVENTS;
+  return value === "enable" || value === "disable" ? value : DEFAULT_DEBUG_WORKFLOW_EVENTS;
 }
 
 /**
@@ -321,7 +321,7 @@ export function normalizeDebugWorkflowEvents(value: unknown): DebugWorkflowEvent
  * @satisfies CTN-019, REQ-322
  */
 export function normalizeDebugToolCommandsEnabled(value: unknown): DebugToolCommandsEnabled {
-  return value === "enable" ? "enable" : DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED;
+  return value === "enable" || value === "disable" ? value : DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED;
 }
 
 /**
@@ -332,7 +332,7 @@ export function normalizeDebugToolCommandsEnabled(value: unknown): DebugToolComm
  * @satisfies REQ-413
  */
 export function normalizeDebugPromptsEnabled(value: unknown): DebugPromptsEnabled {
-  return value === "enable" ? "enable" : DEFAULT_DEBUG_PROMPTS_ENABLED;
+  return value === "enable" || value === "disable" ? value : DEFAULT_DEBUG_PROMPTS_ENABLED;
 }
 
 /**

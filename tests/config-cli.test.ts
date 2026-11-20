@@ -477,5 +477,6 @@ test("configuration CLI renders deterministic print and info trees", () => {
   assert.ok(infoLines.includes("│   Reset block : --unset Global"));
   assert.ok(infoLines.some((line) => line.startsWith("│   │   Set cmd : --set Global:notify-sound ")));
   assert.ok(infoLines.some((line) => line.startsWith("│       Set cmd : --set Global:PI_NOTIFY_SOUND_HIGH_CMD ")));
-  assert.ok(infoLines.some((line) => line.startsWith("        Default : [] (restored via: --unset Local:DEBUG_ENABLED_PROMPTS)")));
+  assert.ok(infoLines.some((line) => line.startsWith("│   │   Default : [] (restored via: --unset Global:DEBUG_ENABLED_PROMPTS)")));
+  assert.ok(infoLines.some((line) => line.startsWith("        Reset block : --unset Local:static-check")));
 });

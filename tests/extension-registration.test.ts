@@ -33,6 +33,7 @@ import {
   DEFAULT_DEBUG_LOG_ON_STATUS,
   DEFAULT_DEBUG_PROMPTS_ENABLED,
   DEFAULT_DEBUG_PROMPTS_LOG_PATH,
+  DEFAULT_DEBUG_STATUS_CHANGES,
   DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
   DEFAULT_DEBUG_WORKFLOW_EVENTS,
   formatPromptDebugErrorFileName,
@@ -1011,11 +1012,6 @@ test("extension registers prompt and config commands while exposing tool capabil
     "req-tokens",
     "req-files-static-check",
     "req-static-check",
-    "debug-compress",
-    "debug-references",
-    "debug-static-check",
-    "debug-summarize",
-    "debug-tokens",
     "pi-usereq-show-config",
     "test-static-check",
   ]) {
@@ -1058,13 +1054,13 @@ test("extension registers prompt and config commands while exposing tool capabil
 });
 
 /**
- * @brief Verifies debug tool wrapper commands register only when the local debug flag is enabled.
- * @details Activates the extension once from a default-disabled fixture and once from a fixture whose local config enables debug tool wrapper commands, then asserts the five debug slash commands appear only in the enabled runtime. Runtime is dominated by fixture setup and extension registration. Side effects are limited to temporary filesystem mutation and process cwd changes.
+ * @brief Verifies debug tool wrapper commands register only when the global debug flag is enabled.
+ * @details Activates the extension once from a fixture whose global config disables debug tool wrapper commands and once from a default fixture whose global default enables them, then asserts the five debug slash commands appear only in the enabled runtime. Runtime is dominated by fixture setup and extension registration. Side effects are limited to temporary filesystem mutation and process cwd changes.
  * @return {void} No return value.
- * @throws {AssertionError} Throws when command registration ignores the local debug tool wrapper flag.
+ * @throws {AssertionError} Throws when command registration ignores the global debug tool wrapper flag.
  * @satisfies TST-115
  */
-test("debug tool commands register only when enabled in local config", () => {
+test("debug tool commands register only when enabled in global config", () => {
   const disabledFixture = initFixtureRepo({ fixtures: [] });
   const enabledFixture = initFixtureRepo({ fixtures: [] });
   const debugCommandNames = [
@@ -1076,8 +1072,8 @@ test("debug tool commands register only when enabled in local config", () => {
   ];
 
   try {
-    writeProjectConfigOverrides(enabledFixture.projectBase, {
-      DEBUG_TOOL_COMMANDS_ENABLED: "enable",
+    writeProjectConfigOverrides(disabledFixture.projectBase, {
+      DEBUG_TOOL_COMMANDS_ENABLED: "disable",
     });
 
     const previousCwd = process.cwd();
@@ -1089,6 +1085,10 @@ test("debug tool commands register only when enabled in local config", () => {
       for (const commandName of debugCommandNames) {
         assert.equal(disabledCommandNames.includes(commandName), false, `unexpected command ${commandName}`);
       }
+
+      writeProjectConfigOverrides(enabledFixture.projectBase, {
+        DEBUG_TOOL_COMMANDS_ENABLED: "enable",
+      });
 
       process.chdir(enabledFixture.projectBase);
       const enabledPi = createFakePi();
@@ -2273,9 +2273,12 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
       "Debug",
       "Debug",
       "Enable debug commands for tools",
+      "Enable debug commands for tools",
       "Log on status",
       "any",
       "Status changes",
+      "Status changes",
+      "Workflow events",
       "Workflow events",
       "req-files-tokens",
       "req-analyze",
@@ -2287,7 +2290,8 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   await command!.handler("", ctx);
 
   const renderedInitialDebugMenu = (ctx.__state.customRenderLines[1] ?? []).join("\n");
-  const persistedConfig = readProjectConfigJson(cwd);
+  const persistedConfig = readGlobalConfigJson();
+  const persistedLocalConfig = readProjectConfigJson(cwd);
   const debugCalls = ctx.__state.selectCalls.filter((call: { title: string; items: string[]; selectedChoiceId?: string }) => call.title === "Debug");
   assert.match(renderedInitialDebugMenu, /<dim>Generated log files/);
   assert.match(renderedInitialDebugMenu, /<dim>Enable debug commands for tools/);
@@ -2300,7 +2304,7 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.match(renderedInitialDebugMenu, /<dim>Workflow events/);
   assert.match(renderedInitialDebugMenu, /<dim>req-compress/);
   assert.equal(persistedConfig.DEBUG_ENABLED, "enable");
-  assert.equal(Object.hasOwn(persistedConfig, "DEBUG_LOG_FILE"), false);
+  assert.equal(Object.hasOwn(persistedLocalConfig, "DEBUG_ENABLED"), false);
   assert.equal(persistedConfig.DEBUG_TOOL_COMMANDS_ENABLED, "enable");
   assert.equal(persistedConfig.DEBUG_STATUS_CHANGES, "enable");
   assert.equal(persistedConfig.DEBUG_WORKFLOW_EVENTS, "enable");
@@ -2314,21 +2318,24 @@ test("debug menu dims locked rows and persists debug settings with focus-preserv
   assert.deepEqual(persistedConfig.DEBUG_ENABLED_PROMPTS, ["req-analyze"]);
   assert.equal(debugCalls[1]?.selectedChoiceId, "debug-enabled");
   assert.equal(debugCalls[2]?.selectedChoiceId, "debug-tool-commands-enabled");
-  assert.equal(debugCalls[3]?.selectedChoiceId, "debug-log-on-status");
-  assert.equal(debugCalls[4]?.selectedChoiceId, "debug-status-changes");
-  assert.equal(debugCalls[5]?.selectedChoiceId, "debug-workflow-events");
-  assert.equal(debugCalls[6]?.selectedChoiceId, "debug-tool:req-files-tokens");
-  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-prompt:req-analyze");
+  assert.equal(debugCalls[3]?.selectedChoiceId, "debug-tool-commands-enabled");
+  assert.equal(debugCalls[4]?.selectedChoiceId, "debug-log-on-status");
+  assert.equal(debugCalls[5]?.selectedChoiceId, "debug-status-changes");
+  assert.equal(debugCalls[6]?.selectedChoiceId, "debug-status-changes");
+  assert.equal(debugCalls[7]?.selectedChoiceId, "debug-workflow-events");
+  assert.equal(debugCalls[8]?.selectedChoiceId, "debug-workflow-events");
+  assert.equal(debugCalls[9]?.selectedChoiceId, "debug-tool:req-files-tokens");
+  assert.equal(debugCalls[10]?.selectedChoiceId, "debug-prompt:req-analyze");
 
   const resetCtx = createFakeCtx(cwd, {
     selects: ["Debug", "Reset defaults", "Approve reset", "Save and close"],
   });
   await command!.handler("", resetCtx);
-  const resetConfig = readProjectConfigJson(cwd);
+  const resetConfig = readGlobalConfigJson();
   assert.equal(resetConfig.DEBUG_ENABLED, "disable");
   assert.equal(Object.hasOwn(resetConfig, "DEBUG_LOG_FILE"), false);
   assert.equal(resetConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
-  assert.equal(resetConfig.DEBUG_STATUS_CHANGES, "disable");
+  assert.equal(resetConfig.DEBUG_STATUS_CHANGES, DEFAULT_DEBUG_STATUS_CHANGES);
   assert.equal(resetConfig.DEBUG_WORKFLOW_EVENTS, DEFAULT_DEBUG_WORKFLOW_EVENTS);
   assert.equal(resetConfig.DEBUG_LOG_ON_STATUS, DEFAULT_DEBUG_LOG_ON_STATUS);
   assert.deepEqual(resetConfig.DEBUG_ENABLED_TOOLS, []);
@@ -2573,20 +2580,20 @@ test("debug menu persists prompt content logging settings and resets them to def
   const cwd = createTempDir("pi-usereq-menu-debug-prompts-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const defaultConfig = getDefaultConfig(cwd);
-  assert.equal(defaultConfig.DEBUG_PROMPTS_ENABLED, "disable");
+  assert.equal(defaultConfig.DEBUG_PROMPTS_ENABLED, "enable");
   assert.equal(defaultConfig.DEBUG_PROMPTS_LOG_PATH, "/tmp/PI-useReq");
   const pi = createFakePi();
   piUsereqExtension(pi);
   const command = pi.commands.get("pi-usereq");
   assert.ok(command);
   const ctx = createFakeCtx(cwd, {
-    selects: ["Debug", "Debug", "Enable debug prompts", "Log path for prompts", "Save and close"],
+    selects: ["Debug", "Debug", "Enable debug prompts", "Enable debug prompts", "Log path for prompts", "Save and close"],
     inputs: ["logs/saved-prompts/"],
   });
 
   await command!.handler("", ctx);
 
-  const persistedConfig = readProjectConfigJson(cwd);
+  const persistedConfig = readGlobalConfigJson();
   assert.equal(persistedConfig.DEBUG_PROMPTS_ENABLED, "enable");
   assert.equal(persistedConfig.DEBUG_PROMPTS_LOG_PATH, "logs/saved-prompts");
   const debugCalls = ctx.__state.selectCalls.filter((call: any) => call.title === "Debug");
@@ -2602,7 +2609,7 @@ test("debug menu persists prompt content logging settings and resets them to def
     selects: ["Debug", "Reset defaults", "Approve reset", "Save and close"],
   });
   await command!.handler("", resetCtx);
-  const resetConfig = readProjectConfigJson(cwd);
+  const resetConfig = readGlobalConfigJson();
   assert.equal(resetConfig.DEBUG_PROMPTS_ENABLED, DEFAULT_DEBUG_PROMPTS_ENABLED);
   assert.equal(resetConfig.DEBUG_PROMPTS_LOG_PATH, DEFAULT_DEBUG_PROMPTS_LOG_PATH);
 });
@@ -2617,6 +2624,8 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
   writeProjectConfigOverrides(activeFixture.projectBase, {
     DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_STATUS_CHANGES: "disable",
+    DEBUG_WORKFLOW_EVENTS: "disable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
@@ -2687,6 +2696,8 @@ test("provider error payload debug logging saves failing request payload beside 
   writeProjectConfigOverrides(fixture.projectBase, {
     DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_STATUS_CHANGES: "disable",
+    DEBUG_WORKFLOW_EVENTS: "disable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
@@ -2754,6 +2765,8 @@ test("provider error debug logging writes response text and replay sidecar besid
   writeProjectConfigOverrides(fixture.projectBase, {
     DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_STATUS_CHANGES: "disable",
+    DEBUG_WORKFLOW_EVENTS: "disable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
@@ -2855,6 +2868,8 @@ test("provider error debug logging snapshots the execution session for log-local
   writeProjectConfigOverrides(fixture.projectBase, {
     DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_STATUS_CHANGES: "disable",
+    DEBUG_WORKFLOW_EVENTS: "disable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
@@ -2936,6 +2951,8 @@ test("provider error debug logging appends response text after an after_provider
   writeProjectConfigOverrides(fixture.projectBase, {
     DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_STATUS_CHANGES: "disable",
+    DEBUG_WORKFLOW_EVENTS: "disable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
@@ -3021,6 +3038,8 @@ test("provider error payload debug logging stays silent when disabled or status 
   writeProjectConfigOverrides(belowFixture.projectBase, {
     DEBUG_ENABLED: "enable",
     DEBUG_PROMPTS_ENABLED: "enable",
+    DEBUG_STATUS_CHANGES: "disable",
+    DEBUG_WORKFLOW_EVENTS: "disable",
     DEBUG_PROMPTS_LOG_PATH: "logs/saved-prompts/",
     DEBUG_ENABLED_PROMPTS: ["req-implement"],
   });
@@ -3260,7 +3279,7 @@ test("provider error payload debug logging survives the host compact-and-retry a
 
 /**
  * @brief Verifies provider error payload capture follows the original base configuration when the worktree checkout lacks the local project config.
- * @details Reproduces the live pi runtime flow reported for `/tmp/PI-useReq/20261009174607538-req-analyze-prompt`: the real repository keeps `.pi-usereq.json` untracked and git-ignored, so the prompt-command worktree checkout does not contain the local project configuration and the rebound extension instance operating from `worktree-path` resolves `DEBUG_PROMPTS_ENABLED=disable` defaults from the missing config file. The test proves the `before_provider_request` capture gate MUST resolve its gating configuration from the prompt execution plan's original `base-path` — the same configuration that wrote the `-request` and `-prompt` debug files — so a mid-run 400 still writes exactly one `<timestamp>-<req-command>-error-<status>` file beside them even though the worktree checkout itself has no `.pi-usereq.json`.
+ * @details Reproduces the live pi runtime flow reported for `/tmp/PI-useReq/20261009174607538-req-analyze-prompt`: the real repository keeps `.pi-usereq.json` untracked and git-ignored, so the prompt-command worktree checkout does not contain the local project configuration and the rebound extension instance operating from `worktree-path` resolves default debug values from the missing config file. The test proves the `before_provider_request` capture gate MUST resolve its gating configuration from the prompt execution plan's original `base-path` — the same configuration that wrote the `-request` and `-prompt` debug files — so a mid-run 400 still writes exactly one `<timestamp>-<req-command>-error-<status>` file beside them even though the worktree checkout itself has no `.pi-usereq.json`.
  * @satisfies REQ-416, REQ-421, REQ-422, REQ-423, REQ-424, REQ-425, TST-146, TST-149
  */
 test("provider error payload capture follows base config when the worktree checkout lacks the local project config", async () => {
@@ -3293,15 +3312,16 @@ test("provider error payload capture follows base config when the worktree check
       encoding: "utf8",
       env: gitEnv,
     }).status, 0);
-    // Enable prompt debug logging only at the original base through the now-ignored local
-    // config file, exactly like the real `/tmp/PI-useReq` setup that produced the defect.
-    const localConfigPath = getProjectConfigPath(projectBase);
-    const localConfig = JSON.parse(fs.readFileSync(localConfigPath, "utf8")) as Record<string, unknown>;
-    localConfig.DEBUG_ENABLED = "enable";
-    localConfig.DEBUG_PROMPTS_ENABLED = "enable";
-    localConfig.DEBUG_PROMPTS_LOG_PATH = "logs/saved-prompts";
-    localConfig.DEBUG_ENABLED_PROMPTS = ["req-implement"];
-    fs.writeFileSync(localConfigPath, `${JSON.stringify(localConfig, null, 2)}\n`, "utf8");
+    // Enable prompt debug logging through the global config file so the gating flags stay
+    // readable from both the original base and the worktree checkout, mirroring the global
+    // debug configuration scope shared by every project.
+    const globalConfigPath = getGlobalConfigPath();
+    const globalConfigPayload = JSON.parse(fs.readFileSync(globalConfigPath, "utf8")) as Record<string, unknown>;
+    globalConfigPayload.DEBUG_ENABLED = "enable";
+    globalConfigPayload.DEBUG_PROMPTS_ENABLED = "enable";
+    globalConfigPayload.DEBUG_PROMPTS_LOG_PATH = "logs/saved-prompts";
+    globalConfigPayload.DEBUG_ENABLED_PROMPTS = ["req-implement"];
+    fs.writeFileSync(globalConfigPath, `${JSON.stringify(globalConfigPayload, null, 2)}\n`, "utf8");
 
     const firstPi = createFakePi();
     piUsereqExtension(firstPi);
@@ -8680,7 +8700,9 @@ test("default configuration applies the documented static-check, debug, notify, 
   const globalConfig = readGlobalConfigJson();
   assert.equal((localConfig["static-check"] as Record<string, any>).Python.enabled, "enable");
   assert.equal((localConfig["static-check"] as Record<string, any>).Ruby.enabled, "disable");
-  assert.equal(localConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
+  assert.equal(Object.hasOwn(localConfig, "DEBUG_ENABLED"), false);
+  assert.equal(globalConfig.DEBUG_ENABLED, "disable");
+  assert.equal(globalConfig.DEBUG_TOOL_COMMANDS_ENABLED, DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED);
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },

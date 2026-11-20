@@ -150,8 +150,8 @@ interface GlobalStaticCheckLanguageConfig {
 
 /**
  * @brief Defines the persisted local pi-usereq configuration schema.
- * @details Captures project-scoped directory, debug, and static-check enablement fields written to `<base-path>/.pi-usereq.json` while excluding global notification, tool, git, and checker-command settings. The interface is compile-time only and introduces no runtime side effects.
- * @satisfies REQ-236, REQ-426
+ * @details Captures project-scoped directory and static-check enablement fields written to `<base-path>/.pi-usereq.json` while excluding global notification, tool, git, debug, and checker-command settings. The interface is compile-time only and introduces no runtime side effects.
+ * @satisfies REQ-426
  */
 interface UseReqLocalConfig {
   "docs-dir": string;
@@ -161,6 +161,19 @@ interface UseReqLocalConfig {
   "context-files-references": boolean;
   "context-files-workflow": boolean;
   "static-check": Record<string, LocalStaticCheckLanguageConfig>;
+}
+
+/**
+ * @brief Defines the persisted global pi-usereq configuration schema.
+ * @details Captures cross-project static-check checker commands, enabled tool names, git automation fields, debug logging controls, and notification settings written to `~/.config/pi-usereq/config.json` while excluding project-local directory fields. The interface is compile-time only and introduces no runtime side effects.
+ * @satisfies CTN-013, CTN-019, REQ-236, REQ-426, REQ-413, REQ-414
+ */
+interface UseReqGlobalConfig {
+  "static-check": Record<string, GlobalStaticCheckLanguageConfig>;
+  "enabled-tools": string[];
+  AUTO_GIT_COMMIT: "enable" | "disable";
+  GIT_WORKTREE_ENABLED: "enable" | "disable";
+  GIT_WORKTREE_PREFIX: string;
   DEBUG_ENABLED: "enable" | "disable";
   DEBUG_PROMPTS_ENABLED: DebugPromptsEnabled;
   DEBUG_PROMPTS_LOG_PATH: string;
@@ -170,18 +183,6 @@ interface UseReqLocalConfig {
   DEBUG_LOG_ON_STATUS: "any" | "idle" | "checking" | "running" | "merging" | "done" | "warning" | "error";
   DEBUG_ENABLED_TOOLS: string[];
   DEBUG_ENABLED_PROMPTS: string[];
-}
-
-/**
- * @brief Defines the persisted global pi-usereq configuration schema.
- * @details Captures cross-project static-check checker commands, enabled tool names, git automation fields, and notification settings written to `~/.config/pi-usereq/config.json` while excluding project-local directory and debug fields. The interface is compile-time only and introduces no runtime side effects.
- */
-interface UseReqGlobalConfig {
-  "static-check": Record<string, GlobalStaticCheckLanguageConfig>;
-  "enabled-tools": string[];
-  AUTO_GIT_COMMIT: "enable" | "disable";
-  GIT_WORKTREE_ENABLED: "enable" | "disable";
-  GIT_WORKTREE_PREFIX: string;
   "notify-enabled": boolean;
   "notify-on-completed": boolean;
   "notify-on-interrupted": boolean;
@@ -590,10 +591,10 @@ export function getGlobalConfigPath(): string {
 
 /**
  * @brief Builds the default persisted local configuration.
- * @details Populates canonical docs/test/source directories, derives local static-check enable defaults from the supplied global checker definitions, and seeds documented debug defaults including tool-wrapper command registration without any cross-project fields. Runtime is O(l). No filesystem side effects occur.
+ * @details Populates canonical docs/test/source directories and derives local static-check enable defaults from the supplied global checker definitions without any cross-project fields. Runtime is O(l). No filesystem side effects occur.
  * @param[in] globalStaticCheckConfig {Record<string, GlobalStaticCheckLanguageConfig>} Global checker definitions used to derive local enable defaults.
  * @return {UseReqLocalConfig} Fresh default local configuration object.
- * @satisfies CTN-013, CTN-019, REQ-328, REQ-413, REQ-414, REQ-426
+ * @satisfies CTN-001, REQ-328, REQ-426
  */
 function getDefaultLocalConfig(
   globalStaticCheckConfig: Record<string, GlobalStaticCheckLanguageConfig>,
@@ -606,6 +607,22 @@ function getDefaultLocalConfig(
     "context-files-references": DEFAULT_CONTEXT_FILES_FLAG,
     "context-files-workflow": DEFAULT_CONTEXT_FILES_FLAG,
     "static-check": getDefaultLocalStaticCheckConfig(globalStaticCheckConfig),
+  };
+}
+
+/**
+ * @brief Builds the default persisted global configuration.
+ * @details Populates documented cross-project static-check checker commands, enabled tools, git automation fields, debug logging controls, and notification defaults without any project-local directory fields. Runtime is O(l + c). No filesystem side effects occur.
+ * @return {UseReqGlobalConfig} Fresh default global configuration object.
+ * @satisfies CTN-013, CTN-019, REQ-236, REQ-237, REQ-238, REQ-239, REQ-254, REQ-277, REQ-413, REQ-414
+ */
+function getDefaultGlobalConfig(): UseReqGlobalConfig {
+  return {
+    "static-check": getDefaultGlobalStaticCheckConfig(),
+    "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
+    AUTO_GIT_COMMIT: DEFAULT_AUTO_GIT_COMMIT,
+    GIT_WORKTREE_ENABLED: DEFAULT_GIT_WORKTREE_ENABLED,
+    GIT_WORKTREE_PREFIX: DEFAULT_GIT_WORKTREE_PREFIX,
     DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
     DEBUG_PROMPTS_ENABLED: DEFAULT_DEBUG_PROMPTS_ENABLED,
     DEBUG_PROMPTS_LOG_PATH: DEFAULT_DEBUG_PROMPTS_LOG_PATH,
@@ -615,21 +632,6 @@ function getDefaultLocalConfig(
     DEBUG_LOG_ON_STATUS: DEFAULT_DEBUG_LOG_ON_STATUS,
     DEBUG_ENABLED_TOOLS: [],
     DEBUG_ENABLED_PROMPTS: [],
-  };
-}
-
-/**
- * @brief Builds the default persisted global configuration.
- * @details Populates documented cross-project static-check checker commands, enabled tools, git automation fields, and notification defaults without any project-local directory or debug fields. Runtime is O(l + c). No filesystem side effects occur.
- * @return {UseReqGlobalConfig} Fresh default global configuration object.
- */
-function getDefaultGlobalConfig(): UseReqGlobalConfig {
-  return {
-    "static-check": getDefaultGlobalStaticCheckConfig(),
-    "enabled-tools": normalizeEnabledPiUsereqTools(undefined),
-    AUTO_GIT_COMMIT: DEFAULT_AUTO_GIT_COMMIT,
-    GIT_WORKTREE_ENABLED: DEFAULT_GIT_WORKTREE_ENABLED,
-    GIT_WORKTREE_PREFIX: DEFAULT_GIT_WORKTREE_PREFIX,
     "notify-enabled": false,
     "notify-on-completed": true,
     "notify-on-interrupted": false,
@@ -657,11 +659,11 @@ function getDefaultGlobalConfig(): UseReqGlobalConfig {
 
 /**
  * @brief Merges persisted local and global configuration scopes into the effective runtime config.
- * @details Normalizes local directories, combines local static-check enable flags with global checker arrays, resolves effective worktree disablement when automatic git commit is off, normalizes debug and notification fields including tool-wrapper command registration, sources the persisted local `DEBUG_ENABLED` flag, and disables Pushover until both credentials are populated. Runtime is O(l + c + p). No external state is mutated.
+ * @details Normalizes local directories, combines local static-check enable flags with global checker arrays, resolves effective worktree disablement when automatic git commit is off, normalizes debug and notification fields including tool-wrapper command registration, sources every persisted debug field from the global scope, and disables Pushover until both credentials are populated. Runtime is O(l + c + p). No external state is mutated.
  * @param[in] localConfig {UseReqLocalConfig} Persisted local configuration.
  * @param[in] globalConfig {UseReqGlobalConfig} Persisted global configuration.
  * @return {UseReqConfig} Effective merged configuration.
- * @satisfies REQ-236, REQ-328, REQ-413, REQ-414, REQ-426
+ * @satisfies CTN-013, CTN-019, REQ-236, REQ-328, REQ-413, REQ-414, REQ-426
  */
 function mergeConfigScopes(
   localConfig: UseReqLocalConfig,
@@ -696,15 +698,15 @@ function mergeConfigScopes(
     AUTO_GIT_COMMIT: autoGitCommit,
     GIT_WORKTREE_ENABLED: gitWorktreeEnabled,
     GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(globalConfig.GIT_WORKTREE_PREFIX),
-    DEBUG_ENABLED: normalizeDebugEnabled(localConfig.DEBUG_ENABLED),
-    DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(localConfig.DEBUG_PROMPTS_ENABLED),
-    DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(localConfig.DEBUG_PROMPTS_LOG_PATH),
-    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(localConfig.DEBUG_STATUS_CHANGES),
-    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(localConfig.DEBUG_WORKFLOW_EVENTS),
-    DEBUG_TOOL_COMMANDS_ENABLED: normalizeDebugToolCommandsEnabled(localConfig.DEBUG_TOOL_COMMANDS_ENABLED),
-    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(localConfig.DEBUG_LOG_ON_STATUS),
-    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(localConfig.DEBUG_ENABLED_TOOLS),
-    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(localConfig.DEBUG_ENABLED_PROMPTS),
+    DEBUG_ENABLED: normalizeDebugEnabled(globalConfig.DEBUG_ENABLED),
+    DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(globalConfig.DEBUG_PROMPTS_ENABLED),
+    DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(globalConfig.DEBUG_PROMPTS_LOG_PATH),
+    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(globalConfig.DEBUG_STATUS_CHANGES),
+    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(globalConfig.DEBUG_WORKFLOW_EVENTS),
+    DEBUG_TOOL_COMMANDS_ENABLED: normalizeDebugToolCommandsEnabled(globalConfig.DEBUG_TOOL_COMMANDS_ENABLED),
+    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(globalConfig.DEBUG_LOG_ON_STATUS),
+    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(globalConfig.DEBUG_ENABLED_TOOLS),
+    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(globalConfig.DEBUG_ENABLED_PROMPTS),
     "notify-enabled": globalConfig["notify-enabled"] === true,
     "notify-on-completed": globalConfig["notify-on-completed"] !== false,
     "notify-on-interrupted": globalConfig["notify-on-interrupted"] === true,
@@ -872,11 +874,11 @@ function normalizeGlobalStaticCheckConfig(
 
 /**
  * @brief Loads and sanitizes the persisted local configuration.
- * @details Returns defaults when `<base-path>/.pi-usereq.json` is absent. Otherwise parses the local JSON payload, normalizes project-scoped directory, debug including the persisted `DEBUG_ENABLED` flag, tool-wrapper command registration, and static-check enable fields, and ignores misplaced global keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when `<base-path>/.pi-usereq.json` is absent. Otherwise parses the local JSON payload, normalizes project-scoped directory and static-check enable fields, and ignores misplaced global keys including debug fields without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute project root path.
  * @param[in] defaultStaticCheckConfig {Record<string, LocalStaticCheckLanguageConfig>} Local static-check enable defaults derived from the current global checker map.
  * @return {UseReqLocalConfig} Sanitized local configuration.
- * @satisfies CTN-013, CTN-019, REQ-236, REQ-328, REQ-413, REQ-414
+ * @satisfies CTN-001, REQ-328, REQ-426
  */
 function loadLocalConfig(
   projectBase: string,
@@ -893,15 +895,6 @@ function loadLocalConfig(
       "context-files-references": DEFAULT_CONTEXT_FILES_FLAG,
       "context-files-workflow": DEFAULT_CONTEXT_FILES_FLAG,
       "static-check": normalizeLocalStaticCheckConfig(undefined, defaultStaticCheckConfig),
-      DEBUG_ENABLED: DEFAULT_DEBUG_ENABLED,
-      DEBUG_PROMPTS_ENABLED: DEFAULT_DEBUG_PROMPTS_ENABLED,
-      DEBUG_PROMPTS_LOG_PATH: DEFAULT_DEBUG_PROMPTS_LOG_PATH,
-      DEBUG_STATUS_CHANGES: DEFAULT_DEBUG_STATUS_CHANGES,
-      DEBUG_WORKFLOW_EVENTS: DEFAULT_DEBUG_WORKFLOW_EVENTS,
-      DEBUG_TOOL_COMMANDS_ENABLED: DEFAULT_DEBUG_TOOL_COMMANDS_ENABLED,
-      DEBUG_LOG_ON_STATUS: DEFAULT_DEBUG_LOG_ON_STATUS,
-      DEBUG_ENABLED_TOOLS: [],
-      DEBUG_ENABLED_PROMPTS: [],
     };
   }
   const docsDirCandidate = typeof data["docs-dir"] === "string"
@@ -924,22 +917,14 @@ function loadLocalConfig(
     "context-files-references": normalizeContextFilesFlag(data["context-files-references"]),
     "context-files-workflow": normalizeContextFilesFlag(data["context-files-workflow"]),
     "static-check": normalizeLocalStaticCheckConfig(data["static-check"], defaultStaticCheckConfig),
-    DEBUG_ENABLED: normalizeDebugEnabled(data.DEBUG_ENABLED),
-    DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(data.DEBUG_PROMPTS_ENABLED),
-    DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(data.DEBUG_PROMPTS_LOG_PATH),
-    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(data.DEBUG_STATUS_CHANGES),
-    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(data.DEBUG_WORKFLOW_EVENTS),
-    DEBUG_TOOL_COMMANDS_ENABLED: normalizeDebugToolCommandsEnabled(data.DEBUG_TOOL_COMMANDS_ENABLED),
-    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(data.DEBUG_LOG_ON_STATUS),
-    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(data.DEBUG_ENABLED_TOOLS),
-    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(data.DEBUG_ENABLED_PROMPTS),
   };
 }
 
 /**
  * @brief Loads and sanitizes the persisted global configuration.
- * @details Returns defaults when `~/.config/pi-usereq/config.json` is absent. Otherwise parses the global JSON payload, normalizes cross-project checker, tool, git, and notification fields, and ignores misplaced local keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
+ * @details Returns defaults when `~/.config/pi-usereq/config.json` is absent. Otherwise parses the global JSON payload, normalizes cross-project checker, tool, git, debug, and notification fields, and ignores misplaced local keys without migration. Runtime is O(n) in file size. Side effects are limited to filesystem reads.
  * @return {UseReqGlobalConfig} Sanitized global configuration.
+ * @satisfies CTN-013, CTN-019, REQ-236, REQ-254, REQ-277, REQ-413, REQ-414
  */
 function loadGlobalConfig(): UseReqGlobalConfig {
   const configPath = getGlobalConfigPath();
@@ -953,6 +938,15 @@ function loadGlobalConfig(): UseReqGlobalConfig {
     AUTO_GIT_COMMIT: normalizeAutoGitCommit(data.AUTO_GIT_COMMIT),
     GIT_WORKTREE_ENABLED: normalizeGitWorktreeEnabled(data.GIT_WORKTREE_ENABLED),
     GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(data.GIT_WORKTREE_PREFIX),
+    DEBUG_ENABLED: normalizeDebugEnabled(data.DEBUG_ENABLED),
+    DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(data.DEBUG_PROMPTS_ENABLED),
+    DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(data.DEBUG_PROMPTS_LOG_PATH),
+    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(data.DEBUG_STATUS_CHANGES),
+    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(data.DEBUG_WORKFLOW_EVENTS),
+    DEBUG_TOOL_COMMANDS_ENABLED: normalizeDebugToolCommandsEnabled(data.DEBUG_TOOL_COMMANDS_ENABLED),
+    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(data.DEBUG_LOG_ON_STATUS),
+    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(data.DEBUG_ENABLED_TOOLS),
+    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(data.DEBUG_ENABLED_PROMPTS),
     "notify-enabled": data["notify-enabled"] === true,
     "notify-on-completed": data["notify-on-completed"] !== false,
     "notify-on-interrupted": data["notify-on-interrupted"] === true,
@@ -1003,10 +997,10 @@ export function loadConfig(projectBase: string): UseReqConfig {
 
 /**
  * @brief Builds the persisted local configuration payload.
- * @details Copies only project-scoped keys into a fresh object so runtime-derived metadata and global checker, tool, git, and notification fields never reach `.pi-usereq.json`, while preserving the persisted `DEBUG_ENABLED` flag and the debug tool-wrapper command flag beside other persisted local debug settings. Runtime is O(n) in config size. No external state is mutated.
+ * @details Copies only project-scoped keys into a fresh object so runtime-derived metadata and global checker, tool, git, debug, and notification fields never reach `.pi-usereq.json`. Runtime is O(n) in config size. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective configuration object.
  * @return {UseReqLocalConfig} Persistable local configuration payload.
- * @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-236, REQ-249, REQ-316, REQ-277, REQ-328, REQ-413, REQ-414, REQ-426
+ * @satisfies CTN-012, CTN-013, CTN-019, REQ-104, REQ-146, REQ-236, REQ-249, REQ-316, REQ-328, REQ-426
  */
 function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig {
   const normalizedSrcDir = config["src-dir"]
@@ -1030,24 +1024,15 @@ function buildPersistedLocalConfig(config: UseReqConfig): UseReqLocalConfig {
         ),
       ]),
     ),
-    DEBUG_ENABLED: normalizeDebugEnabled(config.DEBUG_ENABLED),
-    DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED),
-    DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(config.DEBUG_PROMPTS_LOG_PATH),
-    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES),
-    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS),
-    DEBUG_TOOL_COMMANDS_ENABLED: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED),
-    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(config.DEBUG_LOG_ON_STATUS),
-    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS),
-    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS),
   };
 }
 
 /**
  * @brief Builds the persisted global configuration payload.
- * @details Copies only cross-project keys into a fresh object so local directory and debug fields never reach `~/.config/pi-usereq/config.json`, while forcing persisted worktree disablement when automatic git commit is disabled and forcing persisted Pushover disablement until both credentials are populated. Runtime is O(n) in config size. No external state is mutated.
+ * @details Copies only cross-project keys into a fresh object so local directory fields never reach `~/.config/pi-usereq/config.json`, persists every debug logging control beside the git automation fields, forces persisted worktree disablement when automatic git commit is disabled, and forces persisted Pushover disablement until both credentials are populated. Runtime is O(n) in config size. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective configuration object.
  * @return {UseReqGlobalConfig} Persistable global configuration payload.
- * @satisfies REQ-137, REQ-163, REQ-174, REQ-178, REQ-184, REQ-196, REQ-204, REQ-205, REQ-212, REQ-234, REQ-249, REQ-315
+ * @satisfies CTN-013, CTN-019, REQ-137, REQ-163, REQ-174, REQ-178, REQ-184, REQ-196, REQ-204, REQ-205, REQ-212, REQ-234, REQ-236, REQ-238, REQ-239, REQ-249, REQ-254, REQ-277, REQ-315, REQ-413, REQ-414, REQ-426
  */
 function buildPersistedGlobalConfig(config: UseReqConfig): UseReqGlobalConfig {
   const autoGitCommit = normalizeAutoGitCommit(config.AUTO_GIT_COMMIT);
@@ -1065,6 +1050,15 @@ function buildPersistedGlobalConfig(config: UseReqConfig): UseReqGlobalConfig {
       config.GIT_WORKTREE_ENABLED,
     ),
     GIT_WORKTREE_PREFIX: normalizeGitWorktreePrefix(config.GIT_WORKTREE_PREFIX),
+    DEBUG_ENABLED: normalizeDebugEnabled(config.DEBUG_ENABLED),
+    DEBUG_PROMPTS_ENABLED: normalizeDebugPromptsEnabled(config.DEBUG_PROMPTS_ENABLED),
+    DEBUG_PROMPTS_LOG_PATH: normalizeDebugPromptsLogPath(config.DEBUG_PROMPTS_LOG_PATH),
+    DEBUG_STATUS_CHANGES: normalizeDebugStatusChanges(config.DEBUG_STATUS_CHANGES),
+    DEBUG_WORKFLOW_EVENTS: normalizeDebugWorkflowEvents(config.DEBUG_WORKFLOW_EVENTS),
+    DEBUG_TOOL_COMMANDS_ENABLED: normalizeDebugToolCommandsEnabled(config.DEBUG_TOOL_COMMANDS_ENABLED),
+    DEBUG_LOG_ON_STATUS: normalizeDebugLogOnStatus(config.DEBUG_LOG_ON_STATUS),
+    DEBUG_ENABLED_TOOLS: normalizeDebugEnabledTools(config.DEBUG_ENABLED_TOOLS),
+    DEBUG_ENABLED_PROMPTS: normalizeDebugEnabledPrompts(config.DEBUG_ENABLED_PROMPTS),
     "notify-enabled": config["notify-enabled"],
     "notify-on-completed": config["notify-on-completed"],
     "notify-on-interrupted": config["notify-on-interrupted"],
