@@ -34,7 +34,7 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
  * @details Preserves a deterministic human-facing label for the dedicated non-agentic worktree-disposal command while keeping the implementation independent from bundled prompt Markdown files. Access complexity is O(1).
  * @satisfies REQ-815
  */
-export const REQ_WTD_COMMAND_DESCRIPTION = "Restore base-path, switch to the main branch, and remove generated worktrees";
+export const REQ_WTD_COMMAND_DESCRIPTION = "Restore base-path, switch to the main branch, and remove the current or generated worktree";
 
 /**
  * @brief Describes the prepared execution facts for one `req-wtd` run.
@@ -181,26 +181,39 @@ function listReqWtdMatchingWorktreeRoots(
 }
 
 /**
- * @brief Lists every matching generated branch targeted by `req-wtd`.
- * @details Executes `git branch --list --format=%(refname:short)`, filters the local branch inventory through the generated-name matcher, and returns a sorted list so later forced branch deletion remains deterministic. Runtime is dominated by one git subprocess plus O(n) parsing in listed branch count. Side effects include subprocess creation.
- * @param[in] gitRoot {string} Absolute runtime git root.
- * @param[in] worktreeNamePattern {RegExp} Generated-worktree name matcher.
- * @return {string[]} Sorted local branch names targeted for deletion.
- * @throws {ReqError} Throws when local branch enumeration fails.
+ * @brief Resolves the one target worktree directory removed by `req-wtd`.
+ * @details Prefers the persisted prompt-orchestration worktree name when the plan carries a worktree-backed execution plan, and otherwise resolves the sibling generated worktree that anchors the live pi CLI session by matching the context cwd — degrading stale getter reads to the host process cwd — against the sibling directories whose basenames satisfy the generated-name pattern, including nested cwd positions inside the worktree. Every other sibling worktree stays untouched. Runtime is O(s) in sibling-directory count plus bounded filesystem probes. No external state is mutated.
+ * @param[in] plan {ReqWtdCommandPlan} Prepared recovery and cleanup plan.
+ * @param[in] activeContext {ReqWtdCommandContext | undefined} Session-bound context whose live cwd may anchor the current worktree.
+ * @return {string | undefined} Resolved target worktree and branch directory name, or `undefined` when no persisted worktree exists and the pi CLI session is not anchored inside a generated sibling worktree.
+ * @throws {ReqError} Throws when sibling-directory enumeration fails.
+ * @satisfies REQ-309, REQ-310, REQ-311, REQ-822
  */
-function listReqWtdMatchingBranchNames(
-  gitRoot: string,
-  worktreeNamePattern: RegExp,
-): string[] {
-  const branchResult = runCapture(["git", "branch", "--list", "--format=%(refname:short)"], gitRoot);
-  if (branchResult.error || branchResult.status !== 0) {
-    throw new ReqError("ERROR: Unable to enumerate git branches for req-wtd.", 1);
+function resolveReqWtdTargetWorktreeDir(
+  plan: ReqWtdCommandPlan,
+  activeContext: ReqWtdCommandContext | undefined,
+): string | undefined {
+  if (plan.promptRequest?.worktreeDir !== undefined) {
+    return plan.promptRequest.worktreeDir;
   }
-  return branchResult.stdout
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter((line) => line !== "" && worktreeNamePattern.test(line))
-    .sort((left, right) => left.localeCompare(right));
+  let processCwd: string | undefined;
+  try {
+    processCwd = path.resolve(process.cwd());
+  } catch {
+    processCwd = undefined;
+  }
+  const executionPath = readReqWtdContextCwd(activeContext) ?? processCwd;
+  if (executionPath === undefined) {
+    return undefined;
+  }
+  const normalizedExecutionPath = path.resolve(executionPath);
+  for (const siblingRootPath of listReqWtdSiblingWorktreeRoots(plan.parentPath, plan.worktreeNamePattern)) {
+    const normalizedRoot = path.resolve(siblingRootPath);
+    if (normalizedExecutionPath === normalizedRoot || normalizedExecutionPath.startsWith(`${normalizedRoot}${path.sep}`)) {
+      return path.basename(normalizedRoot);
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -260,21 +273,24 @@ function resolveReqWtdMainBranchName(gitRoot: string): string | undefined {
 }
 
 /**
- * @brief Ensures the main repository HEAD stays on the main branch before cleanup.
- * @details Reads the current local branch of the main repository; when HEAD is checked out on a generated prompt-command branch that matches the cleanup matcher, resolves the repository main branch and switches to it so later forced branch deletion cannot fail with git's checked-out-worktree guard. Normal branches, detached HEAD, unresolvable main branches, and probing failures skip the switch defensively. Runtime is dominated by up to two git subprocesses. Side effects include main-worktree branch switching.
+ * @brief Ensures the main repository HEAD stays off the target branch before cleanup.
+ * @details Reads the current local branch of the main repository; when HEAD is checked out on the resolved `req-wtd` target branch, resolves the repository main branch and switches to it so the forced target-branch deletion cannot fail with git's checked-out-worktree guard. Every other branch — including sibling generated branches — stays checked out untouched, and undefined targets, normal branches, detached HEAD, unresolvable main branches, and probing failures skip the switch defensively. Runtime is dominated by up to two git subprocesses. Side effects include main-worktree branch switching.
  * @param[in] gitRoot {string} Absolute main repository worktree root.
- * @param[in] worktreeNamePattern {RegExp} Generated-worktree name matcher.
+ * @param[in] targetBranchName {string | undefined} Resolved target worktree and branch name; `undefined` skips the switch.
  * @return {void} No return value.
- * @throws {ReqError} Throws when the main worktree cannot switch off one generated branch.
+ * @throws {ReqError} Throws when the main worktree cannot switch off the target branch.
  * @satisfies REQ-309, REQ-310, REQ-819
  */
-function ensureReqWtdMainBranch(gitRoot: string, worktreeNamePattern: RegExp): void {
+function ensureReqWtdMainBranch(gitRoot: string, targetBranchName: string | undefined): void {
+  if (targetBranchName === undefined) {
+    return;
+  }
   const currentBranchResult = runCapture(["git", "branch", "--show-current"], gitRoot);
   if (currentBranchResult.error || currentBranchResult.status !== 0) {
     return;
   }
   const currentBranch = currentBranchResult.stdout.trim();
-  if (currentBranch === "" || !worktreeNamePattern.test(currentBranch)) {
+  if (currentBranch === "" || currentBranch !== targetBranchName) {
     return;
   }
   const mainBranchName = resolveReqWtdMainBranchName(gitRoot);
@@ -720,11 +736,11 @@ export function prepareReqWtdCommandExecution(
 
 /**
  * @brief Executes the specialized `req-wtd` recovery and cleanup workflow.
- * @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, enumerates every matching sibling worktree, returns the pi CLI execution surfaces to the main base path (materializing the reserved base session when pi never flushed it) before any matching worktree directory is removed, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, retains the worktree plus branch that still anchor the live pi session whenever the session re-anchor fails so the session cwd is never orphaned at a deleted directory, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
+ * @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, resolves the one target worktree — the persisted prompt-orchestration worktree or the sibling worktree anchoring the live pi CLI session — ensures the main repository HEAD is off that target branch so the forced target-branch deletion cannot hit git's checked-out-worktree guard, returns the pi CLI execution surfaces to the main base path (materializing the reserved base session when pi never flushed it) before the target worktree directory is removed, force-removes only the resolved target worktree directory and its local branch with or without active changes while every other sibling worktree and branch stays untouched, retains the target worktree plus branch whenever the session re-anchor fails so the session cwd is never orphaned at a deleted directory, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
  * @param[in] plan {ReqWtdCommandPlan} Prepared recovery and cleanup plan.
  * @param[in] ctx {ReqWtdCommandContext | undefined} Optional session-bound command context.
  * @return {Promise<ReqWtdCommandExecutionResult>} Recovery and cleanup outcome facts.
- * @satisfies REQ-816, REQ-818, REQ-308, REQ-309, REQ-310, REQ-821
+ * @satisfies REQ-816, REQ-818, REQ-308, REQ-309, REQ-310, REQ-821, REQ-822
  */
 export async function executeReqWtdCommandExecution(
   plan: ReqWtdCommandPlan,
@@ -760,19 +776,28 @@ export async function executeReqWtdCommandExecution(
     }
   }
 
+  let targetWorktreeDir: string | undefined;
   try {
-    ensureReqWtdMainBranch(plan.gitPath, plan.worktreeNamePattern);
+    targetWorktreeDir = resolveReqWtdTargetWorktreeDir(plan, activeContext);
+  } catch (error) {
+    errorMessages.push(error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    ensureReqWtdMainBranch(plan.gitPath, targetWorktreeDir);
   } catch (error) {
     errorMessages.push(error instanceof Error ? error.message : String(error));
   }
 
   let matchingWorktreeRoots: string[] = [];
   try {
-    matchingWorktreeRoots = listReqWtdMatchingWorktreeRoots(
-      plan.parentPath,
-      plan.gitPath,
-      plan.worktreeNamePattern,
-    );
+    matchingWorktreeRoots = targetWorktreeDir === undefined
+      ? []
+      : listReqWtdMatchingWorktreeRoots(
+          plan.parentPath,
+          plan.gitPath,
+          plan.worktreeNamePattern,
+        ).filter((worktreeRootPath) => path.basename(worktreeRootPath) === targetWorktreeDir);
   } catch (error) {
     errorMessages.push(error instanceof Error ? error.message : String(error));
   }
@@ -809,28 +834,29 @@ export async function executeReqWtdCommandExecution(
     }
   }
 
-  try {
-    const matchingBranchNames = listReqWtdMatchingBranchNames(plan.gitPath, plan.worktreeNamePattern);
-    for (const branchName of matchingBranchNames) {
-      if (retainedWorktreeDirs.has(branchName)) {
-        errorMessages.push(
-          `ERROR: req-wtd retained branch ${branchName} because its worktree still anchors the pi session.`,
-        );
-        continue;
+  if (targetWorktreeDir !== undefined) {
+    if (retainedWorktreeDirs.has(targetWorktreeDir)) {
+      errorMessages.push(
+        `ERROR: req-wtd retained branch ${targetWorktreeDir} because its worktree still anchors the pi session.`,
+      );
+    } else {
+      const branchExistsResult = runCapture(
+        ["git", "show-ref", "--verify", "--quiet", `refs/heads/${targetWorktreeDir}`],
+        plan.gitPath,
+      );
+      if (!branchExistsResult.error && branchExistsResult.status === 0) {
+        const deleteResult = runCapture(["git", "branch", "-D", targetWorktreeDir], plan.gitPath);
+        if (deleteResult.error || deleteResult.status !== 0) {
+          const diagnostic = deleteResult.stderr.trim()
+            || deleteResult.stdout.trim()
+            || deleteResult.error?.message
+            || `Unable to remove branch ${targetWorktreeDir}.`;
+          errorMessages.push(`ERROR: git branch -D failed for ${targetWorktreeDir}: ${diagnostic}`);
+        } else {
+          removedBranchNames.push(targetWorktreeDir);
+        }
       }
-      const deleteResult = runCapture(["git", "branch", "-D", branchName], plan.gitPath);
-      if (deleteResult.error || deleteResult.status !== 0) {
-        const diagnostic = deleteResult.stderr.trim()
-          || deleteResult.stdout.trim()
-          || deleteResult.error?.message
-          || `Unable to remove branch ${branchName}.`;
-        errorMessages.push(`ERROR: git branch -D failed for ${branchName}: ${diagnostic}`);
-        continue;
-      }
-      removedBranchNames.push(branchName);
     }
-  } catch (error) {
-    errorMessages.push(error instanceof Error ? error.message : String(error));
   }
 
   restoreReqWtdExecutionCwd(plan.basePath, activeContext);

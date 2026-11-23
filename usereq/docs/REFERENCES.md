@@ -6622,7 +6622,7 @@ import { clearPersistedPromptCommandRuntimeState } from "./prompt-command-state.
 
 ---
 
-# req-wtd-command.ts | TypeScript | 848L | 26 symbols | 9 imports | 33 comments
+# req-wtd-command.ts | TypeScript | 874L | 26 symbols | 9 imports | 33 comments
 > Path: `src/core/req-wtd-command.ts`
 - @brief Implements the specialized `req-wtd` slash-command workflow.
 - @details Performs non-agentic worktree disposal by preserving the current execution-session transcript when available, restoring the original session-backed `base-path`, force-removing every generated sibling worktree and matching branch with or without active changes, and returning deterministic cleanup facts to the extension command handler. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, worktree deletion, branch deletion, and filesystem removal.
@@ -6699,42 +6699,43 @@ import { resolveRuntimeGitPath } from "./runtime-project-paths.js";
 - @return {string[]} Sorted absolute worktree-root paths targeted for deletion.
 - @throws {ReqError} Throws when git worktree or sibling-directory enumeration fails.
 
-### fn `function listReqWtdMatchingBranchNames(` (L191-204)
-- @brief Lists every matching generated branch targeted by `req-wtd`.
-- @details Executes `git branch --list --format=%(refname:short)`, filters the local branch inventory through the generated-name matcher, and returns a sorted list so later forced branch deletion remains deterministic. Runtime is dominated by one git subprocess plus O(n) parsing in listed branch count. Side effects include subprocess creation.
-- @param[in] gitRoot {string} Absolute runtime git root.
-- @param[in] worktreeNamePattern {RegExp} Generated-worktree name matcher.
-- @return {string[]} Sorted local branch names targeted for deletion.
-- @throws {ReqError} Throws when local branch enumeration fails.
+### fn `function resolveReqWtdTargetWorktreeDir(` (L192-217)
+- @brief Resolves the one target worktree directory removed by `req-wtd`.
+- @details Prefers the persisted prompt-orchestration worktree name when the plan carries a worktree-backed execution plan, and otherwise resolves the sibling generated worktree that anchors the live pi CLI session by matching the context cwd — degrading stale getter reads to the host process cwd — against the sibling directories whose basenames satisfy the generated-name pattern, including nested cwd positions inside the worktree. Every other sibling worktree stays untouched. Runtime is O(s) in sibling-directory count plus bounded filesystem probes. No external state is mutated.
+- @param[in] plan {ReqWtdCommandPlan} Prepared recovery and cleanup plan.
+- @param[in] activeContext {ReqWtdCommandContext | undefined} Session-bound context whose live cwd may anchor the current worktree.
+- @return {string | undefined} Resolved target worktree and branch directory name, or `undefined` when no persisted worktree exists and the pi CLI session is not anchored inside a generated sibling worktree.
+- @throws {ReqError} Throws when sibling-directory enumeration fails.
+- @satisfies REQ-309, REQ-310, REQ-311, REQ-822
 
-### fn `function resolveReqWtdMainWorktreeRoot(gitRoot: string): string` (L212-225)
+### fn `function resolveReqWtdMainWorktreeRoot(gitRoot: string): string` (L225-238)
 - @brief Resolves the main repository worktree root for one git path.
 - @details Runs `git rev-parse --path-format=absolute --git-common-dir` from the supplied path, treats a common-directory result whose basename is `.git` as proof that its parent is the main repository worktree root, and falls back to the supplied root when git probing fails or the repository layout is non-standard. This keeps all `req-wtd` cleanup probes anchored to the main repository even when the live pi session cwd is inside a linked worktree. Runtime is dominated by one git subprocess plus O(1) path math. Side effects include subprocess creation.
 - @param[in] gitRoot {string} Absolute git worktree root used as probing cwd.
 - @return {string} Absolute main repository worktree root.
 
-### fn `function resolveReqWtdMainBranchName(gitRoot: string): string | undefined` (L233-260)
+### fn `function resolveReqWtdMainBranchName(gitRoot: string): string | undefined` (L246-273)
 - @brief Resolves the repository main branch name used by `req-wtd` cleanup.
 - @details Prefers the local branch referenced by `refs/remotes/origin/HEAD` with the leading remote `origin/` prefix stripped, then conventional local `main`, then local `master`, and returns `undefined` when no candidate exists locally so callers skip branch switching without losing cleanup facts. Runtime is dominated by up to three git subprocesses. Side effects include subprocess creation.
 - @param[in] gitRoot {string} Absolute main repository worktree root.
 - @return {string | undefined} Local main branch name or `undefined` when unresolvable.
 
-### fn `function ensureReqWtdMainBranch(gitRoot: string, worktreeNamePattern: RegExp): void` (L271-292)
-- @brief Ensures the main repository HEAD stays on the main branch before cleanup.
-- @details Reads the current local branch of the main repository; when HEAD is checked out on a generated prompt-command branch that matches the cleanup matcher, resolves the repository main branch and switches to it so later forced branch deletion cannot fail with git's checked-out-worktree guard. Normal branches, detached HEAD, unresolvable main branches, and probing failures skip the switch defensively. Runtime is dominated by up to two git subprocesses. Side effects include main-worktree branch switching.
+### fn `function ensureReqWtdMainBranch(gitRoot: string, targetBranchName: string | undefined): void` (L284-308)
+- @brief Ensures the main repository HEAD stays off the target branch before cleanup.
+- @details Reads the current local branch of the main repository; when HEAD is checked out on the resolved `req-wtd` target branch, resolves the repository main branch and switches to it so the forced target-branch deletion cannot fail with git's checked-out-worktree guard. Every other branch — including sibling generated branches — stays checked out untouched, and undefined targets, normal branches, detached HEAD, unresolvable main branches, and probing failures skip the switch defensively. Runtime is dominated by up to two git subprocesses. Side effects include main-worktree branch switching.
 - @param[in] gitRoot {string} Absolute main repository worktree root.
-- @param[in] worktreeNamePattern {RegExp} Generated-worktree name matcher.
+- @param[in] targetBranchName {string | undefined} Resolved target worktree and branch name; `undefined` skips the switch.
 - @return {void} No return value.
-- @throws {ReqError} Throws when the main worktree cannot switch off one generated branch.
+- @throws {ReqError} Throws when the main worktree cannot switch off the target branch.
 - @satisfies REQ-309, REQ-310, REQ-819
 
-### fn `function readReqWtdSessionHeader(sessionFile: string): { cwd?: string; parentSession?: string } | undefined` (L300-326)
+### fn `function readReqWtdSessionHeader(sessionFile: string): { cwd?: string; parentSession?: string } | undefined` (L316-342)
 - @brief Reads the persisted header record from one session file.
 - @details Parses the first non-empty JSONL line and returns its `cwd` plus `parentSession` fields when the file is readable and the header is a JSON object. Runtime is O(n) in header size. No external state is mutated.
 - @param[in] sessionFile {string} Absolute session-file path.
 - @return {{ cwd?: string; parentSession?: string } | undefined} Parsed header fields or `undefined` when unreadable.
 
-### fn `function resolveReqWtdParentSessionFile(` (L343-375)
+### fn `function resolveReqWtdParentSessionFile(` (L359-391)
 - @brief Resolves the original base-path session file from the active session header.
 - @details Reads the current session file exposed by the supplied command context and accepts one
 persisted `parentSession` link as the reserved original base-path session under two conditions:
@@ -6749,7 +6750,7 @@ mutated.
 - @param[in] basePath {string} Absolute main repository base path that must contain the parent session cwd.
 - @return {string | undefined} Original base-path session file or `undefined` when unavailable.
 
-### fn `function ensureReqWtdBaseSessionFile(sessionFile: string, basePath: string): boolean` (L392-413)
+### fn `function ensureReqWtdBaseSessionFile(sessionFile: string, basePath: string): boolean` (L408-429)
 - @brief Guarantees one switchable persisted base-path session file for `req-wtd` re-anchoring.
 - @details Leaves existing session files untouched and, when the resolved base session file was
 never flushed to disk (pi persists session files lazily on the first entry append), materializes
@@ -6764,7 +6765,7 @@ Side effects include one conditional session-file creation.
 - @param[in] basePath {string} Absolute main repository base path recorded in the materialized header.
 - @return {boolean} `true` when a persisted session file exists or was materialized; `false` when the session directory is missing or the write fails.
 
-### fn `function readReqWtdContextSessionDir(activeContext: ReqWtdCommandContext | undefined): string | undefined` (L424-433)
+### fn `function readReqWtdContextSessionDir(activeContext: ReqWtdCommandContext | undefined): string | undefined` (L440-449)
 - @brief Reads one live session-bound context session directory while tolerating stale contexts.
 - @details Real pi command contexts resolve `sessionManager` through getter-only accessors whose
 reads throw the documented stale-extension-context error after session replacement, so the
@@ -6773,7 +6774,7 @@ state is mutated.
 - @param[in] activeContext {ReqWtdCommandContext | undefined} Candidate session-bound context.
 - @return {string | undefined} Live session directory when readable; `undefined` when absent or stale.
 
-### fn `function allocateReqWtdBaseSessionFile(` (L448-462)
+### fn `function allocateReqWtdBaseSessionFile(` (L464-478)
 - @brief Allocates one fresh persisted base-path session file for `req-wtd` re-anchoring.
 - @details Mirrors pi `/new` semantics for recovery situations without any resolvable original or
 recent base session: reserves one new session file path inside the live session directory
@@ -6786,13 +6787,13 @@ pi session-manager reservation.
 - @param[in] sessionDir {string | undefined} Live session directory reused for the reserved file.
 - @return {string | undefined} Reserved session file path or `undefined` when allocation is impossible.
 
-### fn `function resolveReqWtdMainSessionFile(basePath: string): string | undefined` (L470-480)
+### fn `function resolveReqWtdMainSessionFile(basePath: string): string | undefined` (L486-496)
 - @brief Resolves the most recent persisted session file rooted at the main base path.
 - @details Uses the pi SDK default session discovery for the supplied cwd and returns the persisted session file only when it already exists on disk, so the pi CLI can resume the recent base-path session instead of being created a fresh one. Runtime is O(s) in session-directory listing cost. No external state is mutated.
 - @param[in] basePath {string} Absolute main repository base path.
 - @return {string | undefined} Most recent persisted base-path session file or `undefined` when none exists.
 
-### fn `function reqWtdExecutionPathNeedsRedirect(` (L490-511)
+### fn `function reqWtdExecutionPathNeedsRedirect(` (L506-527)
 - @brief Tests whether one execution path must be re-anchored to the main base path before cleanup.
 - @details Returns `true` when the path does not exist anymore, or when it is anchored inside any generated worktree root targeted by `req-wtd` and the base path is not an ancestor of it. Existing paths already inside the main base path never need a redirect. Runtime is O(r) in matched-worktree count plus bounded filesystem probes. No external state is mutated.
 - @param[in] executionPath {string | undefined} Live process or context execution path.
@@ -6800,7 +6801,7 @@ pi session-manager reservation.
 - @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
 - @return {boolean} `true` when the execution path must be switched to the main base path first.
 
-### fn `function readReqWtdContextCwd(activeContext: ReqWtdCommandContext | undefined): string | undefined` (L522-530)
+### fn `function readReqWtdContextCwd(activeContext: ReqWtdCommandContext | undefined): string | undefined` (L538-546)
 - @brief Reads one live session-bound context cwd while tolerating stale contexts.
 - @details Real pi command contexts expose `cwd` as a getter-only accessor whose read throws the
 documented stale-extension-context error after session replacement, so every `req-wtd` probe
@@ -6809,7 +6810,7 @@ No external state is mutated.
 - @param[in] activeContext {ReqWtdCommandContext | undefined} Candidate session-bound context.
 - @return {string | undefined} Live context cwd when readable; `undefined` when absent or stale.
 
-### fn `async function redirectReqWtdExecutionToMainBranch(` (L553-616)
+### fn `async function redirectReqWtdExecutionToMainBranch(` (L569-632)
 - @brief Returns the pi CLI to the main base path before generated worktrees are removed.
 - @details When the host process cwd or the supplied context cwd is still anchored inside a
 generated worktree targeted for deletion or points at a deleted path, best-effort switches the
@@ -6830,7 +6831,7 @@ base-session file materialization.
 - @return {Promise<{ context: ReqWtdCommandContext | undefined; reanchorErrorMessage?: string }>} Re-anchored context plus one optional re-anchor failure diagnostic.
 - @satisfies REQ-257, REQ-818, REQ-308, REQ-821
 
-### fn `function resolveReqWtdAnchoredWorktreeRoots(` (L630-647)
+### fn `function resolveReqWtdAnchoredWorktreeRoots(` (L646-663)
 - @brief Lists matching worktree roots that still anchor the live session cwd.
 - @details Used only after a failed session re-anchor so `req-wtd` retains the worktree directory
 the live pi session is still checked out in, preventing the session cwd from being orphaned at a
@@ -6842,14 +6843,14 @@ mutated.
 - @param[in] matchingWorktreeRoots {string[]} Absolute generated worktree roots targeted for deletion.
 - @return {string[]} Absolute matching worktree roots that still contain the live session cwd.
 
-### fn `function restoreReqWtdExecutionCwd(basePath: string, activeContext: ReqWtdCommandContext | undefined): void` (L656-682)
+### fn `function restoreReqWtdExecutionCwd(basePath: string, activeContext: ReqWtdCommandContext | undefined): void` (L672-698)
 - @brief Restores live process and context cwd surfaces after worktree removal.
 - @details Best-effort re-points `process.cwd()` and the supplied context `cwd` mirror to the main repository base path when the previously live cwd was removed by `req-wtd` cleanup, so subsequent status rendering and notifications never probe deleted worktree paths. Runtime is O(1) plus bounded filesystem probes. Side effects include process cwd mutation and optional context mirror mutation.
 - @param[in] basePath {string} Absolute main repository base path.
 - @param[in,out] activeContext {ReqWtdCommandContext | undefined} Mutated session context mirror.
 - @return {void} No return value.
 
-### fn `export function prepareReqWtdCommandExecution(` (L694-719)
+### fn `export function prepareReqWtdCommandExecution(` (L710-735)
 - @brief Prepares the specialized `req-wtd` execution plan.
 - @details Resolves the active project base into a runtime git root, normalizes that root to the main repository worktree so cleanup and branch checks never run from inside a linked worktree, derives the sibling-worktree parent directory and generated-name matcher from the same prefix plus repository-basename contract used by prompt-command worktree generation, and keeps only worktree-backed persisted prompt execution plans for transcript-preserving base-path restoration. Runtime is O(p) in path length plus one git subprocess. No external state is mutated.
 - @param[in] projectBase {string} Absolute project base path.
@@ -6859,13 +6860,13 @@ mutated.
 - @throws {ReqError} Throws when the repository root cannot be resolved.
 - @satisfies REQ-817, REQ-309, REQ-310, REQ-311
 
-### fn `export async function executeReqWtdCommandExecution(` (L729-848)
+### fn `export async function executeReqWtdCommandExecution(` (L745-874)
 - @brief Executes the specialized `req-wtd` recovery and cleanup workflow.
-- @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, ensures the main repository HEAD is on the main branch so generated branch deletion cannot hit git's checked-out-worktree guard, enumerates every matching sibling worktree, returns the pi CLI execution surfaces to the main base path (materializing the reserved base session when pi never flushed it) before any matching worktree directory is removed, force-removes every matching sibling worktree directory, force-removes every remaining matching local branch, retains the worktree plus branch that still anchor the live pi session whenever the session re-anchor fails so the session cwd is never orphaned at a deleted directory, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
+- @details Preserves the execution-session transcript into the original session file when a worktree-backed prompt execution plan is still available, restores the original session-backed `base-path` through the shared prompt-command restoration helper, resolves the one target worktree — the persisted prompt-orchestration worktree or the sibling worktree anchoring the live pi CLI session — ensures the main repository HEAD is off that target branch so the forced target-branch deletion cannot hit git's checked-out-worktree guard, returns the pi CLI execution surfaces to the main base path (materializing the reserved base session when pi never flushed it) before the target worktree directory is removed, force-removes only the resolved target worktree directory and its local branch with or without active changes while every other sibling worktree and branch stays untouched, retains the target worktree plus branch whenever the session re-anchor fails so the session cwd is never orphaned at a deleted directory, restores deleted live cwd surfaces, and aggregates any failure diagnostics without rolling back successful cleanup steps. Runtime is dominated by session switching plus git subprocess execution. Side effects include session-file reads and writes, active-session replacement, host-process cwd mutation, branch switching, worktree deletion, branch deletion, and filesystem reads.
 - @param[in] plan {ReqWtdCommandPlan} Prepared recovery and cleanup plan.
 - @param[in] ctx {ReqWtdCommandContext | undefined} Optional session-bound command context.
 - @return {Promise<ReqWtdCommandExecutionResult>} Recovery and cleanup outcome facts.
-- @satisfies REQ-816, REQ-818, REQ-308, REQ-309, REQ-310, REQ-821
+- @satisfies REQ-816, REQ-818, REQ-308, REQ-309, REQ-310, REQ-821, REQ-822
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -6879,23 +6880,23 @@ mutated.
 |`listReqWtdRegisteredWorktreeRoots`|fn||118-127|function listReqWtdRegisteredWorktreeRoots(gitRoot: strin...|
 |`listReqWtdSiblingWorktreeRoots`|fn||137-155|function listReqWtdSiblingWorktreeRoots(|
 |`listReqWtdMatchingWorktreeRoots`|fn||166-181|function listReqWtdMatchingWorktreeRoots(|
-|`listReqWtdMatchingBranchNames`|fn||191-204|function listReqWtdMatchingBranchNames(|
-|`resolveReqWtdMainWorktreeRoot`|fn||212-225|function resolveReqWtdMainWorktreeRoot(gitRoot: string): ...|
-|`resolveReqWtdMainBranchName`|fn||233-260|function resolveReqWtdMainBranchName(gitRoot: string): st...|
-|`ensureReqWtdMainBranch`|fn||271-292|function ensureReqWtdMainBranch(gitRoot: string, worktree...|
-|`readReqWtdSessionHeader`|fn||300-326|function readReqWtdSessionHeader(sessionFile: string): { ...|
-|`resolveReqWtdParentSessionFile`|fn||343-375|function resolveReqWtdParentSessionFile(|
-|`ensureReqWtdBaseSessionFile`|fn||392-413|function ensureReqWtdBaseSessionFile(sessionFile: string,...|
-|`readReqWtdContextSessionDir`|fn||424-433|function readReqWtdContextSessionDir(activeContext: ReqWt...|
-|`allocateReqWtdBaseSessionFile`|fn||448-462|function allocateReqWtdBaseSessionFile(|
-|`resolveReqWtdMainSessionFile`|fn||470-480|function resolveReqWtdMainSessionFile(basePath: string): ...|
-|`reqWtdExecutionPathNeedsRedirect`|fn||490-511|function reqWtdExecutionPathNeedsRedirect(|
-|`readReqWtdContextCwd`|fn||522-530|function readReqWtdContextCwd(activeContext: ReqWtdComman...|
-|`redirectReqWtdExecutionToMainBranch`|fn||553-616|async function redirectReqWtdExecutionToMainBranch(|
-|`resolveReqWtdAnchoredWorktreeRoots`|fn||630-647|function resolveReqWtdAnchoredWorktreeRoots(|
-|`restoreReqWtdExecutionCwd`|fn||656-682|function restoreReqWtdExecutionCwd(basePath: string, acti...|
-|`prepareReqWtdCommandExecution`|fn||694-719|export function prepareReqWtdCommandExecution(|
-|`executeReqWtdCommandExecution`|fn||729-848|export async function executeReqWtdCommandExecution(|
+|`resolveReqWtdTargetWorktreeDir`|fn||192-217|function resolveReqWtdTargetWorktreeDir(|
+|`resolveReqWtdMainWorktreeRoot`|fn||225-238|function resolveReqWtdMainWorktreeRoot(gitRoot: string): ...|
+|`resolveReqWtdMainBranchName`|fn||246-273|function resolveReqWtdMainBranchName(gitRoot: string): st...|
+|`ensureReqWtdMainBranch`|fn||284-308|function ensureReqWtdMainBranch(gitRoot: string, targetBr...|
+|`readReqWtdSessionHeader`|fn||316-342|function readReqWtdSessionHeader(sessionFile: string): { ...|
+|`resolveReqWtdParentSessionFile`|fn||359-391|function resolveReqWtdParentSessionFile(|
+|`ensureReqWtdBaseSessionFile`|fn||408-429|function ensureReqWtdBaseSessionFile(sessionFile: string,...|
+|`readReqWtdContextSessionDir`|fn||440-449|function readReqWtdContextSessionDir(activeContext: ReqWt...|
+|`allocateReqWtdBaseSessionFile`|fn||464-478|function allocateReqWtdBaseSessionFile(|
+|`resolveReqWtdMainSessionFile`|fn||486-496|function resolveReqWtdMainSessionFile(basePath: string): ...|
+|`reqWtdExecutionPathNeedsRedirect`|fn||506-527|function reqWtdExecutionPathNeedsRedirect(|
+|`readReqWtdContextCwd`|fn||538-546|function readReqWtdContextCwd(activeContext: ReqWtdComman...|
+|`redirectReqWtdExecutionToMainBranch`|fn||569-632|async function redirectReqWtdExecutionToMainBranch(|
+|`resolveReqWtdAnchoredWorktreeRoots`|fn||646-663|function resolveReqWtdAnchoredWorktreeRoots(|
+|`restoreReqWtdExecutionCwd`|fn||672-698|function restoreReqWtdExecutionCwd(basePath: string, acti...|
+|`prepareReqWtdCommandExecution`|fn||710-735|export function prepareReqWtdCommandExecution(|
+|`executeReqWtdCommandExecution`|fn||745-874|export async function executeReqWtdCommandExecution(|
 
 
 ---
@@ -9239,7 +9240,7 @@ registration and status updates.
 
 ### fn `function registerReqWtdCommand(` (L3925-3999)
 - @brief Registers the specialized `req-wtd` slash command.
-- @details Registers the non-agentic worktree-disposal command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, returns the client to the main branch, force-removes matching generated worktrees plus branches with or without active changes, clears recoverable prompt state when restoration succeeds while preserving the captured Next-Workflow array so queued commands stay executable from the restored `idle` state (REQ-670), re-applies the captured model selection after returning the active session to the main `base-path`, notifies pi without starting an LLM session or creating a worktree, and dispatches no command-notify, sound, or Pushover prompt-end effect. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and UI notifications.
+- @details Registers the non-agentic worktree-disposal command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, returns the client to the main branch, force-removes only the resolved target worktree plus its branch with or without active changes, clears recoverable prompt state when restoration succeeds while preserving the captured Next-Workflow array so queued commands stay executable from the restored `idle` state (REQ-670), re-applies the captured model selection after returning the active session to the main `base-path`, notifies pi without starting an LLM session or creating a worktree, and dispatches no command-notify, sound, or Pushover prompt-end effect. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and UI notifications.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.

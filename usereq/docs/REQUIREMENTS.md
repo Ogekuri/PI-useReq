@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.177"
+version: "0.0.178"
 date: "2026-11-23"
 author: "OpenAI Codex"
 scope:
@@ -49,7 +49,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
 - **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery that only resets the orchestration to the `idle` workflow state without worktree cleanup or client relocation.
-- **PRJ-011**: MUST expose a dedicated `req-wtd` slash command that restores the main base-path session, returns the client to the main branch, and force-removes generated worktrees plus branches.
+- **PRJ-011**: MUST expose a dedicated `req-wtd` slash command that restores the main base-path session, returns the client to the main branch, and force-removes the generated or current worktree plus its branch.
 - **PRJ-009**: MUST expose a distributable `pi-usereq` npm bin program accepting the management commands `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop] [--force]`, and `--uninstall`.
 - **PRJ-010**: MUST expose an additive configuration CLI with `--get`, `--set`, `--unset`, `--print`, `--info`, `--print-raw`, and `--write-config` over the existing local and global JSON scopes.
 
@@ -333,9 +333,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-306**: MUST allow `req-reset` invocation from any current workflow state and MUST NOT reject it when workflow state is not `idle`.
 - **REQ-307**: MUST make `req-reset` preserve the visible execution transcript without changing the active session or client working position.
 - **REQ-308**: MUST make `req-wtd` restore the original session-backed `base-path` when persisted prompt-orchestration state targets a worktree-backed execution session.
-- **REQ-309**: MUST make `req-wtd` force-remove every sibling worktree under `parent-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`, with or without active changes.
-- **REQ-310**: MUST make `req-wtd` force-remove every local branch under `git-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
-- **REQ-311**: MUST derive `req-wtd` cleanup matchers from the same prefix, project, and branch-sanitization rules used by prompt-command worktree generation.
+- **REQ-309**: MUST make `req-wtd` force-remove only the resolved target worktree under `parent-path`, with or without active changes.
+- **REQ-310**: MUST make `req-wtd` force-remove only the local branch associated with the resolved target worktree under `git-path`.
+- **REQ-311**: MUST derive the `req-wtd` target-worktree identity from the same prefix, project, and branch-sanitization rules used by prompt-command worktree generation.
 - **REQ-312**: MUST make successful `req-reset` clear persisted prompt-orchestration state, transition workflow state to `idle`, and notify pi success.
 - **REQ-313**: MUST make failing `req-reset` surface recovery failures, transition workflow state to `error`, and preserve the active client position.
 - **REQ-228**: MUST transition workflow state to `merging` immediately before merge and worktree/branch deletion begin during successful orchestrated session closure.
@@ -893,13 +893,14 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-802**: MUST append `-retry-<n>` before the filename extension when one run flushes additional same-status provider error payload file sets, keeping the first set unsuffixed.
 - **REQ-813**: MUST make project static-check execution terminate successfully without dispatching any checker when the fixture-filtered source selection holds no supported source file.
 - **REQ-814**: MUST return the payload declared by `NO_SOURCE_STATIC_CHECK_RESULT` in `src/core/source-presence.ts` verbatim as the project static-check no-source result stdout.
-- **REQ-815**: MUST register `req-wtd` as a dedicated extension command with description `Restore base-path, switch to the main branch, and remove generated worktrees` and MUST NOT depend on a bundled prompt Markdown file.
+- **REQ-815**: MUST register `req-wtd` as a dedicated extension command with description `Restore base-path, switch to the main branch, and remove the current or generated worktree` and MUST NOT depend on a bundled prompt Markdown file.
 - **REQ-816**: MUST make `req-wtd` execute without prompt dispatch, LLM-session initialization, or worktree creation.
 - **REQ-817**: MUST allow `req-wtd` invocation from any current workflow state and MUST NOT reject it when workflow state is not `idle`.
 - **REQ-818**: MUST make `req-wtd` preserve the visible execution transcript while restoring the original session-backed `base-path`.
 - **REQ-819**: MUST make `req-wtd` switch the main repository worktree back to the main branch from which generated worktrees were derived before branch deletion.
 - **REQ-820**: MUST make successful `req-wtd` clear persisted prompt-orchestration state, transition workflow state to `idle`, and notify pi success after cleanup completes.
 - **REQ-821**: MUST make failing `req-wtd` surface restoration or cleanup failures, transition workflow state to `error`, and preserve already-completed cleanup effects.
+- **REQ-822**: MUST resolve the `req-wtd` target worktree as the persisted prompt-orchestration worktree when available, otherwise the sibling worktree anchoring the current pi CLI session.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1152,9 +1153,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-256**: MUST verify the report colorizer renders `Summary`-section plain body text in intense white while headings, fences, inline elements, other bodies, and the Next-Workflow table keep unchanged styling.
 - **TST-257**: MUST verify project static-check on a source-free repository exits 0, emits the verbatim `NO_SOURCE_STATIC_CHECK_RESULT` payload on stdout, and dispatches no checker.
 - **TST-258**: MUST verify extension activation registers `req-wtd` outside the bundled prompt inventory with its dedicated fixed description.
-- **TST-259**: MUST verify successful `req-wtd` restores `base-path`, switches the main worktree to the main branch, force-removes matching generated worktrees plus branches, and returns workflow state `idle` without LLM messages.
+- **TST-259**: MUST verify successful `req-wtd` restores `base-path`, switches the main worktree to the main branch, force-removes the resolved target worktree plus its branch, and returns workflow state `idle` without LLM messages.
 - **TST-260**: MUST verify failing `req-wtd` surfaces restoration or cleanup failures, transitions workflow state to `error`, and starts no worktree or LLM session.
-- **TST-261**: MUST verify `req-wtd` force-removes generated worktrees containing active uncommitted changes.
+- **TST-261**: MUST verify `req-wtd` force-removes the target worktree even when it contains active uncommitted changes.
 
 ## 5. Observed Component Model
 
@@ -1292,7 +1293,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | PRJ-003 | `src/index.ts` :: `buildPiUsereqMenuChoices`, `configurePiUsereq`, and `configureDebugMenu` :: expose project paths, git automation, static-check, startup tools, notifications, and debug logging controls. |
 | PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` and `executeReqReferencesCommandExecution` :: keep git orchestration internal to slash-command execution. |
 | PRJ-005 | `src/core/resources.ts` :: `ensureBundledResourcesAccessible` :: validates installation-owned `resources/{prompts,instructions,templates,guidelines}` directories; bundled tree exists under `src/resources/{prompts,instructions,templates,guidelines}`. |
-| PRJ-011 | `src/index.ts` :: `registerReqWtdCommand` :: registers the dedicated `req-wtd` worktree-disposal command; `src/core/req-wtd-command.ts` :: `prepareReqWtdCommandExecution` plus `executeReqWtdCommandExecution` :: restore base-path, switch the main branch, and force-remove generated worktrees plus branches. |
+| PRJ-011 | `src/index.ts` :: `registerReqWtdCommand` :: registers the dedicated `req-wtd` worktree-disposal command; `src/core/req-wtd-command.ts` :: `prepareReqWtdCommandExecution` plus `executeReqWtdCommandExecution` :: restore base-path, switch the main branch, and force-remove the resolved target worktree plus its branch. |
 | CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `<base-path>/.pi-usereq.json`, `usereq/docs`, `tests`, and `["src"]`. |
 | CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
 | CTN-003 | `src/core/tool-runner.ts` :: `SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG))`; `src/core/source-analyzer.ts` :: alias assignments `specs.cc = specs.cpp`, `specs.cxx = specs.cpp`, `specs.hpp = specs.cpp`, `specs.exs = specs.elixir`. |

@@ -4366,72 +4366,75 @@ test("req-reset surfaces recovery failures and transitions workflow state to err
 });
 
 /**
- * @brief Verifies `req-wtd` switches the main worktree off generated branches before cleanup.
- * @details Prepares one fixture repository whose main worktree HEAD is left checked out on a generated prompt-command branch while a second generated worktree plus branch remains pending, invokes `req-wtd`, and verifies the command switches the main worktree back to the repository main branch first so both generated branches and the pending worktree are force-removed without git's checked-out-worktree rejection. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation and fake UI notifications.
- * @return {Promise<void>} Promise resolved after main-branch recovery assertions complete.
- * @throws {AssertionError} Throws when `req-wtd` leaves generated branch cleanup blocked, fails to restore the main branch, or reports a failed reset.
- * @satisfies TST-259
+ * @brief Verifies `req-wtd` removes only the current worktree and keeps sibling generated worktrees.
+ * @details Prepares one fixture repository with two generated worktrees plus branches, anchors the fake pi CLI context and host process inside the first worktree, invokes `req-wtd`, and verifies the command returns the client to the repository main branch and force-removes only the anchored worktree plus its branch while the sibling generated worktree and branch stay untouched. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation, process cwd mutation, and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after target-scoping assertions complete.
+ * @throws {AssertionError} Throws when `req-wtd` removes the sibling generated worktree or branch, fails to restore the main branch, or reports a failed disposal.
+ * @satisfies TST-259, REQ-822, REQ-309, REQ-310
  */
-test("req-wtd switches the main worktree off generated branches before removing pending worktrees", async () => {
+test("req-wtd removes only the current worktree and keeps sibling generated worktrees", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   const parentPath = path.resolve(projectBase, "..");
   const projectName = path.basename(projectBase);
-  const headBranchName = `PI-useReq-${projectName}-master-20260923165510`;
-  const pendingBranchName = `PI-useReq-${projectName}-master-20260923165520`;
-  const pendingWorktreeRoot = path.join(parentPath, pendingBranchName);
+  const currentBranchName = `PI-useReq-${projectName}-master-20260923165510`;
+  const siblingBranchName = `PI-useReq-${projectName}-master-20260923165520`;
+  const currentWorktreeRoot = path.join(parentPath, currentBranchName);
+  const siblingWorktreeRoot = path.join(parentPath, siblingBranchName);
   try {
-    const headBranchCreate = spawnSync("git", ["branch", headBranchName], { cwd: projectBase, encoding: "utf8" });
-    assert.equal(headBranchCreate.status, 0, headBranchCreate.stderr);
-    const headSwitch = spawnSync("git", ["switch", headBranchName], { cwd: projectBase, encoding: "utf8" });
-    assert.equal(headSwitch.status, 0, headSwitch.stderr);
-    const pendingWorktreeAdd = spawnSync(
+    const currentWorktreeAdd = spawnSync(
       "git",
-      ["worktree", "add", pendingWorktreeRoot, "-b", pendingBranchName],
+      ["worktree", "add", currentWorktreeRoot, "-b", currentBranchName],
       { cwd: projectBase, encoding: "utf8" },
     );
-    assert.equal(pendingWorktreeAdd.status, 0, pendingWorktreeAdd.stderr);
-    assert.equal(
-      spawnSync("git", ["branch", "--show-current"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
-      headBranchName,
+    assert.equal(currentWorktreeAdd.status, 0, currentWorktreeAdd.stderr);
+    const siblingWorktreeAdd = spawnSync(
+      "git",
+      ["worktree", "add", siblingWorktreeRoot, "-b", siblingBranchName],
+      { cwd: projectBase, encoding: "utf8" },
     );
+    assert.equal(siblingWorktreeAdd.status, 0, siblingWorktreeAdd.stderr);
 
     const pi = createFakePi();
     piUsereqExtension(pi);
-    const ctx = createFakeCtx(projectBase);
+    const ctx = createFakeCtx(currentWorktreeRoot);
+    process.chdir(currentWorktreeRoot);
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
     await pi.commands.get("req-wtd")!.handler("", ctx);
 
     assert.equal(pi.sentUserMessages.length, 0);
-    assert.equal(fs.existsSync(pendingWorktreeRoot), false);
+    assert.equal(fs.existsSync(currentWorktreeRoot), false);
+    assert.equal(fs.existsSync(siblingWorktreeRoot), true);
     assert.equal(
-      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${headBranchName}`], {
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${currentBranchName}`], {
         cwd: projectBase,
         encoding: "utf8",
       }).status,
       1,
     );
     assert.equal(
-      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${pendingBranchName}`], {
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${siblingBranchName}`], {
         cwd: projectBase,
         encoding: "utf8",
       }).status,
-      1,
+      0,
     );
     assert.equal(
       spawnSync("git", ["branch", "--show-current"], { cwd: projectBase, encoding: "utf8" }).stdout.trim(),
       "master",
     );
-    assert.match(
-      spawnSync("git", ["worktree", "list", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout,
-      /^worktree /mu,
+    assert.equal(
+      spawnSync("git", ["worktree", "list", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout
+        .includes(path.resolve(currentWorktreeRoot)),
+      false,
     );
     assert.equal(
       spawnSync("git", ["worktree", "list", "--porcelain"], { cwd: projectBase, encoding: "utf8" }).stdout
-        .includes(path.resolve(pendingWorktreeRoot)),
-      false,
+        .includes(path.resolve(siblingWorktreeRoot)),
+      true,
     );
+    assert.equal(path.resolve(process.cwd()), path.resolve(projectBase));
     assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-wtd/.test(entry.message)));
     assert.ok(!ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
     assert.equal(
@@ -4449,19 +4452,20 @@ test("req-wtd switches the main worktree off generated branches before removing 
     );
   } finally {
     process.chdir(previousCwd);
-    fs.rmSync(pendingWorktreeRoot, { recursive: true, force: true });
+    fs.rmSync(currentWorktreeRoot, { recursive: true, force: true });
+    fs.rmSync(siblingWorktreeRoot, { recursive: true, force: true });
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
 });
 
 /**
- * @brief Verifies `req-wtd` cleans generated worktrees when invoked from inside one.
- * @details Prepares one fixture repository with one generated worktree plus branch, chdirs the host process into that worktree, invokes `req-wtd` without any persisted prompt state, and verifies plan resolution normalizes to the main repository so the generated worktree and branch are force-removed, the deleted live cwd is restored to the main base path, and a success notification is emitted without error leftovers. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation, process cwd mutation, and fake UI notifications.
+ * @brief Verifies `req-wtd` cleans the generated worktree when invoked from inside it.
+ * @details Prepares one fixture repository with one generated worktree plus branch, chdirs the host process into that worktree, invokes `req-wtd` without any persisted prompt state, and verifies plan resolution resolves that current worktree as the single target so the generated worktree and branch are force-removed, the deleted live cwd is restored to the main base path, and a success notification is emitted without error leftovers. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation, process cwd mutation, and fake UI notifications.
  * @return {Promise<void>} Promise resolved after main-repository normalization assertions complete.
  * @throws {AssertionError} Throws when `req-wtd` leaves generated worktree artifacts behind, fails to restore the live cwd, or reports a failed reset.
  * @satisfies TST-259
  */
-test("req-wtd removes generated worktrees when invoked from inside a leftover worktree", async () => {
+test("req-wtd removes the generated worktree when invoked from inside it", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   const parentPath = path.resolve(projectBase, "..");
