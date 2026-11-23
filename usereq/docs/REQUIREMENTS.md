@@ -125,7 +125,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-036**: MUST implement the integrated previous-build artifact cleanup and post-build repository cleanup in `scripts/build.sh` using `git`, `npm`, `node`, and core shell utilities only.
 - **DES-037**: MUST implement installed-source identification plus source-switch removal and installation in `src/core/package-manager.ts` outside `src/cli.ts` dispatch logic.
 - **DES-038**: MUST implement npm-managed, git-managed, and project-scope `.pi` installation-tree detection in `src/core/bin-deploy.ts` `isPiPackageInstallation`.
-- **DES-039**: MUST implement git-file-inventory source detection plus no-source placeholder rendering for `req-references` and `req-workflow` in one dedicated `src/core/` module outside `src/index.ts` business logic.
+- **DES-039**: MUST implement git-file-inventory source detection plus no-source placeholder rendering for `req-references` and `req-workflow`, plus the `req-static-check` no-source result payload, in one dedicated `src/core/` module outside `src/index.ts` business logic.
 - **DES-040**: MUST implement Next-Workflow capture, process-scoped storage, numbered-list rendering, ordinal selection, and `/req-continue` handler dispatch in one dedicated `src/core/next-workflow.ts` module outside `src/index.ts` business logic.
 - **DES-042**: MUST implement final-output JSON parsing, mandatory-field validation, markdown report rendering, and process-scoped report capture in one dedicated `src/core/` module outside `src/index.ts` business logic.
 - **DES-043**: MUST implement `--write-config` absent-default materialization plus absence-preserving `--set`/`--unset` write pruning in `src/core/config-cli.ts` reusing schema-projected defaults from `src/core/config-cli-schema.ts`.
@@ -889,6 +889,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-800**: MUST fall back to `<project-base-basename>-unknown-<write-time YYYYMMDDHHMMSS>` as the debug filename prefix for entries written while no run identity is active.
 - **REQ-801**: MUST render `Generated log files` as one permanently disabled, dimmed, read-only `Debug` submenu row whose description lists every generated debug file kind and the content each persists.
 - **REQ-802**: MUST append `-retry-<n>` before the filename extension when one run flushes additional same-status provider error payload file sets, keeping the first set unsuffixed.
+- **REQ-813**: MUST make project static-check execution terminate successfully without dispatching any checker when the fixture-filtered source selection holds no supported source file.
+- **REQ-814**: MUST return the payload declared by `NO_SOURCE_STATIC_CHECK_RESULT` in `src/core/source-presence.ts` verbatim as the project static-check no-source result stdout.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1139,6 +1141,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-253**: MUST verify JSON debug entries append into one `<run-prefix>-<command>-debug.json` file under `DEBUG_PROMPTS_LOG_PATH`, and entries without an active run identity use the REQ-800 fallback prefix.
 - **TST-254**: MUST verify the `Generated log files` row renders permanently disabled and dimmed with a description covering every generated debug file kind.
 - **TST-256**: MUST verify the report colorizer renders `Summary`-section plain body text in intense white while headings, fences, inline elements, other bodies, and the Next-Workflow table keep unchanged styling.
+- **TST-257**: MUST verify project static-check on a source-free repository exits 0, emits the verbatim `NO_SOURCE_STATIC_CHECK_RESULT` payload on stdout, and dispatches no checker.
 
 ## 5. Observed Component Model
 
@@ -1154,7 +1157,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/next-workflow.ts` provides Next-Workflow command capture from the parsed final-output JSON `next_commands` array, process-scoped Next-Workflow array storage, rounded-table rendering for the Next-Workflow and `/req-continue` command tables, ordinal selection, and `/req-continue` handler dispatch helpers.
 - `src/core/config-cli-schema.ts`, `src/core/config-cli-render.ts`, and `src/core/config-cli.ts` provide the additive configuration CLI schema, deterministic tree plus table rendering, and CLI dispatch over the existing local and global scopes, plus the `--write-config` absent-default materialization with absence-preserving mutation persistence.
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
-- `src/core/source-presence.ts` detects analyzable source presence from the configured `src-dir` git file inventory and writes the documented no-source placeholder payloads for `REFERENCES.md` and `WORKFLOW.md`.
+- `src/core/source-presence.ts` detects analyzable source presence from the configured `src-dir` git file inventory, writes the documented no-source placeholder payloads for `REFERENCES.md` and `WORKFLOW.md`, and declares the exact static-check no-source result payload.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
 - `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release, applies the automatic version-sorted update gate without user confirmation, and stages the synchronized targets plus both version markers into exactly one commit on the current branch.
@@ -1314,7 +1317,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-036 | `scripts/build.sh` :: previous-build cleanup plus post-build repository cleanup stages :: integrated standalone bash cleanup process using `git`, `npm`, `node`, and core shell utilities only. |
 | DES-037 | `src/core/package-manager.ts` :: `resolveInstalledPackageManagerSource(...)` and `switchPackageManagerSource(...)` :: identify the installed source and reconcile a channel switch inside the package-manager module. |
 | DES-038 | `src/core/bin-deploy.ts` :: `isPiPackageInstallation(...)` and `isProjectPiPackageInstallationPath(...)` :: detect npm-managed, git-managed, and project-scope `.pi` installation trees. |
-| DES-039 | `src/core/source-presence.ts` :: `hasAnalyzableSourceFiles(...)` and `writeNoSourcePlaceholderDocument(...)` :: git-inventory detection plus no-source placeholder rendering reused by `req-references` and `req-workflow`. |
+| DES-039 | `src/core/source-presence.ts` :: `hasAnalyzableSourceFiles(...)` and `writeNoSourcePlaceholderDocument(...)` :: git-inventory detection plus no-source placeholder rendering reused by `req-references` and `req-workflow`, plus the `NO_SOURCE_STATIC_CHECK_RESULT` payload declaration. |
 | DES-040 | `src/core/next-workflow.ts` :: `captureNextWorkflowCommands`, `formatNextWorkflowCommandTable`, `resolveNextWorkflowEntryIndex`, and the handler registry :: one dedicated Next-Workflow module outside `src/index.ts` business logic. |
 | DES-042 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput`, `renderAgentFinalOutputMarkdownReport`, and the process-scoped report store :: one dedicated module implementing final-output JSON parsing, validation, report rendering, and capture outside `src/index.ts` business logic. |
 | DES-046 | `src/core/context-file-size.ts` :: `CONTEXT_OCCUPANCY_MENU_ALERT_THRESHOLD_PERCENT` and `formatConfigMenuContextOccupancySuffix` :: one shared alert-threshold helper consuming the occupancy facts and reused by both configuration-menu renderers. |
@@ -1583,6 +1586,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-802 | `src/core/debug-runtime.ts` :: `flushCapturedPromptErrorPayload` :: appends the `-retry-<n>` base suffix for repeated same-status error flushes of one run. |
 | REQ-811 | `src/core/agent-final-output.ts` :: `colorizeAgentFinalOutputSummaryBodyLine` :: styles `Summary`-section plain body segments with the intense-white ANSI foreground. |
 | REQ-812 | `src/core/agent-final-output.ts` :: `colorizeAgentFinalOutputMarkdownText` :: scopes the intense-white styling to the `Summary` heading state so fences, other bodies, headings, and table text stay unchanged. |
+| REQ-813 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` empty-selection branch :: returns the declared no-source payload with exit code 0 before any checker dispatch. |
+| REQ-814 | `src/core/source-presence.ts` :: `NO_SOURCE_STATIC_CHECK_RESULT` :: declares the exact static-check no-source result payload. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1685,6 +1690,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-253 | `tests/extension-registration.test.ts` :: JSON debug log file shape assertions for `<run-prefix>-<command>-debug.json` plus the no-active-run fallback prefix. |
 | TST-254 | `tests/extension-registration.test.ts` :: `Generated log files` disabled-row and description assertions inside the Debug submenu inventory. |
 | TST-256 | `tests/agent-final-output.test.ts` :: `ANSI colorizer renders the Summary section body in intense white` :: Summary-body white base, unchanged boxes, fences, inline elements, other bodies, and table text. |
+| TST-257 | `tests/cli-command-option-parity.test.ts` :: empty-repository `--static-check` scenario :: exit code 0 plus verbatim `NO_SOURCE_STATIC_CHECK_RESULT` stdout match. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

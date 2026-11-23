@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief Detects analyzable source presence and writes no-source placeholder documents.
- * @details Exposes the git-file-inventory probe that decides whether the configured source directories hold at least one supported source file, plus the documented placeholder payloads and the writer that materializes them under `<base-path>/<docs-dir>`. Consumed by the non-agentic `req-references` workflow and by the `req-workflow` preflight so documentation-only repositories receive the documented `NO_SOURCE_CODE_DETECTED` system directive instead of failing source extraction or dispatching an agentic workflow. Runtime is dominated by one `git ls-files` subprocess for the presence probe plus one file write. Side effects include subprocess creation and filesystem writes.
+ * @details Exposes the git-file-inventory probe that decides whether the configured source directories hold at least one supported source file, plus the documented placeholder payloads, the writer that materializes them under `<base-path>/<docs-dir>`, and the static-check no-source result payload. Consumed by the non-agentic `req-references` workflow, by the `req-workflow` preflight, and by `runProjectStaticCheck(...)` so documentation-only repositories receive the documented `NO_SOURCE_CODE_DETECTED` system directive instead of failing source extraction, dispatching an agentic workflow, or failing static-check execution. Runtime is dominated by one `git ls-files` subprocess for the presence probe plus one file write. Side effects include subprocess creation and filesystem writes.
  */
 
 import fs from "node:fs";
@@ -50,6 +50,25 @@ This repository is structured exclusively for documentation or otherwise lacks a
 1. Do not attempt to trace, analyze, or map source code execution workflows within this project.
 2. Update the current context to reflect that the \`req-workflow\` skill and the \`/req-workflow\` command are **UNNECESSARY** and **DEPRECATED** for this specific repository.
 3. Do not invoke or prompt the user to execute the \`/req-workflow\` command during any future interactions within this workspace.
+</system_directive>
+`;
+
+/**
+ * @brief Declares the exact `req-static-check` result payload emitted when no analyzable source exists.
+ * @details Carries the documented `SUCCESS` status with `STATIC_CHECK_RESULT` classification `NO_SOURCE_CODE_DETECTED` so downstream LLM Agents treat the `req-static-check` skill and the `/req-static-check` command as deprecated for documentation-only repositories and skip every later invocation instead of failing source analysis. Access complexity is O(1).
+ * @satisfies REQ-813, REQ-814
+ */
+export const NO_SOURCE_STATIC_CHECK_RESULT = `<system_directive>
+[STATUS]: SUCCESS
+[STATIC_CHECK_RESULT]: NO_SOURCE_CODE_DETECTED
+
+[CONTEXT_UPDATE]
+This repository is structured exclusively for documentation or otherwise lacks analyzable source code. Consequently, this \`req-static-check\` return SUCCESS by definition.
+
+[AGENT_INSTRUCTIONS]
+1. Do not attempt to search, extract, or index source code references within this project.
+2. Update current context to reflect that the \`req-static-check\` skill and the \`/req-static-check\` command are **UNNECESSARY** and **DEPRECATED** for this specific repository.
+3. Do not invoke or prompt the user to execute the \`/req-static-check\` command during any future interactions within this workspace.
 </system_directive>
 `;
 

@@ -7617,10 +7617,10 @@ import { formatDoxygenFieldsAsMarkdown, parseDoxygenComment } from "./doxygen-pa
 
 ---
 
-# source-presence.ts | TypeScript | 101L | 4 symbols | 4 imports | 7 comments
+# source-presence.ts | TypeScript | 120L | 4 symbols | 4 imports | 8 comments
 > Path: `src/core/source-presence.ts`
 - @brief Detects analyzable source presence and writes no-source placeholder documents.
-- @details Exposes the git-file-inventory probe that decides whether the configured source directories hold at least one supported source file, plus the documented placeholder payloads and the writer that materializes them under `<base-path>/<docs-dir>`. Consumed by the non-agentic `req-references` workflow and by the `req-workflow` preflight so documentation-only repositories receive the documented `NO_SOURCE_CODE_DETECTED` system directive instead of failing source extraction or dispatching an agentic workflow. Runtime is dominated by one `git ls-files` subprocess for the presence probe plus one file write. Side effects include subprocess creation and filesystem writes.
+- @details Exposes the git-file-inventory probe that decides whether the configured source directories hold at least one supported source file, plus the documented placeholder payloads, the writer that materializes them under `<base-path>/<docs-dir>`, and the static-check no-source result payload. Consumed by the non-agentic `req-references` workflow, by the `req-workflow` preflight, and by `runProjectStaticCheck(...)` so documentation-only repositories receive the documented `NO_SOURCE_CODE_DETECTED` system directive instead of failing source extraction, dispatching an agentic workflow, or failing static-check execution. Runtime is dominated by one `git ls-files` subprocess for the presence probe plus one file write. Side effects include subprocess creation and filesystem writes.
 
 ## Imports
 ```
@@ -7635,14 +7635,14 @@ import { collectSourceFiles } from "./tool-runner.js";
 - type `export type NoSourcePlaceholderFileName = "REFERENCES.md" | "WORKFLOW.md";` (L16)
 - @brief Enumerates the document filenames receiving no-source placeholder payloads.
 - @details Restricts placeholder rendering to the two documents whose generation depends on analyzable source code. Access complexity is O(1).
-### fn `export function resolveNoSourcePlaceholderContent(fileName: NoSourcePlaceholderFileName): string` (L63-67)
+### fn `export function resolveNoSourcePlaceholderContent(fileName: NoSourcePlaceholderFileName): string` (L82-86)
 - @brief Resolves the placeholder payload for one targeted document.
 - @details Maps the two supported document filenames onto their declared payloads so callers never duplicate the `NO_SOURCE_CODE_DETECTED` directive text. Runtime is O(1). No external state is mutated.
 - @param[in] fileName {NoSourcePlaceholderFileName} Targeted document filename.
 - @return {string} Exact placeholder payload for the document.
 - @satisfies REQ-622
 
-### fn `export function hasAnalyzableSourceFiles(projectBase: string, config: UseReqConfig): boolean` (L78-80)
+### fn `export function hasAnalyzableSourceFiles(projectBase: string, config: UseReqConfig): boolean` (L97-99)
 - @brief Tests whether the configured source directories hold at least one supported source file.
 - @details Enumerates the repository git file inventory through `collectSourceFiles(...)`, which applies the configured `src-dir` roots, excluded directories, and the supported-extension filter, so documentation-only repositories report `false` while repositories holding any analyzable language file report `true`. Runtime is dominated by one `git ls-files` subprocess. Side effects include subprocess creation.
 - @param[in] projectBase {string} Absolute project root path.
@@ -7651,7 +7651,7 @@ import { collectSourceFiles } from "./tool-runner.js";
 - @throws {ReqError} Throws when the git file inventory cannot be collected.
 - @satisfies REQ-620, REQ-621
 
-### fn `export function writeNoSourcePlaceholderDocument(` (L92-101)
+### fn `export function writeNoSourcePlaceholderDocument(` (L111-120)
 - @brief Writes one no-source placeholder document under the configured docs directory.
 - @details Resolves `<base-path>/<docs-dir>/<fileName>` from the trailing-slash-free persisted `docs-dir` and overwrites it with the exact declared placeholder payload so the resulting document is byte-stable for downstream parsers and tests. Runtime is O(n) in payload length plus one file write. Side effects include one file overwrite.
 - @param[in] projectBase {string} Absolute project root path.
@@ -7665,9 +7665,9 @@ import { collectSourceFiles } from "./tool-runner.js";
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
 |`NoSourcePlaceholderFileName`|type||16||
-|`resolveNoSourcePlaceholderContent`|fn||63-67|export function resolveNoSourcePlaceholderContent(fileNam...|
-|`hasAnalyzableSourceFiles`|fn||78-80|export function hasAnalyzableSourceFiles(projectBase: str...|
-|`writeNoSourcePlaceholderDocument`|fn||92-101|export function writeNoSourcePlaceholderDocument(|
+|`resolveNoSourcePlaceholderContent`|fn||82-86|export function resolveNoSourcePlaceholderContent(fileNam...|
+|`hasAnalyzableSourceFiles`|fn||97-99|export function hasAnalyzableSourceFiles(projectBase: str...|
+|`writeNoSourcePlaceholderDocument`|fn||111-120|export function writeNoSourcePlaceholderDocument(|
 
 
 ---
@@ -8139,7 +8139,7 @@ import { searchConstructsInFiles } from "./find-constructs.js";
 import { generateMarkdown } from "./generate-markdown.js";
 import {
 import { makeRelativeIfContainsProject } from "./utils.js";
-import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./source-presence.js";
+import { hasAnalyzableSourceFiles, NO_SOURCE_STATIC_CHECK_RESULT, writeNoSourcePlaceholderDocument } from "./source-presence.js";
 ```
 
 ## Definitions
@@ -8326,12 +8326,12 @@ import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./so
 
 ### fn `export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult` (L495-556)
 - @brief Runs configured static checks for project source and test directories.
-- @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, while every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Directory-scan invocations append after all per-file results in first-encountered language and checker order. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
+- @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, while every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Directory-scan invocations append after all per-file results in first-encountered language and checker order. Returns the declared `NO_SOURCE_STATIC_CHECK_RESULT` payload with exit code 0 and dispatches no checker when the fixture-filtered selection holds no supported source file. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
 - @param[in] projectBase {string} Candidate project root.
 - @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
-- @return {ToolResult} Aggregated static-check result.
-- @throws {ReqError} Throws when no source files are found.
-- @satisfies REQ-696, REQ-697, REQ-698
+- @return {ToolResult} Aggregated static-check result, or the declared no-source success payload with exit code 0 when the selection holds no supported source file.
+- @throws {ReqError} Throws when the project base or the effective configuration cannot be resolved.
+- @satisfies REQ-696, REQ-697, REQ-698, REQ-813, REQ-814
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|

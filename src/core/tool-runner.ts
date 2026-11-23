@@ -28,7 +28,7 @@ import {
   supportsStaticCheckDirScan,
 } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
-import { hasAnalyzableSourceFiles, writeNoSourcePlaceholderDocument } from "./source-presence.js";
+import { hasAnalyzableSourceFiles, NO_SOURCE_STATIC_CHECK_RESULT, writeNoSourcePlaceholderDocument } from "./source-presence.js";
 
 /**
  * @brief Represents the normalized output contract for a tool invocation.
@@ -485,12 +485,12 @@ function resolveStaticCheckDirScanTargets(selectionDirs: string[], files: string
 
 /**
  * @brief Runs configured static checks for project source and test directories.
- * @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, while every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Directory-scan invocations append after all per-file results in first-encountered language and checker order. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
+ * @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, while every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Directory-scan invocations append after all per-file results in first-encountered language and checker order. Returns the declared `NO_SOURCE_STATIC_CHECK_RESULT` payload with exit code 0 and dispatches no checker when the fixture-filtered selection holds no supported source file. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
- * @return {ToolResult} Aggregated static-check result.
- * @throws {ReqError} Throws when no source files are found.
- * @satisfies REQ-696, REQ-697, REQ-698
+ * @return {ToolResult} Aggregated static-check result, or the declared no-source success payload with exit code 0 when the selection holds no supported source file.
+ * @throws {ReqError} Throws when the project base or the effective configuration cannot be resolved.
+ * @satisfies REQ-696, REQ-697, REQ-698, REQ-813, REQ-814
  */
 export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
@@ -503,7 +503,7 @@ export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig
     const rel = path.relative(base, filePath).split(path.sep).join("/");
     return ![...fixtureRoots].some((fixtureRoot) => rel === fixtureRoot || rel.startsWith(`${fixtureRoot}/`));
   });
-  if (files.length === 0) fail("Error: no source files found in configured directories.", 1);
+  if (files.length === 0) return ok(NO_SOURCE_STATIC_CHECK_RESULT);
   files = files.map((filePath) => path.resolve(filePath));
   const scConfig = effectiveConfig["static-check"] ?? {};
   const existingFixtureRoots = [...fixtureRoots].filter((fixtureRoot) => {

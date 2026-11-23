@@ -28,6 +28,7 @@ import {
   saveFixtureConfigs,
   writeExecutableScript,
 } from "./helpers.js";
+import { NO_SOURCE_STATIC_CHECK_RESULT } from "../src/core/source-presence.js";
 
 const TAB_SENSITIVE_FIXTURE_NAME = "fixture_go.go";
 
@@ -576,8 +577,9 @@ const TARGET_CASES: TargetParityCase[] = [
         },
       });
       const noSource = runNodeCli(["--static-check"], emptyRepo.projectBase);
-      assert.equal(noSource.status, 1);
-      assert.match(noSource.stderr, /no source files found/i);
+      assert.equal(noSource.status, 0, noSource.stderr);
+      assert.equal(noSource.stdout, NO_SOURCE_STATIC_CHECK_RESULT);
+      assert.equal(noSource.stderr, "");
     },
   },
   {
