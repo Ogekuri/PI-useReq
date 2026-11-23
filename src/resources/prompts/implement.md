@@ -29,6 +29,7 @@ In scope: read `%%DOC_PATH%%/REQUIREMENTS.md`, implement/introduce source under 
 
 
 ## Absolute Rules, Non-Negotiable
+- **CRITICAL**: Complete and record the outcome and evidence for every requirement in each compliance audit before proceeding to the next Step. Iteration and context economy rules do not reduce the audit scope. Before proceeding to the next Step, verify that every requirement ID in the audit scope has an `OK` or `FAIL` result with the required evidence. If the audit is incomplete, continue it in bounded batches; do not stage or commit until it is complete.
 - **CRITICAL**: The final response, including every early termination, MUST be exactly one valid JSON object without surrounding text or fences. Set `result` to `ok` on success and `error` on failure, blockage, or no-change termination. Include only the fields described below. All fields except `next_commands` MUST be human-readable strings in the user request language; preserve exact diagnostic literals, commands, identifiers, and Unicode. Escape quotation marks, backslashes, control characters, and newlines as JSON requires. `req-result-json-validator` validates only the final structured result JSON; it MUST NOT be used to validate generic JSON artifacts. Before emitting the final response, execute the `req-result-json-validator` tool on the complete JSON object to validate its structure; do not presume structural correctness without executing the tool, and while `req-result-json-validator` reports an invalid structure, correct the JSON object, re-run `req-result-json-validator`, and only then emit the validated response.
   - `summary`: Summarize the entire final response in at most 1010 Unicode characters.
   - `outcome`: Report the workflow outcome and required exact diagnostics, including partial results on failure.
@@ -50,7 +51,7 @@ In scope: read `%%DOC_PATH%%/REQUIREMENTS.md`, implement/introduce source under 
   
 ## Behavior
 - Do not modify `%%DOC_PATH%%/REQUIREMENTS.md`.
-- Always strictly respect requirements.
+- Integrate information from the [User's Request](#users-request) with the specifications in `%%DOC_PATH%%/REQUIREMENTS.md`; strictly respect the SRS and its scope.
 - Use `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, and `%%DOC_PATH%%/REFERENCES.md` as the primary technical inputs; keep decisions traceable to requirements and repository evidence.
 - All newly written or edited content MUST be in English. Do NOT translate existing text outside the minimal change surface required by this workflow; if you detect non-English text elsewhere, report it in **Evidence** instead of rewriting it.
 - By default, do not add backward-compatibility logic or legacy support for features, commands, communication interfaces, GUI, TUI, or configurations; implement such support only when the [User Request](#users-request) explicitly indicates the specific support to implement.
@@ -151,6 +152,10 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Populate the report fields with all applicable results, diagnostics, evidence and partial work; use a clear not-applicable description when a section has no content. Preserve required paths, line numbers, conflict tables and exact diagnostic strings inside the appropriate strings.
    - Set `next_commands` to an array of objects containing only string fields `command` and `text`. Include only commands mandated by the outcome, never optional commands; a follow-up action identified by this workflow's outcome as the correct next step is outcome-mandated and MUST NOT be omitted as optional; use the exact slash command and its required input text, or an empty `text` if input is unnecessary. Use `[]` when none are mandated. Describe the same next actions in `next_workflow`, or state that none are required.
    - Serialize the object as JSON, using valid JSON escaping for quotation marks, backslashes, control characters and newlines in string values; preserve Unicode. Do not interpolate unescaped content. Execute the `req-result-json-validator` tool on the serialized JSON object to validate its structure, do not presume it correct without that validation, and emit the final response only after `req-result-json-validator` reports a valid structure. Apply this complete contract to early terminations as well as normal completion.
+
+
+<h2 id="users-request">User's Request</h2>
+%%ARGS%%
 
 
 ## Context Files
