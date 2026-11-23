@@ -738,21 +738,27 @@ function formatStatusDuration(durationMs: number): string {
 
 /**
  * @brief Resolves the three elapsed-timer values for one status render.
- * @details Computes the shared in-flight orchestration elapsed once, derives `running_timer` from the in-flight elapsed or the frozen final value, and adds the same in-flight elapsed to the `context_timer` and `session_timer` accumulated bases so all three timers advance concurrently while an orchestration runs and hold `running_timer <= context_timer <= session_timer`. Runtime is O(1). No external state is mutated.
+ * @details Computes the shared in-flight orchestration elapsed once, derives `running_timer` from the in-flight elapsed or the frozen final value, and adds the same in-flight elapsed to the `context_timer` and `session_timer` accumulated bases so all three timers advance concurrently while an orchestration runs and hold `running_timer <= context_timer <= session_timer`. A terminal workflow state marks the orchestration ended per REQ-803, so an in-flight start record that was not yet healed — restored from the process-scoped store before the terminal park, or left by a terminal park whose source state was not in-flight — is treated as closed and can never advance the rendered timers past the orchestration end. Runtime is O(1). No external state is mutated.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {{ runningMs: number; contextMs: number; sessionMs: number }} Resolved elapsed-timer durations in milliseconds.
- * @satisfies REQ-803, REQ-808, REQ-810
+ * @satisfies REQ-803, REQ-804, REQ-808, REQ-810
  */
 function resolveElapsedTimerSnapshot(
   state: PiUsereqStatusState,
   nowMs: number,
 ): { runningMs: number; contextMs: number; sessionMs: number } {
-  const inFlightMs = state.orchestrationStartMs === undefined
+  // REQ-803 render guarantee: a terminal workflow state marks the orchestration ended,
+  // so an in-flight start record that was not yet healed (restored from the process-scoped
+  // store before the terminal park, or left by a park whose source state was not in-flight)
+  // must never advance the rendered timers past the orchestration end.
+  const hasLiveInFlightRecord = state.orchestrationStartMs !== undefined
+    && isPiUsereqWorkflowStateInFlight(state.workflowState);
+  const inFlightMs = !hasLiveInFlightRecord
     ? 0
-    : Math.max(0, nowMs - state.orchestrationStartMs);
+    : Math.max(0, nowMs - state.orchestrationStartMs!);
   return {
-    runningMs: state.orchestrationStartMs === undefined ? state.runningFinalMs : inFlightMs,
+    runningMs: hasLiveInFlightRecord ? inFlightMs : state.runningFinalMs,
     contextMs: state.contextBaseMs + inFlightMs,
     sessionMs: state.sessionBaseMs + inFlightMs,
   };
@@ -1097,12 +1103,12 @@ export function renderPiUsereqStatus(
 
 /**
  * @brief Transitions the prompt-orchestration workflow state and refreshes the status bar.
- * @details Mutates the tracked workflow state after driving the elapsed-timer lifecycle across the transition (orchestration start restarts `running_timer` from zero and applies the empty-context `context_timer` reset; orchestration end freezes `running_timer` and accumulates the executed duration into `context_timer` plus `session_timer`), synchronizes the live ticker with the resulting in-flight state, preserves the latest extension context when available, and re-renders the single-line footer immediately so internal command transitions and pi lifecycle transitions stay visible to the user. Runtime is O(1). Side effect: mutates workflow state, elapsed-timer state, and may update `ctx.ui` status.
- * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
+ * @details Mutates the tracked workflow state after driving the elapsed-timer lifecycle across the transition (orchestration start restarts `running_timer` from zero and applies the empty-context `context_timer` reset; orchestration end freezes `running_timer` and accumulates the executed duration into `context_timer` plus `session_timer`), then enforces the REQ-803/REQ-804 terminal-freeze invariant by freezing any stale in-flight elapsed record that survives a terminal transition whose source state was not in-flight — for example a rebound runtime that restored the in-flight record from the process-scoped store and then parks the already-terminal `result` "error" closure — so every terminal workflow state ends with frozen timers, a stopped ticker, and frozen process-scoped persistence. Finally synchronizes the live ticker with the resulting in-flight state, preserves the latest extension context when available, and re-renders the single-line footer immediately so internal command transitions and pi lifecycle transitions stay visible to the user. Runtime is O(1). Side effect: mutates workflow state, elapsed-timer state, and may update `ctx.ui` status.
+ * @param[in] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] workflowState {PiUsereqWorkflowState} Next workflow state.
  * @param[in] ctx {ExtensionContext | undefined} Optional active extension context.
  * @return {void} No return value.
- * @satisfies REQ-159, REQ-221, REQ-222, REQ-223, REQ-803, REQ-804, REQ-805, REQ-806
+ * @satisfies REQ-159, REQ-221, REQ-222, REQ-223, REQ-803, REQ-804, REQ-805, REQ-806, REQ-808, REQ-809
  */
 export function setPiUsereqWorkflowState(
   controller: PiUsereqStatusController,
@@ -1112,6 +1118,16 @@ export function setPiUsereqWorkflowState(
   const previousWorkflowState = controller.state.workflowState;
   applyOrchestrationElapsedLifecycle(controller, previousWorkflowState, workflowState, ctx);
   controller.state.workflowState = workflowState;
+  // REQ-803/REQ-804 invariant: every terminal transition must leave a frozen elapsed
+  // record. `applyOrchestrationElapsedLifecycle` closes only in-flight -> terminal
+  // transitions, so a terminal park whose source state was not in-flight (for example a
+  // rebound runtime that restored the in-flight record from the process-scoped store
+  // while its prompt-state restore observed the already-persisted terminal `error`
+  // transition of a `result` "error" closure) would otherwise keep `orchestrationStartMs`
+  // set: every later render advances the timers from the stale start and the hook-end
+  // persist keeps the store in flight. The helper is a no-op for genuinely in-flight
+  // states, so legitimate transitions are untouched.
+  freezeAdoptedTerminalOrchestrationElapsed(controller);
   persistPromptCommandState(controller.state);
   syncPiUsereqStatusTicker(controller);
   const renderContext = ctx ?? controller.latestContext;
@@ -1174,7 +1190,7 @@ export function resynchronizePersistedTerminalWorkflowState(
 
 /**
  * @brief Updates mutable status state for one intercepted lifecycle hook.
- * @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start`, records the one-shot `/new` empty-context reset fact consumed by the next orchestration-start `context_timer` decision, and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, reconciles that rebound controller's stale in-flight elapsed timers by adopting the persisted frozen timer facts whenever the process-scoped store reports the orchestration closed so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration, and freezes a terminal-adopted controller's stale in-flight elapsed record at the `session_start` terminal restore so adopted terminal states never keep ticking, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
+ * @details Refreshes stored context usage on every hook, restores persisted elapsed-timer facts during `session_start`, records the one-shot `/new` empty-context reset fact consumed by the next orchestration-start `context_timer` decision, and closes an in-flight orchestration for `startup|reload` by freezing `running_timer` and absorbing its duration into `context_timer` plus `session_timer`, loads the active runtime sound level from persisted config during `session_start`, restores persisted prompt-command metadata when the active session matches a forked execution session, restores the persisted terminal workflow state plus active request for non-reset `session_start` reasons and resets workflow state to `idle` only for `startup|reload`, resynchronizes a stale idle replacement controller from the persisted terminal transition on every non-`session_start` hook so terminal transitions persisted by the initiating instance after the replacement bound stay visible, reconciles that rebound controller's stale in-flight elapsed timers by adopting the persisted frozen timer facts whenever the process-scoped store reports the orchestration closed so live ticking stops at the orchestration end and the accumulated durations stay intact for the next orchestration, and freezes a rebound controller's stale in-flight elapsed record whenever its per-hook prompt-state restore adopted a persisted terminal transition such as a `result` "error" park without driving the elapsed lifecycle so the rendered timers stop at the orchestration end and the hook-end persist stores frozen facts, and freezes a terminal-adopted controller's stale in-flight elapsed record at the `session_start` terminal restore so adopted terminal states never keep ticking, clears the deferred terminal finalization outcome whenever session resets clear prompt-request metadata, records whether the in-flight run belongs to the active prompt request, and promotes the pending prompt-request metadata into the active run on `agent_start` while preserving an already-promoted active request across pi-host agent-run restarts such as overflow compact-and-retry recovery, persists the in-flight agent-run ownership into the process-scoped store, captures the orchestration elapsed at `agent_end` or `agent_settled` (recovering the orchestration start and prompt association from the process-scoped store when the in-memory timer was cleared mid-run) for `%%TIME%%` substitution, closes an unpreserved in-flight orchestration at `session_shutdown` before resetting in-flight workflow states to `idle`, preserves in-memory prompt-command state plus process-scoped persistence across switch-triggered `session_shutdown`, keeps terminal `done|warning|error` states across shutdown, tolerates stale post-replacement render contexts, synchronizes the live ticker with the in-flight orchestration, and re-renders the status bar with the runtime extension identity prefix when configuration is available. Runtime is O(1). Side effects include in-memory state mutation, interval scheduling, process-scoped persistence mutation, and footer-status updates.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @param[in] hookName {PiUsereqStatusHookName} Intercepted hook name.
  * @param[in] event {unknown} Hook payload forwarded from the wrapper.
@@ -1260,6 +1276,14 @@ export function updateExtensionStatus(
     // transition on the next intercepted hook so post-switch terminal transitions stay
     // visible to the replacement runtime and its hook-end persist keeps the terminal facts.
     resynchronizePersistedTerminalWorkflowState(controller);
+    // REQ-803/REQ-804 invariant: the per-hook prompt-state restore above can flip this
+    // controller onto the persisted terminal transition of a `result` "error" park without
+    // driving the elapsed lifecycle, leaving a terminal workflow state over a still-set
+    // in-flight start record restored earlier from the process-scoped store. Freeze such a
+    // stale record here so the rendered timers stop at the orchestration end and the
+    // hook-end persist stores frozen facts instead of resurrecting the in-flight start.
+    // The helper is a no-op for genuinely in-flight states, so REQ-809 stays intact.
+    freezeAdoptedTerminalOrchestrationElapsed(controller);
   }
   const preservePromptCommandStateOnShutdown = hookName === "session_shutdown"
     && shouldPreservePromptCommandStateOnShutdown(controller.state);

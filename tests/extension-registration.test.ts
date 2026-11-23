@@ -86,6 +86,7 @@ import {
 import {
   clearPersistedPromptCommandFinalizationSnapshot,
   clearPersistedPromptCommandRuntimeState,
+  readPersistedPromptCommandRuntimeState,
   readPersistedPromptCommandSessionContext,
   writePersistedPromptCommandRuntimeState,
 } from "../src/core/prompt-command-state.js";
@@ -11493,3 +11494,146 @@ test("result error orchestration refreshes the captured report and req-reset ret
   }
 });
 
+/**
+ * @brief Verifies a `result` "error" park freezes the elapsed timers a rebound runtime restored in flight.
+ * @details Seeds one initiating non-worktree orchestration in flight since the mocked clock origin, then persists the terminal `result` "error" workflow transition on the process-scoped prompt-command store while the shared elapsed record stays in flight (the cross-instance park/restore persist race of a rebound runtime). The rebound runtime bound to the same execution session restores the still-in-flight elapsed record at `session_start`, and its next per-hook prompt-state restore adopts the persisted terminal `error` transition without driving the elapsed lifecycle, so the terminal workflow state ends up over a still-set in-flight start. Every later hook render must keep the elapsed timers frozen at the absorbed duration instead of advancing them past the orchestration end, must never start a live ticker, and must re-freeze the process-scoped store so a later extension instance restores frozen facts. Runtime is dominated by fake lifecycle dispatch with a mocked clock and interval capture. Side effects are limited to temporary repository setup plus process-scoped state mutation.
+ * @return {Promise<void>} Promise resolved after frozen-timer assertions complete.
+ * @throws {AssertionError} Throws when the terminal `result` "error" park keeps advancing the rendered elapsed timers, keeps a live ticker, or leaves the shared elapsed record in flight.
+ * @satisfies REQ-803, REQ-804, REQ-808, REQ-809, REQ-587
+ */
+test("result error park freezes elapsed timers a rebound runtime restores in flight", async () => {
+  const { projectBase: cwd } = initFixtureRepo({ fixtures: [] });
+  writeProjectConfigOverrides(cwd, { GIT_WORKTREE_ENABLED: "disable" });
+  const previousCwd = process.cwd();
+  const originalDateNow = Date.now;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let nowMs = 0;
+  const intervalCallbacks: Array<() => void> = [];
+  Date.now = () => nowMs;
+  globalThis.setInterval = ((callback: TimerHandler) => {
+    intervalCallbacks.push(callback as () => void);
+    return intervalCallbacks.length;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((handle: ReturnType<typeof setInterval>) => {
+    void handle;
+  }) as unknown as typeof clearInterval;
+
+  try {
+    // Seed the shared state: one initiating orchestration in flight since `nowMs === 0`.
+    const initiatingPi = createFakePi();
+    piUsereqExtension(initiatingPi);
+    const initiatingCtx = createFakeCtx(cwd);
+    await initiatingPi.emit("session_start", { reason: "startup" }, initiatingCtx);
+    await initiatingPi.commands.get("req-analyze")!.handler("Inspect src", initiatingCtx);
+    // The real `result` "error" park retains the active request for `/req-reset` recovery
+    // (REQ-209/REQ-587); capture the executed plan so the seeded park keeps it.
+    const executedPlan = readPersistedPromptCommandRuntimeState().activePromptRequest
+      ?? readPersistedPromptCommandRuntimeState().pendingPromptRequest;
+
+    // A rebound runtime bound to the SAME execution session while the persisted state is
+    // still `running` restores the still-in-flight elapsed record and the running prompt
+    // state; no terminal adoption freeze runs at `session_start` yet.
+    nowMs = 61_000;
+    const reboundPi = createFakePi();
+    piUsereqExtension(reboundPi);
+    const executionSessionFile = initiatingCtx.sessionManager.getSessionFile() ?? "";
+    const reboundCtx = createFakeCtx(cwd);
+    reboundCtx.sessionManager.getSessionFile = () => executionSessionFile;
+    reboundCtx.sessionManager.getSessionDir = () => path.dirname(executionSessionFile);
+    reboundCtx.sessionManager.getCwd = () => cwd;
+    reboundCtx.cwd = cwd;
+    await reboundPi.emit("session_start", { reason: "resume" }, reboundCtx);
+    const tickerCountAfterRebound = intervalCallbacks.length;
+
+    // The initiating runtime persists the `result` "error" terminal park between the
+    // rebound bind and the rebound runtime's next hook, while the elapsed record that the
+    // rebound runtime restored is still in flight (start `0`).
+    nowMs = 122_000;
+    writePersistedPromptCommandRuntimeState({
+      workflowState: "error",
+      workflowRequest: "analyze",
+      pendingPromptRequest: undefined,
+      activePromptRequest: executedPlan,
+    });
+
+    // First post-park hook: the per-hook prompt-state restore adopts the persisted
+    // terminal `error` transition without driving the elapsed lifecycle; the render must
+    // show the timers frozen at the orchestration end.
+    nowMs = 183_000;
+    await reboundPi.emit("context", {}, reboundCtx);
+    assert.equal(
+      reboundCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 3:03 ⚑ 3:03 ⌛︎3:03",
+      }),
+    );
+
+    // Core defect assertion: later hooks must never advance the timers of the terminated
+    // orchestration past the frozen park boundary.
+    nowMs = 244_000;
+    await reboundPi.emit("context", {}, reboundCtx);
+    assert.equal(
+      reboundCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 3:03 ⚑ 3:03 ⌛︎3:03",
+      }),
+      "the result error park must freeze the elapsed timers instead of counting past the orchestration end",
+    );
+    assert.equal(
+      intervalCallbacks.length,
+      tickerCountAfterRebound,
+      "the terminal result error park must not start a live ticker",
+    );
+
+    // A later extension instance must restore frozen facts from the process-scoped store.
+    nowMs = 305_000;
+    const laterPi = createFakePi();
+    piUsereqExtension(laterPi);
+    const laterCtx = createFakeCtx(cwd);
+    await laterPi.emit("session_start", { reason: "resume" }, laterCtx);
+    assert.equal(
+      laterCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 3:03 ⚑ 3:03 ⌛︎3:03",
+      }),
+    );
+    nowMs = 366_000;
+    await laterPi.emit("context", {}, laterCtx);
+    assert.equal(
+      laterCtx.__state.statuses.get("pi-usereq"),
+      buildExpectedFakeStatusText({
+        workflowState: "error",
+        workflowRequest: "analyze",
+        basePath: buildExpectedFakeBasePath(cwd),
+        contextFilledCells: 0,
+        et: "⏱︎ 3:03 ⚑ 3:03 ⌛︎3:03",
+      }),
+      "the re-frozen store must keep the elapsed timers frozen for later extension instances",
+    );
+    assert.equal(
+      intervalCallbacks.length,
+      tickerCountAfterRebound,
+      "the frozen store must not start a live ticker for later extension instances",
+    );
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+    clearPersistedPromptCommandRuntimeState();
+    process.chdir(previousCwd);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
