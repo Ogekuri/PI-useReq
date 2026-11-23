@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.28](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.28) - 2026-11-20
+## [0.109.29](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.29) - 2026-11-23
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,18 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- Freeze result-error elapsed timers past orchestration end [useReq] *(extension-status)*
+  A terminal result "error" park whose transition source state was not
+  in-flight (rebound runtime restoring the in-flight elapsed record from
+  the process-scoped store while its per-hook prompt-state restore adopted
+  the persisted terminal transition) kept orchestrationStartMs set, so
+  every later render advanced running/context/session timers and the
+  hook-end persist kept the store in flight. Enforce the REQ-803/REQ-804
+  terminal-freeze invariant in setPiUsereqWorkflowState and the non-
+  session_start hook heal in updateExtensionStatus, and make the elapsed
+  render snapshot treat terminal workflow states as closed. Add reproducer
+  test; update WORKFLOW.md call traces and REFERENCES.md.
+- Update .pi-usereq.json config file.
 - Accept mandated pi-host version warning in session-start replay [useReq] *(debug-harness)*
   The session-start offline replay test required zero notifications, but REQ-457 mandates exactly one pi CLI host compatibility warning when the installed pi-coding-agent resolves below 1.6.0 (observed with a stale node_modules tree at 1.5.2 while package-lock.json pins 1.6.0). The assertion now derives the expected notification set from the installed SDK version through buildPiHostVersionWarningMessage and comparePiHostVersions and requires every other notification to stay absent per REQ-458. Verified under both 1.5.2 (reproducer now passes) and 1.6.0 trees; full suite 563/563. No source or requirements changes.
 - Align render signature with pi-tui Component contract [useReq] *(settings-menu)*
@@ -124,6 +136,17 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Update bundled prompts from v0.12.19 to v0.12.20 [useReq] *(prompts)*
+- return no-source success directive [useReq] *(static-check)*
+  Add REQ-813/REQ-814: project static-check terminates with SUCCESS and the
+  declared NO_SOURCE_STATIC_CHECK_RESULT system-directive payload, without
+  dispatching any checker, when the fixture-filtered selection holds no
+  supported source file. Declare the verbatim payload constant in
+  src/core/source-presence.ts (DES-039) and return it from
+  runProjectStaticCheck instead of failing with exit code 1. Update the CLI
+  parity empty-repository scenario (TST-257) to assert exit 0 plus the
+  verbatim payload stdout. Regenerate WORKFLOW.md call traces and
+  REFERENCES.md evidence mappings.
 - Update .galias.conf file. *(config)*
 - BREAKING CHANGE: move debug configuration to global scope with enable defaults [useReq] *(config)*
   Move every DEBUG_* field (DEBUG_ENABLED, DEBUG_PROMPTS_ENABLED, DEBUG_PROMPTS_LOG_PATH, DEBUG_STATUS_CHANGES, DEBUG_WORKFLOW_EVENTS, DEBUG_TOOL_COMMANDS_ENABLED, DEBUG_LOG_ON_STATUS, DEBUG_ENABLED_TOOLS, DEBUG_ENABLED_PROMPTS) from the local project scope to the global configuration scope, satisfying updated CTN-013, CTN-019, REQ-236, REQ-426, REQ-413, and REQ-414.
@@ -1809,7 +1832,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.28\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.28
+- \[0.109.29\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.29
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1918,4 +1941,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.28]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.28
+[0.109.29]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.29
