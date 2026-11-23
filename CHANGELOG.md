@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.29](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.29) - 2026-11-23
+## [0.109.30](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.30) - 2026-11-23
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -136,6 +136,26 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Update bundled prompts from v0.12.20 to v0.12.21 [useReq] *(prompts)*
+- dispose only the resolved target worktree [useReq] *(req-wtd)*
+  /req-wtd no longer sweeps every generated sibling worktree and branch:
+  it resolves one target - the persisted prompt-orchestration worktree
+  or the sibling worktree anchoring the live pi CLI session - and
+  force-removes only that worktree plus its branch, with or without
+  active changes, after restoring base-path and the main branch
+  (PRJ-011, REQ-309..311, REQ-815, REQ-822, TST-259, TST-261).
+  ensureReqWtdMainBranch is target-scoped; multi-worktree scoping,
+  sibling preservation, and target-branch switch covered by updated
+  and new tests.
+- BREAKING CHANGE: make req-reset idle-only and add req-wtd disposal [useReq] *(commands)*
+  /req-reset now only clears prompt-orchestration state and returns the
+  orchestration to idle without worktree/branch deletion, session
+  switching, or client relocation (REQ-304..REQ-307, REQ-312, REQ-313).
+  New /req-wtd command inherits the removed operations: base-path
+  restoration, main-branch switch, and forced worktree/branch disposal
+  with or without active changes (PRJ-011, DES-048, REQ-815..REQ-821).
+  Next-Workflow capture admits req-wtd; requirements SRS, workflow
+  runtime model, references, and tests updated (TST-258..TST-261).
 - Update bundled prompts from v0.12.19 to v0.12.20 [useReq] *(prompts)*
 - return no-source success directive [useReq] *(static-check)*
   Add REQ-813/REQ-814: project static-check terminates with SUCCESS and the
@@ -1832,7 +1852,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.29\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.29
+- \[0.109.30\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.30
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1941,4 +1961,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.29]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.29
+[0.109.30]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.30
