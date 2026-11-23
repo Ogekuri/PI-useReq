@@ -68,14 +68,5 @@
     "Zig": {
       "enabled": "disable"
     }
-  },
-  "DEBUG_ENABLED": "enable",
-  "DEBUG_PROMPTS_ENABLED": "enable",
-  "DEBUG_PROMPTS_LOG_PATH": "/tmp/PI-useReq",
-  "DEBUG_STATUS_CHANGES": "enable",
-  "DEBUG_WORKFLOW_EVENTS": "enable",
-  "DEBUG_TOOL_COMMANDS_ENABLED": "disable",
-  "DEBUG_LOG_ON_STATUS": "running",
-  "DEBUG_ENABLED_TOOLS": [],
-  "DEBUG_ENABLED_PROMPTS": []
+  }
 }
