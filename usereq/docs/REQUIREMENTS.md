@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.176"
-date: "2026-11-20"
+version: "0.0.177"
+date: "2026-11-23"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -48,7 +48,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **PRJ-005**: MUST install bundled prompts, git execution instructions, documentation templates, and guidelines under the extension installation path and expose them through shared runtime path context.
 - **PRJ-006**: MUST expose a standalone debug surface that inventories extension commands and tools, replays handlers offline, captures registration and UI metadata, provides a bash wrapper, and optionally compares the contract against the official pi SDK runtime.
 - **PRJ-007**: MUST intercept pi CLI lifecycle hooks to maintain context telemetry, prompt workflow state, session timing, and selected debug logging for prompt orchestration and tool execution.
-- **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery, base-path session restoration, and force cleanup of generated worktrees plus branches.
+- **PRJ-008**: MUST expose a dedicated `req-reset` slash command for non-agentic prompt-orchestration recovery that only resets the orchestration to the `idle` workflow state without worktree cleanup or client relocation.
+- **PRJ-011**: MUST expose a dedicated `req-wtd` slash command that restores the main base-path session, returns the client to the main branch, and force-removes generated worktrees plus branches.
 - **PRJ-009**: MUST expose a distributable `pi-usereq` npm bin program accepting the management commands `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop] [--force]`, and `--uninstall`.
 - **PRJ-010**: MUST expose an additive configuration CLI with `--get`, `--set`, `--unset`, `--print`, `--info`, `--print-raw`, and `--write-config` over the existing local and global JSON scopes.
 
@@ -92,7 +93,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-003**: MUST represent parsed source constructs as `SourceElement` instances produced by `SourceAnalyzer` and enriched with signatures, hierarchy, visibility, inheritance, body annotations, and Doxygen fields.
 - **DES-012**: MUST implement bundled prompt-command git validation and worktree lifecycle logic in `src/core/prompt-command-runtime.ts` without invoking extension custom-tool executors from `src/core/tool-runner.ts`.
 - **DES-013**: MUST implement dedicated `req-references` git-validation, reference-write, staging, commit, and clean-repository verification logic in `src/core/req-references-command.ts` without starting an LLM session or creating a worktree.
-- **DES-014**: MUST implement dedicated `req-reset` recovery and cleanup orchestration in `src/core/req-reset-command.ts`, reusing shared base-path restoration helpers without starting an LLM session or creating a worktree.
+- **DES-014**: MUST implement dedicated `req-reset` recovery orchestration in `src/core/req-reset-command.ts`, clearing prompt-orchestration state without starting an LLM session or creating, deleting, or moving a worktree.
+- **DES-048**: MUST implement dedicated `req-wtd` worktree-disposal orchestration in `src/core/req-wtd-command.ts`, reusing shared base-path restoration helpers without starting an LLM session or creating a worktree.
 - **DES-004**: MUST implement modular static-check execution through debug-capable `StaticCheckBase` and user-facing `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token counting, summary generation, reference-file generation, compression, construct search, and static-check execution in `src/core/tool-runner.ts`.
 - **DES-006**: MUST reuse shared markdown and text renderers for CLI and agent-tool compression plus construct-search outputs, preserving source-leading tabs in emitted excerpts instead of dedicated agent-tool JSON payload builders.
@@ -297,7 +299,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-197**: MUST summarize top-level `Notifications` as `notification:<state> • sound:<level> • pushover:<state>`.
 - **REQ-198**: MUST render `Notification events`, `Sound events`, and `Pushover events` as identical submenu lists with right-aligned `on|off` values for `Prompt completed`, `Prompt interrupted`, and `Prompt failed`.
 - **REQ-199**: MUST render `%%RESULT%%` as `successed`, `aborted`, or `failed` for completed, interrupted, and failed prompt-end outcomes.
-- **REQ-200**: MUST run slash-command-owned git validation immediately after the workflow startability gate at the start of every `req-*` slash command except `req-reset` and abort before command execution on failure.
+- **REQ-200**: MUST run slash-command-owned git validation immediately after the workflow startability gate at the start of every `req-*` slash command except `req-reset` and `req-wtd` and abort before command execution on failure.
 - **REQ-201**: MUST require `REQUIREMENTS.md`, `WORKFLOW.md`, and `REFERENCES.md` before `analyze`, `change`, `check`, `cover`, `fix`, `flowchart`, `new`, `readme`, `recreate`, `refactor`, and `renumber`.
 - **REQ-202**: MUST require `REQUIREMENTS.md` before `implement`, and MUST skip required-doc prechecks for `create`, `references`, `workflow`, and `write`.
 - **REQ-203**: MUST abort a bundled prompt-backed `req-<prompt>` command before worktree creation and prompt dispatch when any prompt-required doc is missing, surfacing the missing canonical path plus remediation prompt command.
@@ -317,7 +319,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-221**: MUST maintain one prompt-orchestration state machine with states `idle`, `checking`, `running`, `merging`, `done`, `warning`, and `error`.
 - **REQ-222**: MUST render `status` as the first single-line status field and refresh it on every internal or pi CLI state transition.
 - **REQ-223**: MUST render `status:error` with theme `error` plus terminal blink when supported, and other `status` values with the existing non-error status-bar convention.
-- **REQ-224**: MUST reject every `req-*` slash command except `req-reset` and parameterized `req-continue` before any operation when workflow state is neither `idle` nor `done`, surface the error to pi CLI, and transition workflow state to `error`.
+- **REQ-224**: MUST reject every `req-*` slash command except `req-reset`, `req-wtd`, and parameterized `req-continue` before any operation when workflow state is neither `idle` nor `done`, surface the error to pi CLI, and transition workflow state to `error`.
 - **REQ-225**: MUST make bundled prompt-backed `req-<prompt>` commands record their prompt name as the active workflow request, transition workflow state to `checking` after the workflow startability gate, and keep it there through preflight and prompt handoff preparation.
 - **REQ-226**: MUST transition workflow state to `error` when required-doc checks or worktree creation fails during bundled prompt-backed `req-<prompt>` preflight.
 - **REQ-227**: MUST make bundled prompt-backed `req-<prompt>` commands transition workflow state to `running` only after required-doc checks, worktree preparation, worktree verification, and prompt-session handoff succeed.
@@ -326,16 +328,16 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-301**: MUST make `req-references` stage only updated `<docs-dir>/REFERENCES.md` and create one git commit with exact message `docs(references): Update REFERENCES.md document. [useReq]` whenever the staged file differs from `HEAD`.
 - **REQ-302**: MUST make successful `req-references` completion verify repository cleanliness, notify pi CLI success, and transition workflow state to `done` before the command handler returns.
 - **REQ-303**: MUST make failing `req-references` execution notify pi CLI, transition workflow state to `error`, and surface git or reference-generation failures without LLM-session initialization.
-- **REQ-304**: MUST register `req-reset` as a dedicated extension command with description `Reset req workflow state, restore base-path, and remove generated worktrees` and MUST NOT depend on a bundled prompt Markdown file.
-- **REQ-305**: MUST make `req-reset` execute without prompt dispatch, LLM-session initialization, or worktree creation.
+- **REQ-304**: MUST register `req-reset` as a dedicated extension command with description `Reset req workflow state to idle without worktree cleanup or client relocation` and MUST NOT depend on a bundled prompt Markdown file.
+- **REQ-305**: MUST make `req-reset` execute without prompt dispatch, LLM-session initialization, worktree creation, worktree deletion, or client relocation.
 - **REQ-306**: MUST allow `req-reset` invocation from any current workflow state and MUST NOT reject it when workflow state is not `idle`.
-- **REQ-307**: MUST make `req-reset` preserve the visible execution transcript while restoring the original session-backed `base-path`.
-- **REQ-308**: MUST make `req-reset` restore the original session-backed `base-path` when persisted prompt-orchestration state targets a worktree-backed execution session.
-- **REQ-309**: MUST make `req-reset` force-remove every sibling worktree under `parent-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
-- **REQ-310**: MUST make `req-reset` force-remove every local branch under `git-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
-- **REQ-311**: MUST derive `req-reset` cleanup matchers from the same prefix, project, and branch-sanitization rules used by prompt-command worktree generation.
-- **REQ-312**: MUST make successful `req-reset` clear persisted prompt-orchestration state, transition workflow state to `idle`, and notify pi success after cleanup completes.
-- **REQ-313**: MUST make failing `req-reset` surface restoration or cleanup failures, transition workflow state to `error`, and preserve already-completed cleanup effects.
+- **REQ-307**: MUST make `req-reset` preserve the visible execution transcript without changing the active session or client working position.
+- **REQ-308**: MUST make `req-wtd` restore the original session-backed `base-path` when persisted prompt-orchestration state targets a worktree-backed execution session.
+- **REQ-309**: MUST make `req-wtd` force-remove every sibling worktree under `parent-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`, with or without active changes.
+- **REQ-310**: MUST make `req-wtd` force-remove every local branch under `git-path` whose name matches `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>`.
+- **REQ-311**: MUST derive `req-wtd` cleanup matchers from the same prefix, project, and branch-sanitization rules used by prompt-command worktree generation.
+- **REQ-312**: MUST make successful `req-reset` clear persisted prompt-orchestration state, transition workflow state to `idle`, and notify pi success.
+- **REQ-313**: MUST make failing `req-reset` surface recovery failures, transition workflow state to `error`, and preserve the active client position.
 - **REQ-228**: MUST transition workflow state to `merging` immediately before merge and worktree/branch deletion begin during successful orchestrated session closure.
 - **REQ-229**: MUST transition workflow state to `error` and notify the pi CLI when base-path restoration, merge, or worktree/branch deletion verification fails during orchestrated session closure.
 - **REQ-230**: MUST transition workflow state to `done` before the orchestrated session-closure handler returns for successful completed runs.
@@ -493,7 +495,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-366**: MUST capture the active model provider, model identifier, and thinking level into the prompt-command execution plan during command preflight.
 - **REQ-367**: MUST re-apply the captured model after the prompt execution-session switch succeeds and before agent start using the session-scoped model API.
 - **REQ-368**: MUST re-apply the captured model after successful `base-path` session restoration during orchestrated closure using the session-scoped model API.
-- **REQ-369**: MUST re-apply the captured model after `req-reset` returns the active pi session to the main `base-path` session.
+- **REQ-369**: MUST re-apply the captured model after `req-wtd` returns the active pi session to the main `base-path` session.
 - **REQ-370**: MUST skip model re-application when the post-switch active model already matches the captured provider and identifier, avoiding duplicate `model_change` session entries.
 - **REQ-371**: MUST re-apply the captured thinking level at every model re-application point only when the active thinking level differs.
 - **REQ-372**: MUST emit one stale-context-safe warning notification and continue orchestration without aborting when model re-application fails or is rejected.
@@ -575,11 +577,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-438**: MUST emit one `req-references` notification per completed run stating whether the fixed-message commit was created or skipped without changes.
 - **REQ-439**: MUST defer non-agentic command-output notifications whose stale-context-safe delivery fails by enqueuing message plus severity into one process-scoped replay store instead of discarding them.
 - **REQ-440**: MUST drain the process-scoped replay store during `session_start` for reasons `new`, `resume`, `reload`, and `fork`, redelivering each queued notification through the restored context UI-notification channel.
-- **REQ-441**: MUST route `req-references` and `req-reset` outcome notifications plus the final context-retention notification through the stale-context-safe deferred-delivery notification helper.
+- **REQ-441**: MUST route `req-references`, `req-reset`, and `req-wtd` outcome notifications plus the final context-retention notification through the stale-context-safe deferred-delivery notification helper.
 - **REQ-442**: MUST keep replayed notifications on the UI-notification channel without session messages or session switching, and MUST NOT replay already-delivered notifications.
 - **REQ-443**: MUST resolve `%%OUTPUT%%` from the concatenated `type === "text"` blocks of the last assistant message inside the `agent_end` payload, skipping `thinking` and tool-call content blocks.
 - **REQ-444**: MUST resolve `%%OUTPUT%%` to the empty string for agent runs whose last assistant message exposes no `text` content blocks.
-- **REQ-447**: MUST NOT dispatch command-notify, sound, or Pushover prompt-end effects for completed or failed non-agentic `req-references` and `req-reset` runs.
+- **REQ-447**: MUST NOT dispatch command-notify, sound, or Pushover prompt-end effects for completed or failed non-agentic `req-references`, `req-reset`, and `req-wtd` runs.
 - **REQ-450**: MUST fall back the Pushover `message` body to the `%%RESULT%%` outcome token whenever the fully substituted Pushover text template resolves to empty.
 - **REQ-445**: MUST head-truncate the substituted Pushover `message` body with a fixed truncation marker whenever it exceeds the 1024-character Pushover Message API limit.
 - **REQ-446**: MUST document the `%%OUTPUT%%` token in the `Pushover text` menu row description.
@@ -751,17 +753,17 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-630**: MUST keep the workflow state and the active orchestration request in process-scoped runtime state variables for every orchestration.
 - **REQ-631**: MUST record the processed slash-command name without the `req-` prefix as the active workflow request before entering `checking` or `running`.
 - **REQ-632**: MUST render the `status` field value as `<request> ➔ <state>`, with one space before and after the arrow, whenever an active workflow request exists, and as `<state>` otherwise.
-- **REQ-633**: MUST treat `idle` as the bootstrap, extension-start, and `/req-reset` terminal state and MUST NOT set it on completed, warned, or failed orchestration termination.
+- **REQ-633**: MUST treat `idle` as the bootstrap, extension-start, `/req-reset`, and `/req-wtd` terminal state and MUST NOT set it on completed, warned, or failed orchestration termination.
 - **REQ-634**: MUST transition successful non-reset orchestration termination to `done` by default.
 - **REQ-635**: MUST allow a new orchestration only when workflow state is `idle` or `done` and MUST transition `done` to `running` when that orchestration reaches agent execution.
-- **REQ-636**: MUST terminate every non-`req-reset` orchestration only with `done`, `warning`, or `error` and every `req-reset` orchestration only with `idle`, `warning`, or `error`.
+- **REQ-636**: MUST terminate every non-`req-reset` orchestration only with `done`, `warning`, or `error` and every `req-reset` and `req-wtd` orchestration only with `idle`, `warning`, or `error`.
 - **REQ-637**: MUST persist and restore the active workflow request alongside the workflow state across extension rebinding.
 - **REQ-638**: MUST render `done` with the non-error warning-token status value convention.
 - **REQ-649**: MUST resolve at command bootstrap whether each bundled agentic `req-<prompt>` command runs a `new` chain-of-thought from workflow state `idle` or a `continue` flow from any other startable state.
 - **REQ-653**: MUST inspect the final agent output of every completed agentic prompt run before emitting the final context-retention notification and MUST parse it as one final-output JSON object.
 - **REQ-654**: MUST capture each `next_commands` entry naming a pi-usereq slash command into one process-scoped Next-Workflow array as command plus input-text pairs in entry order.
 - **REQ-655**: MUST purge every non-pi-usereq orchestration command from the Next-Workflow array while keeping the `/req-continue` exception.
-- **REQ-656**: MUST preserve the Next-Workflow array across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` recovery so `/req-continue` consumes the last completed flow's commands.
+- **REQ-656**: MUST preserve the Next-Workflow array across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` plus `/req-wtd` recovery so `/req-continue` consumes the last completed flow's commands.
 - **REQ-657**: MUST render the `/req-continue` command table after the `Context retained.` retention line, separated from it by exactly one blank line.
 - **REQ-658**: MUST quote each `/req-continue` table input text as its first 20 characters, then ` .. `, then its last 10 characters, keeping texts of 30 characters or fewer verbatim.
 - **REQ-659**: MUST register `req-continue` as a dedicated extension command with description `Continue the previous agentic workflow with a captured Next-Workflow command` and MUST NOT depend on a bundled prompt Markdown file.
@@ -775,7 +777,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-667**: MUST surface one identical hardcoded message beginning with `ERROR: ` that warns the fast-forward merge failed and the worktree changes require a manual merge as the last merge-failure output line.
 - **REQ-668**: MUST retain the captured Next-Workflow array unchanged when the fast-forward merge fails during worktree-backed closure.
 - **REQ-669**: MUST clear the captured Next-Workflow array immediately before prompt dispatch of a `new` agentic flow, after every slash-command pre-check has succeeded.
-- **REQ-670**: MUST NOT clear the captured Next-Workflow array during `/req-reset` recovery.
+- **REQ-670**: MUST NOT clear the captured Next-Workflow array during `/req-reset` or `/req-wtd` recovery.
 - **REQ-677**: MUST treat `result`, `summary`, and `next_commands` as the only mandatory fields of the final-output JSON object.
 - **REQ-678**: MUST validate `result` as exactly `ok` or `error`, `summary` as a string, and `next_commands` as an array on the extracted final-output JSON object before consuming it.
 - **REQ-679**: MUST tolerate the absence of every non-mandatory report field of the final-output JSON without generating an error.
@@ -860,10 +862,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-769**: MUST render each `Context Files` submenu row occupancy suffix with intense-red ANSI styling when that row's displayed one-decimal percentage exceeds 80, and without styling otherwise.
 - **REQ-770**: MUST keep the occupancy suffix text unstyled on the command invocation summary and early-check diagnostic surfaces regardless of the percentage value.
 - **REQ-771**: MUST capture the exact composed final context-retention notification message into one process-scoped retention store at every agentic-flow terminal emission of that notification.
-- **REQ-772**: MUST preserve the retained final-output notification message across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` recovery so `/req-print-result` consumes the last completed flow's notification.
+- **REQ-772**: MUST preserve the retained final-output notification message across terminal orchestration transitions, extension rebinds, `/new` session starts, and `/req-reset` plus `/req-wtd` recovery so `/req-print-result` consumes the last completed flow's notification.
 - **REQ-773**: MUST clear the retained final-output notification message at the idle-reset `startup|reload` `session_start` boundaries together with the captured Next-Workflow array.
 - **REQ-774**: MUST clear the retained final-output notification message immediately before prompt dispatch of a `new` agentic flow, after every slash-command pre-check has succeeded.
-- **REQ-775**: MUST NOT clear the retained final-output notification message during `/req-reset` recovery or failed slash-command pre-checks.
+- **REQ-775**: MUST NOT clear the retained final-output notification message during `/req-reset` or `/req-wtd` recovery or failed slash-command pre-checks.
 - **REQ-776**: MUST register `req-print-result` as a dedicated non-agentic extension command with description `Print the final-output report notification of the last completed agentic workflow` and MUST NOT depend on a bundled prompt Markdown file.
 - **REQ-777**: MUST redeliver the retained final-output notification message verbatim through the stale-context-safe UI-notification channel with its original info severity.
 - **REQ-778**: MUST allow `req-print-result` execution from every workflow state without workflow dispatch, startability gate, workflow-state transition, or captured-state mutation.
@@ -891,6 +893,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-802**: MUST append `-retry-<n>` before the filename extension when one run flushes additional same-status provider error payload file sets, keeping the first set unsuffixed.
 - **REQ-813**: MUST make project static-check execution terminate successfully without dispatching any checker when the fixture-filtered source selection holds no supported source file.
 - **REQ-814**: MUST return the payload declared by `NO_SOURCE_STATIC_CHECK_RESULT` in `src/core/source-presence.ts` verbatim as the project static-check no-source result stdout.
+- **REQ-815**: MUST register `req-wtd` as a dedicated extension command with description `Restore base-path, switch to the main branch, and remove generated worktrees` and MUST NOT depend on a bundled prompt Markdown file.
+- **REQ-816**: MUST make `req-wtd` execute without prompt dispatch, LLM-session initialization, or worktree creation.
+- **REQ-817**: MUST allow `req-wtd` invocation from any current workflow state and MUST NOT reject it when workflow state is not `idle`.
+- **REQ-818**: MUST make `req-wtd` preserve the visible execution transcript while restoring the original session-backed `base-path`.
+- **REQ-819**: MUST make `req-wtd` switch the main repository worktree back to the main branch from which generated worktrees were derived before branch deletion.
+- **REQ-820**: MUST make successful `req-wtd` clear persisted prompt-orchestration state, transition workflow state to `idle`, and notify pi success after cleanup completes.
+- **REQ-821**: MUST make failing `req-wtd` surface restoration or cleanup failures, transition workflow state to `error`, and preserve already-completed cleanup effects.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -958,8 +967,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-103**: MUST verify successful `req-references` runs create no worktree or LLM message, overwrite configured `REFERENCES.md`, stage only that file, commit exact message, notify success, and restore workflow state `done`.
 - **TST-104**: MUST verify failing `req-references` runs transition workflow state to `error`, notify pi CLI, create no worktree or LLM message, and surface git or reference-generation failures.
 - **TST-105**: MUST verify extension activation registers `req-reset` outside the bundled prompt inventory with its dedicated fixed description.
-- **TST-106**: MUST verify successful `req-reset` accepts non-`idle` workflow state, preserves execution transcript, restores `base-path`, removes matching generated worktrees plus branches, and returns workflow state `idle` without LLM messages.
-- **TST-107**: MUST verify failing `req-reset` surfaces restoration or cleanup failures, transitions workflow state to `error`, and starts no worktree or LLM session.
+- **TST-106**: MUST verify successful `req-reset` accepts non-`idle` workflow state, preserves the execution transcript and client position without removing worktrees or branches, and returns workflow state `idle` without LLM messages.
+- **TST-107**: MUST verify failing `req-reset` surfaces recovery failures, transitions workflow state to `error`, and starts no worktree or LLM session.
 - **TST-024**: MUST verify `req-files-search` and `req-search` agent-tool outputs place monolithic search markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
 - **TST-025**: MUST verify harness inspection surfaces `req-files-search` and `req-search` descriptions covering parameters, regex semantics, supported tags, monolithic markdown output, and failure details.
 - **TST-026**: MUST verify `req-files-compress` and `req-compress` agent-tool outputs place monolithic compression markdown with preserved leading tabs in `content[0].text` and restrict `details` to execution metadata.
@@ -996,7 +1005,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-061**: MUST verify `req-<prompt>` commands skip worktree creation when `AUTO_GIT_COMMIT=disable`, even if persisted `GIT_WORKTREE_ENABLED=enable`.
 - **TST-064**: MUST verify worktree-backed `req-<prompt>` commands confirm created worktree directory plus branch existence before prompt dispatch and abort without dispatch when verification fails.
 - **TST-067**: MUST verify `status:error` renders with blinking error styling and non-error `status` values follow the documented status-bar theme convention.
-- **TST-068**: MUST verify every `req-*` slash command except `req-reset` rejects workflow state other than `idle` or `done` before checks, worktree operations, or direct references execution, surfaces an error, and transitions workflow state to `error`.
+- **TST-068**: MUST verify every `req-*` slash command except `req-reset` and `req-wtd` rejects workflow state other than `idle` or `done` before checks, worktree operations, or direct references execution, surfaces an error, and transitions workflow state to `error`.
 - **TST-069**: MUST verify bundled prompt-backed `req-<prompt>` commands transition workflow state through `checking`, `error`, and `running` for documented preflight and prompt-handoff paths.
 - **TST-070**: MUST verify prompt-end handling ignores unrelated or non-success completions and performs cleanup only for the matched successful prompt.
 - **TST-071**: MUST verify matched successful cleanup transitions workflow state through `merging` to `done` and transitions to `error` on merge or deletion failure.
@@ -1021,7 +1030,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-134**: MUST verify prompt-command preflight stores the captured model provider, model identifier, and thinking level inside the execution plan.
 - **TST-135**: MUST verify execution-session activation re-applies the captured model on the replacement session before agent start when the restored model differs.
 - **TST-136**: MUST verify orchestrated closure re-applies the captured model after successful `base-path` restoration when the restored model differs.
-- **TST-137**: MUST verify `req-reset` re-applies the captured model after returning the active session to the main `base-path`.
+- **TST-137**: MUST verify `req-wtd` re-applies the captured model after returning the active session to the main `base-path`.
 - **TST-138**: MUST verify re-application is skipped without a second model mutation when the post-switch model and thinking level already match the captured selection.
 - **TST-139**: MUST verify a failed or unauthenticated model re-application emits one warning notification, keeps workflow state consistent, and does not abort orchestration.
 - **TST-140**: MUST verify `src/core/context-file-size.ts` reports `exists=false` with zero metrics for missing context files and exact character plus `cl100k_base` token counts for existing files.
@@ -1142,6 +1151,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-254**: MUST verify the `Generated log files` row renders permanently disabled and dimmed with a description covering every generated debug file kind.
 - **TST-256**: MUST verify the report colorizer renders `Summary`-section plain body text in intense white while headings, fences, inline elements, other bodies, and the Next-Workflow table keep unchanged styling.
 - **TST-257**: MUST verify project static-check on a source-free repository exits 0, emits the verbatim `NO_SOURCE_STATIC_CHECK_RESULT` payload on stdout, and dispatches no checker.
+- **TST-258**: MUST verify extension activation registers `req-wtd` outside the bundled prompt inventory with its dedicated fixed description.
+- **TST-259**: MUST verify successful `req-wtd` restores `base-path`, switches the main worktree to the main branch, force-removes matching generated worktrees plus branches, and returns workflow state `idle` without LLM messages.
+- **TST-260**: MUST verify failing `req-wtd` surfaces restoration or cleanup failures, transitions workflow state to `error`, and starts no worktree or LLM session.
+- **TST-261**: MUST verify `req-wtd` force-removes generated worktrees containing active uncommitted changes.
 
 ## 5. Observed Component Model
 
@@ -1279,6 +1292,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | PRJ-003 | `src/index.ts` :: `buildPiUsereqMenuChoices`, `configurePiUsereq`, and `configureDebugMenu` :: expose project paths, git automation, static-check, startup tools, notifications, and debug logging controls. |
 | PRJ-004 | `src/core/prompt-command-runtime.ts` :: `validatePromptGitState`, `buildPromptWorktreeName`, `createPromptWorktree`, and `finalizePromptCommandExecution`; `src/core/req-references-command.ts` :: `prepareReqReferencesCommandExecution` and `executeReqReferencesCommandExecution` :: keep git orchestration internal to slash-command execution. |
 | PRJ-005 | `src/core/resources.ts` :: `ensureBundledResourcesAccessible` :: validates installation-owned `resources/{prompts,instructions,templates,guidelines}` directories; bundled tree exists under `src/resources/{prompts,instructions,templates,guidelines}`. |
+| PRJ-011 | `src/index.ts` :: `registerReqWtdCommand` :: registers the dedicated `req-wtd` worktree-disposal command; `src/core/req-wtd-command.ts` :: `prepareReqWtdCommandExecution` plus `executeReqWtdCommandExecution` :: restore base-path, switch the main branch, and force-remove generated worktrees plus branches. |
 | CTN-001 | `src/core/config.ts` :: `getProjectConfigPath` and `getDefaultConfig` :: returns `<base-path>/.pi-usereq.json`, `usereq/docs`, `tests`, and `["src"]`. |
 | CTN-002 | `src/core/tool-runner.ts` :: `collectSourceFiles` :: executes `git -C <projectBase> ls-files --cached --others --exclude-standard` and fails on non-zero status. |
 | CTN-003 | `src/core/tool-runner.ts` :: `SUPPORTED_EXTENSIONS = new Set(Object.keys(STATIC_CHECK_EXT_TO_LANG))`; `src/core/source-analyzer.ts` :: alias assignments `specs.cc = specs.cpp`, `specs.cxx = specs.cpp`, `specs.hpp = specs.cpp`, `specs.exs = specs.elixir`. |
@@ -1322,6 +1336,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | DES-042 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput`, `renderAgentFinalOutputMarkdownReport`, and the process-scoped report store :: one dedicated module implementing final-output JSON parsing, validation, report rendering, and capture outside `src/index.ts` business logic. |
 | DES-046 | `src/core/context-file-size.ts` :: `CONTEXT_OCCUPANCY_MENU_ALERT_THRESHOLD_PERCENT` and `formatConfigMenuContextOccupancySuffix` :: one shared alert-threshold helper consuming the occupancy facts and reused by both configuration-menu renderers. |
 | DES-047 | `src/core/prompt-command-args.ts` :: `resolvePromptCommandUserRequest`, `parsePromptCommandFileSpec`, `expandPromptCommandHomePath`, and `PROMPT_COMMAND_EMPTY_REQUEST_PLACEHOLDER` :: one dedicated user-request resolution module outside `src/index.ts` business logic. |
+| DES-048 | `src/core/req-wtd-command.ts` :: `prepareReqWtdCommandExecution` and `executeReqWtdCommandExecution` :: implement the dedicated `req-wtd` worktree-disposal workflow reusing shared base-path restoration helpers without starting an LLM session or creating a worktree. |
 
 ### 8.3 REQ Evidence
 | ID | Evidence |
@@ -1339,10 +1354,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-630 | `src/core/extension-status.ts` :: `PiUsereqStatusState.workflowState` plus `workflowRequest` :: process-scoped runtime orchestration state variables. |
 | REQ-631 | `src/index.ts` :: `registerPromptCommands`, `registerReqReferencesCommand`, plus `registerReqResetCommand` :: record the active request token before `checking` or `running`. |
 | REQ-632 | `src/core/extension-status.ts` :: `PI_USEREQ_STATUS_REQUEST_STATE_SEPARATOR` plus `formatWorkflowStateValue` :: renders `<request> ➔ <state>` with the documented fallback. |
-| REQ-633 | `src/core/extension-status.ts` :: `shouldResetWorkflowStateOnSessionStart` plus `updateExtensionStatus` :: resets to `idle` only on `startup|reload`; `src/index.ts` :: `registerReqResetCommand` :: ends successful reset in `idle`. |
+| REQ-633 | `src/core/extension-status.ts` :: `shouldResetWorkflowStateOnSessionStart` plus `updateExtensionStatus` :: resets to `idle` only on `startup|reload`; `src/index.ts` :: `registerReqResetCommand` plus `registerReqWtdCommand` :: end successful reset and disposal in `idle`. |
 | REQ-634 | `src/index.ts` :: `finalizeMatchedPromptSuccess`, `registerReqReferencesCommand`, plus `registerPromptCommands` :: successful termination sets `done`. |
 | REQ-635 | `src/index.ts` :: `registerPromptCommands` plus `registerReqReferencesCommand` :: startability gate accepts `idle|done`. |
-| REQ-636 | `src/index.ts` :: terminal transition branches :: non-reset orchestration ends in `done|warning|error`; `req-reset` ends in `idle|warning|error`. |
+| REQ-636 | `src/index.ts` :: terminal transition branches :: non-reset orchestration ends in `done|warning|error`; `req-reset` and `req-wtd` end in `idle|warning|error`. |
 | REQ-637 | `src/core/prompt-command-state.ts` :: `PersistedPromptCommandRuntimeState.workflowRequest` :: persists and restores the active request with the workflow state. |
 | REQ-638 | `src/core/extension-status.ts` :: `formatWorkflowStateValue` :: renders `done` with the non-error warning-token value convention. |
 | REQ-649 | `src/index.ts` :: `registerPromptCommands` handler :: resolves `resolvePromptCommandFlowKind(...)` from the workflow state observed before the `checking` transition. |
@@ -1503,7 +1518,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-653 | `src/index.ts` :: `handleExtensionStatusEvent` capture block :: parses the terminal completed output through `parseAgentFinalOutput(...)` before the retention notification; `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: single-JSON-object parsing with mandatory-field validation. |
 | REQ-654 | `src/core/next-workflow.ts` :: `captureNextWorkflowCommands` :: maps `next_commands` entries into the process-scoped array in entry order. |
 | REQ-655 | `src/core/next-workflow.ts` :: `appendNextWorkflowBlockEntry` purge branch (L126-129) plus `NEXT_WORKFLOW_COMMAND_NAMES` (L36-43) :: non-pi-usereq orchestration commands dropped while `req-continue` stays eligible. |
-| REQ-656 | `src/core/next-workflow.ts` :: `ProcessScopedNextWorkflowStore` (L78-84) plus `getNextWorkflowStore` (L95-103); `src/index.ts` :: `session_start` clear (L1624-1629) plus `promptCommandHandler` pre-dispatch wipe (L4003-4009) :: array preserved across terminal transitions, rebinds, `/new`, and `/req-reset` while `startup|reload` and the pre-dispatch `new`-flow wipe clear it. |
+| REQ-656 | `src/core/next-workflow.ts` :: `ProcessScopedNextWorkflowStore` (L78-84) plus `getNextWorkflowStore` (L95-103); `src/index.ts` :: `session_start` clear (L1624-1629) plus `promptCommandHandler` pre-dispatch wipe (L4003-4009) :: array preserved across terminal transitions, rebinds, `/new`, and `/req-reset` plus `/req-wtd` while `startup|reload` and the pre-dispatch `new`-flow wipe clear it. |
 | REQ-657 | `src/index.ts` :: `notifyContextRetentionReminder` (L1292-1311) :: appends the numbered list after the retention line; `src/core/next-workflow.ts` :: `formatNextWorkflowList` (L292-300) :: one command per line. |
 | REQ-658 | `src/core/next-workflow.ts` :: `condenseNextWorkflowInputText` (L274-285) :: first 20 characters plus `...` plus last 10 characters, omitted without input text. |
 | REQ-659 | `src/index.ts` :: `registerReqContinueCommand` (L3827-3863) registers `req-continue` with `REQ_CONTINUE_COMMAND_DESCRIPTION`; `src/core/next-workflow.ts` :: `REQ_CONTINUE_COMMAND_DESCRIPTION` (L51-53) :: dedicated registration outside the bundled prompt inventory. |
@@ -1522,7 +1537,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-667 | `src/core/prompt-command-runtime.ts` :: `PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE` (L1001-1007); `src/index.ts` :: error-message append (L1512-1518) :: identical hardcoded `ERROR:` last line for every orchestration. |
 | REQ-668 | `src/index.ts` :: merge-failure branch clears no Next-Workflow state (L1504-1520); `tests/extension-registration.test.ts` :: `worktree-backed finalization transitions through merging, error, and idle when merge fails` (L5260) :: captured array still holds two entries after the failed closure. |
 | REQ-669 | `src/index.ts` :: `promptCommandHandler` pre-dispatch wipe (L4005-4011) :: `clearNextWorkflowCommands()` only for the `new` flow after all pre-checks; `tests/extension-registration.test.ts` :: `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206). |
-| REQ-670 | `src/index.ts` :: `resetCommandHandler` idle transition preserves the array (L3728-3731); `tests/extension-registration.test.ts` :: `req-reset accepts non-idle workflow state, preserves transcript, and removes generated worktrees` (L3936) plus the wipe-placement test (L10206). |
+| REQ-670 | `src/index.ts` :: `resetCommandHandler` plus `wtdCommandHandler` idle transitions preserve the array; `tests/extension-registration.test.ts` :: `req-reset accepts non-idle workflow state and returns to idle without worktree cleanup or client relocation` (L4183) plus the wipe-placement test (L11198). |
 | REQ-677 | `src/core/agent-final-output.ts` :: mandatory-field validation inside `parseAgentFinalOutput` :: only `result`, `summary`, and `next_commands` are mandatory. |
 | REQ-678 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: validates the extracted object's `result` domain, `summary` string type, and `next_commands` array type before returning the report. |
 | REQ-679 | `src/core/agent-final-output.ts` :: `parseAgentFinalOutput` :: optional report fields are consumed only when present as strings and their absence never errors. |
@@ -1558,7 +1573,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-772 | `src/core/result-retention.ts` :: `ProcessScopedResultRetentionStore` plus `getRetainedResultMessage` :: `globalThis` persistence across rebinds; `src/index.ts` :: `resetCommandHandler` plus `referencesCommandHandler` :: `captureMessage false` emissions preserve the retained message. |
 | REQ-773 | `src/index.ts` :: `handleExtensionStatusEvent` :: `session_start` `shouldResetWorkflowStateOnSessionStart` branch :: `clearRetainedResultMessage()` beside `clearNextWorkflowCommands()`. |
 | REQ-774 | `src/index.ts` :: `promptCommandHandler` pre-dispatch wipe :: `clearRetainedResultMessage()` only for the `new` flow after all pre-checks. |
-| REQ-775 | `src/index.ts` :: `resetCommandHandler` idle transition plus failed-preflight `req-change` rejection :: neither path invokes `clearRetainedResultMessage()`. |
+| REQ-775 | `src/index.ts` :: `resetCommandHandler` plus `wtdCommandHandler` idle transitions and the failed-preflight `req-change` rejection :: neither path invokes `clearRetainedResultMessage()`. |
 | REQ-776 | `src/index.ts` :: `registerReqPrintResultCommand` registers `req-print-result` with `REQ_PRINT_RESULT_COMMAND_DESCRIPTION`; `src/core/result-retention.ts` :: `REQ_PRINT_RESULT_COMMAND_DESCRIPTION` :: dedicated registration outside the bundled prompt inventory. |
 | REQ-777 | `src/index.ts` :: `printResultCommandHandler` retained branch :: `notifyContextSafely(ctx, retainedMessage, "info")` redelivers the byte-identical message through the notification channel. |
 | REQ-778 | `src/index.ts` :: `printResultCommandHandler` :: no `isPiUsereqWorkflowStartable` gate, no request recording, no workflow-state transition, and no capture mutation before notification delivery. |
@@ -1665,7 +1680,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-235 | `tests/extension-registration.test.ts` :: `req-continue prints the Next-Workflow table without a parameter from every workflow state` :: editor-only table printing with no dispatch, notification, transition, or array mutation. |
 | TST-236 | `tests/extension-registration.test.ts` :: parameter-less `req-continue` empty-array coverage inside the every-workflow-state print test :: `NEXT_WORKFLOW_EMPTY_LIST_TEXT` editor payload. |
 | TST-219 | `tests/extension-registration.test.ts` :: `worktree-backed finalization transitions through merging, error, and idle when merge fails` (L5260) :: worktree re-point, retention-before-error ordering, hardcoded `ERROR:` last line, and preserved Next-Workflow array. |
-| TST-220 | `tests/extension-registration.test.ts` :: `req-reset accepts non-idle workflow state, preserves transcript, and removes generated worktrees` (L3936) plus `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206) :: array preserved across `/req-reset` recovery. |
+| TST-220 | `tests/extension-registration.test.ts` :: `req-reset accepts non-idle workflow state and returns to idle without worktree cleanup or client relocation` (L4183) plus `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L11198) :: array preserved across `/req-reset` recovery. |
 | TST-221 | `tests/extension-registration.test.ts` :: `next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset` (L10206) :: failed pre-checks preserve the array and the dispatch-time sample observes the post-wipe empty array. |
 | TST-225 | `tests/agent-final-output.test.ts` :: parsing, validation, and report-rendering tests :: bare, prose-wrapped, fenced, and prose-plus-fenced object acceptance, non-JSON, object-free, multi-object, and mandatory-field rejections, and optional-field tolerance. |
 | TST-226 | `tests/agent-final-output.test.ts` :: summary-resolution tests plus `src/core/pi-notify.ts` :: `resolvePiNotifyAgentOutput` :: completed outcomes resolve `%%OUTPUT%%` from the JSON `summary` with raw-output fallback. |

@@ -17,6 +17,9 @@ import {
   REQ_RESET_COMMAND_DESCRIPTION,
 } from "../src/core/req-reset-command.js";
 import {
+  REQ_WTD_COMMAND_DESCRIPTION,
+} from "../src/core/req-wtd-command.js";
+import {
   COMMAND_REPORT_ENTRY_TYPE,
   type CommandReportEntryData,
 } from "../src/core/command-report-entry.js";
@@ -993,6 +996,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "req-refactor",
     "req-references",
     "req-reset",
+    "req-wtd",
     "req-print-result",
     "req-renumber",
     "req-workflow",
@@ -1144,6 +1148,26 @@ test("req-reset registers outside the bundled prompt inventory and keeps its ded
   assert.equal(
     pi.commands.get("req-reset")?.description,
     REQ_RESET_COMMAND_DESCRIPTION,
+  );
+});
+
+/**
+ * @brief Verifies `req-wtd` registration is independent from bundled prompt inventory.
+ * @details Confirms `wtd` is absent from `PROMPT_COMMAND_NAMES` while extension activation still registers `req-wtd` with the fixed dedicated description. Runtime is O(1). Side effects are limited to extension registration.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when `wtd` remains in the bundled prompt inventory or the command description diverges.
+ * @satisfies TST-258
+ */
+test("req-wtd registers outside the bundled prompt inventory and keeps its dedicated description", () => {
+  const bundledPromptNames = PROMPT_COMMAND_NAMES as readonly string[];
+  assert.equal(bundledPromptNames.includes("wtd"), false);
+
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+
+  assert.equal(
+    pi.commands.get("req-wtd")?.description,
+    REQ_WTD_COMMAND_DESCRIPTION,
   );
 });
 
@@ -3841,7 +3865,7 @@ test("req-references appends a durable command-report entry that survives sessio
 
 /**
  * @brief Verifies non-agentic commands dispatch no command-notify, sound, or Pushover effects.
- * @details Enables command-notify, the completed and failed sound events, and Pushover delivery with both credentials, then runs `req-references`, `req-reset`, and one failing `req-references` against a temporary fixture repository. Asserts that neither the intercepted shell-spawn transport nor the intercepted HTTPS transport is invoked, proving completed and failed non-agentic runs never reach the command-notify, sound, or Pushover gates. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation.
+ * @details Enables command-notify, the completed and failed sound events, and Pushover delivery with both credentials, then runs `req-references`, `req-reset`, `req-wtd`, and one failing `req-references` against a temporary fixture repository. Asserts that neither the intercepted shell-spawn transport nor the intercepted HTTPS transport is invoked, proving completed and failed non-agentic runs never reach the command-notify, sound, or Pushover gates. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation.
  * @return {Promise<void>} Promise resolved after the no-dispatch assertions complete.
  * @throws {AssertionError} Throws when a non-agentic run dispatches a shell notification command or a Pushover request.
  * @satisfies TST-156, REQ-447
@@ -3918,6 +3942,7 @@ test("non-agentic req-references and req-reset runs dispatch no notification eff
     await pi.emit("session_start", { reason: "startup" }, ctx);
     await pi.commands.get("req-references")!.handler("", ctx);
     await pi.commands.get("req-reset")!.handler("", ctx);
+    await pi.commands.get("req-wtd")!.handler("", ctx);
     fs.writeFileSync(path.join(projectBase, "DIRTY.txt"), "dirty\n", "utf8");
     await assert.rejects(
       pi.commands.get("req-references")!.handler("", ctx),
@@ -4149,13 +4174,13 @@ test("req-workflow writes the no-source WORKFLOW.md placeholder without dispatch
 });
 
 /**
- * @brief Verifies successful `req-reset` recovers from a non-`idle` worktree-backed prompt state while preserving the captured Next-Workflow array.
- * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree with workflow state `running`, captures one Next-Workflow entry, appends one unique execution-session record, invokes `req-reset` from that non-`idle` state, and verifies transcript preservation, base-path restoration, generated worktree plus branch deletion, unchanged LLM prompt count, preserved captured Next-Workflow array, success notification, and final workflow state `idle`. Runtime is dominated by temporary git worktree setup plus session-file inspection. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @brief Verifies successful `req-reset` recovers from a non-`idle` worktree-backed prompt state without worktree cleanup or client relocation while preserving the captured Next-Workflow array.
+ * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree with workflow state `running`, captures one Next-Workflow entry, invokes `req-reset` from that non-`idle` state, and verifies transcript and client-position preservation, unchanged worktree plus branch and session artifacts, unchanged LLM prompt count, preserved captured Next-Workflow array, success notification, and final workflow state `idle`. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after recovery-path assertions complete.
- * @throws {AssertionError} Throws when `req-reset` rejects the non-`idle` state, loses the execution transcript, drops the captured Next-Workflow array, leaves generated cleanup artifacts behind, or dispatches an additional LLM prompt.
- * @satisfies TST-106, REQ-656, REQ-670
+ * @throws {AssertionError} Throws when `req-reset` rejects the non-`idle` state, deletes cleanup artifacts, relocates the client, drops the captured Next-Workflow array, or dispatches an additional LLM prompt.
+ * @satisfies TST-106, REQ-305, REQ-307, REQ-656, REQ-670
  */
-test("req-reset accepts non-idle workflow state, preserves transcript, and removes generated worktrees", async () => {
+test("req-reset accepts non-idle workflow state and returns to idle without worktree cleanup or client relocation", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
@@ -4164,8 +4189,6 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
     const ctx = createFakeCtx(projectBase);
 
     await pi.emit("session_start", { reason: "startup" }, ctx);
-    const originalSessionFile = ctx.sessionManager.getSessionFile() ?? "";
-    assert.notEqual(originalSessionFile, "");
 
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
 
@@ -4183,10 +4206,8 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
     const worktreeName = worktreeMatch?.[1] ?? "";
     const executionBasePath = worktreeMatch?.[2] ?? "";
     const executionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
-    const appendedEntryId = "req-reset-transcript-entry";
 
     assert.notEqual(executionSessionFile, "");
-    assert.notEqual(executionSessionFile, originalSessionFile);
     assert.equal(ctx.cwd, executionBasePath);
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(fs.existsSync(executionBasePath), true);
@@ -4195,34 +4216,22 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
       /<accent>status:<\/accent><warning>change ➔ running<\/warning>/,
     );
 
-    fs.appendFileSync(
-      executionSessionFile,
-      `${JSON.stringify({
-        type: "custom",
-        id: appendedEntryId,
-        parentId: null,
-        timestamp: new Date(0).toISOString(),
-        customType: "req-reset-test",
-        data: { recovered: true },
-      })}\n`,
-      "utf8",
-    );
-
     await pi.commands.get("req-reset")!.handler("", ctx);
 
     assert.equal(pi.sentUserMessages.length, sentMessageCountBeforeReset);
-    assert.equal(ctx.cwd, projectBase);
-    assert.equal(process.cwd(), projectBase);
-    assert.equal(ctx.sessionManager.getSessionFile(), originalSessionFile);
-    assert.equal(fs.existsSync(executionBasePath), false);
+    // REQ-307: the client stays on the current worktree session without relocation.
+    assert.equal(ctx.cwd, executionBasePath);
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(ctx.sessionManager.getSessionFile(), executionSessionFile);
+    // REQ-305: `req-reset` retains the generated worktree plus branch for `/req-wtd`.
+    assert.equal(fs.existsSync(executionBasePath), true);
     assert.equal(
       spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
         cwd: projectBase,
         encoding: "utf8",
       }).status,
-      1,
+      0,
     );
-    assert.match(fs.readFileSync(originalSessionFile, "utf8"), new RegExp(appendedEntryId));
     assert.equal(getNextWorkflowCommands().length, 1);
     assert.ok(
       ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)),
@@ -4232,7 +4241,7 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
       buildExpectedFakeStatusText({
         workflowState: "idle",
         workflowRequest: "reset",
-        basePath: buildExpectedFakeBasePath(projectBase),
+        basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
         srcDir: ["src"],
@@ -4247,13 +4256,13 @@ test("req-reset accepts non-idle workflow state, preserves transcript, and remov
 });
 
 /**
- * @brief Verifies failing `req-reset` surfaces restoration errors without starting new worktree or LLM execution.
- * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree, forces the subsequent base-path restoration switch to return `cancelled`, invokes `req-reset` from that non-`idle` state, and verifies the command reports the restoration failure, leaves the generated worktree plus branch in place for manual recovery, sends no additional LLM prompt, and transitions workflow state to `error`. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @brief Verifies failing `req-wtd` surfaces restoration errors without starting new worktree or LLM execution.
+ * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree, forces the subsequent base-path restoration switch to return `cancelled`, invokes `req-wtd` from that non-`idle` state, and verifies the command reports the restoration failure, leaves the generated worktree plus branch in place for manual recovery, sends no additional LLM prompt, and transitions workflow state to `error`. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after failure-path assertions complete.
- * @throws {AssertionError} Throws when `req-reset` hides restoration failures, creates new cleanup artifacts, or clears the generated worktree plus branch despite the failed restore.
- * @satisfies TST-107
+ * @throws {AssertionError} Throws when `req-wtd` hides restoration failures, creates new cleanup artifacts, or clears the generated worktree plus branch despite the failed restore.
+ * @satisfies TST-260
  */
-test("req-reset surfaces restoration failures and transitions workflow state to error", async () => {
+test("req-wtd surfaces restoration failures and transitions workflow state to error", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
@@ -4282,7 +4291,7 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
     ctx.switchSession = async (_sessionPath: string) => ({ cancelled: true });
 
     await assert.rejects(
-      pi.commands.get("req-reset")!.handler("", ctx),
+      pi.commands.get("req-wtd")!.handler("", ctx),
       /Session switch cancelled/,
     );
 
@@ -4304,7 +4313,7 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "error",
-        workflowRequest: "reset",
+        workflowRequest: "wtd",
         basePath: buildExpectedFakeBasePath(executionBasePath),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4320,13 +4329,50 @@ test("req-reset surfaces restoration failures and transitions workflow state to 
 });
 
 /**
- * @brief Verifies `req-reset` switches the main worktree off generated branches before cleanup.
- * @details Prepares one fixture repository whose main worktree HEAD is left checked out on a generated prompt-command branch while a second generated worktree plus branch remains pending, invokes `req-reset`, and verifies the command switches the main worktree back to the repository main branch first so both generated branches and the pending worktree are force-removed without git's checked-out-worktree rejection. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation and fake UI notifications.
- * @return {Promise<void>} Promise resolved after main-branch recovery assertions complete.
- * @throws {AssertionError} Throws when `req-reset` leaves generated branch cleanup blocked, fails to restore the main branch, or reports a failed reset.
- * @satisfies TST-106
+ * @brief Verifies failing `req-reset` surfaces recovery failures without worktree cleanup or LLM execution.
+ * @details Corrupts the persisted local configuration after startup, invokes `req-reset`, and verifies the command reports the recovery failure, transitions workflow state to `error`, sends no LLM message, and mutates no repository artifact. Runtime is dominated by fixture setup plus fake handler dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after failure-path assertions complete.
+ * @throws {AssertionError} Throws when `req-reset` hides recovery failures or dispatches an LLM prompt.
+ * @satisfies TST-107, REQ-313, REQ-305
  */
-test("req-reset switches the main worktree off generated branches before removing pending worktrees", async () => {
+test("req-reset surfaces recovery failures and transitions workflow state to error", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    fs.writeFileSync(path.join(projectBase, ".pi-usereq.json"), "{ broken", "utf8");
+
+    await assert.rejects(
+      pi.commands.get("req-reset")!.handler("", ctx),
+      /invalid /,
+    );
+
+    assert.equal(pi.sentUserMessages.length, 0);
+    assert.ok(
+      ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "info" && /invalid /.test(entry.message)),
+    );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>/,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-wtd` switches the main worktree off generated branches before cleanup.
+ * @details Prepares one fixture repository whose main worktree HEAD is left checked out on a generated prompt-command branch while a second generated worktree plus branch remains pending, invokes `req-wtd`, and verifies the command switches the main worktree back to the repository main branch first so both generated branches and the pending worktree are force-removed without git's checked-out-worktree rejection. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after main-branch recovery assertions complete.
+ * @throws {AssertionError} Throws when `req-wtd` leaves generated branch cleanup blocked, fails to restore the main branch, or reports a failed reset.
+ * @satisfies TST-259
+ */
+test("req-wtd switches the main worktree off generated branches before removing pending worktrees", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   const parentPath = path.resolve(projectBase, "..");
@@ -4355,7 +4401,7 @@ test("req-reset switches the main worktree off generated branches before removin
     const ctx = createFakeCtx(projectBase);
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
-    await pi.commands.get("req-reset")!.handler("", ctx);
+    await pi.commands.get("req-wtd")!.handler("", ctx);
 
     assert.equal(pi.sentUserMessages.length, 0);
     assert.equal(fs.existsSync(pendingWorktreeRoot), false);
@@ -4386,13 +4432,13 @@ test("req-reset switches the main worktree off generated branches before removin
         .includes(path.resolve(pendingWorktreeRoot)),
       false,
     );
-    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-wtd/.test(entry.message)));
     assert.ok(!ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "idle",
-        workflowRequest: "reset",
+        workflowRequest: "wtd",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4409,13 +4455,13 @@ test("req-reset switches the main worktree off generated branches before removin
 });
 
 /**
- * @brief Verifies `req-reset` cleans generated worktrees when invoked from inside one.
- * @details Prepares one fixture repository with one generated worktree plus branch, chdirs the host process into that worktree, invokes `req-reset` without any persisted prompt state, and verifies plan resolution normalizes to the main repository so the generated worktree and branch are force-removed, the deleted live cwd is restored to the main base path, and a success notification is emitted without error leftovers. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation, process cwd mutation, and fake UI notifications.
+ * @brief Verifies `req-wtd` cleans generated worktrees when invoked from inside one.
+ * @details Prepares one fixture repository with one generated worktree plus branch, chdirs the host process into that worktree, invokes `req-wtd` without any persisted prompt state, and verifies plan resolution normalizes to the main repository so the generated worktree and branch are force-removed, the deleted live cwd is restored to the main base path, and a success notification is emitted without error leftovers. Runtime is dominated by temporary git setup plus cleanup. Side effects are limited to temporary repository mutation, process cwd mutation, and fake UI notifications.
  * @return {Promise<void>} Promise resolved after main-repository normalization assertions complete.
- * @throws {AssertionError} Throws when `req-reset` leaves generated worktree artifacts behind, fails to restore the live cwd, or reports a failed reset.
- * @satisfies TST-106
+ * @throws {AssertionError} Throws when `req-wtd` leaves generated worktree artifacts behind, fails to restore the live cwd, or reports a failed reset.
+ * @satisfies TST-259
  */
-test("req-reset removes generated worktrees when invoked from inside a leftover worktree", async () => {
+test("req-wtd removes generated worktrees when invoked from inside a leftover worktree", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   const parentPath = path.resolve(projectBase, "..");
@@ -4436,7 +4482,7 @@ test("req-reset removes generated worktrees when invoked from inside a leftover 
     process.chdir(worktreeRoot);
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
-    await pi.commands.get("req-reset")!.handler("", ctx);
+    await pi.commands.get("req-wtd")!.handler("", ctx);
 
     assert.equal(pi.sentUserMessages.length, 0);
     assert.equal(fs.existsSync(worktreeRoot), false);
@@ -4453,13 +4499,13 @@ test("req-reset removes generated worktrees when invoked from inside a leftover 
       false,
     );
     assert.equal(path.resolve(process.cwd()), path.resolve(projectBase));
-    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)));
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-wtd/.test(entry.message)));
     assert.ok(!ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
         workflowState: "idle",
-        workflowRequest: "reset",
+        workflowRequest: "wtd",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
         testsDir: "tests",
@@ -4568,22 +4614,22 @@ function createPiFaithfulCommandContext(
 }
 
 /**
- * @brief Verifies `req-reset` re-anchors the live pi session when the reserved base session was never persisted.
+ * @brief Verifies `req-wtd` re-anchors the live pi session when the reserved base session was never persisted.
  * @details Prepares one fixture repository with one generated worktree plus branch, binds one pi-faithful
  * command context (getter-only `cwd` accessor, stale-after-switch semantics matching `pi.dev-src`) to one
  * worktree-bound session whose header links a reserved original base session file that was never flushed
- * to disk, invokes `req-reset` without any persisted prompt state, and verifies the command materializes
+ * to disk, invokes `req-wtd` without any persisted prompt state, and verifies the command materializes
  * the reserved base session, switches the live session onto the main base path before any worktree
  * directory is removed, force-removes the generated worktree plus branch, and renders the final status
  * branch from the main repository instead of the deleted worktree path. Runtime is dominated by
  * temporary git worktree setup. Side effects are limited to temporary repository mutation, session-file
  * writes under one temporary session directory, process cwd mutation, and shared UI notifications.
  * @return {Promise<void>} Promise resolved after session-re-anchor assertions complete.
- * @throws {AssertionError} Throws when `req-reset` deletes the anchoring worktree before re-anchoring
+ * @throws {AssertionError} Throws when `req-wtd` deletes the anchoring worktree before re-anchoring
  * the session, fails to materialize the reserved base session, or renders `branch:unknown`.
- * @satisfies TST-106
+ * @satisfies TST-259
  */
-test("req-reset re-anchors the live session when the reserved base session was never persisted", async () => {
+test("req-wtd re-anchors the live session when the reserved base session was never persisted", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   const parentPath = path.resolve(projectBase, "..");
@@ -4631,7 +4677,7 @@ test("req-reset re-anchors the live session when the reserved base session was n
     await pi.emit("session_start", { reason: "startup" }, ctx);
     assert.equal(fs.existsSync(reservedOriginalSessionFile), false);
 
-    await pi.commands.get("req-reset")!.handler("", ctx);
+    await pi.commands.get("req-wtd")!.handler("", ctx);
 
     const mainBranchName = spawnSync("git", ["branch", "--show-current"], {
       cwd: projectBase,
@@ -4654,7 +4700,7 @@ test("req-reset re-anchors the live session when the reserved base session was n
       1,
     );
     assert.equal(path.resolve(process.cwd()), path.resolve(projectBase));
-    assert.ok(uiState.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)));
+    assert.ok(uiState.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-wtd/.test(entry.message)));
     assert.ok(!uiState.notifications.some((entry: { message: string; level: string }) => entry.level === "error"));
     const finalStatusText = uiState.statuses.get("pi-usereq") ?? "";
     assert.doesNotMatch(finalStatusText, /branch:⎇ unknown/);
@@ -4775,7 +4821,7 @@ test("prompt commands capture checking before handoff and running at prompt inje
 });
 
 /**
- * @brief Verifies every req command except `req-reset` rejects non-`idle` workflow state and transitions to `error`.
+ * @brief Verifies every req command except `req-reset` and `req-wtd` rejects non-`idle` workflow state and transitions to `error`.
  * @details Starts one no-worktree `req-change` run until workflow state becomes `running`, invokes `req-analyze` and `req-references` while orchestration remains active, and verifies both handlers reject with deterministic diagnostics, emit error notifications, send no additional LLM prompt, and move the shared workflow state to `error` before `agent_end` restores `idle`. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after rejection-path assertions complete.
  * @throws {AssertionError} Throws when a busy req command starts new orchestration, skips the error transition, or prevents the active no-worktree prompt from returning to `idle`.
@@ -5657,7 +5703,7 @@ test("worktree-backed prompt failures keep the worktree session, retain worktree
 
     // The original base-path session MUST NOT be resumed on failure; the
     // client stays on the worktree execution session so the failure stays
-    // visible until req-reset restores base-path and removes the worktree.
+    // visible until req-wtd restores base-path and removes the worktree.
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(ctx.cwd, executionBasePath);
     assert.equal(fs.existsSync(executionBasePath), true);
