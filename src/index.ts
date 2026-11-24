@@ -1532,7 +1532,7 @@ function isPiAgentSettledEventSupported(
 
 /**
  * @brief Finalizes a matched successful worktree-backed prompt at the current lifecycle point.
- * @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications in intense red, emits the final context-retention notification with the `/req-continue` command table before the error output when the fast-forward merge fails and terminates that error output with the hardcoded uniform merge-failure message, emits the warning-only closure notification after the retention reminder so terminal error and warning diagnostics print last, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
+ * @details Executes the deferred stash-assisted merge, transcript preservation, base-path restore, and worktree plus branch deletion through `finalizePromptCommandExecution(...)`, surfaces `error` or warning-only notifications in intense red, emits the final context-retention notification with the `/req-continue` command table before every terminal error output (REQ-712, REQ-719) — including fast-forward merge failures per REQ-666 and closure cleanup failures — emits the warning-only closure notification after the retention reminder so terminal error and warning diagnostics print last, clears the pending finalization outcome plus prompt state, and transitions workflow state to `done` or `error`; the caller owns the preceding `merging` transition. Reused by the `agent_settled` handler on 0.80.4+ hosts (after the settle-time `merging` transition) and directly by the `agent_end` fallback on legacy hosts that never emit `agent_settled`. Runtime is dominated by git finalization. Side effects include branch merges, worktree deletion, notifications, and workflow-state transitions.
  * @param[in] pi {ExtensionAPI} Active extension API instance supplying the model re-apply appliers.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller whose pending and active prompt state is cleared.
  * @param[in] promptRequest {PiUsereqPromptRequest} Matched successful worktree-backed prompt execution plan.
@@ -1610,12 +1610,11 @@ async function finalizeMatchedPromptSuccess(
     && (!finalization.cleanupSucceeded || !finalization.mergeSucceeded)
   ) {
     const mergeFailed = finalization.mergeAttempted && !finalization.mergeSucceeded;
-    if (mergeFailed) {
-      // REQ-666: the retained-context reminder with the `/req-continue` command table
-      // prints before the error output, so the queued `/req-continue <n>` commands stay
-      // visible and the captured array is preserved for recovery (REQ-668).
-      notifyContextRetentionReminder(statusController, promptContext);
-    }
+    // REQ-712/REQ-719: every terminal error termination carrying a parsed final-output
+    // report prints the context-retention notification (report sections, Next-Workflow
+    // command table, `/req-continue` command table, context percentage) before the
+    // intense-red diagnostic, so a closure failure never drops the report printout.
+    notifyContextRetentionReminder(statusController, promptContext);
     notifyTerminalOrchestrationDiagnostic(
       promptContext,
       mergeFailed
@@ -1981,6 +1980,7 @@ async function handleExtensionStatusEvent(
         && completionPromptRequest.worktreeDir !== undefined
         ? `ERROR: Prompt closure retained worktree ${completionPromptRequest.worktreeDir} after ${outcome} outcome.`
         : undefined;
+      let deferredRestoreFailureDiagnostic: string | undefined;
       const shouldFinalizeMatchedSuccess = outcome === "completed"
         && completionPromptRequest.worktreeDir !== undefined
         && statusMarker === "ok";
@@ -2103,6 +2103,11 @@ async function handleExtensionStatusEvent(
           ) ?? promptContext) as typeof ctx;
         } catch (error) {
           promptContext = (getPromptCommandErrorContext(error) ?? promptContext) as typeof ctx;
+          // REQ-719: the diagnostic is deferred until after the completed-run retention
+          // notification so the report printout, the Next-Workflow command table, the
+          // `/req-continue` command table, and the context-usage percentage line print
+          // before the intense-red terminal error output.
+          deferredRestoreFailureDiagnostic = error instanceof Error ? error.message : String(error);
           if (debugConfig) {
             transitionPromptWorkflowState(
               statusController,
@@ -2115,7 +2120,6 @@ async function handleExtensionStatusEvent(
           } else {
             setPiUsereqWorkflowState(statusController, "error", promptContext);
           }
-          notifyTerminalOrchestrationDiagnostic(promptContext, error instanceof Error ? error.message : String(error), "error");
         }
       }
       if (closureFailureMessage === undefined && !shouldFinalizeMatchedSuccess && !markerBlockedOutcome) {
@@ -2142,6 +2146,9 @@ async function handleExtensionStatusEvent(
         }
         if (outcome === "completed") {
           notifyContextRetentionReminder(statusController, promptContext);
+        }
+        if (deferredRestoreFailureDiagnostic !== undefined) {
+          notifyTerminalOrchestrationDiagnostic(promptContext, deferredRestoreFailureDiagnostic, "error");
         }
       }
     }

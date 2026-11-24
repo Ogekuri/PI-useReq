@@ -2152,7 +2152,7 @@ export function preparePromptCommandExecution(
 
 /**
  * @brief Activates the prepared prompt execution path before prompt dispatch or agent start.
- * @details For a reused-worktree plan (REQ-826), keeps the live session anchored on the reused worktree and only re-aligns `process.cwd()` plus verifies the session target without switching sessions or forking a new execution session. Otherwise switches the active session to the execution-session file when worktree routing changed the cwd, re-aligns `process.cwd()` to the execution path, verifies active-session cwd plus cwd mirrors after the switch completes, and stores the verified command-capable replacement-session context for later closure handling. Runtime is dominated by the optional session switch and one optional cwd mutation. Side effects include active-session replacement, host-process cwd mutation, runtime-path state mutation, and process-scoped command-context persistence.
+ * @details For a reused-worktree plan (REQ-826), keeps the live session anchored on the reused worktree and only re-aligns `process.cwd()` plus verifies the session target without switching sessions or forking a new execution session; the reusable session context is replaced only by a command-capable context exposing `switchSession()`, so a lifecycle event context arriving from the `before_agent_start` re-verification can never overwrite the command context captured at dispatch (REQ-276, REQ-279). Otherwise switches the active session to the execution-session file when worktree routing changed the cwd, re-aligns `process.cwd()` to the execution path, verifies active-session cwd plus cwd mirrors after the switch completes, and stores the verified command-capable replacement-session context for later closure handling. Runtime is dominated by the optional session switch and one optional cwd mutation. Side effects include active-session replacement, host-process cwd mutation, runtime-path state mutation, and process-scoped command-context persistence.
  * @param[in] plan {PromptCommandExecutionPlan} Prepared prompt execution plan.
  * @param[in] ctx {PromptCommandSessionContext | undefined} Optional prompt-command context.
  * @return {Promise<PromptCommandSessionContext | undefined>} Active prompt-command context after any required session switch.
@@ -2180,7 +2180,11 @@ export async function activatePromptCommandExecution(
       } catch (error) {
         throw attachPromptCommandErrorContext(error, ctx);
       }
-      if (ctx !== undefined) {
+      // REQ-276: lifecycle event contexts omit `switchSession()`, so only a
+      // command-capable context may replace the persisted one; the command context
+      // captured at dispatch stays authoritative for later closure restoration
+      // (REQ-272, REQ-279).
+      if (ctx !== undefined && typeof ctx.switchSession === "function") {
         writePersistedPromptCommandSessionContext(plan.executionSessionFile, ctx);
       }
     } else {
@@ -2198,7 +2202,7 @@ export async function activatePromptCommandExecution(
       } catch (error) {
         throw attachPromptCommandErrorContext(error, activeContext);
       }
-      if (activeContext !== undefined) {
+      if (activeContext !== undefined && typeof activeContext.switchSession === "function") {
         writePersistedPromptCommandSessionContext(plan.executionSessionFile, activeContext);
       }
     }

@@ -4309,6 +4309,192 @@ test("req-change auto-recovers the error park and reuses the retained worktree t
 });
 
 /**
+ * @brief Verifies lifecycle `before_agent_start` re-verification never overwrites the reusable command-capable session context of a reused-worktree run.
+ * @details Runs one worktree-backed `req-change` flow that parks in `error` with the worktree plus branch retained, dispatches a second `req-change` from the retained worktree through the reuse path, re-verifies the execution session through a `before_agent_start` lifecycle context that omits `switchSession()` exactly as real pi lifecycle events do, and completes the reused run. Asserts the persisted session context still exposes `switchSession()` after the lifecycle re-verification, closure restores the original `base-path` session through the command context captured at dispatch, the worktree plus branch are deleted, the workflow reaches `change ➔ done`, and no `requires ctx.switchSession()` diagnostic surfaces. Reproduces the closure failure observed when the reuse activation branch persisted the non-command lifecycle context over the only command-capable context available at settlement. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after closure assertions complete.
+ * @throws {AssertionError} Throws when the lifecycle re-verification clobbers the persisted command context, closure fails with the switchSession diagnostic, or the workflow parks in `error`.
+ * @satisfies REQ-276, REQ-279, REQ-826
+ */
+test("lifecycle before_agent_start re-verification preserves the reusable command context for reused-worktree closure", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const originalSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(originalSessionFile, "");
+
+    // Flow A parks the workflow in `error` while retaining the generated worktree.
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "failed.ts"), "export const FAILED = 1;\n", "utf8");
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
+    assert.equal(fs.existsSync(executionBasePath), true);
+
+    // Flow B reuses the retained worktree exactly like the `/req-continue` recovery path.
+    await pi.commands.get("req-change")!.handler("Continue the adjustment", ctx);
+    assert.match(
+      String(pi.sentUserMessages[pi.sentUserMessages.length - 1]?.content ?? ""),
+      /reused the retained worktree-dir/,
+    );
+
+    // Real pi lifecycle contexts carry UI plus session-manager surfaces but omit
+    // `switchSession()` (REQ-276); reuse activation must never persist one over the
+    // command-capable context captured at dispatch.
+    const lifecycleCtx: Record<string, unknown> = {
+      cwd: ctx.cwd,
+      sessionManager: ctx.sessionManager,
+      ui: ctx.ui,
+      getContextUsage: () => undefined,
+    };
+    await pi.emit("before_agent_start", {}, lifecycleCtx);
+    const persistedAfterLifecycle = readPersistedPromptCommandSessionContext(executionSessionFile) as
+      | { switchSession?: unknown }
+      | undefined;
+    assert.ok(persistedAfterLifecycle, "the dispatch command context must stay persisted");
+    assert.equal(typeof persistedAfterLifecycle?.switchSession, "function");
+
+    await pi.emit("agent_start", {}, lifecycleCtx);
+    fs.writeFileSync(path.join(executionBasePath, "src", "reused.ts"), "export const REUSED = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "reused worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(commit.status, 0, commit.stderr);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, lifecycleCtx);
+    await pi.emit("agent_settled", {}, lifecycleCtx);
+
+    // Closure restores the original base-path session through the persisted command
+    // context instead of failing with the switchSession diagnostic.
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.equal(ctx.sessionManager.getSessionFile(), originalSessionFile);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>change ➔ done<\/warning>/,
+    );
+    assert.ok(
+      !ctx.__state.notifications.some((entry: { message: string }) =>
+        /requires ctx\.switchSession\(\)/.test(entry.message)),
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies closure-failure termination prints the retained final-output report notification before the terminal diagnostic.
+ * @details Runs one worktree-backed `req-change` flow that parks in `error` with the worktree retained, dispatches a second `req-change` through the reuse path whose agent output carries one valid `result` `ok` final-output JSON, then forces the settlement base-path restoration to fail through a throwing `switchSession` replacement. Asserts settlement captured the parsed final-output report, the context-retention notification carrying the `Change applied cleanly.` report section plus the `Context retained.` sentence is emitted, the terminal error diagnostic carrying the restoration failure is emitted, the retention notification positions strictly before the diagnostic, the workflow parks in `error`, and the worktree stays retained for `/req-wtd` recovery. Reproduces the observed missing report printout when a completed reused run failed closure restoration. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after notification-ordering assertions complete.
+ * @throws {AssertionError} Throws when the report notification is dropped, arrives after the diagnostic, or the worktree is deleted despite the failed closure.
+ * @satisfies REQ-712, REQ-719, REQ-209
+ */
+test("closure-failure termination prints the retained final-output report notification before the terminal diagnostic", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    // Flow A parks the workflow in `error` while retaining the generated worktree.
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, promptText);
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "failed.ts"), "export const FAILED = 1;\n", "utf8");
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
+
+    // Flow B reuses the retained worktree and completes with a valid final-output
+    // JSON report so settlement captures the parsed report for the retention printout.
+    await pi.commands.get("req-change")!.handler("Continue the adjustment", ctx);
+    assert.match(
+      String(pi.sentUserMessages[pi.sentUserMessages.length - 1]?.content ?? ""),
+      /reused the retained worktree-dir/,
+    );
+    await pi.emit("agent_start", {}, ctx);
+    fs.writeFileSync(path.join(executionBasePath, "src", "reused.ts"), "export const REUSED = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "reused worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(commit.status, 0, commit.stderr);
+    await pi.emit("agent_end", {
+      messages: [{
+        role: "assistant",
+        stopReason: "stop",
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            result: "ok",
+            summary: "Change applied cleanly.",
+            next_commands: [{ command: "/req-analyze", text: "Inspect the applied change" }],
+          }),
+        }],
+      }],
+    }, ctx);
+
+    // Force the closure base-path restoration to fail deterministically so the
+    // settlement finalization reports a cleanup failure for the completed run.
+    ctx.switchSession = async () => {
+      throw new Error("Simulated stale command context during restoration.");
+    };
+    await pi.emit("agent_settled", {}, ctx);
+
+    const retentionIndex = ctx.__state.notifications.findIndex((entry: { message: string }) =>
+      entry.message.includes("Context retained."));
+    const failureIndex = ctx.__state.notifications.findIndex((entry: { message: string }) =>
+      entry.message.includes("Simulated stale command context during restoration."));
+    // REQ-712: the parsed final-output report notification is emitted for the terminal
+    // completed outcome even when closure failed.
+    assert.notEqual(retentionIndex, -1);
+    assert.ok(ctx.__state.notifications[retentionIndex]?.message.includes("Change applied cleanly."));
+    assert.ok(ctx.__state.notifications[retentionIndex]?.message.includes("/req-continue 1"));
+    // REQ-719: the terminal error diagnostic positions after the report printout.
+    assert.notEqual(failureIndex, -1);
+    assert.ok(retentionIndex < failureIndex);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>/,
+    );
+    // REQ-209: the failed closure retains the worktree for `/req-wtd` recovery.
+    assert.equal(fs.existsSync(executionBasePath), true);
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies failing `req-wtd` surfaces restoration errors without starting new worktree or LLM execution.
  * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree, forces the subsequent base-path restoration switch to return `cancelled`, invokes `req-wtd` from that non-`idle` state, and verifies the command reports the restoration failure, leaves the generated worktree plus branch in place for manual recovery, sends no additional LLM prompt, and transitions workflow state to `error`. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after failure-path assertions complete.
