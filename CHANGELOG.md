@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.30](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.30) - 2026-11-23
+## [0.109.31](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.31) - 2026-11-24
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -136,6 +136,23 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: replace req-reset with auto-recovery and retained-worktree reuse [useReq] *(core)*
+  Remove the /req-reset slash command, module, registration, Next-Workflow
+  eligibility, requirements (PRJ-008, DES-014, REQ-304..307, REQ-312..313,
+  TST-105..107, TST-220) and tests without backward compatibility.
+  Add REQ-224 auto-recovery: gated req-* commands clear persisted
+  prompt-orchestration state and return to idle from terminal error or
+  warning states before execution (REQ-823 keeps in-flight rejection;
+  REQ-824 emits the info auto-reset notification).
+  Add REQ-825..REQ-829 worktree reuse: prompt commands dispatched while
+  the session anchors inside a retained generated worktree continue on it
+  without creating a new worktree or forking a new execution session,
+  validate the main repository, recover the base session through the
+  parentSession link, and retain the reused worktree on command-side
+  failure; successful closure keeps merging and deleting it.
+  Rework orchestration-gate, wipe-placement, and result-error tests;
+  add auto-recovery, reuse-closure, and reuse-failure coverage
+  (TST-262..TST-267); update README, WORKFLOW.md, and REFERENCES.md.
 - Update bundled prompts from v0.12.20 to v0.12.21 [useReq] *(prompts)*
 - dispose only the resolved target worktree [useReq] *(req-wtd)*
   /req-wtd no longer sweeps every generated sibling worktree and branch:
@@ -1852,7 +1869,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.30\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.30
+- \[0.109.31\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.31
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1961,4 +1978,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.30]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.30
+[0.109.31]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.31
