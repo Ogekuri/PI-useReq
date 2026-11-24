@@ -26,7 +26,6 @@
 !pyproject.toml
 !pyrightconfig.json
 !uv.lock
-!.galias.conf
 !package-lock.json
 !package.json
 !src/
