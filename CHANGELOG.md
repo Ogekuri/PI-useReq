@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.31](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.31) - 2026-11-24
+## [0.109.32](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.32) - 2026-11-24
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,14 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- keep reusable session context and report printout on closure failure [useReq] *(prompt-orchestration)*
+  Persist only command-capable contexts in activatePromptCommandExecution so the before_agent_start lifecycle re-verification of a reused-worktree run can no longer overwrite the dispatch command context, which made closure restoration fail with the ctx.switchSession() diagnostic after /req-continue recovery (REQ-276, REQ-279, REQ-826).
+  Emit the context-retention notification with the parsed final-output report printout before every terminal closure-failure diagnostic, including worktree cleanup failures and non-worktree restoration failures, so REQ-712 report notifications and REQ-719 diagnostic ordering hold and /req-wtd no longer becomes the first surface that prints the report.
+  Add two reproducer tests covering the lifecycle-context persistence guard and the retention-before-diagnostic ordering; regenerate WORKFLOW.md call traces and REFERENCES.md.
+- derive reused debug-run prefix from worktree name [useReq] *(prompt-command-runtime)*
+  REQ-798 debug prefixes nested the worktree prefix when a req-* command reused a retained generated worktree: project and branch resolved from the worktree root basename and its generated branch, both embedding GIT_WORKTREE_PREFIX, yielding <wt>-<wt>-<id> filenames under the prompt debug log path. Identity now derives from the retained worktree name minus the configured prefix at dispatch and in the prepare fallback (REQ-825/826). Adds a failing-first reproducer for TST-252 and refreshes WORKFLOW.md plus REFERENCES.md call-trace and symbol indexes.
+- Fix .gitignore file.
+- Update .gitignore file.
 - Freeze result-error elapsed timers past orchestration end [useReq] *(extension-status)*
   A terminal result "error" park whose transition source state was not
   in-flight (rebound runtime restoring the in-flight elapsed record from
@@ -1869,7 +1877,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.31\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.31
+- \[0.109.32\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.32
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1978,4 +1986,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.31]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.31
+[0.109.32]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.32
