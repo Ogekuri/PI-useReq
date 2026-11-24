@@ -1502,6 +1502,48 @@ function buildPromptRunIdentity(
 }
 
 /**
+ * @brief Builds the shared prompt-run identity for one run dispatched on a retained generated worktree.
+ * @details Derives every REQ-206 worktree-name component from the retained worktree directory name instead of the worktree root basename and the generated branch name, because both embed the configured worktree prefix and would nest it into the REQ-798 debug prefix. Parses the retained name as `<prefix><project>-<sanitized-branch>-<YYYYMMDDHHMMSS>` against the configured normalized prefix and the main-repository basename resolved from the reused-worktree main base path, reuses the retained execution identifier so the debug prefix equals the retained worktree name minus the configured prefix, and falls back to `buildPromptRunIdentity(...)` anchored at the main-repository base path when the retained name cannot be parsed. Publishes the identity through the process-scoped debug run-identity store. Runtime is O(p) in name length. No external state is mutated beyond the process-scoped debug identity.
+ * @param[in] reusedWorktree {PromptCommandReusedWorktree} Reused-worktree facts resolved by `resolveReusedPromptWorktree`.
+ * @param[in] config {UseReqConfig} Effective project configuration supplying the worktree prefix.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name of the starting run.
+ * @return {PromptRunIdentity} Shared run identity whose log prefix equals the retained worktree name minus the configured prefix.
+ * @satisfies REQ-798, REQ-799, REQ-826
+ */
+function buildReusedPromptRunIdentity(
+  reusedWorktree: PromptCommandReusedWorktree,
+  config: UseReqConfig,
+  promptName: PromptCommandName,
+): PromptRunIdentity {
+  const projectName = path.basename(reusedWorktree.basePath);
+  const worktreePrefix = normalizeGitWorktreePrefix(config.GIT_WORKTREE_PREFIX);
+  const strippedWorktreeName = reusedWorktree.worktreeDir.startsWith(worktreePrefix)
+    ? reusedWorktree.worktreeDir.slice(worktreePrefix.length)
+    : reusedWorktree.worktreeDir;
+  const executionId = strippedWorktreeName.match(/(\d{14})$/u)?.[1]
+    ?? getNextPromptWorktreeExecutionId();
+  const branchToken = strippedWorktreeName.endsWith(`-${executionId}`)
+    ? strippedWorktreeName.slice(0, strippedWorktreeName.length - executionId.length - 1)
+      .startsWith(`${projectName}-`)
+      ? strippedWorktreeName.slice(0, strippedWorktreeName.length - executionId.length - 1)
+        .slice(projectName.length + 1)
+      : undefined
+    : undefined;
+  if (!branchToken) {
+    return buildPromptRunIdentity(reusedWorktree.basePath, config, promptName);
+  }
+  const logPrefix = `${projectName}-${branchToken}-${executionId}`;
+  setActivePromptDebugRunIdentity(promptName, logPrefix);
+  return {
+    projectName,
+    branchName: reusedWorktree.branchName,
+    sanitizedBranchName: branchToken,
+    executionId,
+    logPrefix,
+  };
+}
+
+/**
  * @brief Defines the process-scoped pending prompt-run identity slot.
  * @details Holds the identity established at prompt dispatch until the matching `preparePromptCommandExecution(...)` consumes it for worktree naming, so preflight debug writes and the worktree name share identical components. Access complexity is O(1).
  * @satisfies REQ-798, REQ-799
@@ -1510,20 +1552,28 @@ const PI_USEREQ_PENDING_PROMPT_RUN_IDENTITY_KEY = "__piUsereqPendingPromptRunIde
 
 /**
  * @brief Establishes the shared prompt-run identity at dispatch time.
- * @details Builds the run identity from the dispatch project base and immediately publishes it to the process-scoped debug run-identity store so every debug write of the run, including preflight workflow-state transitions fired before execution preparation, filenames itself with the REQ-798 prefix, and caches it for the matching `preparePromptCommandExecution(...)` so the generated worktree name reuses the identical components. Runtime is O(1) plus git execution. Side effects include process spawning and process-scoped state mutation.
+ * @details Builds the run identity from the dispatch project base and immediately publishes it to the process-scoped debug run-identity store so every debug write of the run, including preflight workflow-state transitions fired before execution preparation, filenames itself with the REQ-798 prefix, and caches it for the matching `preparePromptCommandExecution(...)` so the generated worktree name reuses the identical components. When the dispatch project base anchors inside a previously generated retained worktree — detected through the same `resolveEffectiveGitWorktreeEnabled` gating and `resolveReusedPromptWorktree` detection used by `preparePromptCommandExecution(...)` (REQ-825) — the identity derives from the retained worktree name minus the configured prefix so the debug prefix never nests the worktree prefix; otherwise it derives from the runtime git root basename plus the sanitized current branch. Runtime is O(1) plus git execution. Side effects include process spawning and process-scoped state mutation.
  * @param[in] projectBase {string} Absolute dispatch project base.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] promptName {PromptCommandName} Bundled prompt name of the dispatching run.
  * @return {void} No return value.
- * @satisfies REQ-798, REQ-799
+ * @satisfies REQ-798, REQ-799, REQ-825, REQ-826
  */
 export function establishPromptRunIdentity(
   projectBase: string,
   config: UseReqConfig,
   promptName: PromptCommandName,
 ): void {
-  const gitRoot = resolveRuntimeGitPath(projectBase) ?? projectBase;
-  const identity = buildPromptRunIdentity(gitRoot, config, promptName);
+  const gitWorktreeEnabled = resolveEffectiveGitWorktreeEnabled(
+    config.AUTO_GIT_COMMIT,
+    config.GIT_WORKTREE_ENABLED,
+  );
+  const reusedWorktree = gitWorktreeEnabled === "enable"
+    ? resolveReusedPromptWorktree(projectBase, config)
+    : undefined;
+  const identity = reusedWorktree
+    ? buildReusedPromptRunIdentity(reusedWorktree, config, promptName)
+    : buildPromptRunIdentity(resolveRuntimeGitPath(projectBase) ?? projectBase, config, promptName);
   const globalState = globalThis as typeof globalThis & {
     __piUsereqPendingPromptRunIdentity?: { promptName: PromptCommandName; identity: PromptRunIdentity };
   };
@@ -1553,6 +1603,31 @@ function consumePromptRunIdentity(
     return pending.identity;
   }
   return buildPromptRunIdentity(gitRoot, config, promptName);
+}
+
+/**
+ * @brief Consumes the pending prompt-run identity for one matching reused-worktree execution preparation.
+ * @details Returns the cached identity established at dispatch when its prompt name matches and clears the slot so later preparations never reuse a stale identity, and otherwise builds one reused-worktree identity from the retained worktree name so a fallback preparation without a dispatch-time identity still publishes the prefix equal to the retained worktree name minus the configured prefix. Runtime is O(1) plus git execution for the fresh path. Side effects include process-scoped state mutation and process spawning on the fresh path.
+ * @param[in] promptName {PromptCommandName} Bundled prompt name of the preparing run.
+ * @param[in] reusedWorktree {PromptCommandReusedWorktree} Reused-worktree facts resolved by `resolveReusedPromptWorktree`.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PromptRunIdentity} Shared run identity for debug prefixes and reused-plan metadata.
+ * @satisfies REQ-798, REQ-799, REQ-826
+ */
+function consumeReusedPromptRunIdentity(
+  promptName: PromptCommandName,
+  reusedWorktree: PromptCommandReusedWorktree,
+  config: UseReqConfig,
+): PromptRunIdentity {
+  const globalState = globalThis as typeof globalThis & {
+    __piUsereqPendingPromptRunIdentity?: { promptName: PromptCommandName; identity: PromptRunIdentity };
+  };
+  const pending = globalState[PI_USEREQ_PENDING_PROMPT_RUN_IDENTITY_KEY];
+  if (pending && pending.promptName === promptName) {
+    globalState[PI_USEREQ_PENDING_PROMPT_RUN_IDENTITY_KEY] = undefined;
+    return pending.identity;
+  }
+  return buildReusedPromptRunIdentity(reusedWorktree, config, promptName);
 }
 
 /**
@@ -1965,7 +2040,9 @@ export function preparePromptCommandExecution(
   enforceContextOccupancyLimit(config, measureContextFileSizes(projectBase, config), maxContextTokens);
   const reuseCurrentSessionFile = isUsablePromptSessionFile(currentSessionFile, projectBase);
   setRuntimeGitPath(reusedWorktree ? reusedWorktree.gitRoot : gitPath);
-  const runIdentity = consumePromptRunIdentity(promptName, gitPath, config);
+  const runIdentity = reusedWorktree
+    ? consumeReusedPromptRunIdentity(promptName, reusedWorktree, config)
+    : consumePromptRunIdentity(promptName, gitPath, config);
   validatePromptRequiredDocs(promptName, projectBase, config, debugOptions);
   if (gitWorktreeEnabled === "disable") {
     const staticWorktreePaths = resolveWorktreePaths(projectBase, gitPath, "");

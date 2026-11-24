@@ -43,7 +43,9 @@ import {
   formatPromptDebugFileName,
   logDebugPromptContent,
   normalizeDebugPromptsLogPath,
+  clearActivePromptDebugRunIdentity,
   discardCapturedPromptErrorPayload,
+  getActivePromptDebugRunIdentity,
   shouldLogDebugPromptContent,
 } from "../src/core/debug-runtime.js";
 import { PROMPT_COMMAND_NAMES } from "../src/core/prompt-command-catalog.js";
@@ -77,6 +79,7 @@ import {
 import {
   abortPromptCommandExecution,
   activatePromptCommandExecution,
+  establishPromptRunIdentity,
   preparePromptCommandExecution,
   PROMPT_COMMAND_MERGE_FAILURE_ERROR_MESSAGE,
   restorePromptCommandExecution,
@@ -2685,6 +2688,49 @@ test("prompt content debug logging saves dispatched prompts gated by debug enabl
   assert.ok(disabledCommand);
   await disabledCommand!.handler("debug prompts", disabledCtx);
   assert.equal(fs.existsSync(path.join(disabledFixture.projectBase, "logs", "saved-prompts")), false);
+});
+
+/**
+ * @brief Verifies the REQ-798 debug prefix derivation for a run dispatched on a retained generated worktree.
+ * @details Creates one repository plus one retained generated worktree named per REQ-206 with the matching generated branch, dispatches `establishPromptRunIdentity(...)` from the retained worktree path exactly as the reused-worktree bootstrap does, asserts the published debug run identity equals the retained worktree name minus the configured `PI-useReq-` prefix with no nested prefix repetition, and consumes the cached identity through the reused-worktree prepare path so the process-scoped pending slot never leaks into later tests. Reproduces the nested `<worktree-name>-<worktree-name>-<id>` debug filenames observed under `DEBUG_PROMPTS_LOG_PATH` when a command reused a retained worktree. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and process-scoped run-identity state.
+ * @return {Promise<void>} Promise resolved after prefix and prepare assertions complete.
+ * @throws {AssertionError} Throws when the published prefix nests the worktree prefix, diverges from the retained worktree name minus its prefix, loses the prompt-name attribution, or the reused prepare path drops the identity.
+ * @satisfies REQ-798, REQ-825, REQ-826, TST-252
+ */
+test("establishPromptRunIdentity derives the reused-worktree debug prefix from the retained worktree name", async () => {
+  const { projectBase, config } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  const worktreeName = `PI-useReq-${path.basename(projectBase)}-work-20261124173401`;
+  const worktreePath = path.join(path.dirname(projectBase), worktreeName);
+  try {
+    const worktreeAdd = spawnSync(
+      "git",
+      ["worktree", "add", "-b", worktreeName, worktreePath],
+      { cwd: projectBase, encoding: "utf8" },
+    );
+    assert.equal(worktreeAdd.status, 0, worktreeAdd.stderr);
+    clearActivePromptDebugRunIdentity();
+
+    establishPromptRunIdentity(worktreePath, config, "change");
+    const identity = getActivePromptDebugRunIdentity();
+    assert.ok(identity);
+    assert.equal(identity.commandName, "req-change");
+    // REQ-798 + TST-252: the prefix equals the active (reused) worktree name minus the configured prefix.
+    assert.equal(identity.logPrefix, worktreeName.replace(/^PI-useReq-/u, ""));
+    assert.doesNotMatch(identity.logPrefix, /PI-useReq-.*PI-useReq-/u);
+
+    // The reused-worktree prepare path consumes the cached identity and keeps the published prefix.
+    const plan = preparePromptCommandExecution("change", "", worktreePath, config, undefined, undefined, undefined);
+    assert.equal(plan.reusedWorktree, true);
+    assert.equal(plan.worktreeDir, worktreeName);
+    assert.equal(getActivePromptDebugRunIdentity()?.logPrefix, worktreeName.replace(/^PI-useReq-/u, ""));
+  } finally {
+    process.chdir(previousCwd);
+    spawnSync("git", ["worktree", "remove", "--force", worktreePath], { cwd: projectBase, encoding: "utf8" });
+    spawnSync("git", ["branch", "-D", worktreeName], { cwd: projectBase, encoding: "utf8" });
+    fs.rmSync(projectBase, { recursive: true, force: true });
+    clearActivePromptDebugRunIdentity();
+  }
 });
 
 /**
