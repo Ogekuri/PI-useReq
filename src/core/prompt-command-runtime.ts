@@ -50,7 +50,7 @@ export interface PromptRequiredDocSpec {
 
 /**
  * @brief Describes one prompt-command execution plan tracked across lifecycle hooks.
- * @details Stores the prompt identity, runtime git root, associated branch name, original project base, execution context path, persisted origin and execution session files, and optional worktree metadata so the extension can switch all cwd surfaces before prompt dispatch and finalize worktree lifecycle after agent end. The interface is compile-time only and introduces no runtime cost.
+ * @details Stores the prompt identity, runtime git root, associated branch name, original project base, execution context path, persisted origin and execution session files, and optional worktree metadata so the extension can switch all cwd surfaces before prompt dispatch and finalize worktree lifecycle after agent end. The `reusedWorktree` flag marks plans that continue a previously generated worktree instead of creating a new one. The interface is compile-time only and introduces no runtime cost.
  */
 export interface PromptCommandExecutionPlan {
   promptName: PromptCommandName;
@@ -66,6 +66,7 @@ export interface PromptCommandExecutionPlan {
   worktreeDir?: string;
   worktreePath?: string;
   worktreeRootPath?: string;
+  reusedWorktree?: boolean;
   originalModel?: PromptCommandModelSelection;
   originalThinkingLevel?: string;
 }
@@ -510,12 +511,12 @@ function syncPromptCommandProcessCwd(expectedPath: string, stageLabel: string): 
 }
 
 /**
- * @brief Reads the persisted working directory recorded in one prompt-command session file header.
- * @details Opens the JSONL session file, parses the first non-empty line as JSON, and returns the `cwd` field when present as a string so session-target verification can rely on live on-disk session state instead of stale handler-scoped `ctx` references. Runtime is O(n) in header size. No external state is mutated.
+ * @brief Parses the persisted header record of one session file.
+ * @details Reads the first non-empty JSONL line and returns it as one plain JSON object so session-cwd, parent-session, and future header consumers share one deterministic header parser. Runtime is O(n) in header size. No external state is mutated.
  * @param[in] sessionFile {string} Absolute session-file path.
- * @return {string | undefined} Persisted session cwd when readable; otherwise undefined.
+ * @return {Record<string, unknown> | undefined} Parsed header object, or `undefined` when unreadable or malformed.
  */
-function readPromptSessionFileCwd(sessionFile: string): string | undefined {
+function readPromptSessionFileHeader(sessionFile: string): Record<string, unknown> | undefined {
   let raw: string;
   try {
     raw = fs.readFileSync(sessionFile, "utf8");
@@ -528,17 +529,38 @@ function readPromptSessionFileCwd(sessionFile: string): string | undefined {
   if (trimmed === "") {
     return undefined;
   }
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(trimmed);
+    const parsed: unknown = JSON.parse(trimmed);
+    if (typeof parsed === "object" && parsed !== null) {
+      return parsed as Record<string, unknown>;
+    }
   } catch {
     return undefined;
   }
-  if (typeof parsed !== "object" || parsed === null) {
-    return undefined;
-  }
-  const headerCwd = (parsed as { cwd?: unknown }).cwd;
+  return undefined;
+}
+
+/**
+ * @brief Reads the persisted working directory recorded in one prompt-command session file header.
+ * @details Returns the `cwd` field of the shared header parser as a string so session-target verification can rely on live on-disk session state instead of stale handler-scoped `ctx` references. Runtime is O(n) in header size. No external state is mutated.
+ * @param[in] sessionFile {string} Absolute session-file path.
+ * @return {string | undefined} Persisted session cwd when readable; otherwise undefined.
+ */
+function readPromptSessionFileCwd(sessionFile: string): string | undefined {
+  const headerCwd = readPromptSessionFileHeader(sessionFile)?.cwd;
   return typeof headerCwd === "string" ? headerCwd : undefined;
+}
+
+/**
+ * @brief Reads the persisted `parentSession` link from one session file header.
+ * @details Parses the first non-empty JSONL header line and returns the `parentSession` field when present as a non-empty string so reused-worktree preparation can recover the original base-path session from the retained execution session without live runtime state. Runtime is O(n) in header size. No external state is mutated.
+ * @param[in] sessionFile {string} Absolute session-file path.
+ * @return {string | undefined} Persisted parent-session path when readable; otherwise undefined.
+ * @satisfies REQ-829
+ */
+function readPromptSessionParentSessionFile(sessionFile: string): string | undefined {
+  const parentSession = readPromptSessionFileHeader(sessionFile)?.parentSession;
+  return typeof parentSession === "string" && parentSession !== "" ? parentSession : undefined;
 }
 
 /**
@@ -1225,6 +1247,109 @@ function validatePromptWorktreeName(wtName: string): boolean {
 }
 
 /**
+ * @brief Escapes one literal string for safe JavaScript regular-expression reuse.
+ * @details Prefixes every regular-expression metacharacter with `\\` so generated worktree-name patterns can embed persisted prefixes and repository basenames without introducing unintended matcher semantics. Runtime is O(n) in string length. No external state is mutated.
+ * @param[in] text {string} Literal text fragment.
+ * @return {string} Regular-expression-safe literal fragment.
+ */
+function escapePromptWorktreeRegExpLiteral(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * @brief Builds the generated-worktree name matcher used by prompt-command reuse detection.
+ * @details Reuses the configured worktree prefix plus the main-repository basename, accepts any sanitized branch token between those fixed segments and the final execution identifier, and constrains the timestamp suffix to the documented `YYYYMMDDHHMMSS` shape so only worktrees generated by REQ-206 naming rules match. Runtime is O(p) in combined prefix and project-name length. No external state is mutated.
+ * @param[in] mainRepositoryRootPath {string} Absolute main repository worktree root path.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {RegExp} Matcher for generated prompt-command worktree and branch names.
+ * @satisfies REQ-825
+ */
+function buildPromptWorktreeNamePattern(mainRepositoryRootPath: string, config: UseReqConfig): RegExp {
+  const worktreePrefix = normalizeGitWorktreePrefix(config.GIT_WORKTREE_PREFIX);
+  const projectName = path.basename(mainRepositoryRootPath);
+  return new RegExp(
+    `^${escapePromptWorktreeRegExpLiteral(worktreePrefix)}${escapePromptWorktreeRegExpLiteral(projectName)}-.+-\\d{14}$`,
+    "u",
+  );
+}
+
+/**
+ * @brief Describes one previously generated worktree reused by a prompt command.
+ * @details Stores the reused worktree root, directory name, project base inside the worktree, sibling parent path, base-dir offset, main-repository base path, and the branch currently checked out in the reused worktree so a reused execution plan can finalize against the original repository. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-825, REQ-829
+ */
+export interface PromptCommandReusedWorktree {
+  gitRoot: string;
+  worktreeDir: string;
+  worktreeRootPath: string;
+  worktreePath: string;
+  parentPath: string;
+  baseDir: string;
+  basePath: string;
+  branchName: string;
+}
+
+/**
+ * @brief Resolves the previously generated worktree anchoring the live project base.
+ * @details Detects whether the supplied project base resolves inside a linked git worktree whose directory name satisfies the generated prompt-command naming rules (REQ-311) against the main repository root, then derives the reused-worktree facts: the linked worktree root and project base inside it, the main-repository base path, the sibling parent directory, the base-dir offset, and the branch currently checked out in the reused worktree. Returns `undefined` for the main worktree, non-generated directory names, non-standard repository layouts, or a missing main-repository base so ordinary worktree creation proceeds. Runtime is dominated by two git subprocesses. Side effects include process spawning.
+ * @param[in] projectBase {string} Absolute current project base path inside the candidate worktree.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {PromptCommandReusedWorktree | undefined} Reused-worktree facts, or `undefined` when no previous generated worktree anchors the project base.
+ * @satisfies REQ-825, REQ-827, REQ-829
+ */
+export function resolveReusedPromptWorktree(
+  projectBase: string,
+  config: UseReqConfig,
+): PromptCommandReusedWorktree | undefined {
+  const gitRoot = resolveRuntimeGitPath(projectBase);
+  if (!gitRoot) {
+    return undefined;
+  }
+  const worktreeRootPath = path.resolve(gitRoot);
+  const commonDirResult = runCapture(
+    ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+    worktreeRootPath,
+  );
+  if (commonDirResult.error || commonDirResult.status !== 0) {
+    return undefined;
+  }
+  const commonDir = commonDirResult.stdout.trim();
+  if (path.basename(commonDir) !== ".git") {
+    return undefined;
+  }
+  const mainRepositoryRootPath = path.resolve(commonDir, "..");
+  if (mainRepositoryRootPath === worktreeRootPath) {
+    return undefined;
+  }
+  const worktreeDir = path.basename(worktreeRootPath);
+  const worktreeNamePattern = buildPromptWorktreeNamePattern(mainRepositoryRootPath, config);
+  if (!worktreeNamePattern.test(worktreeDir)) {
+    return undefined;
+  }
+  const normalizedProjectBase = path.resolve(projectBase);
+  const baseDir = normalizeRelativeDirContract(
+    path.relative(worktreeRootPath, normalizedProjectBase),
+  );
+  const basePath = baseDir === ""
+    ? mainRepositoryRootPath
+    : path.join(mainRepositoryRootPath, baseDir);
+  if (!fs.existsSync(basePath)) {
+    return undefined;
+  }
+  const currentBranchName = resolveCurrentPromptBranchName(worktreeRootPath);
+  return {
+    gitRoot: worktreeRootPath,
+    worktreeDir,
+    worktreeRootPath,
+    worktreePath: normalizedProjectBase,
+    parentPath: path.resolve(worktreeRootPath, ".."),
+    baseDir,
+    basePath,
+    branchName: currentBranchName !== "unknown" ? currentBranchName : worktreeDir,
+  };
+}
+
+/**
  * @brief Throws the canonical prompt-command git-preflight failure.
  * @details Normalizes all repository-validation failures to the contractually stable prompt-command error string consumed by tests and downstream prompt workflows. Runtime is O(1). No external state is mutated.
  * @return {never} Always throws.
@@ -1797,10 +1922,10 @@ export function validatePromptRequiredDocs(
 
 /**
  * @brief Prepares prompt-command execution for one bundled prompt.
- * @details Runs slash-command-owned git validation, enforces the context-occupancy early check against the selected model max input context, enforces the prompt-specific required-doc matrix, resolves persisted origin and execution session files, establishes the shared run identity consumed by worktree naming and REQ-798 debug filename prefixes, applies the effective worktree policy, generates and verifies a dedicated worktree when enabled, and returns the execution plan consumed by prompt rendering plus lifecycle hooks. Worktree-backed execution reuses the active session directory for the forked session file. Runtime is dominated by git subprocesses, worktree creation, and optional session-file cloning. Side effects include worktree creation, session-file creation, filesystem reads, and optional prompt debug-log writes.
+ * @details Runs slash-command-owned git validation — targeting the main repository instead of the reused worktree when one is detected (REQ-827) — enforces the context-occupancy early check against the selected model max input context, enforces the prompt-specific required-doc matrix, resolves persisted origin and execution session files, establishes the shared run identity consumed by worktree naming and REQ-798 debug filename prefixes, applies the effective worktree policy, reuses the previously generated worktree anchoring the live session without creating a new worktree or forking a new execution session when one is detected (REQ-825, REQ-826, REQ-829), otherwise generates and verifies a dedicated worktree when enabled, and returns the execution plan consumed by prompt rendering plus lifecycle hooks. Worktree-backed execution reuses the active session directory for the forked session file. Runtime is dominated by git subprocesses, worktree creation, and optional session-file cloning. Side effects include worktree creation, session-file creation, filesystem reads, and optional prompt debug-log writes.
  * @param[in] promptName {PromptCommandName} Bundled prompt identifier.
  * @param[in] promptArgs {string} Raw prompt argument string.
- * @param[in] projectBase {string} Absolute current project base.
+ * @param[in] projectBase {string} Absolute current project base path.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] currentSessionFile {string | undefined} Active session file used as the switch origin when available.
  * @param[in] currentSessionDir {string | undefined} Active session directory reused when the execution session is forked.
@@ -1811,7 +1936,7 @@ export function validatePromptRequiredDocs(
  * @param[in] maxContextTokens {number | undefined} Selected model max input context tokens consumed by the early occupancy check; undefined selects the documented 1,000,000-token fallback.
  * @return {PromptCommandExecutionPlan} Prepared execution plan.
  * @throws {ReqError} Throws when repository validation, the context-occupancy early check, required-doc validation, worktree creation, or session preparation fails.
- * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271, REQ-366, REQ-408, REQ-409, REQ-410, REQ-411, REQ-798, REQ-799
+ * @satisfies REQ-200, REQ-203, REQ-206, REQ-207, REQ-215, REQ-219, REQ-220, REQ-245, REQ-256, REQ-271, REQ-366, REQ-408, REQ-409, REQ-410, REQ-411, REQ-798, REQ-799, REQ-825, REQ-826, REQ-827, REQ-829
  */
 export function preparePromptCommandExecution(
   promptName: PromptCommandName,
@@ -1826,22 +1951,28 @@ export function preparePromptCommandExecution(
   originalThinkingLevel?: string,
   maxContextTokens?: number | undefined,
 ): PromptCommandExecutionPlan {
-  const gitPath = validatePromptGitState(projectBase, config);
-  enforceContextOccupancyLimit(config, measureContextFileSizes(projectBase, config), maxContextTokens);
-  const reuseCurrentSessionFile = isUsablePromptSessionFile(currentSessionFile, projectBase);
-  const originalSessionFile = resolvePromptSessionFile(
-    reuseCurrentSessionFile ? currentSessionFile : undefined,
-    projectBase,
-  );
-  setRuntimeGitPath(gitPath);
-  const runIdentity = consumePromptRunIdentity(promptName, gitPath, config);
-  validatePromptRequiredDocs(promptName, projectBase, config, debugOptions);
-  const staticWorktreePaths = resolveWorktreePaths(projectBase, gitPath, "");
   const gitWorktreeEnabled = resolveEffectiveGitWorktreeEnabled(
     config.AUTO_GIT_COMMIT,
     config.GIT_WORKTREE_ENABLED,
   );
+  const reusedWorktree = gitWorktreeEnabled === "enable"
+    ? resolveReusedPromptWorktree(projectBase, config)
+    : undefined;
+  const gitPath = validatePromptGitState(
+    reusedWorktree ? reusedWorktree.basePath : projectBase,
+    config,
+  );
+  enforceContextOccupancyLimit(config, measureContextFileSizes(projectBase, config), maxContextTokens);
+  const reuseCurrentSessionFile = isUsablePromptSessionFile(currentSessionFile, projectBase);
+  setRuntimeGitPath(reusedWorktree ? reusedWorktree.gitRoot : gitPath);
+  const runIdentity = consumePromptRunIdentity(promptName, gitPath, config);
+  validatePromptRequiredDocs(promptName, projectBase, config, debugOptions);
   if (gitWorktreeEnabled === "disable") {
+    const staticWorktreePaths = resolveWorktreePaths(projectBase, gitPath, "");
+    const originalSessionFile = resolvePromptSessionFile(
+      reuseCurrentSessionFile ? currentSessionFile : undefined,
+      projectBase,
+    );
     setRuntimeWorktreePathState({});
     return {
       promptName,
@@ -1858,6 +1989,48 @@ export function preparePromptCommandExecution(
       originalThinkingLevel,
     };
   }
+  if (reusedWorktree) {
+    // REQ-826/REQ-829: the live session already anchors on the retained generated
+    // worktree, so continue on the current session without creating a new worktree or
+    // forking a new execution session; the original base-path session recovers through
+    // the retained execution session's `parentSession` header link.
+    const executionSessionFile = reuseCurrentSessionFile
+      ? path.resolve(currentSessionFile)
+      : resolvePromptSessionFile(undefined, projectBase);
+    const parentSessionFile = reuseCurrentSessionFile
+      ? readPromptSessionParentSessionFile(executionSessionFile)
+      : undefined;
+    const originalSessionFile = parentSessionFile !== undefined
+      && isUsablePromptSessionFile(parentSessionFile, reusedWorktree.basePath)
+      ? path.resolve(parentSessionFile)
+      : resolvePromptSessionFile(undefined, reusedWorktree.basePath);
+    setRuntimeWorktreePathState({
+      worktreeDir: reusedWorktree.worktreeDir,
+      worktreePath: reusedWorktree.worktreePath,
+    });
+    return {
+      promptName,
+      promptArgs,
+      gitPath,
+      branchName: reusedWorktree.branchName,
+      basePath: reusedWorktree.basePath,
+      contextPath: reusedWorktree.worktreePath,
+      parentPath: reusedWorktree.parentPath,
+      baseDir: reusedWorktree.baseDir,
+      originalSessionFile,
+      executionSessionFile,
+      worktreeDir: reusedWorktree.worktreeDir,
+      worktreePath: reusedWorktree.worktreePath,
+      worktreeRootPath: reusedWorktree.worktreeRootPath,
+      reusedWorktree: true,
+      originalModel,
+      originalThinkingLevel,
+    };
+  }
+  const originalSessionFile = resolvePromptSessionFile(
+    reuseCurrentSessionFile ? currentSessionFile : undefined,
+    projectBase,
+  );
   const worktreeDir = buildPromptWorktreeName(config, runIdentity);
   const worktreePaths = createPromptWorktree(
     projectBase,
@@ -1902,12 +2075,12 @@ export function preparePromptCommandExecution(
 
 /**
  * @brief Activates the prepared prompt execution path before prompt dispatch or agent start.
- * @details Switches the active session to the execution-session file when worktree routing changed the cwd, re-aligns `process.cwd()` to the execution path, verifies active-session cwd plus cwd mirrors after the switch completes, and stores the verified command-capable replacement-session context for later closure handling. Runtime is dominated by the optional session switch and one optional cwd mutation. Side effects include active-session replacement, host-process cwd mutation, runtime-path state mutation, and process-scoped command-context persistence.
+ * @details For a reused-worktree plan (REQ-826), keeps the live session anchored on the reused worktree and only re-aligns `process.cwd()` plus verifies the session target without switching sessions or forking a new execution session. Otherwise switches the active session to the execution-session file when worktree routing changed the cwd, re-aligns `process.cwd()` to the execution path, verifies active-session cwd plus cwd mirrors after the switch completes, and stores the verified command-capable replacement-session context for later closure handling. Runtime is dominated by the optional session switch and one optional cwd mutation. Side effects include active-session replacement, host-process cwd mutation, runtime-path state mutation, and process-scoped command-context persistence.
  * @param[in] plan {PromptCommandExecutionPlan} Prepared prompt execution plan.
  * @param[in] ctx {PromptCommandSessionContext | undefined} Optional prompt-command context.
  * @return {Promise<PromptCommandSessionContext | undefined>} Active prompt-command context after any required session switch.
  * @throws {ReqError} Throws when the session switch or cwd verification fails.
- * @satisfies REQ-206, REQ-207, REQ-257, REQ-272, REQ-276
+ * @satisfies REQ-206, REQ-207, REQ-257, REQ-272, REQ-276, REQ-826
  */
 export async function activatePromptCommandExecution(
   plan: PromptCommandExecutionPlan,
@@ -1916,22 +2089,41 @@ export async function activatePromptCommandExecution(
   const nextContextPath = plan.worktreePath ?? plan.basePath;
   let activeContext = ctx;
   if (plan.worktreePath) {
-    const switchContext = resolvePromptCommandSwitchContext(plan, ctx);
-    activeContext = switchContext.context ?? activeContext;
-    activeContext = await switchPromptCommandSession(plan.executionSessionFile, switchContext.context);
-    try {
-      syncPromptCommandProcessCwd(nextContextPath, "Prompt execution activation");
-      verifyPromptCommandSessionTarget(
-        plan.executionSessionFile,
-        nextContextPath,
-        activeContext,
-        "Prompt execution activation",
-      );
-    } catch (error) {
-      throw attachPromptCommandErrorContext(error, activeContext);
-    }
-    if (activeContext !== undefined) {
-      writePersistedPromptCommandSessionContext(plan.executionSessionFile, activeContext);
+    if (plan.reusedWorktree) {
+      // REQ-826: the live session already anchors on the reused worktree, so activation
+      // only aligns and verifies the execution cwd without switching sessions.
+      try {
+        syncPromptCommandProcessCwd(nextContextPath, "Prompt execution activation");
+        verifyPromptCommandSessionTarget(
+          plan.executionSessionFile,
+          nextContextPath,
+          ctx,
+          "Prompt execution activation",
+        );
+      } catch (error) {
+        throw attachPromptCommandErrorContext(error, ctx);
+      }
+      if (ctx !== undefined) {
+        writePersistedPromptCommandSessionContext(plan.executionSessionFile, ctx);
+      }
+    } else {
+      const switchContext = resolvePromptCommandSwitchContext(plan, ctx);
+      activeContext = switchContext.context ?? activeContext;
+      activeContext = await switchPromptCommandSession(plan.executionSessionFile, switchContext.context);
+      try {
+        syncPromptCommandProcessCwd(nextContextPath, "Prompt execution activation");
+        verifyPromptCommandSessionTarget(
+          plan.executionSessionFile,
+          nextContextPath,
+          activeContext,
+          "Prompt execution activation",
+        );
+      } catch (error) {
+        throw attachPromptCommandErrorContext(error, activeContext);
+      }
+      if (activeContext !== undefined) {
+        writePersistedPromptCommandSessionContext(plan.executionSessionFile, activeContext);
+      }
     }
   } else {
     clearPersistedPromptCommandSessionContext();
@@ -2075,12 +2267,12 @@ export async function redirectPromptCommandExecutionToRetainedWorktree(
 
 /**
  * @brief Aborts one prepared prompt-command execution before pi CLI takes ownership.
- * @details Restores the original session-backed cwd and deletes any created worktree plus branch when command-side preflight, prompt rendering, or prompt handoff fails before agent completion. Restoration failures are returned as structured cleanup errors so the original preflight failure is not masked. Runtime is dominated by the optional session switch plus git subprocess execution. Side effects include active-session replacement, optional worktree deletion, and optional debug-log writes.
+ * @details For a reused-worktree plan (REQ-828), keeps the current session anchored on the reused worktree without restoring the base session and without deleting the reused worktree because the worktree predates the aborted command. Otherwise restores the original session-backed cwd and deletes any created worktree plus branch when command-side preflight, prompt rendering, or prompt handoff fails before agent completion. Restoration failures are returned as structured cleanup errors so the original preflight failure is not masked. Runtime is dominated by the optional session switch plus git subprocess execution. Side effects include active-session replacement, optional worktree deletion, and optional debug-log writes.
  * @param[in] plan {PromptCommandExecutionPlan} Prepared prompt execution plan.
  * @param[in] ctx {PromptCommandSessionContext | undefined} Optional prompt-command context.
  * @param[in] debugOptions {PromptCommandDebugOptions | undefined} Optional prompt debug logging context.
  * @return {Promise<{ cleanupSucceeded: boolean; errorMessage?: string; activeContext?: PromptCommandSessionContext }>} Abort-cleanup facts plus the last valid active prompt-command context.
- * @satisfies REQ-226, REQ-220, REQ-245
+ * @satisfies REQ-226, REQ-220, REQ-245, REQ-828
  */
 export async function abortPromptCommandExecution(
   plan: PromptCommandExecutionPlan,
@@ -2092,6 +2284,18 @@ export async function abortPromptCommandExecution(
   activeContext?: PromptCommandSessionContext;
 }> {
   let activeContext = ctx;
+  if (plan.reusedWorktree) {
+    // REQ-828: the reused worktree predates this command; command-side failures keep
+    // the current session anchored on it without restore or deletion.
+    setRuntimeWorktreePathState({
+      worktreeDir: plan.worktreeDir,
+      worktreePath: plan.worktreePath,
+    });
+    return {
+      cleanupSucceeded: true,
+      activeContext,
+    };
+  }
   try {
     activeContext = await restorePromptCommandExecution(plan, ctx, debugOptions);
   } catch (error) {

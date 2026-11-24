@@ -67,7 +67,7 @@ export function getRetainedResultMessage(): string | undefined {
 
 /**
  * @brief Clears the retained final-output notification message.
- * @details Resets the process-scoped store to no retained message. The wipe runs only at the idle-reset bootstrap boundaries (`startup|reload` `session_start`) and immediately before prompt dispatch of a `new` agentic flow after every slash-command pre-check has succeeded, mirroring the captured Next-Workflow array lifetime so failed pre-checks and `/req-reset` recovery preserve the retained message. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @details Resets the process-scoped store to no retained message. The wipe runs only at the idle-reset bootstrap boundaries (`startup|reload` `session_start`) and immediately before prompt dispatch of a `new` agentic flow after every slash-command pre-check has succeeded, mirroring the captured Next-Workflow array lifetime so failed pre-checks and REQ-224 auto-recovery preserve the retained message. Runtime is O(1). Side effect: mutates process-scoped state.
  * @return {void} No return value.
  * @satisfies REQ-773, REQ-774, REQ-775
  * @note Complexity: O(1).

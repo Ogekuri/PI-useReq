@@ -137,10 +137,6 @@ import {
   prepareReqReferencesCommandExecution,
 } from "./core/req-references-command.js";
 import {
-  REQ_RESET_COMMAND_DESCRIPTION,
-  executeReqResetCommandExecution,
-} from "./core/req-reset-command.js";
-import {
   REQ_WTD_COMMAND_DESCRIPTION,
   executeReqWtdCommandExecution,
   prepareReqWtdCommandExecution,
@@ -1364,7 +1360,7 @@ function notifyTerminalOrchestrationDiagnostic(
 
 /**
  * @brief Emits the single merged final context-retention notification for a completed `/req-*` orchestration and captures it for identical reprinting.
- * @details Builds exactly one info-level message through `buildContextRetentionNotificationMessage(...)` — the ANSI-colored report printout with rounded section-title boxes, the ANSI-styled full-text Next-Workflow command table, the intense-white `Context retained.` retention sentence carrying the intense-yellow percentage segment when a normalized snapshot exists, and the `/req-continue` command table carrying only the condensed citations, rendered from the process-scoped capture of the last completed agentic flow — captures the exact composed message text into the process-scoped result-retention store when the emission terminates an agentic flow so `/req-print-result` can redeliver the byte-identical notification after the pi TUI clears it, and delivers it through one `notifyContextSafely(...)` call so the pi TUI back-to-back info-notification collapse can never overwrite the ANSI report printout with a subsequent status line; the report appears exactly once because no plain-markdown duplicate is emitted. Auxiliary non-agentic emissions from `/req-reset`, `/req-wtd`, and `/req-references` pass the capture gate as `false` so the retained message keeps reflecting the last agentic-flow termination instead of a recomposition with a newer context-usage snapshot. Performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effects are the optional process-scoped retention capture and one user notification delivery when the supplied context is still active.
+ * @details Builds exactly one info-level message through `buildContextRetentionNotificationMessage(...)` — the ANSI-colored report printout with rounded section-title boxes, the ANSI-styled full-text Next-Workflow command table, the intense-white `Context retained.` retention sentence carrying the intense-yellow percentage segment when a normalized snapshot exists, and the `/req-continue` command table carrying only the condensed citations, rendered from the process-scoped capture of the last completed agentic flow — captures the exact composed message text into the process-scoped result-retention store when the emission terminates an agentic flow so `/req-print-result` can redeliver the byte-identical notification after the pi TUI clears it, and delivers it through one `notifyContextSafely(...)` call so the pi TUI back-to-back info-notification collapse can never overwrite the ANSI report printout with a subsequent status line; the report appears exactly once because no plain-markdown duplicate is emitted. Auxiliary non-agentic emissions from `/req-wtd` and `/req-references` pass the capture gate as `false` so the retained message keeps reflecting the last agentic-flow termination instead of a recomposition with a newer context-usage snapshot. Performs no session message send and no session switch. Runtime is O(n) in captured report and entry length. Side effects are the optional process-scoped retention capture and one user notification delivery when the supplied context is still active.
  * @param[in] statusController {PiUsereqStatusController} Mutable status controller supplying the latest normalized context-usage snapshot.
  * @param[in] ctx {(ExtensionContext | ExtensionCommandContext) | undefined} Candidate UI context for notification delivery.
  * @param[in] captureMessage {boolean} `true` when the emission terminates an agentic flow and must refresh the retained message; `false` for auxiliary non-agentic emissions that must preserve the retained message.
@@ -1392,13 +1388,13 @@ function notifyContextRetentionReminder(
 
 /**
  * @brief Rejects one non-startable req-command invocation and records the workflow error state.
- * @details Builds a deterministic busy-state diagnostic from the current workflow state, transitions the shared workflow state to `error`, preserves any pending or active prompt execution metadata for later closure handling, emits an error notification, and throws `ReqError`. Only `idle` and `done` are startable, so `checking`, `running`, `merging`, `warning`, and `error` are rejected. Bundled prompt commands reuse `transitionPromptWorkflowState(...)` when cached configuration is available so prompt debug logging captures the actual state transition; specialized non-prompt commands fall back to direct status mutation. Runtime is O(1). Side effects include workflow-state mutation, status-bar rendering, optional debug-log writes, and user notification delivery.
+ * @details Builds a deterministic busy-state diagnostic from the current workflow state, transitions the shared workflow state to `error`, preserves any pending or active prompt execution metadata for later closure handling, emits an error notification, and throws `ReqError`. REQ-224 auto-recovery runs before this gate, so only in-flight `checking`, `running`, and `merging` states reach the rejection here. Bundled prompt commands reuse `transitionPromptWorkflowState(...)` when cached configuration is available so prompt debug logging captures the actual state transition; specialized non-prompt commands fall back to direct status mutation. Runtime is O(1). Side effects include workflow-state mutation, status-bar rendering, optional debug-log writes, and user notification delivery.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext | ExtensionCommandContext} Active extension context.
  * @param[in] promptName {import("./core/prompt-command-catalog.js").PromptCommandName | undefined} Optional bundled prompt name used for prompt debug logging.
  * @return {never} This helper always throws a deterministic `ReqError`.
  * @throws {ReqError} Always throws because non-startable req commands are rejected.
- * @satisfies REQ-224, REQ-635
+ * @satisfies REQ-224, REQ-635, REQ-823
  */
 function rejectNonIdleReqCommand(
   statusController: PiUsereqStatusController,
@@ -1420,6 +1416,35 @@ function rejectNonIdleReqCommand(
   }
   notifyContextSafely(ctx, message, "error");
   throw new ReqError(message, 1);
+}
+
+/**
+ * @brief Auto-recovers terminal non-startable workflow state before a req command bootstrap.
+ * @details Clears the persisted prompt-orchestration state, drops the in-memory pending and active prompt requests plus the deferred finalization outcome, transitions the shared workflow state to `idle`, and emits one info notification stating the recovered state so every gated `req-*` slash command continues from the bootstrap `idle` state when the previous orchestration terminated in `error` or `warning` (REQ-224), exactly matching the removed `/req-reset` recovery semantics. In-flight `checking|running|merging` states are never recovered so concurrent orchestrations keep rejecting through REQ-823. The captured Next-Workflow array and the retained final-output notification message stay untouched so queued commands remain consumable (REQ-670, REQ-775). Runtime is O(1). Side effects include workflow-state mutation, status-bar rendering, process-scoped prompt-state clearing, and user notification delivery.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @param[in] ctx {ExtensionContext | ExtensionCommandContext} Active extension context.
+ * @return {boolean} `true` when a terminal state was auto-recovered to `idle`; `false` when no recovery was needed.
+ * @satisfies REQ-224, REQ-633, REQ-636, REQ-656, REQ-670, REQ-775, REQ-824
+ */
+function autoRecoverTerminalReqCommandState(
+  statusController: PiUsereqStatusController,
+  ctx: ExtensionContext | ExtensionCommandContext,
+): boolean {
+  const workflowState = statusController.state.workflowState;
+  if (workflowState !== "error" && workflowState !== "warning") {
+    return false;
+  }
+  statusController.state.pendingPromptRequest = undefined;
+  statusController.state.activePromptRequest = undefined;
+  statusController.state.pendingFinalizationOutcome = undefined;
+  clearPersistedPromptCommandRuntimeState();
+  setPiUsereqWorkflowState(statusController, "idle", ctx);
+  notifyContextSafely(
+    ctx,
+    `Auto-reset: recovered the ${workflowState} workflow state to idle before command execution.`,
+    "info",
+  );
+  return true;
 }
 
 /**
@@ -1935,7 +1960,7 @@ async function handleExtensionStatusEvent(
         // terminal notifications render the markdown report sections plus the command
         // tables. The capture gates on the parse outcome instead of the merge-gate
         // marker so a workflow-mandated `result` "error" terminal refreshes every
-        // captured-state surface (`/req-reset` retention composition, `/req-print-result`,
+        // captured-state surface (`/req-print-result`,
         // and the `/req-continue` array) with the EXECUTED flow outcome instead of
         // keeping the antecedent flow state; runs whose output carries no valid
         // final-output JSON never feed the capture because no parsed report exists.
@@ -3864,57 +3889,6 @@ function resolveReqWtdPromptRequest(
 }
 
 /**
- * @brief Registers the specialized `req-reset` slash command.
- * @details Registers the non-agentic prompt-recovery command that accepts any current workflow state, clears the persisted prompt-orchestration state, and transitions the workflow state to `idle` without deleting worktrees or branches, without switching sessions, and without relocating the client working position, while preserving the captured Next-Workflow array and the retained final-output notification message so queued commands stay executable from the restored `idle` state (REQ-670), notifying pi without starting an LLM session or creating a worktree, and dispatching no command-notify, sound, or Pushover prompt-end effect. Runtime is O(1). Side effects include command registration, status-controller mutation, process-scoped prompt-state clearing, and UI notifications.
- * @param[in] pi {ExtensionAPI} Active extension API instance.
- * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
- * @return {void} No return value.
- * @satisfies REQ-304, REQ-305, REQ-306, REQ-307, REQ-312, REQ-313, REQ-447, REQ-441, REQ-656, REQ-663, REQ-670, REQ-775
- */
-function registerReqResetCommand(
-  pi: ExtensionAPI,
-  statusController: PiUsereqStatusController,
-): void {
-  const resetCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
-      const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
-      const projectBase = getProjectBase(commandCwd);
-      bootstrapRuntimePathState(projectBase, {
-        gitPath: resolveRuntimeGitPath(projectBase),
-      });
-      setPiUsereqWorkflowRequest(statusController, "reset", ctx);
-      setPiUsereqWorkflowState(statusController, "running", ctx);
-
-      try {
-        const config = loadProjectConfig(projectBase);
-        setPiUsereqStatusConfig(statusController, config);
-        await executeReqResetCommandExecution();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setPiUsereqWorkflowState(statusController, "error", ctx);
-        notifyContextSafely(ctx, message, "error");
-        throw error;
-      }
-
-      statusController.state.pendingPromptRequest = undefined;
-      statusController.state.activePromptRequest = undefined;
-      statusController.state.pendingFinalizationOutcome = undefined;
-      setPiUsereqWorkflowState(statusController, "idle", ctx);
-      // REQ-670: `/req-reset` recovery preserves the captured Next-Workflow array and
-      // the retained final-output notification message so the queued commands stay
-      // executable through `/req-continue` from the restored `idle` state (REQ-656).
-      notifyContextSafely(ctx, "SUCCESS: req-reset restored idle state without worktree cleanup or client relocation.", "info");
-      // REQ-772: the auxiliary non-agentic emission preserves the retained message so
-      // `/req-print-result` keeps reprinting the last agentic-flow termination.
-      notifyContextRetentionReminder(statusController, ctx, false);
-  };
-  pi.registerCommand("req-reset", {
-    description: REQ_RESET_COMMAND_DESCRIPTION,
-    handler: resetCommandHandler,
-  });
-  registerNextWorkflowCommandHandler("req-reset", resetCommandHandler);
-}
-
-/**
  * @brief Registers the specialized `req-wtd` slash command.
  * @details Registers the non-agentic worktree-disposal command that accepts any current workflow state, reuses persisted prompt runtime state when available, restores the original session-backed `base-path`, returns the client to the main branch, force-removes only the resolved target worktree plus its branch with or without active changes, clears recoverable prompt state when restoration succeeds while preserving the captured Next-Workflow array so queued commands stay executable from the restored `idle` state (REQ-670), re-applies the captured model selection after returning the active session to the main `base-path`, notifies pi without starting an LLM session or creating a worktree, and dispatches no command-notify, sound, or Pushover prompt-end effect. Runtime is dominated by session restoration plus git cleanup. Side effects include command registration, status-controller mutation, active-session replacement, worktree deletion, branch deletion, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -4011,6 +3985,7 @@ function registerReqReferencesCommand(
   statusController: PiUsereqStatusController,
 ): void {
   const referencesCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+      autoRecoverTerminalReqCommandState(statusController, ctx);
       if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
         rejectNonIdleReqCommand(statusController, ctx);
       }
@@ -4178,7 +4153,7 @@ function registerReqPrintResultCommand(pi: ExtensionAPI): void {
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428, REQ-621, REQ-622, REQ-623, REQ-649, REQ-663, REQ-669, REQ-774, REQ-781, REQ-792, REQ-794, REQ-795
+ * @satisfies REQ-004, REQ-067, REQ-068, REQ-169, REQ-200, REQ-201, REQ-202, REQ-203, REQ-206, REQ-207, REQ-219, REQ-220, REQ-221, REQ-224, REQ-225, REQ-226, REQ-227, REQ-245, REQ-246, REQ-247, REQ-277, REQ-281, REQ-377, REQ-416, REQ-417, REQ-418, REQ-427, REQ-428, REQ-621, REQ-622, REQ-623, REQ-649, REQ-663, REQ-669, REQ-774, REQ-781, REQ-792, REQ-794, REQ-795, REQ-823, REQ-824, REQ-825, REQ-826, REQ-827, REQ-828, REQ-829
  */
 function registerPromptCommands(
   pi: ExtensionAPI,
@@ -4191,6 +4166,7 @@ function registerPromptCommands(
         // transition; resynchronize so the startability gate and the REQ-649 agentic-flow
         // kind observe the completed flow that already exists in context.
         resynchronizePersistedTerminalWorkflowState(statusController, ctx);
+        autoRecoverTerminalReqCommandState(statusController, ctx);
         if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
           rejectNonIdleReqCommand(statusController, ctx, promptName);
         }
@@ -6047,10 +6023,10 @@ function registerConfigCommands(
 
 /**
  * @brief Activates the complete pi-usereq extension surface.
- * @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-reset`, `req-wtd`, `req-references`, `req-continue`, and `req-print-result` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
+ * @details Deploys the PATH-accessible `pi-usereq` launcher symlink best-effort for pi-package installations so pi-package installations expose the management CLI as a direct command without global npm bin linking, plus the best-effort conditional `~/bin/pi-usereq` symlink layer targeting the deployed agent-bin launcher whenever the user-home bin directory already exists and both never aborting activation, persists the live extension api into process-scoped storage on every bind so model re-application after session replacement binds to the api of the currently active session runner instead of an invalidated captured api, registers the durable `pi-usereq.command-report` transcript entry renderer, schedules the once-per-process pi CLI host version probe whose below-minimum result surfaces as one `session_start` warning notification, then validates installation-owned bundled resources, schedules a best-effort idle-time shared-tokenizer plus canonical-context-file measurement pre-warm so the first configuration-menu render never pays the one-time `js-tiktoken` module load or first content encodes synchronously, registers the specialized `req-wtd`, `req-references`, `req-continue`, and `req-print-result` commands plus bundled prompt-backed commands and agent tools, conditionally registers config-gated debug tool wrapper commands when the current project enables them, registers configuration commands, registers the configurable notification-sound shortcut when the runtime supports shortcuts, and installs shared wrappers for all supported pi lifecycle hooks so status telemetry, context usage, prompt timing, cumulative runtime, prompt-specific Pushover metadata, tool-result debug logging, and prompt-orchestration effects remain synchronized with runtime events. Runtime is O(h) in hook count during registration. Side effects include filesystem reads, best-effort launcher symlink deployment, command/tool/shortcut registration, UI updates, active-tool changes, process-scoped extension-api persistence, optional debug-log writes, and timer scheduling.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @return {void} No return value.
- * @satisfies DES-002, DES-015, DES-030, DES-040, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-304, REQ-305, REQ-306, REQ-308, REQ-309, REQ-310, REQ-311, REQ-312, REQ-313, REQ-369, REQ-815, REQ-816, REQ-817, REQ-818, REQ-819, REQ-820, REQ-821, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520, REQ-653, REQ-656, REQ-659, REQ-663, REQ-776, REQ-777, REQ-778, REQ-779, REQ-780
+ * @satisfies DES-002, DES-015, DES-030, DES-040, REQ-004, REQ-005, REQ-009, REQ-044, REQ-067, REQ-068, REQ-109, REQ-111, REQ-112, REQ-113, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-121, REQ-122, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-131, REQ-132, REQ-133, REQ-134, REQ-137, REQ-159, REQ-163, REQ-164, REQ-165, REQ-166, REQ-167, REQ-168, REQ-169, REQ-172, REQ-174, REQ-179, REQ-180, REQ-184, REQ-188, REQ-190, REQ-191, REQ-192, REQ-193, REQ-194, REQ-195, REQ-196, REQ-197, REQ-236, REQ-237, REQ-238, REQ-239, REQ-240, REQ-241, REQ-242, REQ-243, REQ-244, REQ-245, REQ-246, REQ-247, REQ-298, REQ-299, REQ-300, REQ-301, REQ-302, REQ-303, REQ-308, REQ-309, REQ-310, REQ-311, REQ-369, REQ-815, REQ-816, REQ-817, REQ-818, REQ-819, REQ-820, REQ-821, REQ-323, REQ-324, REQ-325, REQ-326, REQ-327, REQ-456, REQ-504, REQ-505, REQ-506, REQ-507, REQ-516, REQ-517, REQ-518, REQ-519, REQ-520, REQ-653, REQ-656, REQ-659, REQ-663, REQ-776, REQ-777, REQ-778, REQ-779, REQ-780
  */
 function activatePiUsereqExtension(pi: ExtensionAPI): void {
   if (isPiPackageInstallation()) {
@@ -6067,7 +6043,6 @@ function activatePiUsereqExtension(pi: ExtensionAPI): void {
   } catch {
     // Best-effort idle-time pre-warm: measurement failures surface unchanged at render time.
   }
-  registerReqResetCommand(pi, statusController);
   registerReqWtdCommand(pi, statusController);
   registerReqReferencesCommand(pi, statusController);
   registerReqContinueCommand(pi, statusController);

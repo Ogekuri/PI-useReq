@@ -54,26 +54,26 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 4. **Implement the source code**: run `/req-implement` to build the source from the requirements, or `/req-cover` to make the minimal changes that cover uncovered requirements.
 5. **Update the documentation**: run `/req-workflow`, `/req-flowchart`, and/or `/req-references` to regenerate the project documentation from the source; `/req-readme` keeps this file aligned with the implementation.
 6. **Iterate**: use `/req-change`, `/req-new`, `/req-fix`, `/req-refactor`, and `/req-check` to evolve requirements and code together.
-7. **Recover** (if a run fails or is interrupted): run `/req-reset` to restore the original base path and remove generated worktrees and branches.
+7. **Recover** (if a run fails or is interrupted): invoke the next `/req-*` command directly — it auto-recovers the errored workflow state and continues on the retained worktree; run `/req-wtd` to restore the original base path and remove generated worktrees and branches.
 
 
 ## Requirements
 
 - **Node.js** - 24.0.0 or newer, per the `engines` constraint in `package.json`.
 - **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 1.5.2 or newer. A resolvable older host version surfaces one warning notification while the extension keeps working.
-- **Git repository** - every prompt-backed `req-*` slash command plus the non-agentic `/req-references` runs slash-command-owned git validation (`/req-reset`, `/req-print-result`, and parameter-less `/req-continue` do not): the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
+- **Git repository** - every prompt-backed `req-*` slash command plus the non-agentic `/req-references` runs slash-command-owned git validation (`/req-print-result` and parameter-less `/req-continue` do not; `/req-wtd` validates only repository discoverability): the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
 - **Requirements documentation** - the configured `docs-dir` (default `usereq/docs`) must contain the canonical documents required by the executed commands (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); the command table below lists each command's requirement, and `/req-write`, `/req-create`, `/req-workflow`, and `/req-references` are the entry points that generate them.
 - **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install best-effort through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
-- **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker). The extension is model-agnostic: it captures the active provider, model id, and thinking level at command start and re-applies them after a worktree session switch and after `/req-reset`.
+- **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker). The extension is model-agnostic: it captures the active provider, model id, and thinking level at command start and re-applies them after a worktree session switch and after `/req-wtd` restoration.
 
 
 ## Feature Highlights
 
-- **19 slash commands** - 15 prompt-backed `req-*` commands plus the dedicated `/req-references`, `/req-reset`, `/req-continue`, and `/req-print-result` commands.
+- **19 slash commands** - 15 prompt-backed `req-*` commands plus the dedicated `/req-references`, `/req-wtd`, `/req-continue`, and `/req-print-result` commands.
 - **12 built-in agent tools** - token counting, summarization, compression, construct search, static-check, and final-output JSON validation tools for explicit files or for the configured project surface.
 - **Interactive configuration menu** - `/pi-usereq` manages local (`<base-path>/.pi-usereq.json`) and global (`~/.config/pi-usereq/config.json`) configuration with no manual JSON editing required.
 - **Standalone management and configuration CLI** - the `pi-usereq` bin exposes `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`, plus `--get`/`--set`/`--unset`/`--print`/`--info`/`--print-raw`/`--write-config` over the same local and global scopes (see [Standalone CLI](#standalone-cli-pi-usereq)).
-- **Worktree-isolated runs** - prompt-command executions run in an isolated git worktree (created with `<prefix><project>-<branch>-<YYYYMMDDHHMMSS>` names) and are merged back with a stash-assisted fast-forward only when the final agent output parses as a final-output JSON object with `result` `ok`; runs carrying `result` `error` or violating the final-output JSON contract retain the worktree in `error`.
+- **Worktree-isolated runs** - prompt-command executions run in an isolated git worktree (created with `<prefix><project>-<branch>-<YYYYMMDDHHMMSS>` names) and are merged back with a stash-assisted fast-forward only when the final agent output parses as a final-output JSON object with `result` `ok`; runs carrying `result` `error` or violating the final-output JSON contract retain the worktree in `error`, and the next `/req-*` command auto-recovers the errored state and continues on the retained worktree instead of creating a new one.
 - **Automatic commit guidance** - `AUTO_GIT_COMMIT=enable` (default) injects structured commit instructions (`<TYPE>(<COMPONENT>)<BREAKING>: <DESCRIPTION> [useReq]`) into every prompt; disabling it forces read-only git behavior and turns worktree orchestration off.
 - **Notifications** - desktop notify command, sound effects (levels `none`/`low`/`mid`/`high`, default `alt+s` toggle) and Pushover push messages on prompt completion, interruption, or failure.
 - **Runtime status bar** - the extension renders its workflow state, current branch, context usage, elapsed time, and sound level in the pi status line.
@@ -89,9 +89,10 @@ isolated worktree, render the bundled prompt with the project context, and on su
 repository clean. Merge and worktree deletion run only when the final agent output parses as a final-output JSON object with
 `result` `ok`: outputs carrying `result` `error` park the workflow in `error`, and outputs violating the final-output JSON
 contract (mandatory `result`, `summary`, and `next_commands` fields) park it in `error` with a diagnostic, both retaining the
-worktree for `/req-reset` recovery. Every prompt-backed `req-*` command prints an on-screen invocation summary (command name, passed arguments, and active
+worktree so the next `/req-*` command auto-recovers the errored state and continues on the retained worktree, or `/req-wtd`
+disposes of it. Every prompt-backed `req-*` command prints an on-screen invocation summary (command name, passed arguments, and active
 configuration); the full rendered prompt content is delivered only to the LLM agent and is never displayed on screen.
-`/req-references` and `/req-reset` are non-agentic: they execute directly without starting an LLM session or
+`/req-references` is non-agentic: it executes directly without starting an LLM session or
 creating a worktree. `/req-print-result` reprints the final-output notification of the last completed agentic workflow through
 one info notification; parameter-less `/req-continue` prints captured Next-Workflow data into the
 editor; a parameterized `/req-continue` delegates to the selected captured command, which owns its own orchestration.
@@ -134,7 +135,7 @@ editor; a parameterized `/req-continue` delegates to the selected captured comma
 | `/req-references` | Write a `REFERENCES.md` using the project's source code (non-agentic, commits the regenerated file) | none |
 | `/req-workflow` | Write a `WORKFLOW.md` using the project's source code | none |
 | `/req-flowchart` | Write a `FLOWCHART.md` using the project's source code | `REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md` |
-| `/req-reset` | Reset the req workflow state, restore the base path, and remove generated worktrees and branches (non-agentic) | none |
+| `/req-wtd` | Restore the base path, switch to the main branch, and remove the current or generated worktree (non-agentic) | none |
 | `/req-continue` | Continue the previous agentic workflow with a captured Next-Workflow command: with an integer ordinal, dispatch the captured command of that rank with its captured input text; without arguments, print the captured Next-Workflow command table into the editor | depends on the delegated command |
 | `/req-print-result` | Re-print the retained final-output notification of the last completed agentic workflow exactly as it was emitted (non-agentic) | none |
 
@@ -370,7 +371,7 @@ The interactive configuration menu exposes every user-facing setting; changes ar
 - **Git worktree** / **Worktree prefix** — enable/disable prompt-command worktree isolation and set the name prefix (default `PI-useReq-`).
 - **Language static code checkers** — per-language `enable`/`disable` flags and the global `Command`-module checker definitions (view/remove/reset with confirmation).
 - **Enable tools** — the subset of configurable startup tools activated for the project: the `files-*` and project tools plus the embedded pi tools (`read`, `bash`, `edit`, `write` enabled by default; `find`, `grep`, `ls` configurable and disabled by default).
-- **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed). Non-agentic `/req-references` and `/req-reset` runs never dispatch command-notify, sound, or Pushover effects.
+- **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed). Non-agentic `/req-references` and `/req-wtd` runs never dispatch command-notify, sound, or Pushover effects.
 - **Debug** — local debug logging: global enablement, prompt-content logging (`Enable debug prompts` plus `Log path for prompts`), log file, log-on-status filter, status-change/workflow-event toggles, enabled tools/prompts, and `Enable debug commands for tools`.
 - **Show local/global configuration** — write the exact config file contents into the editor.
 - **Reset defaults** — restore the default configuration with a confirmation preview.
@@ -441,7 +442,7 @@ The extension renders a status field in the pi status line showing: extension id
 
 ## Note on Git usage
 
-This section describes the Git behavior of the `req-*` commands. The commands own their git workflow: every prompt-backed `req-*` command plus `/req-references` validates the repository before dispatch (`/req-reset`, `/req-print-result`, and parameter-less `/req-continue` perform no git validation; a parameterized `/req-continue` inherits the validation of the delegated command), and finalization happens at the end of each worktree-backed run.
+This section describes the Git behavior of the `req-*` commands. The commands own their git workflow: every prompt-backed `req-*` command plus `/req-references` validates the repository before dispatch (`/req-print-result` and parameter-less `/req-continue` perform no git validation; a parameterized `/req-continue` inherits the validation of the delegated command), and finalization happens at the end of each worktree-backed run.
 
 - Required state before execution (every prompt-backed `req-*` command plus `/req-references`):
   - The project must be inside a git work tree with a **clean tracked working tree** (`git status --porcelain` empty; the configured debug-log file is ignored by the validation).
@@ -449,13 +450,13 @@ This section describes the Git behavior of the `req-*` commands. The commands ow
   - All files must be saved and you must be in the correct project directory.
 
 - What the commands do to the repository:
-  - Each `req-*` prompt command runs git validation and the required-document checks, then (when `Auto git commit` and `Git worktree` are enabled) creates an isolated **git worktree and branch** named `<GIT_WORKTREE_PREFIX><project>-<branch>-<YYYYMMDDHHMMSS>` (default prefix `PI-useReq-`), switches the session into it, and executes the prompt there.
+  - Each `req-*` prompt command runs git validation and the required-document checks, then (when `Auto git commit` and `Git worktree` are enabled) creates an isolated **git worktree and branch** named `<GIT_WORKTREE_PREFIX><project>-<branch>-<YYYYMMDDHHMMSS>` (default prefix `PI-useReq-`), switches the session into it, and executes the prompt there. When the live session is already anchored inside a previously generated worktree — for example after a failed run — no new worktree is created and the command continues on the retained worktree and the current session, validating the main repository instead of the (possibly dirty) reused worktree.
   - On success with a final-output JSON object carrying `result` `ok` in the final agent output, the extension restores the original `base-path` session, applies a stash-assisted fast-forward merge of the worktree branch, and deletes the worktree and branch.
-  - A completed run whose final output carries `result` `error`, or that violates the final-output JSON contract (no parsable JSON object, or missing/invalid `result`, `summary`, or `next_commands`), parks the workflow in `error` with a diagnostic and **keeps** the worktree and branch so the produced artifacts can be inspected or recovered: run `/req-reset` to restore the original base path and force-remove the generated worktrees and branches. Interrupted, failed, aborted, or incomplete runs also retain the worktree execution session and park the workflow in `error`.
+  - A completed run whose final output carries `result` `error`, or that violates the final-output JSON contract (no parsable JSON object, or missing/invalid `result`, `summary`, or `next_commands`), parks the workflow in `error` with a diagnostic and **keeps** the worktree and branch so the produced artifacts can be inspected or recovered: the next `/req-*` command auto-recovers the errored state and continues on the retained worktree, or `/req-wtd` restores the original base path and force-removes the generated worktrees and branches. Interrupted, failed, aborted, or incomplete runs also retain the worktree execution session and park the workflow in `error`.
   - `/req-references` regenerates `<docs-dir>/REFERENCES.md`, stages only that file, and commits it with the fixed message `docs(references): Update REFERENCES.md document. [useReq]` whenever the regenerated content differs from `HEAD`; when the content already matches, the commit is skipped and the run still reports success. Completed runs notify whether the references file changed and whether the commit was created or skipped. When the configured `src-dir` inventory holds no supported source file, `/req-references` writes a documented no-source placeholder directive into `REFERENCES.md` instead of extracting references; `/req-workflow` behaves the same for `WORKFLOW.md` and completes without dispatching a prompt.
   - With `Auto git commit = enable` (default), every prompt receives structured commit instructions and commits follow the message template `<TYPE>(<COMPONENT>)<BREAKING>: <DESCRIPTION> [useReq]`. With `Auto git commit = disable`, prompts receive a read-only git restriction and worktree orchestration is forced off.
-  - The extension never rewrites git history; destructive cleanup is limited to generated worktrees and branches: successful closure and command-side rollback remove only the run's own worktree, while `/req-reset` force-removes every matching generated worktree and branch (see above).
+  - The extension never rewrites git history; destructive cleanup is limited to generated worktrees and branches: successful closure and command-side rollback remove only the run's own worktree, while `/req-wtd` force-removes the resolved target worktree and branch (see above).
 
 - Recommended practice:
   - Review the changes produced by each command before pushing them.
-  - Do not use destructive commands (e.g., `git reset --hard`, `git clean -fd`) to "clean" the repository without verifying the impact; prefer `/req-reset` for worktree cleanup after failed runs.
+  - Do not use destructive commands (e.g., `git reset --hard`, `git clean -fd`) to "clean" the repository without verifying the impact; prefer `/req-wtd` for worktree disposal after failed runs.

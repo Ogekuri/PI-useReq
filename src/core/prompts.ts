@@ -266,7 +266,9 @@ function buildPromptExecutionBlock(
     : requiredDocs.map((requirement) => requirement.fileName).join(", ");
   const preparedContextPath = formatRuntimePathForDisplay(executionPlan.contextPath);
   const worktreeLine = executionPlan.worktreeDir
-    ? `3. Worktree routing already passed: created worktree-dir \`${executionPlan.worktreeDir}\` and prepared context-path \`${preparedContextPath}\`.`
+    ? executionPlan.reusedWorktree
+      ? `3. Worktree routing already passed: reused the retained worktree-dir \`${executionPlan.worktreeDir}\` and its context-path \`${preparedContextPath}\`.`
+      : `3. Worktree routing already passed: created worktree-dir \`${executionPlan.worktreeDir}\` and prepared context-path \`${preparedContextPath}\`.`
     : `3. Worktree routing already passed: worktree orchestration is disabled and context-path remains \`${preparedContextPath}\`.`;
   return [
     "## Extension-Orchestrated Runtime",

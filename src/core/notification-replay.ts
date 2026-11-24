@@ -26,7 +26,7 @@ export interface DeferredNotificationRecord {
 
 /**
  * @brief Defines the global property used for deferred-notification replay persistence.
- * @details The property lives on `globalThis` because pi tears down and reloads extension modules on session switches while the host process persists, so the queue survives `/new`, `/resume`, `/fork`, `/reload`, and `req-reset` session restoration. Access complexity is O(1).
+ * @details The property lives on `globalThis` because pi tears down and reloads extension modules on session switches while the host process persists, so the queue survives `/new`, `/resume`, `/fork`, `/reload`, and `/req-wtd` session restoration. Access complexity is O(1).
  */
 const PI_USEREQ_NOTIFICATION_REPLAY_KEY = "__piUsereqDeferredNotificationReplay";
 

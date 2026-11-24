@@ -14,9 +14,6 @@ import {
   NO_SOURCE_WORKFLOW_PLACEHOLDER,
 } from "../src/core/source-presence.js";
 import {
-  REQ_RESET_COMMAND_DESCRIPTION,
-} from "../src/core/req-reset-command.js";
-import {
   REQ_WTD_COMMAND_DESCRIPTION,
 } from "../src/core/req-wtd-command.js";
 import {
@@ -995,7 +992,6 @@ test("extension registers prompt and config commands while exposing tool capabil
     "req-recreate",
     "req-refactor",
     "req-references",
-    "req-reset",
     "req-wtd",
     "req-print-result",
     "req-renumber",
@@ -1128,26 +1124,6 @@ test("req-references registers outside the bundled prompt inventory and keeps it
   assert.equal(
     pi.commands.get("req-references")?.description,
     REQ_REFERENCES_COMMAND_DESCRIPTION,
-  );
-});
-
-/**
- * @brief Verifies `req-reset` registration is independent from bundled prompt inventory.
- * @details Confirms `reset` is absent from `PROMPT_COMMAND_NAMES` while extension activation still registers `req-reset` with the fixed dedicated description. Runtime is O(1). Side effects are limited to extension registration.
- * @return {void} No return value.
- * @throws {AssertionError} Throws when `reset` remains in the bundled prompt inventory or the command description diverges.
- * @satisfies TST-105
- */
-test("req-reset registers outside the bundled prompt inventory and keeps its dedicated description", () => {
-  const bundledPromptNames = PROMPT_COMMAND_NAMES as readonly string[];
-  assert.equal(bundledPromptNames.includes("reset"), false);
-
-  const pi = createFakePi();
-  piUsereqExtension(pi);
-
-  assert.equal(
-    pi.commands.get("req-reset")?.description,
-    REQ_RESET_COMMAND_DESCRIPTION,
   );
 });
 
@@ -3865,12 +3841,12 @@ test("req-references appends a durable command-report entry that survives sessio
 
 /**
  * @brief Verifies non-agentic commands dispatch no command-notify, sound, or Pushover effects.
- * @details Enables command-notify, the completed and failed sound events, and Pushover delivery with both credentials, then runs `req-references`, `req-reset`, `req-wtd`, and one failing `req-references` against a temporary fixture repository. Asserts that neither the intercepted shell-spawn transport nor the intercepted HTTPS transport is invoked, proving completed and failed non-agentic runs never reach the command-notify, sound, or Pushover gates. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation.
+ * @details Enables command-notify, the completed and failed sound events, and Pushover delivery with both credentials, then runs `req-references`, `req-wtd`, and one failing `req-references` against a temporary fixture repository. Asserts that neither the intercepted shell-spawn transport nor the intercepted HTTPS transport is invoked, proving completed and failed non-agentic runs never reach the command-notify, sound, or Pushover gates. Runtime is dominated by temporary git execution plus reference generation. Side effects are limited to temporary repository mutation.
  * @return {Promise<void>} Promise resolved after the no-dispatch assertions complete.
  * @throws {AssertionError} Throws when a non-agentic run dispatches a shell notification command or a Pushover request.
  * @satisfies TST-156, REQ-447
  */
-test("non-agentic req-references and req-reset runs dispatch no notification effects", async () => {
+test("non-agentic req-references and req-wtd runs dispatch no notification effects", async () => {
   const fixture = initFixtureRepo({ fixtures: [] });
   const projectBase = fixture.projectBase;
   const pi = createFakePi();
@@ -3941,7 +3917,6 @@ test("non-agentic req-references and req-reset runs dispatch no notification eff
     });
     await pi.emit("session_start", { reason: "startup" }, ctx);
     await pi.commands.get("req-references")!.handler("", ctx);
-    await pi.commands.get("req-reset")!.handler("", ctx);
     await pi.commands.get("req-wtd")!.handler("", ctx);
     fs.writeFileSync(path.join(projectBase, "DIRTY.txt"), "dirty\n", "utf8");
     await assert.rejects(
@@ -4174,80 +4149,112 @@ test("req-workflow writes the no-source WORKFLOW.md placeholder without dispatch
 });
 
 /**
- * @brief Verifies successful `req-reset` recovers from a non-`idle` worktree-backed prompt state without worktree cleanup or client relocation while preserving the captured Next-Workflow array.
- * @details Starts one worktree-backed `req-change` run until the fake command context remains attached to the execution worktree with workflow state `running`, captures one Next-Workflow entry, invokes `req-reset` from that non-`idle` state, and verifies transcript and client-position preservation, unchanged worktree plus branch and session artifacts, unchanged LLM prompt count, preserved captured Next-Workflow array, success notification, and final workflow state `idle`. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
- * @return {Promise<void>} Promise resolved after recovery-path assertions complete.
- * @throws {AssertionError} Throws when `req-reset` rejects the non-`idle` state, deletes cleanup artifacts, relocates the client, drops the captured Next-Workflow array, or dispatches an additional LLM prompt.
- * @satisfies TST-106, REQ-305, REQ-307, REQ-656, REQ-670
+ * @brief Verifies a worktree-backed `error` park auto-recovers and reuses the retained worktree through successful closure.
+ * @details Runs one worktree-backed `req-change` flow that fails and parks the workflow in `error` while retaining the worktree plus branch, seeds one captured Next-Workflow entry, then dispatches a second `req-change` from the retained worktree session. Asserts the auto-reset info notification, the `idle` recovery preceding the new `checking` transition, exactly one registered worktree plus one generated branch (no new worktree and no new execution-session fork), the unchanged execution session while the dirty retained worktree stays usable because git validation targets the main repository, the preserved captured Next-Workflow array before dispatch, and finally the reused run's successful closure restoring `base-path`, merging the reused branch, and deleting the reused worktree plus branch. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after reuse-path assertions complete.
+ * @throws {AssertionError} Throws when the error park rejects the second command, forks a new worktree or session, drops the captured array, or the reused closure skips the merge or worktree deletion.
+ * @satisfies REQ-224, REQ-824, REQ-825, REQ-826, REQ-827, REQ-829, REQ-670, TST-264, TST-265, TST-267
  */
-test("req-reset accepts non-idle workflow state and returns to idle without worktree cleanup or client relocation", async () => {
+test("req-change auto-recovers the error park and reuses the retained worktree through successful closure", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
     const pi = createFakePi();
     piUsereqExtension(pi);
     const ctx = createFakeCtx(projectBase);
-
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
+    // Flow A parks the workflow in `error` while retaining the generated worktree.
     await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const firstPromptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = firstPromptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, firstPromptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
 
-    // REQ-670: the recovered flow's captured follow-up commands must survive the reset
-    // boundary so `/req-continue` can still dispatch them from the restored `idle` state.
+    // REQ-670: the captured follow-up commands must survive the auto-recovery boundary.
     captureTestNextWorkflowCommands([
       { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
     ]);
     assert.equal(getNextWorkflowCommands().length, 1);
 
-    const sentMessageCountBeforeReset = pi.sentUserMessages.length;
-    const promptText = String(pi.sentUserMessages[0]?.content ?? "");
-    const worktreeMatch = promptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
-    assert.ok(worktreeMatch, promptText);
-    const worktreeName = worktreeMatch?.[1] ?? "";
-    const executionBasePath = worktreeMatch?.[2] ?? "";
-    const executionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
-
-    assert.notEqual(executionSessionFile, "");
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "failed.ts"), "export const FAILED = 1;\n", "utf8");
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><error>/);
     assert.equal(ctx.cwd, executionBasePath);
     assert.equal(process.cwd(), executionBasePath);
     assert.equal(fs.existsSync(executionBasePath), true);
+
+    const countRegisteredWorktrees = () =>
+      spawnSync("git", ["worktree", "list", "--porcelain"], { cwd: projectBase, encoding: "utf8" })
+        .stdout.split(/\r?\n/)
+        .filter((line: string) => line.startsWith("worktree ")).length;
+    const countLocalBranches = () =>
+      spawnSync("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads"], { cwd: projectBase, encoding: "utf8" })
+        .stdout.split(/\r?\n/)
+        .filter((entry: string) => entry.trim() !== "").length;
+    assert.equal(countRegisteredWorktrees(), 2);
+    assert.equal(countLocalBranches(), 2);
+
+    // Flow B auto-recovers the `error` park (REQ-224) and reuses the retained worktree
+    // (REQ-826): the dirty retained worktree stays usable because git validation
+    // targets the main repository (REQ-827).
+    const sentMessageCountBeforeRecovery = pi.sentUserMessages.length;
+    await pi.commands.get("req-change")!.handler("Continue the adjustment", ctx);
+
+    assert.ok(
+      ctx.__state.notifications.some((entry: { message: string; level: string }) =>
+        entry.level === "info" && /Auto-reset: recovered the error workflow state/.test(entry.message)),
+    );
+    assert.equal(pi.sentUserMessages.length, sentMessageCountBeforeRecovery + 1);
+    const secondPromptText = String(pi.sentUserMessages[sentMessageCountBeforeRecovery]?.content ?? "");
+    assert.match(secondPromptText, /reused the retained worktree-dir/);
+    // REQ-826: no new worktree and no new execution-session fork.
+    assert.equal(countRegisteredWorktrees(), 2);
+    assert.equal(countLocalBranches(), 2);
+    assert.equal(ctx.sessionManager.getSessionFile(), executionSessionFile);
+    assert.equal(ctx.cwd, executionBasePath);
+    assert.equal(process.cwd(), executionBasePath);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
       /<accent>status:<\/accent><warning>change ➔ running<\/warning>/,
     );
 
-    await pi.commands.get("req-reset")!.handler("", ctx);
+    // Successful closure of the reused run merges the reused branch — including the
+    // dirty work inherited from the failed flow — restores base-path, and deletes the
+    // reused worktree plus branch.
+    await pi.emit("agent_start", {}, ctx);
+    fs.writeFileSync(path.join(executionBasePath, "src", "reused.ts"), "export const REUSED = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "reused worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(commit.status, 0, commit.stderr);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
 
-    assert.equal(pi.sentUserMessages.length, sentMessageCountBeforeReset);
-    // REQ-307: the client stays on the current worktree session without relocation.
-    assert.equal(ctx.cwd, executionBasePath);
-    assert.equal(process.cwd(), executionBasePath);
-    assert.equal(ctx.sessionManager.getSessionFile(), executionSessionFile);
-    // REQ-305: `req-reset` retains the generated worktree plus branch for `/req-wtd`.
-    assert.equal(fs.existsSync(executionBasePath), true);
-    assert.equal(
+    assert.equal(process.cwd(), projectBase);
+    assert.equal(ctx.cwd, projectBase);
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "failed.ts")));
+    assert.ok(fs.existsSync(path.join(projectBase, "src", "reused.ts")));
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
       spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
         cwd: projectBase,
         encoding: "utf8",
       }).status,
       0,
     );
-    assert.equal(getNextWorkflowCommands().length, 1);
-    assert.ok(
-      ctx.__state.notifications.some((entry: { message: string; level: string }) => /SUCCESS: req-reset/.test(entry.message)),
-    );
-    assert.equal(
-      ctx.__state.statuses.get("pi-usereq"),
-      buildExpectedFakeStatusText({
-        workflowState: "idle",
-        workflowRequest: "reset",
-        basePath: buildExpectedFakeBasePath(executionBasePath),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
-        contextFilledCells: 0,
-        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
-      }),
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>change ➔ done<\/warning>/,
     );
   } finally {
     process.chdir(previousCwd);
@@ -4329,13 +4336,80 @@ test("req-wtd surfaces restoration failures and transitions workflow state to er
 });
 
 /**
- * @brief Verifies failing `req-reset` surfaces recovery failures without worktree cleanup or LLM execution.
- * @details Corrupts the persisted local configuration after startup, invokes `req-reset`, and verifies the command reports the recovery failure, transitions workflow state to `error`, sends no LLM message, and mutates no repository artifact. Runtime is dominated by fixture setup plus fake handler dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
- * @return {Promise<void>} Promise resolved after failure-path assertions complete.
- * @throws {AssertionError} Throws when `req-reset` hides recovery failures or dispatches an LLM prompt.
- * @satisfies TST-107, REQ-313, REQ-305
+ * @brief Verifies req commands auto-recover terminal `error` and `warning` workflow states and continue execution.
+ * @details Parks one non-worktree `req-change` flow in `error` through a `result` "error" final output, then invokes `req-references` and asserts the auto-reset info notification, the `idle` recovery, and the completed `references ➔ done` transition instead of a busy-state rejection. Seeds one persisted terminal `warning` state on a fresh controller and asserts a bundled prompt command auto-recovers it to `idle` before dispatching its prompt. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation, temporary repository mutation, and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after auto-recovery assertions complete.
+ * @throws {AssertionError} Throws when a terminal `error` or `warning` state rejects the next command, skips the auto-reset notification, or skips the `idle` recovery.
+ * @satisfies REQ-224, REQ-824, REQ-636, TST-262
  */
-test("req-reset surfaces recovery failures and transitions workflow state to error", async () => {
+test("req commands auto-recover terminal error and warning workflow states to idle and continue execution", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  try {
+    writeProjectConfigOverrides(projectBase, { GIT_WORKTREE_ENABLED: "disable" });
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    // Park one terminal `error` state through a non-worktree `result` "error" flow.
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{
+        role: "assistant",
+        stopReason: "stop",
+        content: [{
+          type: "text",
+          text: JSON.stringify({ result: "error", summary: "Flow failed.", next_commands: [] }),
+        }],
+      }],
+    }, ctx);
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><error>/);
+
+    // REQ-224: `req-references` auto-recovers the `error` park and completes instead of
+    // rejecting the non-startable state.
+    await pi.commands.get("req-references")!.handler("", ctx);
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) =>
+      entry.level === "info" && /Auto-reset: recovered the error workflow state/.test(entry.message)));
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>references ➔ done<\/warning>/,
+    );
+
+    // REQ-224: a seeded terminal `warning` state auto-recovers through the persisted
+    // terminal-state resynchronization before a bundled prompt command continues.
+    const warningPi = createFakePi();
+    piUsereqExtension(warningPi);
+    const warningCtx = createFakeCtx(projectBase);
+    await warningPi.emit("session_start", { reason: "startup" }, warningCtx);
+    writePersistedPromptCommandRuntimeState({
+      workflowState: "warning",
+      workflowRequest: "change",
+      pendingPromptRequest: undefined,
+      activePromptRequest: undefined,
+    });
+    await warningPi.commands.get("req-analyze")!.handler("Inspect src", warningCtx);
+    assert.ok(warningCtx.__state.notifications.some((entry: { message: string; level: string }) =>
+      entry.level === "info" && /Auto-reset: recovered the warning workflow state/.test(entry.message)));
+    assert.match(
+      warningCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>analyze ➔ running<\/warning>/,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies command-side failure after worktree reuse retains the reused worktree and the anchored session.
+ * @details Parks one worktree-backed `req-change` flow in `error` with the worktree and execution session retained, corrupts the retained execution-session header cwd to a nested path inside the worktree, seeds one captured Next-Workflow entry, and dispatches a second `req-change` whose reused activation verification fails. Asserts the auto-reset info notification, the retained worktree plus branch, the unchanged execution session with the client still anchored on the reused worktree, the preserved captured Next-Workflow array, the `error` park, and no additional LLM prompt. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after retained-worktree assertions complete.
+ * @throws {AssertionError} Throws when the reused command deletes the retained worktree, relocates the session, or drops the captured Next-Workflow array.
+ * @satisfies REQ-828, REQ-670, REQ-775, TST-266
+ */
+test("command-side failure after worktree reuse retains the reused worktree and anchored session", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
@@ -4344,17 +4418,60 @@ test("req-reset surfaces recovery failures and transitions workflow state to err
     const ctx = createFakeCtx(projectBase);
     await pi.emit("session_start", { reason: "startup" }, ctx);
 
-    fs.writeFileSync(path.join(projectBase, ".pi-usereq.json"), "{ broken", "utf8");
+    // Flow A parks the workflow in `error` while retaining the generated worktree.
+    await pi.commands.get("req-change")!.handler("Adjust docs", ctx);
+    const firstPromptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = firstPromptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, firstPromptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    const executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "error", content: [] }],
+    }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
+    assert.match(ctx.__state.statuses.get("pi-usereq") ?? "", /<accent>status:<\/accent><error>/);
 
+    // REQ-670/REQ-775: the captured follow-up commands must survive the failed reused run.
+    captureTestNextWorkflowCommands([
+      { command: "/req-fix", text: "Fix the flaky retry path in the orchestrator loop" },
+    ]);
+    assert.equal(getNextWorkflowCommands().length, 1);
+
+    // Corrupt the retained execution-session header cwd to a nested path inside the
+    // worktree so the reused activation verification fails while the session stays
+    // usable for bootstrap (the header cwd still resolves inside the worktree).
+    fs.mkdirSync(path.join(executionBasePath, "nested"), { recursive: true });
+    const executionSessionLines = fs.readFileSync(executionSessionFile, "utf8").split(/\r?\n/);
+    const executionSessionHeader = JSON.parse(executionSessionLines[0]) as Record<string, unknown>;
+    executionSessionHeader.cwd = path.join(executionBasePath, "nested");
+    executionSessionLines[0] = JSON.stringify(executionSessionHeader);
+    fs.writeFileSync(executionSessionFile, executionSessionLines.join("\n"), "utf8");
+
+    const sentMessageCountBeforeReuse = pi.sentUserMessages.length;
     await assert.rejects(
-      pi.commands.get("req-reset")!.handler("", ctx),
-      /invalid /,
+      pi.commands.get("req-change")!.handler("Continue the adjustment", ctx),
+      /Prompt execution activation expected session/,
     );
 
-    assert.equal(pi.sentUserMessages.length, 0);
-    assert.ok(
-      ctx.__state.notifications.some((entry: { message: string; level: string }) => entry.level === "info" && /invalid /.test(entry.message)),
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) =>
+      entry.level === "info" && /Auto-reset: recovered the error workflow state/.test(entry.message)));
+    // REQ-828: the reused worktree, branch, and anchored session stay retained.
+    assert.equal(pi.sentUserMessages.length, sentMessageCountBeforeReuse);
+    assert.equal(fs.existsSync(executionBasePath), true);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
     );
+    assert.equal(ctx.sessionManager.getSessionFile(), executionSessionFile);
+    assert.equal(ctx.cwd, executionBasePath);
+    assert.equal(process.cwd(), executionBasePath);
+    assert.equal(getNextWorkflowCommands().length, 1);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
       /<accent>status:<\/accent><error>/,
@@ -4825,13 +4942,13 @@ test("prompt commands capture checking before handoff and running at prompt inje
 });
 
 /**
- * @brief Verifies every req command except `req-reset` and `req-wtd` rejects non-`idle` workflow state and transitions to `error`.
- * @details Starts one no-worktree `req-change` run until workflow state becomes `running`, invokes `req-analyze` and `req-references` while orchestration remains active, and verifies both handlers reject with deterministic diagnostics, emit error notifications, send no additional LLM prompt, and move the shared workflow state to `error` before `agent_end` restores `idle`. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @brief Verifies every req command rejects in-flight workflow state and transitions to `error`.
+ * @details Starts one no-worktree `req-change` run until workflow state becomes `running`, invokes `req-analyze` while orchestration remains active, and verifies the handler rejects with a deterministic diagnostic, emits one error notification, sends no additional LLM prompt, and parks the shared workflow state in `error` while preserving prompt metadata so `agent_end` still completes the active flow. Runs one further `req-change` flow from the restored `done` state and verifies `req-references` rejects the same in-flight gate, then completes the second flow back to `done`. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
  * @return {Promise<void>} Promise resolved after rejection-path assertions complete.
- * @throws {AssertionError} Throws when a busy req command starts new orchestration, skips the error transition, or prevents the active no-worktree prompt from returning to `idle`.
- * @satisfies TST-068
+ * @throws {AssertionError} Throws when a busy req command starts new orchestration, skips the error transition, or prevents the active no-worktree prompt from returning to `done`.
+ * @satisfies TST-068, REQ-823
  */
-test("req commands except req-reset reject non-idle workflow state and transition to error", async () => {
+test("req commands reject in-flight workflow state and transition to error", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
   const previousCwd = process.cwd();
   try {
@@ -4865,10 +4982,21 @@ test("req commands except req-reset reject non-idle workflow state and transitio
       ctx.__state.notifications.filter((entry: { message: string; level: string }) => /expected idle/.test(entry.message)).length,
       1,
     );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>/,
+    );
+
+    // The busy-command rejection preserves the active prompt metadata, so the first
+    // flow still completes through its terminal agent events.
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
     assert.equal(
       ctx.__state.statuses.get("pi-usereq"),
       buildExpectedFakeStatusText({
-        workflowState: "error",
+        workflowState: "done",
         workflowRequest: "change",
         basePath: buildExpectedFakeBasePath(projectBase),
         docsDir: DEFAULT_DOCS_DIR,
@@ -4879,27 +5007,21 @@ test("req commands except req-reset reject non-idle workflow state and transitio
       }),
     );
 
+    // A second in-flight flow rejects the non-prompt `req-references` gate the same way.
+    await pi.commands.get("req-change")!.handler("Adjust docs again", ctx);
+    assert.equal(pi.sentUserMessages.length, 2);
     await assert.rejects(
       pi.commands.get("req-references")!.handler("", ctx),
       /expected idle/,
     );
-    assert.equal(pi.sentUserMessages.length, 1);
+    assert.equal(pi.sentUserMessages.length, 2);
     assert.equal(
       ctx.__state.notifications.filter((entry: { message: string; level: string }) => /expected idle/.test(entry.message)).length,
       2,
     );
-    assert.equal(
-      ctx.__state.statuses.get("pi-usereq"),
-      buildExpectedFakeStatusText({
-        workflowState: "error",
-        workflowRequest: "change",
-        basePath: buildExpectedFakeBasePath(projectBase),
-        docsDir: DEFAULT_DOCS_DIR,
-        testsDir: "tests",
-        srcDir: ["src"],
-        contextFilledCells: 0,
-        et: "⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00",
-      }),
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>/,
     );
 
     await pi.emit("agent_start", {}, ctx);
@@ -10393,9 +10515,9 @@ test("status-marker closure retains the worktree and parks error for a result er
       run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
       "expected a rendered blinking error workflow state after result error closure",
     );
-    await assert.rejects(
-      run.pi.commands.get("req-analyze")!.handler("Inspect src", run.commandCtx),
-      /expected idle or done/,
+    assert.match(
+      run.eventCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>/,
     );
     assert.ok(
       run.eventCtx.__state.notifications.some(
@@ -10442,9 +10564,9 @@ test("status-marker closure retains the worktree and parks error when the final 
       run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
       "expected a rendered blinking error workflow state when the final output is not one valid JSON object",
     );
-    await assert.rejects(
-      run.pi.commands.get("req-analyze")!.handler("Inspect src", run.commandCtx),
-      /expected idle or done/,
+    assert.match(
+      run.eventCtx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>/,
     );
     assert.ok(
       run.eventCtx.__state.notifications.some(
@@ -11193,13 +11315,13 @@ test("req-continue recovers the persisted terminal state on a replacement runtim
 });
 
 /**
- * @brief Verifies the Next-Workflow wipe placement: preserved on failed pre-checks and `/req-reset` recovery, wiped immediately before a `new` agentic flow dispatch.
- * @details Seeds two captured Next-Workflow entries, fails one `req-change` preflight through a staged uncommitted change, and asserts the array survives the failed pre-checks; runs `/req-reset` from the parked `error` state and asserts the array survives the recovery while the workflow state returns to `idle`; then cleans the repository, samples the process-scoped array inside the prompt-delivery fallback, and asserts the dispatch-time sample is empty, proving the wipe runs immediately before the `new` agentic session starts after every pre-check succeeded. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation, temporary repository mutation, and fake UI notifications.
+ * @brief Verifies the Next-Workflow wipe placement: preserved on failed pre-checks and REQ-224 auto-recovery, wiped immediately before a `new` agentic flow dispatch.
+ * @details Seeds two captured Next-Workflow entries, fails one `req-change` preflight through a staged uncommitted change, and asserts the array survives the failed pre-checks; fails one further `req-change` invocation from the parked `error` state so its auto-recovery boundary is crossed while the array still survives, proving auto-recovery preserves the captured commands; then cleans the repository, samples the process-scoped array inside the prompt-delivery fallback, and asserts the dispatch-time sample is empty, proving the wipe runs immediately before the `new` agentic session starts after every pre-check succeeded. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation, temporary repository mutation, and fake UI notifications.
  * @return {Promise<void>} Promise resolved after wipe-placement assertions complete.
- * @throws {AssertionError} Throws when a failed pre-check or `/req-reset` drops the captured array, or the prompt dispatch observes a non-empty array.
- * @satisfies REQ-656, REQ-669, REQ-670, TST-220, TST-221
+ * @throws {AssertionError} Throws when a failed pre-check or auto-recovery drops the captured array, or the prompt dispatch observes a non-empty array.
+ * @satisfies REQ-656, REQ-669, REQ-670, TST-221, TST-263
  */
-test("next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset", async () => {
+test("next-workflow wipe runs right before a new flow dispatch and survives failed pre-checks plus auto-recovery", async () => {
   resetNextWorkflowStateForTests();
   const { projectBase } = initFixtureRepo();
   const previousCwd = process.cwd();
@@ -11225,13 +11347,15 @@ test("next-workflow wipe runs right before a new flow dispatch and survives fail
     );
     assert.equal(getNextWorkflowCommands().length, 2);
 
-    // REQ-670: `/req-reset` recovery preserves the captured array while returning to idle.
-    await pi.commands.get("req-reset")!.handler("", ctx);
-    assert.match(
-      ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>status:<\/accent><warning>reset ➔ idle<\/warning>/,
+    // REQ-670/REQ-224: auto-recovery preserves the captured array across the `error`
+    // park recovery boundary while the second failed pre-check parks `error` again.
+    await assert.rejects(
+      pi.commands.get("req-change")!.handler("Adjust docs again", ctx),
+      /Git status unclear/,
     );
     assert.equal(getNextWorkflowCommands().length, 2);
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) =>
+      entry.level === "info" && /Auto-reset: recovered the error workflow state/.test(entry.message)));
 
     // REQ-669: the wipe runs immediately before the `new` agentic flow dispatch.
     fs.rmSync(path.join(projectBase, "uncommitted.txt"), { force: true });
@@ -11364,12 +11488,12 @@ test("req-print-result reprints the emitted retention notification identically f
 
 /**
  * @brief Verifies the retained-message wipe placement mirrors the Next-Workflow array lifetime.
- * @details Seeds one retained message plus two captured Next-Workflow entries, fails one `req-change` preflight through a staged uncommitted change, and asserts both captures survive the failed pre-checks; runs `/req-reset` from the parked `error` state and asserts both captures survive the recovery while the workflow state returns to `idle`; then cleans the repository and samples the process-scoped retention store inside the prompt-delivery fallback, asserting the dispatch-time sample is `undefined` while the array sample is empty, proving the wipe runs immediately before the `new` agentic session starts after every pre-check succeeded. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation, temporary repository mutation, and fake UI notifications.
+ * @details Seeds one retained message plus two captured Next-Workflow entries, fails one `req-change` preflight through a staged uncommitted change, and asserts both captures survive the failed pre-checks; fails one further `req-change` invocation from the parked `error` state so its REQ-224 auto-recovery boundary is crossed while both captures still survive; then cleans the repository and samples the process-scoped retention store inside the prompt-delivery fallback, asserting the dispatch-time sample is `undefined` while the array sample is empty, proving the wipe runs immediately before the `new` agentic session starts after every pre-check succeeded. Runtime is dominated by temporary project setup plus handler dispatch. Side effects are limited to temporary filesystem mutation, temporary repository mutation, and fake UI notifications.
  * @return {Promise<void>} Promise resolved after wipe-placement assertions complete.
- * @throws {AssertionError} Throws when a failed pre-check or `/req-reset` drops the retained message, or the prompt dispatch observes a retained message.
+ * @throws {AssertionError} Throws when a failed pre-check or auto-recovery drops the retained message, or the prompt dispatch observes a retained message.
  * @satisfies REQ-772, REQ-773, REQ-774, REQ-775, TST-245
  */
-test("retained-result wipe runs right before a new flow dispatch and survives failed pre-checks plus req-reset", async () => {
+test("retained-result wipe runs right before a new flow dispatch and survives failed pre-checks plus auto-recovery", async () => {
   resetNextWorkflowStateForTests();
   resetResultRetentionStateForTests();
   const { projectBase } = initFixtureRepo();
@@ -11398,14 +11522,16 @@ test("retained-result wipe runs right before a new flow dispatch and survives fa
     assert.equal(getRetainedResultMessage(), "Context retained. Current context usage: 13%.");
     assert.equal(getNextWorkflowCommands().length, 2);
 
-    // REQ-775: `/req-reset` recovery preserves the retained message while returning to idle.
-    await pi.commands.get("req-reset")!.handler("", ctx);
-    assert.match(
-      ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>status:<\/accent><warning>reset ➔ idle<\/warning>/,
+    // REQ-775/REQ-224: auto-recovery preserves the retained message across the `error`
+    // park recovery boundary while the second failed pre-check parks `error` again.
+    await assert.rejects(
+      pi.commands.get("req-change")!.handler("Adjust docs again", ctx),
+      /Git status unclear/,
     );
     assert.equal(getRetainedResultMessage(), "Context retained. Current context usage: 13%.");
     assert.equal(getNextWorkflowCommands().length, 2);
+    assert.ok(ctx.__state.notifications.some((entry: { message: string; level: string }) =>
+      entry.level === "info" && /Auto-reset: recovered the error workflow state/.test(entry.message)));
 
     // REQ-774: the wipe runs immediately before the `new` agentic flow dispatch,
     // mirroring the captured Next-Workflow array lifetime.
@@ -11430,13 +11556,13 @@ test("retained-result wipe runs right before a new flow dispatch and survives fa
 });
 
 /**
- * @brief Verifies a completed orchestration carrying final-output JSON `result` `error` refreshes the captured report, Next-Workflow array, and `/req-reset` retention composition with the executed flow outcome.
- * @details Runs one no-worktree `req-change` flow that completes with `result` `ok` (summary `Alpha flow completed.` plus one `/req-fix` follow-up), then runs a second flow whose terminal output carries `result` `error` with its own summary and `/req-check` follow-up. Asserts the executed flow's error printout pairs its own report summary with its own Next-Workflow table, the process-scoped Next-Workflow array holds the executed flow entries, `/req-reset` recovery recomposes its final context-retention notification from the executed flow report instead of the antecedent flow report, and `/req-continue 1` delegates the executed flow's captured entry. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
- * @return {Promise<void>} Promise resolved after capture and recovery assertions complete.
- * @throws {AssertionError} Throws when a `result` `error` terminal keeps the antecedent flow report or Next-Workflow entries in any captured-state surface consumed by `/req-reset` or `/req-continue`.
+ * @brief Verifies a completed orchestration carrying final-output JSON `result` `error` refreshes the captured report and Next-Workflow entries with the executed flow outcome.
+ * @details Runs one no-worktree `req-change` flow that completes with `result` `ok` (summary `Alpha flow completed.` plus one `/req-fix` follow-up), then runs a second flow whose terminal output carries `result` `error` with its own summary and `/req-check` follow-up. Asserts the executed flow's error printout pairs its own report summary with its own Next-Workflow table, the process-scoped Next-Workflow array holds the executed flow entries, and `/req-continue 1` delegates the executed flow's captured entry. Runtime is dominated by temporary project setup plus fake lifecycle dispatch. Side effects are limited to temporary filesystem mutation and fake UI notifications.
+ * @return {Promise<void>} Promise resolved after capture and continuation assertions complete.
+ * @throws {AssertionError} Throws when a `result` `error` terminal keeps the antecedent flow report or Next-Workflow entries in any captured-state surface consumed by `/req-continue`.
  * @satisfies REQ-584, REQ-587, REQ-653, REQ-654, REQ-655, REQ-656, REQ-712, REQ-772
  */
-test("result error orchestration refreshes the captured report and req-reset retention composition", async () => {
+test("result error orchestration refreshes the captured report and Next-Workflow entries", async () => {
   resetNextWorkflowStateForTests();
   resetResultRetentionStateForTests();
   const { projectBase } = initFixtureRepo();
@@ -11516,22 +11642,6 @@ test("result error orchestration refreshes the captured report and req-reset ret
     assert.ok(errorPrintout!.message.includes("Check the failing static analysis"), "the error printout must carry the executed flow entry text");
     assert.ok(!errorPrintout!.message.includes("Fix the antecedent flow follow-up"), "the error printout must not pair the antecedent flow table");
 
-    // `/req-reset` recovery recomposes its final context-retention notification from
-    // the captured report store: it must present the executed flow result.
-    const notificationsBeforeReset = ctx.__state.notifications.length;
-    await pi.commands.get("req-reset")!.handler("", ctx);
-    assert.match(
-      ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>status:<\/accent><warning>reset ➔ idle<\/warning>/,
-    );
-    const resetRetention = ctx.__state.notifications.slice(notificationsBeforeReset).find(
-      (entry: { level: string; message: string }) => entry.level === "info"
-        && entry.message.includes("Context retained."),
-    );
-    assert.ok(resetRetention, "missing the retention notification after req-reset recovery");
-    assert.ok(resetRetention!.message.includes("Beta flow failed."), "the reset retention notification must carry the executed flow report");
-    assert.ok(!resetRetention!.message.includes("Alpha flow completed."), "the reset retention notification must not carry the antecedent flow report");
-
     // `/req-continue` consumes the executed flow's captured entries (REQ-656).
     await pi.commands.get("req-continue")!.handler("1", ctx);
     assert.deepEqual(checkSpyArgs, ["Check the failing static analysis gate"]);
@@ -11576,7 +11686,7 @@ test("result error park freezes elapsed timers a rebound runtime restores in fli
     const initiatingCtx = createFakeCtx(cwd);
     await initiatingPi.emit("session_start", { reason: "startup" }, initiatingCtx);
     await initiatingPi.commands.get("req-analyze")!.handler("Inspect src", initiatingCtx);
-    // The real `result` "error" park retains the active request for `/req-reset` recovery
+    // The real `result` "error" park retains the active request for REQ-224 auto-recovery
     // (REQ-209/REQ-587); capture the executed plan so the seeded park keeps it.
     const executedPlan = readPersistedPromptCommandRuntimeState().activePromptRequest
       ?? readPersistedPromptCommandRuntimeState().pendingPromptRequest;

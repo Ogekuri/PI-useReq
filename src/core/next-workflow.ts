@@ -13,12 +13,11 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 
 /**
  * @brief Lists the specialized non-prompt pi-usereq commands eligible for Next-Workflow capture.
- * @details Extends the bundled prompt-command inventory with `req-references`, `req-reset`, `req-wtd`, `req-print-result`, and the `/req-continue` exception so chained continuations stay capturable while every non-pi-usereq orchestration command is purged from the array. Access complexity is O(1).
+ * @details Extends the bundled prompt-command inventory with `req-references`, `req-wtd`, `req-print-result`, and the `/req-continue` exception so chained continuations stay capturable while every non-pi-usereq orchestration command is purged from the array. Access complexity is O(1).
  * @satisfies REQ-655, REQ-659, REQ-780
  */
 export const NEXT_WORKFLOW_SPECIALIZED_COMMAND_NAMES = [
   "req-references",
-  "req-reset",
   "req-wtd",
   "req-print-result",
   "req-continue",
@@ -162,7 +161,7 @@ export function getNextWorkflowCommands(): NextWorkflowCommandEntry[] {
 
 /**
  * @brief Clears the captured Next-Workflow commands.
- * @details Resets the process-scoped array to empty. The wipe runs only at the idle-reset bootstrap boundaries (`startup|reload` `session_start`) and immediately before prompt dispatch of a `new` agentic flow after every slash-command pre-check has succeeded, so failed pre-checks preserve queued commands and `/req-reset` recovery never clears the array. Runtime is O(1). Side effect: mutates process-scoped state.
+ * @details Resets the process-scoped array to empty. The wipe runs only at the idle-reset bootstrap boundaries (`startup|reload` `session_start`) and immediately before prompt dispatch of a `new` agentic flow after every slash-command pre-check has succeeded, so failed pre-checks preserve queued commands and REQ-224 auto-recovery never clears the array. Runtime is O(1). Side effect: mutates process-scoped state.
  * @return {void} No return value.
  * @satisfies REQ-656, REQ-669, REQ-670
  * @note Complexity: O(1).
