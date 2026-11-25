@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.32](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.32) - 2026-11-24
+## [0.109.33](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.33) - 2026-11-25
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,10 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- keep installed launcher chain on source-checkout uninstall [useReq] *(bin-deploy)*
+  Guard the ~/bin/pi-usereq removal with the executing-installation ownership check so --uninstall run from a source checkout (scripts/pi-usereq.sh) never de-registers the launcher chain of the installed pi-managed version.
+  Isolate the package-manager and bin-deploy test modules behind a temporary HOME and inject launcher-remover doubles so npm test (pre-release-check stage 3) can no longer delete the developer-home ~/bin/pi-usereq link.
+  Add the foreign-checkout reproducer test and refresh WORKFLOW.md plus REFERENCES.md.
 - keep reusable session context and report printout on closure failure [useReq] *(prompt-orchestration)*
   Persist only command-capable contexts in activatePromptCommandExecution so the before_agent_start lifecycle re-verification of a reused-worktree run can no longer overwrite the dispatch command context, which made closure restoration fail with the ctx.switchSession() diagnostic after /req-continue recovery (REQ-276, REQ-279, REQ-826).
   Emit the context-retention notification with the parsed final-output report printout before every terminal closure-failure diagnostic, including worktree cleanup failures and non-worktree restoration failures, so REQ-712 report notifications and REQ-719 diagnostic ordering hold and /req-wtd no longer becomes the first surface that prints the report.
@@ -1877,7 +1881,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.32\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.32
+- \[0.109.33\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.33
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1986,4 +1990,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.32]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.32
+[0.109.33]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.33
