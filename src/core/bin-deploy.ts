@@ -1,6 +1,6 @@
 /**
  * @brief Deploys and removes the PATH-accessible `pi-usereq` launcher link for pi-package installations.
- * @details Provides the installation-scoped helpers that expose the `pi-usereq` CLI as a direct shell command when the package is installed as a pi CLI extension. pi installs npm package sources locally under `<agent-dir>/npm` without global bin linking, so the extension itself materializes one `pi-usereq` symlink inside the pi-managed agent bin directory (`~/.pi/agent/bin` by default, honoring the pi `PI_CODING_AGENT_DIR` override) targeting the installation-owned shebang launcher `scripts/pi-usereq.js`. Deployment is best-effort and idempotent: existing links resolving to the current target are skipped, divergent symlinks are replaced, and non-symlink entries are never overwritten. Removal during `--uninstall` deletes only links that resolve inside the executing installation path, leaving foreign entries untouched. A secondary best-effort layer additionally exposes the deployed launcher through one `pi-usereq` symlink inside the user-home `bin` directory (`~/bin`): deployed only when that directory already exists and the agent-bin `pi-usereq` entry is a deployed symlink, and removed first during `--uninstall` under the same skip-foreign semantics. Every operation is total: filesystem failures degrade to `false` or a skipped outcome instead of throwing so extension activation never aborts. Runtime is O(1) per operation plus bounded filesystem metadata calls. Side effects include directory creation, symlink creation and deletion inside the resolved agent bin directory.
+ * @details Provides the installation-scoped helpers that expose the `pi-usereq` CLI as a direct shell command when the package is installed as a pi CLI extension. pi installs npm package sources locally under `<agent-dir>/npm` without global bin linking, so the extension itself materializes one `pi-usereq` symlink inside the pi-managed agent bin directory (`~/.pi/agent/bin` by default, honoring the pi `PI_CODING_AGENT_DIR` override) targeting the installation-owned shebang launcher `scripts/pi-usereq.js`. Deployment is best-effort and idempotent: existing links resolving to the current target are skipped, divergent symlinks are replaced, and non-symlink entries are never overwritten. Removal during `--uninstall` deletes only links that resolve inside the executing installation path, leaving foreign entries untouched. A secondary best-effort layer additionally exposes the deployed launcher through one `pi-usereq` symlink inside the user-home `bin` directory (`~/bin`): deployed only when that directory already exists and the agent-bin `pi-usereq` entry is a deployed symlink, and removed first during `--uninstall` only when that agent-bin entry resolves inside the executing installation path, so a source-checkout invocation never de-registers the launcher chain of the installed version. Every operation is total: filesystem failures degrade to `false` or a skipped outcome instead of throwing so extension activation never aborts. Runtime is O(1) per operation plus bounded filesystem metadata calls. Side effects include directory creation, symlink creation and deletion inside the resolved agent bin directory.
  */
 
 import fs from "node:fs";
@@ -304,19 +304,35 @@ export function deployUserBinPiUsereqLauncher(
 }
 
 /**
- * @brief Best-effort removes the user-home `bin` `pi-usereq` launcher link owned by the pi agent bin launcher.
- * @details Removes `~/bin/pi-usereq` only when it is a symlink resolving exactly to the pi agent bin `pi-usereq` entry resolved through the same agent-bin contract, leaves absent links, foreign symlinks, and non-symlink entries untouched, and converts every filesystem failure into `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved user-home bin directory only.
- * @param[in] options {PiUsereqLauncherDeployOptions} Optional agent-bin and user-bin directory overrides consumed by deterministic tests.
+ * @brief Best-effort removes the user-home `bin` `pi-usereq` launcher link owned by the executing installation.
+ * @details Removes `~/bin/pi-usereq` only when every guard holds: the pi agent bin `pi-usereq` entry resolved through the same agent-bin contract is a symlink whose target resolves inside the executing npm package root derived from the caller override or the source-root installation path parent, and the user-home entry is a symlink resolving exactly to that agent-bin entry. The ownership guard mirrors `removeDeployedPiUsereqLauncher` because the user-home link is a chain to the agent-bin launcher: when that launcher belongs to another installation (for example when `--uninstall` runs from a source checkout), both links are foreign and stay untouched, so a non-pi-package invocation never de-registers the launcher chain of the installed version. Absent agent-bin entries, absent links, links chained to foreign agent-bin launchers, foreign symlinks, and non-symlink entries return `false` without deletion, and every filesystem failure converts to `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved user-home bin directory only.
+ * @param[in] options {PiUsereqLauncherDeployOptions} Optional installation, agent-bin, and user-bin directory overrides consumed by deterministic tests.
  * @return {boolean} `true` when the owned user-home launcher link was removed; `false` when absent, foreign, or the removal failed.
  * @note Complexity: O(1) plus bounded filesystem metadata calls.
- * @satisfies REQ-521, REQ-522, REQ-523
+ * @pre MUST run before `removeDeployedPiUsereqLauncher` during `--uninstall` because the ownership probe reads the still-present agent-bin launcher link.
+ * @satisfies REQ-509, REQ-521, REQ-522, REQ-523
  */
 export function removeUserBinPiUsereqLauncher(
   options: PiUsereqLauncherDeployOptions = {},
 ): boolean {
   try {
     const binDir = path.resolve(options.agentBinDir ?? resolvePiAgentBinDir());
-    const agentBinLauncher = path.resolve(path.join(binDir, PI_USEREQ_LAUNCHER_NAME));
+    const agentBinLauncher = path.join(binDir, PI_USEREQ_LAUNCHER_NAME);
+    let agentEntry: fs.Stats;
+    try {
+      agentEntry = fs.lstatSync(agentBinLauncher);
+    } catch {
+      return false;
+    }
+    if (!agentEntry.isSymbolicLink()) {
+      return false;
+    }
+    const installationPath = resolveLauncherPackageRoot(options.installationPath);
+    const agentEntryTarget = path.resolve(binDir, fs.readlinkSync(agentBinLauncher));
+    if (!isSameOrAncestorPath(installationPath, agentEntryTarget)) {
+      return false;
+    }
+    const resolvedAgentBinLauncher = path.resolve(agentBinLauncher);
     const userBinDir = path.resolve(options.userBinDir ?? resolveUserBinDir());
     const linkPath = path.join(userBinDir, PI_USEREQ_LAUNCHER_NAME);
     let existing: fs.Stats;
@@ -328,7 +344,7 @@ export function removeUserBinPiUsereqLauncher(
     if (!existing.isSymbolicLink()) {
       return false;
     }
-    if (path.resolve(userBinDir, fs.readlinkSync(linkPath)) !== agentBinLauncher) {
+    if (path.resolve(userBinDir, fs.readlinkSync(linkPath)) !== resolvedAgentBinLauncher) {
       return false;
     }
     fs.unlinkSync(linkPath);

@@ -514,7 +514,7 @@ import type { ToolResult } from "./tool-runner.js";
 
 ---
 
-# bin-deploy.ts | TypeScript | 339L | 14 symbols | 4 imports | 24 comments
+# bin-deploy.ts | TypeScript | 355L | 14 symbols | 4 imports | 24 comments
 > Path: `src/core/bin-deploy.ts`
 
 ## Imports
@@ -613,13 +613,14 @@ import { getInstallationPath, isSameOrAncestorPath } from "./path-context.js";
 - @note Complexity: O(1) plus bounded filesystem metadata calls.
 - @satisfies REQ-516, REQ-517, REQ-518, REQ-519, REQ-520
 
-### fn `export function removeUserBinPiUsereqLauncher(` (L314-315)
-- @brief Best-effort removes the user-home `bin` `pi-usereq` launcher link owned by the pi agent bin launcher.
-- @details Removes `~/bin/pi-usereq` only when it is a symlink resolving exactly to the pi agent bin `pi-usereq` entry resolved through the same agent-bin contract, leaves absent links, foreign symlinks, and non-symlink entries untouched, and converts every filesystem failure into `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved user-home bin directory only.
-- @param[in] options {PiUsereqLauncherDeployOptions} Optional agent-bin and user-bin directory overrides consumed by deterministic tests.
+### fn `export function removeUserBinPiUsereqLauncher(` (L315-316)
+- @brief Best-effort removes the user-home `bin` `pi-usereq` launcher link owned by the executing installation.
+- @details Removes `~/bin/pi-usereq` only when every guard holds: the pi agent bin `pi-usereq` entry resolved through the same agent-bin contract is a symlink whose target resolves inside the executing npm package root derived from the caller override or the source-root installation path parent, and the user-home entry is a symlink resolving exactly to that agent-bin entry. The ownership guard mirrors `removeDeployedPiUsereqLauncher` because the user-home link is a chain to the agent-bin launcher: when that launcher belongs to another installation (for example when `--uninstall` runs from a source checkout), both links are foreign and stay untouched, so a non-pi-package invocation never de-registers the launcher chain of the installed version. Absent agent-bin entries, absent links, links chained to foreign agent-bin launchers, foreign symlinks, and non-symlink entries return `false` without deletion, and every filesystem failure converts to `false` so the uninstall exit-code contract stays intact. Runtime is O(1) plus bounded filesystem metadata calls. Side effects include one symlink deletion inside the resolved user-home bin directory only.
+- @param[in] options {PiUsereqLauncherDeployOptions} Optional installation, agent-bin, and user-bin directory overrides consumed by deterministic tests.
 - @return {boolean} `true` when the owned user-home launcher link was removed; `false` when absent, foreign, or the removal failed.
 - @note Complexity: O(1) plus bounded filesystem metadata calls.
-- @satisfies REQ-521, REQ-522, REQ-523
+- @satisfies REQ-509, REQ-521, REQ-522, REQ-523
+- @pre MUST run before `removeDeployedPiUsereqLauncher` during `--uninstall` because the ownership probe reads the still-present agent-bin launcher link.
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -637,7 +638,7 @@ import { getInstallationPath, isSameOrAncestorPath } from "./path-context.js";
 |`removeDeployedPiUsereqLauncher`|fn||213-214|export function removeDeployedPiUsereqLauncher(|
 |`resolveUserBinDir`|fn||248-250|export function resolveUserBinDir(homeDirImpl: () => stri...|
 |`deployUserBinPiUsereqLauncher`|fn||260-261|export function deployUserBinPiUsereqLauncher(|
-|`removeUserBinPiUsereqLauncher`|fn||314-315|export function removeUserBinPiUsereqLauncher(|
+|`removeUserBinPiUsereqLauncher`|fn||315-316|export function removeUserBinPiUsereqLauncher(|
 
 
 ---
@@ -4572,7 +4573,7 @@ import {
 
 ### fn `export function runPackageManagerUninstallCommand(deps: PackageManagerCommandDeps = {}): number` (L1366-1372)
 - @brief Handles `--uninstall`: removes the globally installed package plus the deployed agent-bin and user-home bin launcher links.
-- @details Best-effort removes the `~/bin/pi-usereq` launcher link first when it resolves to the pi agent bin `pi-usereq` entry (leaving foreign entries untouched), then best-effort removes the `pi-usereq` agent-bin launcher symlink deployed by extension activation when it resolves inside the executing installation, then runs `npm uninstall -g pi-usereq` with inherited stdio and returns the child exit code; every removal failure and spawn failure map deterministically without changing the uninstall exit-code contract, and spawn failures map to exit code `1` with the manual command hint on stderr.
+- @details Best-effort removes the `~/bin/pi-usereq` launcher link first when it resolves to the pi agent bin `pi-usereq` entry AND that entry resolves inside the executing installation, so the removal order lets the user-home ownership probe read the still-present agent-bin link before it is deleted, then best-effort removes the `pi-usereq` agent-bin launcher symlink deployed by extension activation when it resolves inside the executing installation, then runs `npm uninstall -g pi-usereq` with inherited stdio and returns the child exit code; a source-checkout invocation owns neither launcher link and therefore leaves the installed version's launcher chain untouched; every removal failure and spawn failure map deterministically without changing the uninstall exit-code contract, and spawn failures map to exit code `1` with the manual command hint on stderr.
 - @param[in] deps {PackageManagerCommandDeps} Optional spawner/logger overrides plus the injectable agent-bin and user-home bin launcher removers.
 - @return {number} Child exit code, or `1` when spawning failed.
 - @note Complexity: dominated by the child process execution.

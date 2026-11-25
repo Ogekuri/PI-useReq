@@ -38,6 +38,14 @@ import {
 } from "../src/core/package-manager.js";
 
 /**
+ * @brief Isolates the user home for this test module.
+ * @details Redirects every home-derived resolution (pi agent directory, pi-managed channel installation roots, agent-bin and user-home bin launcher directories, child-process cwd) to one fresh temporary directory so the default, non-injected launcher helpers reachable from the management handlers can never reach or delete the developer-home launcher links of the installed pi-usereq version. `os.homedir()` reads `HOME` on POSIX and `USERPROFILE` on Windows at call time, so every later `homedir()` assertion resolves the same sandbox. Runtime is O(1). Side effects are limited to process-scoped environment mutation plus one temporary directory.
+ */
+const TEST_HOME = fs.mkdtempSync(path.join(tmpdir(), "pi-usereq-package-manager-home-"));
+process.env.HOME = TEST_HOME;
+process.env.USERPROFILE = TEST_HOME;
+
+/**
  * @brief Raw GitHub release tag shared by every develop-channel test double.
  * @details Keeps pinned-source and pinned-command expectations identical across develop-channel cases so one deterministic `tag_name` flows from the probe double into installation and update assertions. Compile-time constant; no runtime cost.
  */
@@ -1116,7 +1124,11 @@ test("upgrade completion summary reports the pi-managed installation version", a
 
 test("uninstall command runs the documented uninstall child command", () => {
   const { calls, spawn } = createSpawnDouble({ status: 0 });
-  const exitCode = runPackageManagerUninstallCommand({ spawn });
+  const exitCode = runPackageManagerUninstallCommand({
+    spawn,
+    removeUserBinLauncher: () => false,
+    removeLauncher: () => false,
+  });
   assert.equal(exitCode, 0);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].file, PACKAGE_UNINSTALL_COMMAND[0]);
@@ -1129,7 +1141,12 @@ test("uninstall command runs the documented uninstall child command", () => {
 test("uninstall command maps spawn failures to exit code one with the manual hint", () => {
   const spawn = createSpawnDouble({ error: { message: "spawn npm ENOENT" } }).spawn;
   const { logs, errors, logger } = createLoggerDouble();
-  const exitCode = runPackageManagerUninstallCommand({ spawn, logger });
+  const exitCode = runPackageManagerUninstallCommand({
+    spawn,
+    logger,
+    removeUserBinLauncher: () => false,
+    removeLauncher: () => false,
+  });
   assert.equal(exitCode, 1);
   assert.match(errors.join("\n"), /Error executing npm/);
   assert.match(logs.join("\n"), /run this command manually/);
@@ -1140,7 +1157,11 @@ test("management dispatch routes every canonical command to its handler", async 
   const uninstallExit = await runPackageManagerManagementCommand(
     "--uninstall",
     { installedVersion: "1.0.0" },
-    { spawn: uninstallSpawn.spawn },
+    {
+      spawn: uninstallSpawn.spawn,
+      removeUserBinLauncher: () => false,
+      removeLauncher: () => false,
+    },
   );
   assert.equal(uninstallExit, 0);
   assert.equal(uninstallSpawn.calls.length, 1);

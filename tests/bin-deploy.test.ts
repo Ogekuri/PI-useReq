@@ -8,6 +8,7 @@ import {
   deployPiUsereqLauncher,
   isPiPackageInstallation,
   removeDeployedPiUsereqLauncher,
+  removeUserBinPiUsereqLauncher,
   resolvePiAgentBinDir,
   resolvePiUsereqLauncherTarget,
   type PiUsereqLauncherDeployOptions,
@@ -17,6 +18,14 @@ import {
   runPackageManagerUninstallCommand,
   type PackageManagerSpawn,
 } from "../src/core/package-manager.js";
+
+/**
+ * @brief Isolates the user home for this test module.
+ * @details Redirects every home-derived launcher resolution (pi agent bin directory, user-home bin directory, default package-root containment) to one fresh temporary directory so the default, non-injected launcher helpers exercised by this module can never reach or delete the developer-home launcher links of the installed pi-usereq version. Runtime is O(1). Side effects are limited to process-scoped environment mutation plus one temporary directory.
+ */
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-bin-deploy-home-"));
+process.env.HOME = TEST_HOME;
+process.env.USERPROFILE = TEST_HOME;
 
 /**
  * @brief Builds one isolated fake installation plus pi agent bin directory.
@@ -178,6 +187,7 @@ test("uninstall removes only the installation-owned launcher link before spawnin
   const { calls, spawn } = createUninstallSpawnDouble(7);
   const exitCode = runPackageManagerUninstallCommand({
     spawn,
+    removeUserBinLauncher: () => false,
     removeLauncher: () => removeDeployedPiUsereqLauncher(fixture.options),
   });
   assert.equal(exitCode, 7);
@@ -223,4 +233,75 @@ test("launcher deployment resolves the default package-root target without injec
     }
     fs.rmSync(sandboxDir, { recursive: true, force: true });
   }
+});
+
+/**
+ * @brief Builds one fake installed pi package plus its deployed launcher chain.
+ * @details Materializes one temporary installation root carrying `scripts/pi-usereq.js`, one pi agent bin directory holding the deployed `pi-usereq` symlink targeting that launcher, and one user-home bin directory holding the chained `pi-usereq` symlink targeting the agent-bin entry, mirroring the two-layer launcher chain deployed by extension activation. Runtime is O(1) plus temporary directory creation. Side effects are confined to the OS temp directory.
+ * @return {{ installRoot: string; agentBinDir: string; userBinDir: string; agentBinLink: string; userBinLink: string }} Fixture paths of the installed package and its deployed launcher chain.
+ */
+function createUserBinLauncherChainFixture(): {
+  installRoot: string;
+  agentBinDir: string;
+  userBinDir: string;
+  agentBinLink: string;
+  userBinLink: string;
+} {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-user-bin-chain-"));
+  const installRoot = path.join(root, "installed");
+  const launcherTarget = resolvePiUsereqLauncherTarget(installRoot);
+  fs.mkdirSync(path.dirname(launcherTarget), { recursive: true });
+  fs.writeFileSync(launcherTarget, "#!/usr/bin/env node\n", "utf8");
+  const agentBinDir = path.join(root, "agent-bin");
+  fs.mkdirSync(agentBinDir, { recursive: true });
+  const agentBinLink = path.join(agentBinDir, PI_USEREQ_LAUNCHER_NAME);
+  fs.symlinkSync(launcherTarget, agentBinLink, "file");
+  const userBinDir = path.join(root, "user-bin");
+  fs.mkdirSync(userBinDir, { recursive: true });
+  const userBinLink = path.join(userBinDir, PI_USEREQ_LAUNCHER_NAME);
+  fs.symlinkSync(agentBinLink, userBinLink, "file");
+  return { installRoot, agentBinDir, userBinDir, agentBinLink, userBinLink };
+}
+
+/**
+ * @brief Builds one fake foreign source checkout carrying its own launcher file.
+ * @details Materializes one temporary source-checkout root holding `scripts/pi-usereq.js` so the executing-installation ownership probe observes a genuine package root that owns neither the deployed agent-bin launcher nor the chained user-home link. Runtime is O(1) plus temporary directory creation. Side effects are confined to the OS temp directory.
+ * @return {string} Absolute foreign source-checkout package root.
+ */
+function createForeignSourceCheckout(): string {
+  const checkoutRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-foreign-checkout-"));
+  const launcherTarget = resolvePiUsereqLauncherTarget(checkoutRoot);
+  fs.mkdirSync(path.dirname(launcherTarget), { recursive: true });
+  fs.writeFileSync(launcherTarget, "#!/usr/bin/env node\n", "utf8");
+  return checkoutRoot;
+}
+
+test("user-home launcher removal leaves the installed link untouched when executed from a foreign source checkout", () => {
+  // Arrange: one installed package owns the deployed agent-bin launcher and its
+  // chained user-home link; a second, foreign source checkout owns neither.
+  const fixture = createUserBinLauncherChainFixture();
+  const foreignCheckout = createForeignSourceCheckout();
+  // Act + Assert: the foreign checkout must not de-register the installed
+  // user-home launcher, even though the link chains to the agent-bin entry.
+  const foreignRemoval = removeUserBinPiUsereqLauncher({
+    installationPath: foreignCheckout,
+    agentBinDir: fixture.agentBinDir,
+    userBinDir: fixture.userBinDir,
+  });
+  assert.equal(foreignRemoval, false);
+  assert.equal(fs.lstatSync(fixture.userBinLink).isSymbolicLink(), true);
+  assert.equal(
+    path.resolve(fixture.userBinDir, fs.readlinkSync(fixture.userBinLink)),
+    path.resolve(fixture.agentBinLink),
+  );
+  assert.equal(fs.lstatSync(fixture.agentBinLink).isSymbolicLink(), true);
+  // Act + Assert: the owning installation still removes its chained user-home link.
+  const owningRemoval = removeUserBinPiUsereqLauncher({
+    installationPath: fixture.installRoot,
+    agentBinDir: fixture.agentBinDir,
+    userBinDir: fixture.userBinDir,
+  });
+  assert.equal(owningRemoval, true);
+  assert.equal(fs.existsSync(fixture.userBinLink), false);
+  assert.equal(fs.lstatSync(fixture.agentBinLink).isSymbolicLink(), true);
 });
