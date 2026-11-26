@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.34](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.34) - 2026-11-26
+## [0.109.35](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.35) - 2026-11-26
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -35,6 +35,12 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- clear stale settlement facts on recovery [useReq] *(orchestration)*
+  Follow-up to the lost-settlement watchdog fix: the REQ-224 auto-recovery and the successful req-wtd recovery cleared the prompt-orchestration runtime state but left the execution-session-keyed finalization snapshot and the armed settlement watchdog in place, so a successor orchestration reusing the same execution session (REQ-826 flow) could adopt the stale terminal outcome through the watchdog or the settle rebind recovery and be wrongly parked in error.
+  autoRecoverTerminalReqCommandState now also clears the finalization snapshot and disarms the settlement watchdog (REQ-224).; The req-wtd success recovery clears the same facts (REQ-820).; Oscillation determination: the reported implement/change status oscillation cannot occur after the watchdog fix because a stale orchestration is forced terminal (watchdog park or REQ-823 gate park), its render source freezes (REQ-803/REQ-804), and REQ-224 recovery clears the full persisted state before the successor records its request; the new regression test asserts no stale request render after the successor starts.; New reproducer: lost settlement facts never bleed into a successor reused-worktree orchestration (failed pre-fix on the surviving snapshot; suite green 174 passed / 0 failed; tsc and eslint clean; WORKFLOW.md and REFERENCES.md updated).
+- park lost settlements in error via watchdog [useReq] *(orchestration)*
+  Worktree-backed prompt orchestrations whose final-output JSON carries result error were deferred from agent_end to agent_settled; when the host never delivered agent_settled (or the settle handler aborted before the transition), the workflow stayed running forever with live elapsed timers and a retained worktree, as observed in /tmp/PI-useReq/GitHub-Template-Rust-work-20261126093532-req-implement-debug.json.
+  Arm a one-shot settlement watchdog at the settle-deferred agent_end (REQ-463/REQ-464): every later agent_end of the same orchestration re-arms it, and on expiry it consumes the recorded or snapshot-recovered terminal facts, logs the settlement_watchdog closure event, parks the workflow in error, clears prompt-run ownership plus pending finalization state, retains the worktree for /req-wtd, and delivers the blocked-gate notification best-effort (REQ-209, REQ-587, REQ-803/REQ-804).; Reorder every blocked-outcome and closure-failure park (agent_end legacy path and agent_settled path) to transition the workflow state and clear pending state BEFORE the fallible UI notification, which is now best-effort, so a throwing or stale notification surface can never abort or revert the terminal park.; Extract adoptPersistedPromptFinalizationSnapshot(...) shared by agent_settled rebind recovery and the watchdog.; Add controller-owned settlementWatchdogHandle cleared on consumption and controller disposal.; Tests: two new extension-registration reproducers (lost settlement parks error; throwing notify delivery still parks error); suite green: 173 passed / 0 failed; tsc --noEmit and eslint clean; WORKFLOW.md and REFERENCES.md updated.
 - keep installed launcher chain on source-checkout uninstall [useReq] *(bin-deploy)*
   Guard the ~/bin/pi-usereq removal with the executing-installation ownership check so --uninstall run from a source checkout (scripts/pi-usereq.sh) never de-registers the launcher chain of the installed pi-managed version.
   Isolate the package-manager and bin-deploy test modules behind a temporary HOME and inject launcher-remover doubles so npm test (pre-release-check stage 3) can no longer delete the developer-home ~/bin/pi-usereq link.
@@ -148,6 +154,21 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Rename pi-prompts-update.sh to prompts-update.sh [useReq] *(scripts)*
+  Rename scripts/pi-prompts-update.sh to scripts/prompts-update.sh and update
+  the script @file header plus its temporary-directory prefix. Align
+  REQUIREMENTS.md: DES-022 path, section 5.1 component description, project
+  structure tree entry (alphabetical order preserved), and front-matter
+  version bump to 0.0.182. WORKFLOW.md unchanged: the updater is a standalone
+  bash process outside src/ and is not modeled as an execution unit.
+  REFERENCES.md regenerated with no content change. No unit tests reference
+  the renamed script; req-static-check reports no issues.
+- Add security checker defaults and gosec scan-by-dir [useReq] *(static-check)*
+  Add clang-tidy and flawfinder Command defaults for C/C++ and bandit for Python (REQ-250, REQ-251).
+  Extend the scan-by-dir capability map with gosec -exclude-dir (REQ-695, REQ-698, REQ-830).
+  Exclude staticcheck and cargo clippy: no checker-native directory-exclusion flag.
+  Align default-config and persisted-checker test assertions (TST-078).
+  Bump SRS to 0.0.181 with REQ-830, REQ-695 evidence, and Performance Notes.
 - BREAKING CHANGE: raise minimum pi CLI host version to 1.6.1 and align peer ranges [useReq] *(pi-host-version)*
   Update MINIMUM_SUPPORTED_PI_HOST_VERSION to 1.6.1 to match the bundled read-only
   pi CLI source-of-truth update (v1.6.0 -> v1.6.1) and raise the three
@@ -1892,7 +1913,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.34\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.34
+- \[0.109.35\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.35
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -2001,4 +2022,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.34]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.34
+[0.109.35]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.35
