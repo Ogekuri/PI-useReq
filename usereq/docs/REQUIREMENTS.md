@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.181"
+version: "0.0.182"
 date: "2026-11-26"
 author: "OpenAI Codex"
 scope:
@@ -108,7 +108,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-019**: MUST resolve the `%%INSTALLATION_PATH%%` keyword inside static-check `Command` `cmd` fields to the runtime installation path within `resolveCheckerExecutable` before executable probing.
 - **DES-020**: MUST extend `scripts/install-static-checkers.ts` to best-effort approve pending npm install scripts for bundled checker dependencies before probing bundled executables.
 - **DES-021**: MUST implement the guarded model-selection reapply helper in `src/core/prompt-command-runtime.ts` without importing extension custom-tool executors from `src/core/tool-runner.ts`.
-- **DES-022**: MUST implement the bundled-resource updater in `scripts/pi-prompts-update.sh` as a standalone bash process using `git` plus core shell utilities only.
+- **DES-022**: MUST implement the bundled-resource updater in `scripts/prompts-update.sh` as a standalone bash process using `git` plus core shell utilities only.
 - **DES-023**: MUST implement the pi CLI reference updater in `scripts/pi-cli-update-src-docs.sh` as a standalone bash process using `git` plus core shell utilities only.
 - **DES-024**: MUST implement the process-scoped deferred-notification replay store plus its session-start replay gate in one dedicated `src/core/` module outside `src/index.ts` business logic.
 - **DES-025**: MUST implement npm publication metadata compliance declaratively in `package.json` plus `package-lock.json` root version identity, without modifying `.github/workflows/release-npm.yml` publication steps.
@@ -1175,7 +1175,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `src/core/doxygen-parser.ts` normalizes Doxygen tags reused by source references and construct search output.
 - `src/core/source-presence.ts` detects analyzable source presence from the configured `src-dir` git file inventory, writes the documented no-source placeholder payloads for `REFERENCES.md` and `WORKFLOW.md`, and declares the exact static-check no-source result payload.
 - `scripts/debug-extension.ts`, `scripts/pi-usereq-debug.sh`, and `scripts/lib/*.ts` provide the standalone extension debug harness, bash wrapper, recording adapters, offline replay, SDK parity probing, and usage-manual rendering.
-- `scripts/pi-prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
+- `scripts/prompts-update.sh` provides the bundled-resource updater that synchronizes instructions, prompts, and templates from the latest PI-Prompts release into `src/resources`.
 - `scripts/pi-cli-update-src-docs.sh` provides the pi CLI reference updater that synchronizes read-only `pi.dev-src/pi` sources and `docs/pi.dev/` documentation from the latest pi CLI release, applies the automatic version-sorted update gate without user confirmation, and stages the synchronized targets plus both version markers into exactly one commit on the current branch.
 - `scripts/build.sh` provides the reproducible release packaging process that validates the toolchain, removes every previous-build `dist/*.tgz` entry plus the emptied `dist/` directory, verifies that no stale `dist/*.tgz` entry survived that cleanup before preparing the dependency tree, runs the strict compilation gate, packs the npm distribution tarball into `dist/`, verifies plus summarizes the produced artifact, and removes every temporary or intermediate repository entry created by the run.
 - `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release packaging plus validation inside one `TMPDIR` temporary build directory from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, every `dist/` entry, and every pre-existing entry; it performs no `dist/` operation, verifies no `dist/` content, and removes its temporary build directory on every exit path.
@@ -1253,9 +1253,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 ├── scripts/
 │   ├── build.sh
 │   ├── debug-extension.ts
-│   ├── pi-prompts-update.sh
 │   ├── pi-usereq-debug.sh
 │   ├── pre-release-check.sh
+│   ├── prompts-update.sh
 │   └── lib/{extension-debug-harness.ts,recording-extension-api.ts,sdk-smoke.ts}
 ├── .github/
 │   ├── workflows/

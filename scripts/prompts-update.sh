@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @file scripts/pi-prompts-update.sh
+# @file scripts/prompts-update.sh
 # @brief Updates bundled PI-useReq prompt resources from the latest PI-Prompts release.
 # @details Clones the PI-Prompts repository (master branch), resolves the newest
 #     release ref, and performs a full one-way synchronization of the upstream
@@ -358,7 +358,7 @@ main() {
 
   mkdir -p "${TARGET_ROOT}"
 
-  WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pi-prompts-update.XXXXXX")" \
+  WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/prompts-update.XXXXXX")" \
     || fail "Unable to create the temporary working directory."
   local repository="${WORK_DIR}/PI-Prompts"
 
