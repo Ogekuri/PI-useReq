@@ -1420,7 +1420,7 @@ function rejectNonIdleReqCommand(
 
 /**
  * @brief Auto-recovers terminal non-startable workflow state before a req command bootstrap.
- * @details Clears the persisted prompt-orchestration state, drops the in-memory pending and active prompt requests plus the deferred finalization outcome, transitions the shared workflow state to `idle`, and emits one info notification stating the recovered state so every gated `req-*` slash command continues from the bootstrap `idle` state when the previous orchestration terminated in `error` or `warning` (REQ-224), exactly matching the removed `/req-reset` recovery semantics. In-flight `checking|running|merging` states are never recovered so concurrent orchestrations keep rejecting through REQ-823. The captured Next-Workflow array and the retained final-output notification message stay untouched so queued commands remain consumable (REQ-670, REQ-775). Runtime is O(1). Side effects include workflow-state mutation, status-bar rendering, process-scoped prompt-state clearing, and user notification delivery.
+ * @details Clears the persisted prompt-orchestration state, drops the in-memory pending and active prompt requests plus the deferred finalization outcome, clears the execution-session-keyed finalization snapshot, disarms the settlement watchdog, transitions the shared workflow state to `idle`, and emits one info notification stating the recovered state so every gated `req-*` slash command continues from the bootstrap `idle` state when the previous orchestration terminated in `error` or `warning` (REQ-224), exactly matching the removed `/req-reset` recovery semantics. In-flight `checking|running|merging` states are never recovered so concurrent orchestrations keep rejecting through REQ-823. The snapshot plus watchdog disposal guarantees a successor orchestration reusing the same execution session can never adopt the stale terminal outcome through the watchdog or the settlement rebind recovery. The captured Next-Workflow array and the retained final-output notification message stay untouched so queued commands remain consumable (REQ-670, REQ-775). Runtime is O(1). Side effects include workflow-state mutation, timer disposal, status-bar rendering, process-scoped prompt-state clearing, and user notification delivery.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @param[in] ctx {ExtensionContext | ExtensionCommandContext} Active extension context.
  * @return {boolean} `true` when a terminal state was auto-recovered to `idle`; `false` when no recovery was needed.
@@ -1438,6 +1438,8 @@ function autoRecoverTerminalReqCommandState(
   statusController.state.activePromptRequest = undefined;
   statusController.state.pendingFinalizationOutcome = undefined;
   clearPersistedPromptCommandRuntimeState();
+  clearPersistedPromptCommandFinalizationSnapshot();
+  clearPromptSettlementWatchdog(statusController);
   setPiUsereqWorkflowState(statusController, "idle", ctx);
   notifyContextSafely(
     ctx,
@@ -4114,6 +4116,8 @@ function registerReqWtdCommand(
         statusController.state.activePromptRequest = undefined;
         statusController.state.pendingFinalizationOutcome = undefined;
         clearPersistedPromptCommandRuntimeState();
+        clearPersistedPromptCommandFinalizationSnapshot();
+        clearPromptSettlementWatchdog(statusController);
       }
 
       if (executionResult.errorMessage) {

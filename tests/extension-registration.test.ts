@@ -91,6 +91,7 @@ import {
 import {
   clearPersistedPromptCommandFinalizationSnapshot,
   clearPersistedPromptCommandRuntimeState,
+  readPersistedPromptCommandFinalizationSnapshot,
   readPersistedPromptCommandRuntimeState,
   readPersistedPromptCommandSessionContext,
   writePersistedPromptCommandRuntimeState,
@@ -4307,6 +4308,130 @@ test("req-change auto-recovers the error park and reuses the retained worktree t
   } finally {
     process.chdir(previousCwd);
     fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies a lost settlement never bleeds into a successor reused-worktree orchestration.
+ * @details Runs one worktree-backed `req-implement` flow whose final-output JSON carries `result` `error` and whose settlement is lost (no `agent_settled`, pending watchdog, persisted finalization snapshot), so the workflow stays `implement ➔ running` exactly as the reported defect leaves it. Dispatches a successor `req-change`: the first attempt is rejected by the REQ-823 in-flight gate parking the stale orchestration in `error`, and the retry auto-recovers (REQ-224) and reuses the retained worktree (REQ-826). Asserts the recovery clears the execution-session-keyed finalization snapshot together with the runtime state so the still-pending watchdog can never adopt the stale outcome onto the successor, the successor completes through `change ➔ done` with the reused merge plus worktree deletion, and no status render after the successor started ever resurrects the stale `implement` request (no oscillation between the two orchestration states). Reproduces the stale-fact bleed observed when the lost-settlement fix left the snapshot and the armed watchdog outside the recovery clears. Runtime is dominated by temporary git worktree setup. Side effects are limited to temporary repository mutation and process-scoped state mutation.
+ * @return {Promise<void>} Promise resolved after stale-bleed assertions complete.
+ * @throws {AssertionError} Throws when the recovery leaves the stale snapshot or watchdog facts, the successor parks through the stale adoption, or the stale request resurrects after the successor started.
+ * @satisfies REQ-224, REQ-209, REQ-463, REQ-464, REQ-587, REQ-803, REQ-804, REQ-820, REQ-823, REQ-826, REQ-632
+ */
+test("lost settlement facts never bleed into a successor reused-worktree orchestration", async () => {
+  setPromptSettlementWatchdogDelayForTests(60_000);
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  const recordedStatuses: string[] = [];
+  let executionBasePath = "";
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    const originalSetStatus = ctx.ui.setStatus.bind(ctx.ui);
+    ctx.ui.setStatus = (key: string, value?: string) => {
+      if (key === "pi-usereq" && value !== undefined) {
+        recordedStatuses.push(value);
+      }
+      originalSetStatus(key, value);
+    };
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+
+    // Flow A parks nothing: the final-output JSON gate defers the terminal outcome to
+    // `agent_settled`, which never arrives, so the orchestration stays in flight.
+    await pi.commands.get("req-implement")!.handler("Port the tool", ctx);
+    const firstPromptText = String(pi.sentUserMessages[0]?.content ?? "");
+    const worktreeMatch = firstPromptText.match(/created worktree-dir `([^`]+)` and prepared context-path `([^`]+)`\./);
+    assert.ok(worktreeMatch, firstPromptText);
+    const worktreeName = worktreeMatch?.[1] ?? "";
+    executionBasePath = worktreeMatch?.[2] ?? "";
+    const executionSessionFile = ctx.sessionManager.getSessionFile() ?? "";
+    assert.notEqual(executionSessionFile, "");
+
+    await pi.emit("before_agent_start", {}, ctx);
+    await pi.emit("agent_start", {}, ctx);
+    await pi.emit("agent_end", {
+      messages: [{
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "text", text: JSON.stringify({ result: "error", summary: "Blocked.", next_commands: [] }) }],
+      }],
+    }, ctx);
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>implement ➔ running<\/warning>/,
+    );
+
+    // The first successor attempt is rejected by the REQ-823 in-flight gate, which parks
+    // the stale orchestration in `error` and freezes its render source.
+    await assert.rejects(
+      pi.commands.get("req-change")!.handler("Continue the adjustment", ctx),
+      /ERROR: Prompt workflow state is running, expected idle or done\./,
+    );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><error>/,
+    );
+
+    // The retry auto-recovers (REQ-224) and reuses the retained worktree (REQ-826). The
+    // recovery must clear the execution-session-keyed finalization snapshot together with
+    // the runtime state so the still-pending watchdog can never adopt the stale outcome
+    // onto the successor orchestration reusing the same execution session.
+    await pi.commands.get("req-change")!.handler("Continue the adjustment", ctx);
+    assert.ok(
+      ctx.__state.notifications.some((entry: { message: string; level: string }) =>
+        entry.level === "info" && /Auto-reset: recovered the error workflow state/.test(entry.message)),
+    );
+    assert.equal(
+      readPersistedPromptCommandFinalizationSnapshot(executionSessionFile),
+      undefined,
+      "expected the auto-recovery to clear the stale finalization snapshot",
+    );
+    const firstSuccessorRenderIndex = recordedStatuses.findIndex((status) => status.includes("change ➔ "));
+    assert.ok(firstSuccessorRenderIndex >= 0, "expected the successor orchestration to render change states");
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>change ➔ running<\/warning>/,
+    );
+
+    // The successor completes through the reused-worktree closure.
+    await pi.emit("agent_start", {}, ctx);
+    fs.mkdirSync(path.join(executionBasePath, "src"), { recursive: true });
+    fs.writeFileSync(path.join(executionBasePath, "src", "successor.ts"), "export const SUCCESSOR = 1;\n", "utf8");
+    assert.equal(spawnSync("git", ["add", "src"], { cwd: executionBasePath, encoding: "utf8" }).status, 0);
+    const commit = spawnSync("git", ["commit", "-m", "successor worktree change"], { cwd: executionBasePath, encoding: "utf8" });
+    assert.equal(commit.status, 0, commit.stderr);
+    await pi.emit("agent_end", {
+      messages: [{ role: "assistant", stopReason: "stop", content: [] }],
+    }, ctx);
+    await pi.emit("agent_settled", {}, ctx);
+
+    assert.equal(fs.existsSync(path.join(projectBase, "src", "successor.ts")), true);
+    assert.equal(fs.existsSync(executionBasePath), false);
+    assert.notEqual(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${worktreeName}`], {
+        cwd: projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /<accent>status:<\/accent><warning>change ➔ done<\/warning>/,
+    );
+    // Oscillation guard: after the successor orchestration started, no render may
+    // resurrect the stale `implement` request.
+    assert.ok(
+      recordedStatuses.slice(firstSuccessorRenderIndex).every((status) => !status.includes("implement")),
+      "expected no stale implement status render after the successor orchestration started",
+    );
+  } finally {
+    setPromptSettlementWatchdogDelayForTests(0);
+    process.chdir(previousCwd);
+    clearPersistedPromptCommandRuntimeState();
+    clearPersistedPromptCommandFinalizationSnapshot();
+    fs.rmSync(projectBase, { recursive: true, force: true });
+    fs.rmSync(executionBasePath, { recursive: true, force: true });
   }
 });
 
