@@ -304,13 +304,14 @@ function resolveFiles(inputs: string[]): string[] {
 
 /**
  * @brief Maps directory-scan-capable command basenames to their native exclusion-argument builders.
- * @details Each entry pairs one checker executable supporting recursive directory targets with the checker-native flag that excludes the project fixture roots from that recursive scan. The map keys define the directory-scan-capable command set. Access complexity is O(1).
- * @satisfies REQ-695, REQ-698
+ * @details Each entry pairs one checker executable supporting recursive directory targets with the checker-native flag that excludes the project fixture roots from that recursive scan: `cppcheck -i <root>`, `ruff --exclude <root>`, `eslint --ignore-pattern <root>/**`, and the repeatable `gosec -exclude-dir <root>`. The map keys define the directory-scan-capable command set. Access complexity is O(1).
+ * @satisfies REQ-695, REQ-698, REQ-830
  */
 const STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS: Record<string, (root: string) => string[]> = {
   cppcheck: (root) => ["-i", root],
   ruff: (root) => ["--exclude", root],
   eslint: (root) => ["--ignore-pattern", `${root}/**`],
+  gosec: (root) => ["-exclude-dir", root],
 };
 
 /**
@@ -325,9 +326,10 @@ function normalizeStaticCheckDirScanCommand(cmd: string): string {
 
 /**
  * @brief Tests whether one Command checker supports recursive directory-scan execution.
- * @details Accepts exactly the checkers that natively accept recursive directory targets and expose a CLI exclusion flag for the project fixture roots: `cppcheck`, `ruff`, and `eslint`. Runtime is O(p) in command length. No side effects occur.
+ * @details Accepts exactly the checkers that natively accept recursive directory targets and expose a CLI exclusion flag for the project fixture roots: `cppcheck`, `ruff`, `eslint`, and `gosec`. Runtime is O(p) in command length. No side effects occur.
  * @param[in] cmd {string} Configured checker executable name, explicit path, or `%%INSTALLATION_PATH%%`-anchored path.
  * @return {boolean} `true` when the command is directory-scan capable.
+ * @note `staticcheck` and `cargo clippy` are deliberately excluded: neither exposes a checker-native directory-exclusion flag (`staticcheck` analyzes Go packages without directory exclusion arguments; `cargo clippy` analyzes the whole crate and ignores directory targets), so they cannot honor the REQ-698 fixture-root exclusion contract.
  * @satisfies REQ-695
  */
 export function supportsStaticCheckDirScan(cmd: string | undefined): boolean {
@@ -475,11 +477,11 @@ export class StaticCheckCommand extends StaticCheckBase {
 
 /**
  * @brief Builds checker-native exclusion arguments for one directory-scan-capable command.
- * @details Maps the normalized command basename onto its native exclusion flag so directory-scan invocations honor the project fixture-root exclusion contract: `cppcheck -i <root>`, `ruff --exclude <root>`, and `eslint --ignore-pattern <root>/**`. Commands without a native exclusion flag produce no arguments. Runtime is O(r) in exclusion-root count. No side effects occur.
+ * @details Maps the normalized command basename onto its native exclusion flag so directory-scan invocations honor the project fixture-root exclusion contract: `cppcheck -i <root>`, `ruff --exclude <root>`, `eslint --ignore-pattern <root>/**`, and `gosec -exclude-dir <root>`. Commands without a native exclusion flag produce no arguments. Runtime is O(r) in exclusion-root count. No side effects occur.
  * @param[in] cmd {string} Configured checker executable name or installation-anchored path.
  * @param[in] excludedDirectoryPaths {string[]} Project-relative fixture-root directories excluded from directory-scan execution.
  * @return {string[]} Ordered exclusion argument tokens appended before directory targets.
- * @satisfies REQ-698
+ * @satisfies REQ-698, REQ-830
  */
 function buildStaticCheckDirScanExclusionArgs(cmd: string, excludedDirectoryPaths: string[]): string[] {
   const builder = STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS[normalizeStaticCheckDirScanCommand(cmd)];

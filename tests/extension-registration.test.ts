@@ -9050,6 +9050,16 @@ test("default configuration applies the documented static-check, debug, notify, 
       cmd: "clang-format",
       params: ["--dry-run", "--Werror"],
     },
+    {
+      module: "Command",
+      cmd: "clang-tidy",
+      params: ["-checks=-*,clang-analyzer-*,cert-*"],
+    },
+    {
+      module: "Command",
+      cmd: "flawfinder",
+      params: [],
+    },
   ], "enable"));
   assert.deepEqual(config["static-check"]["C++"], createStaticCheckLanguageConfig([
     {
@@ -9067,10 +9077,21 @@ test("default configuration applies the documented static-check, debug, notify, 
       cmd: "clang-format",
       params: ["--dry-run", "--Werror"],
     },
+    {
+      module: "Command",
+      cmd: "clang-tidy",
+      params: ["-checks=-*,clang-analyzer-*,cert-*"],
+    },
+    {
+      module: "Command",
+      cmd: "flawfinder",
+      params: [],
+    },
   ], "enable"));
   assert.deepEqual(config["static-check"].Python, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
+    { module: "Command", cmd: "bandit", params: [] },
   ], "enable"));
   assert.deepEqual(config["static-check"].JavaScript, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "node", params: ["--check"] },
@@ -9111,6 +9132,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
+    { module: "Command", cmd: "bandit" },
   ]);
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Ruby.checkers, []);
   assert.equal(globalConfig.AUTO_GIT_COMMIT, "enable");
@@ -10466,6 +10488,7 @@ test("configuration menu can toggle per-language static-check enablement", async
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
+    { module: "Command", cmd: "bandit" },
   ]);
 });
 

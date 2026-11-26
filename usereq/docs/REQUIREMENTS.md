@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.180"
+version: "0.0.181"
 date: "2026-11-26"
 author: "OpenAI Codex"
 scope:
@@ -218,8 +218,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-161**: MUST hide `Dummy` from user-configurable static-check menus while preserving existing-config parsing and debug-driver support for `Dummy` entries.
 - **REQ-248**: MUST render 20 per-language static-check toggle rows between `Reset static code checker` and `Reset defaults`, with right-aligned `on|off` values derived from persisted local enablement.
 - **REQ-249**: MUST persist local `static-check.<language>.enabled` with allowed values `enable|disable` and global `static-check.<language>.checkers` as ordered arrays.
-- **REQ-250**: MUST default global `static-check.C` and `static-check.C++` checker arrays to documented `cppcheck` and `clang-format` Command entries.
-- **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to their documented Command entries.
+- **REQ-250**: MUST default global `static-check.C` and `static-check.C++` checker arrays to documented `cppcheck`, `clang-format`, `clang-tidy`, and `flawfinder` Command entries.
+- **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to documented `pyright`, `ruff`, `bandit`, `node --check`, and `eslint` Command entries.
 - **REQ-252**: MUST default every other global `static-check.<language>.checkers` array to `[]`.
 - **REQ-316**: MUST default local `static-check.<language>.enabled` to `enable` when global `checkers` is non-empty, otherwise `disable`.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, reset workflow state to `idle` and clear the active request for `session_start` reasons `startup|reload`, and publish single-line `pi-usereq` status text.
@@ -788,7 +788,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-692**: MUST emit no stdout on successful `--write-config` and one English stderr diagnostic with non-zero exit code on failure.
 - **REQ-693**: MUST NOT add absent parameter values to an existing persisted configuration file during `--set` or `--unset` unless the requested operation changes that parameter value.
 - **REQ-694**: MUST expose optional boolean `scan-by-dir` on every static-check Command entry selecting recursive directory-scan execution over per-file execution.
-- **REQ-695**: MUST resolve effective `scan-by-dir` from the persisted boolean, defaulting TRUE only for directory-scan-capable commands `cppcheck`, `ruff`, and `eslint`, FALSE otherwise.
+- **REQ-695**: MUST resolve effective `scan-by-dir` from the persisted boolean, defaulting TRUE only for directory-scan-capable commands `cppcheck`, `ruff`, `eslint`, and `gosec`, FALSE otherwise.
 - **REQ-696**: MUST dispatch project static-check per file for checker entries whose effective `scan-by-dir` is FALSE or whose command is not directory-scan-capable.
 - **REQ-697**: When effective `scan-by-dir` is TRUE, MUST execute each directory-scan-capable Command checker entry once over every configured `src-dir` directory plus `tests-dir`.
 - **REQ-698**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from directory-scan invocations through checker-native exclusion arguments for capable commands.
@@ -900,6 +900,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-827**: MUST validate the main repository git state instead of the reused worktree git state when REQ-825 detects a previous worktree.
 - **REQ-828**: MUST retain the reused worktree and keep the current session anchored on it when command-side preflight, prompt rendering, or prompt handoff fails before agent completion.
 - **REQ-829**: MUST resolve the reused execution plan's base-path from the main repository worktree and its original session from the retained execution-session `parentSession` link.
+- **REQ-830**: MUST build `gosec` directory-scan exclusion tokens as one repeatable `-exclude-dir <root>` argument per excluded fixture root.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1562,12 +1563,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-692 | `src/core/config-cli.ts` :: `runWriteConfigCommand` and `runConfigCli` :: emit no stdout on success and one English stderr diagnostic with non-zero exit code on failure. |
 | REQ-693 | `src/core/config-cli.ts` :: `persistScopeMutation`; `src/core/config-cli-schema.ts` :: `buildScopeMutationWritePayload` :: write only raw-present chains plus operation-changed chains into the owning scope file. |
 | REQ-694 | `src/core/config.ts` :: `StaticCheckEntry` :: optional `scan-by-dir` boolean field on every Command entry. |
-| REQ-695 | `src/core/config.ts` :: `normalizeStaticCheckEntries`; `src/core/static-check.ts` :: `supportsStaticCheckDirScan` :: persisted boolean wins, capability default TRUE for `cppcheck`/`ruff`/`eslint`. |
+| REQ-695 | `src/core/config.ts` :: `normalizeStaticCheckEntries`; `src/core/static-check.ts` :: `supportsStaticCheckDirScan` :: persisted boolean wins, capability default TRUE for `cppcheck`/`ruff`/`eslint`/`gosec`. |
 | REQ-696 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` per-file loop :: per-file `dispatchStaticCheckForFile` for FALSE entries. |
 | REQ-697 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` directory-scan loop; `src/core/static-check.ts` :: `dispatchStaticCheckForDirectories` :: one invocation per entry over selection directories. |
 | REQ-698 | `src/core/static-check.ts` :: `buildStaticCheckDirScanExclusionArgs` :: `cppcheck -i`, `ruff --exclude`, `eslint --ignore-pattern` fixture-root exclusion. |
 | REQ-699 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: `scan-by-dir: true` on `cppcheck`, `ruff`, `eslint` defaults. |
 | REQ-700 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: explicit-file dispatch without directory-scan branching. |
+| REQ-830 | `src/core/static-check.ts` :: `STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS` :: `gosec -exclude-dir` fixture-root exclusion builder. |
 | REQ-768 | `src/index.ts` :: `formatContextFilesSummary` :: appends the shared-helper occupancy suffix so the top-level `Context Files` summary value wraps the suffix in intense-red ANSI styling exactly above 80 displayed percent. |
 | REQ-769 | `src/index.ts` :: `buildContextFilesMenuChoices` :: builds every submenu row value through the shared-helper occupancy suffix so each row wraps its suffix in intense-red ANSI styling exactly above 80 displayed percent. |
 | REQ-770 | `src/core/prompts.ts` :: `renderPromptCommandSummary` and `src/core/context-file-size.ts` :: `enforceContextOccupancyLimit` :: keep appending the plain unstyled `ContextOccupancyFacts.suffix` on non-menu surfaces. |
@@ -1722,4 +1724,4 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-267 | `tests/extension-registration.test.ts` :: `req-change auto-recovers the error park and reuses the retained worktree through successful closure` :: base-path restore, branch merge, and worktree deletion after success. |
 
 ## 9. Performance Notes
-- Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.
+- Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`, `gosec`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

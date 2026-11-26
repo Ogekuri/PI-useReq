@@ -269,7 +269,7 @@ export const DEFAULT_STATIC_CHECK_LANGUAGES = [
 
 /**
  * @brief Defines the default static-check entries per language.
- * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; every other shipped entry defaults to `false`. Access complexity is O(1).
+ * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; every other shipped entry, including the PATH-resolved security checkers `clang-tidy`, `flawfinder`, and `bandit`, defaults to `false`. Access complexity is O(1).
  * @satisfies REQ-250, REQ-251, REQ-252, REQ-699
  */
 const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
@@ -289,6 +289,16 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       cmd: "clang-format",
       params: ["--dry-run", "--Werror"],
     },
+    {
+      module: "Command",
+      cmd: "clang-tidy",
+      params: ["-checks=-*,clang-analyzer-*,cert-*"],
+    },
+    {
+      module: "Command",
+      cmd: "flawfinder",
+      params: [],
+    },
   ],
   "C++": [
     {
@@ -306,6 +316,16 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       cmd: "clang-format",
       params: ["--dry-run", "--Werror"],
     },
+    {
+      module: "Command",
+      cmd: "clang-tidy",
+      params: ["-checks=-*,clang-analyzer-*,cert-*"],
+    },
+    {
+      module: "Command",
+      cmd: "flawfinder",
+      params: [],
+    },
   ],
   Python: [
     {
@@ -318,6 +338,11 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       cmd: "ruff",
       params: ["check"],
       "scan-by-dir": true,
+    },
+    {
+      module: "Command",
+      cmd: "bandit",
+      params: [],
     },
   ],
   JavaScript: [
@@ -755,7 +780,7 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
 
 /**
  * @brief Normalizes one raw checker-entry array from persisted config.
- * @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, preserves an explicit persisted `scan-by-dir` boolean, defaults absent flags to `true` for directory-scan-capable commands (`cppcheck`, `ruff`, `eslint`) and `false` otherwise, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
+ * @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, preserves an explicit persisted `scan-by-dir` boolean, defaults absent flags to `true` for directory-scan-capable commands (`cppcheck`, `ruff`, `eslint`, `gosec`) and `false` otherwise, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
  * @param[in] value {unknown} Candidate persisted checker array.
  * @return {StaticCheckEntry[]} Normalized checker-entry vector.
  * @satisfies REQ-694, REQ-695
