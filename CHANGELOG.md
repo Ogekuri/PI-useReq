@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.33](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.33) - 2026-11-25
+## [0.109.34](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.34) - 2026-11-26
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -148,6 +148,17 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- BREAKING CHANGE: raise minimum pi CLI host version to 1.6.1 and align peer ranges [useReq] *(pi-host-version)*
+  Update MINIMUM_SUPPORTED_PI_HOST_VERSION to 1.6.1 to match the bundled read-only
+  pi CLI source-of-truth update (v1.6.0 -> v1.6.1) and raise the three
+  @earendil-works peer dependency ranges to ^1.6.1 in package.json and package-lock.json.
+  Requirements: REQ-457/REQ-458 compatibility warning threshold moved to 1.6.1 and
+  REQ-460 peer ranges updated in the SRS (bumped to 0.0.180). Impact analysis confirms
+  the 1.6.1 extension-facing delta is additive-only (optional dialog blockedKind,
+  optional BashExecutionMessage.fullOutputError, clarified after_provider_response
+  error-response semantics); no slash-command orchestration or notification regression
+  and no code adaptation required. Verified: tsc --noEmit clean, npm test 572/572.
+- Update bundled read-only PI cli source code and docs from v1.6.0 to v1.6.1 [useReq] *(pi-cli-src-docs-update)*
 - BREAKING CHANGE: replace req-reset with auto-recovery and retained-worktree reuse [useReq] *(core)*
   Remove the /req-reset slash command, module, registration, Next-Workflow
   eligibility, requirements (PRJ-008, DES-014, REQ-304..307, REQ-312..313,
@@ -1881,7 +1892,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.33\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.33
+- \[0.109.34\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.34
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -1990,4 +2001,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.33]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.33
+[0.109.34]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.34
