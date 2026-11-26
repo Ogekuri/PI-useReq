@@ -8,7 +8,7 @@
  * @brief Declares the minimum pi CLI host version supported by the extension.
  * @details Versions below this value keep the extension enabled while `session_start` surfaces one compatibility warning; versions at or above this value are fully supported without warning. Compare with `comparePiHostVersions(...)` using numeric triple semantics.
  */
-export const MINIMUM_SUPPORTED_PI_HOST_VERSION = "1.6.0";
+export const MINIMUM_SUPPORTED_PI_HOST_VERSION = "1.6.1";
 
 /**
  * @brief Describes the process-scoped pi CLI host version probe state.

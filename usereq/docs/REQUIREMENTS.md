@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.179"
-date: "2026-11-24"
+version: "0.0.180"
+date: "2026-11-26"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -583,10 +583,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-454**: MUST NOT send a Pushover `url` request field whose value exceeds the 512-character Pushover Message API limit.
 - **REQ-455**: MUST NOT send a Pushover `url_title` request field whose value exceeds the 100-character Pushover Message API limit.
 - **REQ-456**: MUST probe the installed pi CLI host version at extension bootstrap by dynamically importing `@earendil-works/pi-coding-agent` and reading its `VERSION` export into process-scoped runtime state.
-- **REQ-457**: MUST emit one warning notification during `session_start` when the probed pi CLI host version is resolvable and lower than `1.6.0`, without aborting activation or transitioning workflow state.
-- **REQ-458**: MUST remain fully functional when the pi CLI host version is unresolvable or below `1.6.0`, emitting the version warning only for a resolvable version below `1.6.0` and never repeating it in the same process.
+- **REQ-457**: MUST emit one warning notification during `session_start` when the probed pi CLI host version is resolvable and lower than `1.6.1`, without aborting activation or transitioning workflow state.
+- **REQ-458**: MUST remain fully functional when the pi CLI host version is unresolvable or below `1.6.1`, emitting the version warning only for a resolvable version below `1.6.1` and never repeating it in the same process.
 - **REQ-459**: MUST pass `deliverAs: "followUp"` on every `sendUserMessage(...)` prompt-delivery fallback so pi sessions busy during run start queue the dispatched prompt.
-- **REQ-460**: MUST declare `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, and `@earendil-works/pi-tui` peer dependencies with `^1.6.0` ranges.
+- **REQ-460**: MUST declare `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, and `@earendil-works/pi-tui` peer dependencies with `^1.6.1` ranges.
 - **REQ-530**: MUST import `Type` tool parameter schema builders from `typebox` rather than `@sinclair/typebox`.
 - **REQ-461**: MUST keep workflow state `running` throughout the agentic-execution window of one prompt orchestration, from the post-handoff `running` transition until orchestration termination, without intermediate workflow-state updates from agent-run events.
 - **REQ-462**: MUST NOT transition workflow state to `error` from an intermediate agent-run error that the pi host retries or recovers; a recovered orchestration MUST never render `status:error`.
@@ -1180,9 +1180,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - `scripts/pre-release-check.sh` provides the official pre-release verification gate executing environment preflight, clean dependency install, strict type-check, the full test suite, and release packaging plus validation inside one `TMPDIR` temporary build directory from the repository root, then removes repository entries its stages created, including intermediate files, while keeping `node_modules`, every `dist/` entry, and every pre-existing entry; it performs no `dist/` operation, verifies no `dist/` content, and removes its temporary build directory on every exit path.
 
 ### 5.2 Libraries and Runtime Dependencies
-- `@earendil-works/pi-coding-agent` (>=1.6.0) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
-- `@earendil-works/pi-ai` (>=1.6.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
-- `@earendil-works/pi-tui` (>=1.6.0) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-coding-agent` (>=1.6.1) provides extension APIs, command registration, tool registration, and UI integration evidence in `src/index.ts` and `package.json`.
+- `@earendil-works/pi-ai` (>=1.6.1) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
+- `@earendil-works/pi-tui` (>=1.6.1) is a manifest-declared peer dependency evidenced by `package.json` and `package-lock.json`.
 - `typebox` provides runtime tool parameter schemas and is declared as a peer dependency evidenced by `src/index.ts`, `package.json`, and `package-lock.json`.
 - `js-tiktoken` provides token counting evidence in `src/core/token-counter.ts`, `package.json`, and `package-lock.json`.
 - `fast-glob` provides wildcard expansion for static-check inputs evidence in `src/core/static-check.ts`, `package.json`, and `package-lock.json`.
