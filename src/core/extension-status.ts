@@ -152,6 +152,7 @@ export interface PiUsereqStatusController {
   latestContext: ExtensionContext | undefined;
   state: PiUsereqStatusState;
   tickHandle: ReturnType<typeof setInterval> | undefined;
+  settlementWatchdogHandle: ReturnType<typeof setTimeout> | undefined;
 }
 
 /**
@@ -1005,6 +1006,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
       agentSettledEventSupported: undefined,
     },
     tickHandle: undefined,
+    settlementWatchdogHandle: undefined,
   };
 }
 
@@ -1388,5 +1390,9 @@ export function disposePiUsereqStatusController(
   controller: PiUsereqStatusController,
 ): void {
   stopStatusTicker(controller);
+  if (controller.settlementWatchdogHandle !== undefined) {
+    clearTimeout(controller.settlementWatchdogHandle);
+    controller.settlementWatchdogHandle = undefined;
+  }
   controller.latestContext = undefined;
 }

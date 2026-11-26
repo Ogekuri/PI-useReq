@@ -1504,6 +1504,22 @@ function applyConfiguredPiUsereqTools(pi: ExtensionAPI, config: UseReqConfig): v
 }
 
 /**
+ * @brief Stores the grace delay consumed by the settle-deferred prompt settlement watchdog.
+ * @details Holds the milliseconds the extension waits after one settle-deferred final `agent_end` before a lost `agent_settled` settlement is treated as terminal and the defensive `error` park runs. The default equals 15 minutes, exceeding every legitimate `agent_end` to `agent_settled` window (host auto-retries, overflow compact-and-retry, and queued follow-up work) while bounding an orchestration stuck in `running` forever. Mutable module state is intentionally private; tests adjust it through `setPromptSettlementWatchdogDelayForTests(...)` per the explicit-getter convention for externally observable mutable bindings.
+ */
+let promptSettlementWatchdogDelayMs = 900_000;
+
+/**
+ * @brief Overrides the settlement watchdog grace delay for deterministic tests.
+ * @details Replaces the module-private watchdog delay so unit tests can shorten the `agent_end` to defensive-park window to milliseconds. Passing `0` restores the documented 900000 ms production default. Runtime is O(1). Side effect: mutates module-private watchdog delay state.
+ * @param[in] delayMs {number} Replacement watchdog delay in milliseconds; zero restores the documented production default.
+ * @return {void} No return value.
+ */
+export function setPromptSettlementWatchdogDelayForTests(delayMs: number): void {
+  promptSettlementWatchdogDelayMs = delayMs > 0 ? delayMs : 900_000;
+}
+
+/**
  * @brief Probes whether the running pi host emits the `agent_settled` event and caches the result on the status controller state.
  * @details The 0.80.4+ `ExtensionAPI.on(...)` contract returns an unsubscribe function, and `agent_settled` is introduced in that same release; therefore a registration that returns a callable proves the host supports the event, while a `void` registration means a legacy host that never emits it. The probe registers a no-op handler once per status controller, unsubscribes it when the new contract returns a function, and caches the boolean so all later lookups are O(1). No external state is retained beyond the controller-scoped cached boolean.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller that caches the probed capability.
@@ -1528,6 +1544,131 @@ function isPiAgentSettledEventSupported(
   }
   statusController.state.agentSettledEventSupported = supported;
   return supported;
+}
+
+/**
+ * @brief Clears one armed settlement watchdog timer.
+ * @details Stops the pending defensive-park timer and resets the controller handle so a consumed settlement can never fire the watchdog later. Runtime is O(1). Side effect: mutates `controller.settlementWatchdogHandle`.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller owning the watchdog handle.
+ * @return {void} No return value.
+ */
+function clearPromptSettlementWatchdog(statusController: PiUsereqStatusController): void {
+  if (statusController.settlementWatchdogHandle !== undefined) {
+    clearTimeout(statusController.settlementWatchdogHandle);
+    statusController.settlementWatchdogHandle = undefined;
+  }
+}
+
+/**
+ * @brief Adopts the persisted deferred-finalization snapshot into one controller that lost the in-memory pending facts.
+ * @details Mirrors the `agent_settled` rebind recovery so the settlement watchdog can consume the same execution-session-keyed terminal facts recorded at the final `agent_end`: fills the in-memory `pendingFinalization*` fields only when the restored active prompt request is worktree-backed, the pending outcome is still unset, and the process-scoped snapshot matches the request's execution-session file. Runtime is O(1). Side effects include in-memory state mutation and process-scoped snapshot reads.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller whose pending finalization facts are healed.
+ * @param[in] promptRequest {PiUsereqPromptRequest} Active worktree-backed prompt execution plan owning the recorded snapshot.
+ * @return {void} No return value.
+ */
+function adoptPersistedPromptFinalizationSnapshot(
+  statusController: PiUsereqStatusController,
+  promptRequest: PiUsereqPromptRequest,
+): void {
+  if (
+    promptRequest.worktreeDir === undefined
+    || statusController.state.pendingFinalizationOutcome !== undefined
+  ) {
+    return;
+  }
+  const recoveredFinalization = readPersistedPromptCommandFinalizationSnapshot(
+    promptRequest.executionSessionFile,
+  );
+  if (recoveredFinalization !== undefined) {
+    statusController.state.pendingFinalizationOutcome = recoveredFinalization.outcome;
+    statusController.state.pendingFinalizationStatusMarker = recoveredFinalization.statusMarker;
+    statusController.state.pendingFinalizationBlockedMessage = recoveredFinalization.blockedMessage;
+    statusController.state.pendingFinalizationReport = recoveredFinalization.report;
+  }
+}
+
+/**
+ * @brief Arms the one-shot settlement watchdog for one settle-deferred prompt orchestration.
+ * @details Replaces any previous watchdog handle and schedules `runPromptSettlementWatchdog(...)` after the configured grace delay, unreferenceing the timer so a leaked watchdog never holds the pi host process alive. Every later `agent_end` of the same orchestration re-arms the deadline, so legitimate multi-run windows (host auto-retries and overflow compact-and-retry) refresh the grace period instead of tripping it. Runtime is O(1). Side effects include timer creation and controller state mutation.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller receiving the watchdog handle.
+ * @return {void} No return value.
+ */
+function armPromptSettlementWatchdog(statusController: PiUsereqStatusController): void {
+  clearPromptSettlementWatchdog(statusController);
+  const watchdogHandle = setTimeout(() => {
+    void runPromptSettlementWatchdog(statusController);
+  }, promptSettlementWatchdogDelayMs);
+  (watchdogHandle as { unref?: () => void }).unref?.();
+  statusController.settlementWatchdogHandle = watchdogHandle;
+}
+
+/**
+ * @brief Defensively parks one settle-deferred orchestration in `error` when the host never emits `agent_settled`.
+ * @details Runs once after the watchdog grace delay: clears the one-shot handle, recovers the deferred terminal facts from memory or the execution-session-keyed persisted snapshot, and returns silently when no worktree-backed pending finalization exists (the settlement already consumed it or the orchestration was replaced). Otherwise it records one `workflow_closure` debug event naming the lost settlement while the workflow state still matches the debug filter, parks the workflow in `error` through the debug-aware transition, clears prompt-run ownership plus every pending finalization field and the persisted snapshot, and then delivers the blocked-gate notification best-effort so a throwing or stale UI surface can never abort or revert the terminal park; the worktree plus execution session stay retained for `/req-wtd` recovery per REQ-209. Runtime is O(n) in report and diagnostic length. Side effects include workflow-state mutation, timer disposal, process-scoped persistence mutation, and one best-effort UI notification.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller holding the deferred finalization facts.
+ * @return {Promise<void>} Promise resolved after the defensive park completes.
+ * @satisfies REQ-209, REQ-463, REQ-464, REQ-587, REQ-803, REQ-804
+ */
+async function runPromptSettlementWatchdog(statusController: PiUsereqStatusController): Promise<void> {
+  clearPromptSettlementWatchdog(statusController);
+  const watchdogRequest = statusController.state.activePromptRequest;
+  if (watchdogRequest === undefined || watchdogRequest.worktreeDir === undefined) {
+    return;
+  }
+  adoptPersistedPromptFinalizationSnapshot(statusController, watchdogRequest);
+  const watchdogOutcome = statusController.state.pendingFinalizationOutcome;
+  const watchdogStatusMarker = statusController.state.pendingFinalizationStatusMarker;
+  if (watchdogOutcome === undefined) {
+    return;
+  }
+  const watchdogReport = statusController.state.pendingFinalizationReport;
+  const settlementLossDiagnostic = `ERROR: Prompt closure retained worktree ${watchdogRequest.worktreeDir} after the pi host emitted no agent_settled settlement within ${Math.round(promptSettlementWatchdogDelayMs / 60_000)} minutes.`;
+  const watchdogBlockedMessage = statusController.state.pendingFinalizationBlockedMessage !== undefined
+    ? `${statusController.state.pendingFinalizationBlockedMessage}\n${settlementLossDiagnostic}`
+    : settlementLossDiagnostic;
+  const watchdogDebugConfig = statusController.config;
+  if (watchdogDebugConfig) {
+    logPromptWorkflowEvent(
+      watchdogRequest.basePath,
+      watchdogDebugConfig,
+      statusController.state.workflowState,
+      watchdogRequest.promptName,
+      "workflow_closure",
+      {
+        hook: "settlement_watchdog",
+        outcome: watchdogOutcome,
+        status_marker: watchdogStatusMarker,
+      },
+      {
+        settlement_watchdog: true,
+        worktree_dir: watchdogRequest.worktreeDir,
+      },
+    );
+  }
+  const watchdogContext = statusController.latestContext;
+  if (watchdogDebugConfig && watchdogContext !== undefined) {
+    transitionPromptWorkflowState(
+      statusController,
+      watchdogContext,
+      watchdogRequest.basePath,
+      watchdogDebugConfig,
+      watchdogRequest.promptName,
+      "error",
+    );
+  } else {
+    setPiUsereqWorkflowState(statusController, "error", watchdogContext ?? undefined);
+  }
+  statusController.state.activeRunBelongsToPrompt = false;
+  statusController.state.pendingFinalizationOutcome = undefined;
+  statusController.state.pendingFinalizationStatusMarker = undefined;
+  statusController.state.pendingFinalizationBlockedMessage = undefined;
+  statusController.state.pendingFinalizationReport = undefined;
+  clearPersistedPromptCommandFinalizationSnapshot();
+  try {
+    notifyAgentFinalOutputBlockedGate(watchdogContext, watchdogReport, watchdogBlockedMessage);
+  } catch {
+    // Delivery was attempted; a broken or stale UI surface must never abort the terminal park.
+  }
 }
 
 /**
@@ -1630,6 +1771,7 @@ async function finalizeMatchedPromptSuccess(
   statusController.state.pendingPromptRequest = undefined;
   statusController.state.activePromptRequest = undefined;
   clearPersistedPromptCommandFinalizationSnapshot();
+  clearPromptSettlementWatchdog(statusController);
   const terminalWorkflowState = finalization.errorMessage
     && (!finalization.cleanupSucceeded || !finalization.mergeSucceeded)
     ? "error" as const
@@ -2027,6 +2169,10 @@ async function handleExtensionStatusEvent(
           blockedMessage: finalOutputBlockedMessage,
           report: finalOutputParse.ok ? finalOutputParse.report : undefined,
         });
+        // REQ-463/REQ-464 keep the workflow `running` while the host may still restart the agent
+        // run; the watchdog bounds only the lost-settlement window where no further agent event
+        // ever arrives, so every later `agent_end` of the same orchestration re-arms it.
+        armPromptSettlementWatchdog(statusController);
       } else if (shouldFinalizeMatchedSuccess) {
         // Legacy hosts never emit `agent_settled`, so no idle-waiting
         // `switchSession` deadlock exists; finalize the matched success
@@ -2043,20 +2189,14 @@ async function handleExtensionStatusEvent(
       } else if (markerBlockedOutcome) {
         // Final-output JSON gate (REQ-585/REQ-586/REQ-587/REQ-588/REQ-680): the completed
         // run did not parse to `result` `ok`, so no merge and no worktree deletion may
-        // run. Keep the worktree execution session visible for worktree-backed runs,
-        // park the workflow in `error` with the user-facing gate diagnostic, and retain
-        // the active request so `req-wtd` can restore `base-path` and remove the
-        // retained worktree.
-        notifyAgentFinalOutputBlockedGate(
-          promptContext,
-          finalOutputParse.ok ? finalOutputParse.report : undefined,
-          finalOutputBlockedMessage ?? `ERROR: Prompt orchestration terminated with JSON result "error".`,
-        );
-        statusController.state.activeRunBelongsToPrompt = false;
-        statusController.state.pendingFinalizationOutcome = undefined;
-        statusController.state.pendingFinalizationStatusMarker = undefined;
-        statusController.state.pendingFinalizationBlockedMessage = undefined;
-        clearPersistedPromptCommandFinalizationSnapshot();
+        // run. Park the workflow in `error` FIRST so a throwing or stale UI notification
+        // surface can never abort the terminal park, keep the worktree execution session
+        // visible for worktree-backed runs, clear prompt-run ownership and the recorded
+        // pending state, and retain the active request so `req-wtd` can restore `base-path`
+        // and remove the retained worktree.
+        const blockedReport = finalOutputParse.ok ? finalOutputParse.report : undefined;
+        const blockedDiagnostic = finalOutputBlockedMessage
+          ?? `ERROR: Prompt orchestration terminated with JSON result "error".`;
         if (debugConfig) {
           transitionPromptWorkflowState(
             statusController,
@@ -2069,17 +2209,24 @@ async function handleExtensionStatusEvent(
         } else {
           setPiUsereqWorkflowState(statusController, "error", promptContext);
         }
+        statusController.state.activeRunBelongsToPrompt = false;
+        statusController.state.pendingFinalizationOutcome = undefined;
+        statusController.state.pendingFinalizationStatusMarker = undefined;
+        statusController.state.pendingFinalizationBlockedMessage = undefined;
+        clearPersistedPromptCommandFinalizationSnapshot();
+        try {
+          notifyAgentFinalOutputBlockedGate(promptContext, blockedReport, blockedDiagnostic);
+        } catch {
+          // Delivery was attempted; a broken or stale UI surface must never abort the terminal park.
+        }
       } else if (closureFailureMessage !== undefined) {
         // Legacy-host terminal failure (worktree-backed run that ended interrupted,
-        // failed, aborted, or incomplete, REQ-209): keep the worktree execution session
-        // visible, surface the closure-failure error, park the workflow in `error`, and
-        // retain the active request so `req-wtd` can restore `base-path` and
-        // remove the retained worktree plus branch. The original base-path
-        // session MUST NOT be resumed here so the failure stays visible.
-        notifyTerminalOrchestrationDiagnostic(promptContext, closureFailureMessage, "error");
-        // The retained request closed with this run: later unrelated agent runs
-        // must not claim its prompt-end notification effects.
-        statusController.state.activeRunBelongsToPrompt = false;
+        // failed, aborted, or incomplete, REQ-209): park the workflow in `error` FIRST so a
+        // throwing or stale UI notification surface can never abort the terminal park, keep
+        // the worktree execution session visible, surface the closure-failure error, and
+        // retain the active request so `req-wtd` can restore `base-path` and remove the
+        // retained worktree plus branch. The original base-path session MUST NOT be resumed
+        // here so the failure stays visible.
         if (debugConfig) {
           transitionPromptWorkflowState(
             statusController,
@@ -2091,6 +2238,14 @@ async function handleExtensionStatusEvent(
           );
         } else {
           setPiUsereqWorkflowState(statusController, "error", promptContext);
+        }
+        // The retained request closed with this run: later unrelated agent runs
+        // must not claim its prompt-end notification effects.
+        statusController.state.activeRunBelongsToPrompt = false;
+        try {
+          notifyTerminalOrchestrationDiagnostic(promptContext, closureFailureMessage, "error");
+        } catch {
+          // Delivery was attempted; a broken or stale UI surface must never abort the terminal park.
         }
       } else {
         try {
@@ -2166,15 +2321,7 @@ async function handleExtensionStatusEvent(
       // snapshot recorded at the final `agent_end` when its execution-session identity
       // matches the restored active prompt request, so settlement still determines the
       // terminal outcome instead of leaving the orchestration `running` forever.
-      const recoveredFinalization = readPersistedPromptCommandFinalizationSnapshot(
-        settledPromptRequest.executionSessionFile,
-      );
-      if (recoveredFinalization !== undefined) {
-        statusController.state.pendingFinalizationOutcome = recoveredFinalization.outcome;
-        statusController.state.pendingFinalizationStatusMarker = recoveredFinalization.statusMarker;
-        statusController.state.pendingFinalizationBlockedMessage = recoveredFinalization.blockedMessage;
-        statusController.state.pendingFinalizationReport = recoveredFinalization.report;
-      }
+      adoptPersistedPromptFinalizationSnapshot(statusController, settledPromptRequest);
     }
     const pendingOutcome = statusController.state.pendingFinalizationOutcome;
     const pendingStatusMarker = statusController.state.pendingFinalizationStatusMarker;
@@ -2183,6 +2330,8 @@ async function handleExtensionStatusEvent(
       && settledPromptRequest.worktreeDir !== undefined
       && pendingOutcome !== undefined
     ) {
+      // Settlement consumed the deferred orchestration: the watchdog must never park it later.
+      clearPromptSettlementWatchdog(statusController);
       // Publish only the final completed run; intermediate reports remain private candidates.
       const settledReport = statusController.state.pendingFinalizationReport;
       if (pendingOutcome === "completed" && settledReport !== undefined) {
@@ -2212,21 +2361,13 @@ async function handleExtensionStatusEvent(
       } else if (pendingOutcome === "completed") {
         // Final-output JSON gate (REQ-585/REQ-586/REQ-587/REQ-588/REQ-680): the settled
         // completed run did not parse to `result` `ok`, so merge and worktree deletion
-        // MUST NOT run. Keep the worktree execution session visible, park the workflow in
-        // `error` with the recorded gate diagnostic, and retain the active request so
-        // `req-wtd` can restore `base-path` and remove the retained worktree.
-        notifyAgentFinalOutputBlockedGate(
-          ctx,
-          statusController.state.pendingFinalizationReport,
-          statusController.state.pendingFinalizationBlockedMessage
-            ?? `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after JSON result "error".`,
-        );
-        statusController.state.activeRunBelongsToPrompt = false;
-        statusController.state.pendingFinalizationOutcome = undefined;
-        statusController.state.pendingFinalizationStatusMarker = undefined;
-        statusController.state.pendingFinalizationBlockedMessage = undefined;
-        statusController.state.pendingFinalizationReport = undefined;
-        clearPersistedPromptCommandFinalizationSnapshot();
+        // MUST NOT run. Park the workflow in `error` FIRST so a throwing or stale UI
+        // notification surface can never abort the terminal park, keep the worktree
+        // execution session visible, clear prompt-run ownership plus the recorded pending
+        // state, and retain the active request so `req-wtd` can restore `base-path` and
+        // remove the retained worktree.
+        const settledBlockedReport = statusController.state.pendingFinalizationReport;
+        const settledBlockedMessage = statusController.state.pendingFinalizationBlockedMessage;
         const settledDebugConfig = statusController.config;
         if (settledDebugConfig) {
           transitionPromptWorkflowState(
@@ -2240,17 +2381,42 @@ async function handleExtensionStatusEvent(
         } else {
           setPiUsereqWorkflowState(statusController, "error", ctx);
         }
+        statusController.state.activeRunBelongsToPrompt = false;
+        statusController.state.pendingFinalizationOutcome = undefined;
+        statusController.state.pendingFinalizationStatusMarker = undefined;
+        statusController.state.pendingFinalizationBlockedMessage = undefined;
+        statusController.state.pendingFinalizationReport = undefined;
+        clearPersistedPromptCommandFinalizationSnapshot();
+        try {
+          notifyAgentFinalOutputBlockedGate(
+            ctx,
+            settledBlockedReport,
+            settledBlockedMessage
+              ?? `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after JSON result "error".`,
+          );
+        } catch {
+          // Delivery was attempted; a broken or stale UI surface must never abort the terminal park.
+        }
       } else {
-        // Terminal interrupted or failed outcome: keep the worktree execution session
-        // visible, surface the closure-failure error, park the workflow in `error`, and
+        // Terminal interrupted or failed outcome: park the workflow in `error` FIRST so a
+        // throwing or stale UI notification surface can never abort the terminal park, keep
+        // the worktree execution session visible, surface the closure-failure error, and
         // retain the active request so `req-wtd` can restore `base-path` and remove
         // the retained worktree plus branch. The original base-path session MUST NOT be
         // resumed here so the failure stays visible.
-        notifyTerminalOrchestrationDiagnostic(
-          ctx,
-          `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after ${pendingOutcome} outcome.`,
-          "error",
-        );
+        const settledFailureDebugConfig = statusController.config;
+        if (settledFailureDebugConfig) {
+          transitionPromptWorkflowState(
+            statusController,
+            ctx,
+            settledPromptRequest.basePath,
+            settledFailureDebugConfig,
+            settledPromptRequest.promptName,
+            "error",
+          );
+        } else {
+          setPiUsereqWorkflowState(statusController, "error", ctx);
+        }
         // The retained request closed with this orchestration: later unrelated agent
         // runs must not claim its prompt-end notification effects.
         statusController.state.activeRunBelongsToPrompt = false;
@@ -2259,18 +2425,14 @@ async function handleExtensionStatusEvent(
         statusController.state.pendingFinalizationBlockedMessage = undefined;
         statusController.state.pendingFinalizationReport = undefined;
         clearPersistedPromptCommandFinalizationSnapshot();
-        const settledDebugConfig = statusController.config;
-        if (settledDebugConfig) {
-          transitionPromptWorkflowState(
-            statusController,
+        try {
+          notifyTerminalOrchestrationDiagnostic(
             ctx,
-            settledPromptRequest.basePath,
-            settledDebugConfig,
-            settledPromptRequest.promptName,
+            `ERROR: Prompt closure retained worktree ${settledPromptRequest.worktreeDir} after ${pendingOutcome} outcome.`,
             "error",
           );
-        } else {
-          setPiUsereqWorkflowState(statusController, "error", ctx);
+        } catch {
+          // Delivery was attempted; a broken or stale UI surface must never abort the terminal park.
         }
       }
     }

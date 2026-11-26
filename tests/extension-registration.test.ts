@@ -4,7 +4,9 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import piUsereqExtension from "../src/index.js";
+import piUsereqExtension, {
+  setPromptSettlementWatchdogDelayForTests,
+} from "../src/index.js";
 import {
   REQ_REFERENCES_COMMAND_DESCRIPTION,
   REQ_REFERENCES_COMMIT_MESSAGE,
@@ -10781,6 +10783,85 @@ test("status-marker closure retains the worktree and parks error for a result er
           && /JSON result "error"/.test(entry.message),
       ),
       "expected one worktree-retention blocked-gate notification naming the JSON result error gate",
+    );
+  } finally {
+    run.cleanup();
+  }
+});
+
+/**
+ * @brief Verifies the settlement watchdog parks `error` when `agent_settled` never follows the settle-deferred `agent_end`.
+ * @details Starts one worktree-backed `req-change` execution, emits an `agent_end` whose final assistant text block is one valid final-output JSON with `result` `error`, and never emits `agent_settled`. With the watchdog delay shortened through the exported test override, the test proves the defensive watchdog consumes the persisted finalization facts, retains the worktree directory plus branch, parks the workflow state in the blinking `error` rendering, emits one lost-settlement blocked-gate notification naming the retained worktree, and clears the process-scoped finalization snapshot. Runtime is dominated by temporary git worktree setup plus the shortened watchdog delay. Side effects are limited to temporary repository mutation, temporary session-file writes, and one in-process watchdog timer.
+ * @return {Promise<void>} Promise resolved after watchdog-park assertions complete.
+ * @throws {AssertionError} Throws when a lost settlement leaves the workflow running, merges the worktree, or drops the notification.
+ * @satisfies REQ-209, REQ-463, REQ-464, REQ-587, REQ-803, REQ-804
+ */
+test("settlement watchdog parks error when agent_settled never follows the deferred agent_end", async () => {
+  setPromptSettlementWatchdogDelayForTests(20);
+  const run = await startStatusMarkerClosureRun("settlement-watchdog.ts");
+  try {
+    await run.emitAgentEnd([
+      {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "text", text: JSON.stringify({ result: "error", summary: "Blocked.", next_commands: [] }) }],
+      },
+    ]);
+    let parked = false;
+    for (let attempt = 0; attempt < 200 && !parked; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      parked = run.recordedStatuses.some((status) =>
+        status.includes(buildExpectedFakeStatusFieldFragment("error", "change")));
+    }
+    assert.ok(parked, "expected the settlement watchdog to park the workflow in error");
+    assert.equal(fs.existsSync(run.executionBasePath), true);
+    assert.equal(
+      spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${run.worktreeName}`], {
+        cwd: run.projectBase,
+        encoding: "utf8",
+      }).status,
+      0,
+    );
+    assert.ok(
+      run.eventCtx.__state.notifications.some(
+        (entry: { message: string; level: string }) => entry.level === "info"
+          && /retained worktree/.test(entry.message)
+          && /agent_settled/.test(entry.message),
+      ),
+      "expected one lost-settlement blocked-gate notification naming the retained worktree",
+    );
+  } finally {
+    setPromptSettlementWatchdogDelayForTests(0);
+    run.cleanup();
+  }
+});
+
+/**
+ * @brief Verifies the settle blocked-gate park reaches `error` even when UI notification delivery throws.
+ * @details Starts one worktree-backed `req-change` execution, breaks the event-context UI notification channel, emits an `agent_end` whose final assistant text block is one valid final-output JSON with `result` `error`, then settles the orchestration. The test proves the terminal `error` workflow-state park, the pending-finalization clears, and the snapshot clear complete before notification delivery is attempted, so a throwing `ctx.ui.notify` never aborts the park nor leaves the orchestration `running`. Runtime is dominated by temporary git worktree setup plus fake lifecycle dispatch. Side effects are limited to temporary repository mutation and temporary session-file writes.
+ * @return {Promise<void>} Promise resolved after exception-safe park assertions complete.
+ * @throws {AssertionError} Throws when a throwing notification channel blocks the `error` park.
+ * @satisfies REQ-209, REQ-587, REQ-588, REQ-796
+ */
+test("settle blocked-gate park reaches error even when notification delivery throws", async () => {
+  const run = await startStatusMarkerClosureRun("settle-notify-throw.ts");
+  try {
+    run.eventCtx.ui.notify = () => {
+      throw new Error("ui surface broken");
+    };
+    await run.emitAgentEnd([
+      {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "text", text: JSON.stringify({ result: "error", summary: "Blocked.", next_commands: [] }) }],
+      },
+    ]);
+    await run.pi.emit("agent_settled", {}, run.eventCtx);
+
+    assert.equal(fs.existsSync(run.executionBasePath), true);
+    assert.ok(
+      run.recordedStatuses.some((status) => status.includes(buildExpectedFakeStatusFieldFragment("error", "change"))),
+      "expected the error park to complete despite the throwing notification channel",
     );
   } finally {
     run.cleanup();
