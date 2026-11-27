@@ -63,7 +63,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 - **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 1.5.2 or newer. A resolvable older host version surfaces one warning notification while the extension keeps working.
 - **Git repository** - every prompt-backed `req-*` slash command plus the non-agentic `/req-references` runs slash-command-owned git validation (`/req-print-result`, parameter-less `/req-continue`, and `/req-audit` do not; `/req-wtd` validates only repository discoverability): the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
 - **Requirements documentation** - the configured `docs-dir` (default `usereq/docs`) must contain the canonical documents required by the executed commands (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); the command table below lists each command's requirement, and `/req-write`, `/req-create`, `/req-workflow`, and `/req-references` are the entry points that generate them.
-- **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install best-effort through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
+- **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install best-effort through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) and the Rust toolchain (`cargo` for `cargo clippy` and `cargo geiger`) require a system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, Rust, TypeScript.
 - **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker). The extension is model-agnostic: it captures the active provider, model id, and thinking level at command start and re-applies them after a worktree session switch and after `/req-wtd` restoration.
 
 
@@ -212,6 +212,7 @@ Bundled static checkers (`pyright`, `ruff`, `eslint`) install best-effort via th
 - macOS: `brew install cppcheck clang-format`
 - Arch: `sudo pacman -S cppcheck clang`
 - Windows: `choco install cppcheck llvm` or `scoop install cppcheck llvm`
+- Rust toolchain (provides `cargo` for the default `cargo clippy` and `cargo geiger` checkers): https://rustup.rs ; optional `cargo geiger` support: `cargo install cargo-geiger`
 
 ### Uninstall
 

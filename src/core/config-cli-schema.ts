@@ -187,7 +187,7 @@ const PUSHOVER_PRIORITY_MEANINGS: Record<string, string> = {
 
 /**
  * @brief Defines the fixed object-array fields of one static-check checker entry.
- * @details `module` is required, while `cmd` and `params` stay optional removable keys because persisted entries may omit them. Access complexity is O(1).
+ * @details `module` is required, while `cmd`, `params`, `scan-by-dir`, and `scan-by-crate` stay optional removable keys because persisted entries may omit them. Access complexity is O(1).
  * @satisfies REQ-555, REQ-556
  */
 const STATIC_CHECK_FIELDS: ConfigSchemaField[] = [
@@ -225,6 +225,16 @@ const STATIC_CHECK_FIELDS: ConfigSchemaField[] = [
     token: "scan-by-dir",
     type: "boolean",
     description: "Run the checker recursively over configured source and test directories instead of per file.",
+    constraints: "Boolean",
+    required: false,
+    nonEmpty: false,
+    itemNonEmpty: false,
+    example: true,
+  },
+  {
+    token: "scan-by-crate",
+    type: "boolean",
+    description: "Run the checker exactly once from the project base over the whole crate instead of per file.",
     constraints: "Boolean",
     required: false,
     nonEmpty: false,

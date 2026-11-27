@@ -329,7 +329,7 @@ function normalizeStaticCheckDirScanCommand(cmd: string): string {
  * @details Accepts exactly the checkers that natively accept recursive directory targets and expose a CLI exclusion flag for the project fixture roots: `cppcheck`, `ruff`, `eslint`, and `gosec`. Runtime is O(p) in command length. No side effects occur.
  * @param[in] cmd {string} Configured checker executable name, explicit path, or `%%INSTALLATION_PATH%%`-anchored path.
  * @return {boolean} `true` when the command is directory-scan capable.
- * @note `staticcheck` and `cargo clippy` are deliberately excluded: neither exposes a checker-native directory-exclusion flag (`staticcheck` analyzes Go packages without directory exclusion arguments; `cargo clippy` analyzes the whole crate and ignores directory targets), so they cannot honor the REQ-698 fixture-root exclusion contract.
+ * @note `staticcheck` and `cargo clippy` are deliberately excluded: neither exposes a checker-native directory-exclusion flag (`staticcheck` analyzes Go packages without directory exclusion arguments; `cargo clippy` analyzes the whole crate and ignores directory targets), so they cannot honor the REQ-698 fixture-root exclusion contract; crate-level `cargo` analysis is handled by the `scan-by-crate` mode (`supportsStaticCheckCrateScan`).
  * @satisfies REQ-695
  */
 export function supportsStaticCheckDirScan(cmd: string | undefined): boolean {
@@ -337,6 +337,20 @@ export function supportsStaticCheckDirScan(cmd: string | undefined): boolean {
     return false;
   }
   return normalizeStaticCheckDirScanCommand(cmd) in STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS;
+}
+
+/**
+ * @brief Tests whether one Command checker supports crate-level execution.
+ * @details Accepts exactly the checkers whose normalized command basename equals `cargo`: cargo subcommand invocations such as `cargo clippy` and `cargo geiger` analyze the whole crate from the manifest directory and accept neither file nor directory targets. Runtime is O(p) in command length. No side effects occur.
+ * @param[in] cmd {string} Configured checker executable name, explicit path, or `%%INSTALLATION_PATH%%`-anchored path.
+ * @return {boolean} `true` when the command is crate-level capable.
+ * @satisfies REQ-850
+ */
+export function supportsStaticCheckCrateScan(cmd: string | undefined): boolean {
+  if (typeof cmd !== "string" || cmd.trim() === "") {
+    return false;
+  }
+  return normalizeStaticCheckDirScanCommand(cmd) === "cargo";
 }
 
 /**
@@ -550,6 +564,96 @@ export function dispatchStaticCheckForDirectories(
 }
 
 /**
+ * @brief Filters captured crate-level checker evidence lines that reference excluded fixture roots.
+ * @details Splits the captured checker output into lines and drops every line containing an excluded fixture-root token in absolute or project-relative form, with path separators normalized to `/`, because crate-level commands such as `cargo clippy` and `cargo geiger` expose no checker-native directory-exclusion flags. Runtime is O(l * r) in evidence-line and exclusion-token count. No side effects occur.
+ * @param[in] evidence {string} Captured checker stdout plus stderr text.
+ * @param[in] excludedDirectoryPaths {string[]} Fixture-root directories, absolute or project-relative.
+ * @param[in] projectBase {string} Absolute project root used to resolve relative roots.
+ * @return {string} Evidence text with fixture-referencing lines removed.
+ * @satisfies REQ-852
+ */
+function filterCrateEvidenceLines(
+  evidence: string,
+  excludedDirectoryPaths: string[],
+  projectBase: string,
+): string {
+  const tokens = excludedDirectoryPaths
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .flatMap((root) => {
+      const absoluteRoot = path.isAbsolute(root) ? root : path.resolve(projectBase, root);
+      return [absoluteRoot, path.relative(projectBase, absoluteRoot)];
+    })
+    .map((token) => token.split(path.sep).join("/"))
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) {
+    return evidence;
+  }
+  return evidence
+    .split("\n")
+    .filter((line) => {
+      const normalizedLine = line.split("\\").join("/");
+      return !tokens.some((token) => normalizedLine.includes(token));
+    })
+    .join("\n");
+}
+
+/**
+ * @brief Dispatches one configured static checker as a single crate-level invocation.
+ * @details Resolves the Command executable, executes one process carrying only the configured params from the project base without file or directory targets, and filters captured evidence through `filterCrateEvidenceLines` so fixture-root references never reach the report. Emits the standardized `# Static-Check(Command[<cmd>] (scan-by-crate))` header with OK/FAIL result and captured evidence. A missing crate manifest surfaces as a checker FAIL carrying the cargo diagnostic. Runtime is dominated by one external command execution. Side effects include PATH probing, process spawning, and console output.
+ * @param[in] langConfig {StaticCheckEntry} Normalized static-check configuration entry carrying effective `scan-by-crate` TRUE.
+ * @param[in] options {{ failOnly?: boolean; projectBase?: string; excludedDirectoryPaths?: string[] }} Optional execution controls.
+ * @return {number} Checker exit status where `0` means success and non-zero means failure.
+ * @throws {ReqError} Throws for non-Command modules, missing `cmd`, or unresolvable executables.
+ * @satisfies REQ-851, REQ-852
+ */
+export function dispatchStaticCheckForCrate(
+  langConfig: StaticCheckEntry,
+  options: { failOnly?: boolean; projectBase?: string; excludedDirectoryPaths?: string[] } = {},
+): number {
+  const moduleName = String(langConfig.module ?? "");
+  if (moduleName.toLowerCase() !== "command") {
+    throw new ReqError(`Error: static-check module '${moduleName}' does not support scan-by-crate execution.`, 1);
+  }
+  const cmd = typeof langConfig.cmd === "string" ? langConfig.cmd : undefined;
+  if (!cmd) {
+    throw new ReqError("Error: Command module requires 'cmd' in static-check config for scan-by-crate execution.", 1);
+  }
+  const resolvedCmd = resolveCheckerExecutable(cmd);
+  if (!resolvedCmd) {
+    throw new ReqError(`Error: external command '${cmd}' not found on PATH.`, 1);
+  }
+  const params = Array.isArray(langConfig.params) ? langConfig.params.map(String) : [];
+  const projectBase = options.projectBase ?? process.cwd();
+  const failOnly = options.failOnly ?? false;
+  const header = `# Static-Check(Command[${cmd}] (scan-by-crate)): ${projectBase}`;
+  const result = spawnSync(resolvedCmd, params, { encoding: "utf8", cwd: projectBase });
+  if (result.error) {
+    console.log(header);
+    console.log("Result: FAIL");
+    console.log("Evidence:");
+    console.log(`  command '${cmd}' not found on PATH`);
+    return 1;
+  }
+  if (result.status === 0) {
+    if (!failOnly) {
+      console.log(header);
+      console.log("Result: OK");
+    }
+    return 0;
+  }
+  console.log(header);
+  console.log("Result: FAIL");
+  console.log("Evidence:");
+  console.log(filterCrateEvidenceLines(
+    `${result.stdout ?? ""}${result.stderr ?? ""}`,
+    options.excludedDirectoryPaths ?? [],
+    projectBase,
+  ).trimEnd());
+  return 1;
+}
+
+/**
  * @brief Tests whether one filesystem path is executable.
  * @details Requires the candidate to exist, be a regular file, and pass `X_OK` access checks. Runtime is O(1). Side effects are limited to filesystem reads.
  * @param[in] candidate {string} Absolute or relative path to inspect.
@@ -646,12 +750,13 @@ export function checkDefaultCheckersAvailability(config: UseReqConfig): string[]
 
 /**
  * @brief Dispatches one configured static checker for a single file.
- * @details Selects the debug `Dummy` or user-facing `Command` implementation by module name, normalizes parameter arrays, and runs exactly one checker instance against the target file. Runtime is dominated by the selected checker. Side effects include console output and possible process spawning.
+ * @details Selects the debug `Dummy` or user-facing `Command` implementation by module name, normalizes parameter arrays, and runs exactly one checker instance against the target file; `Command` entries carrying `scan-by-crate: true` and a crate-level-capable command dispatch crate-level execution without the file target. Runtime is dominated by the selected checker. Side effects include console output and possible process spawning.
  * @param[in] filePath {string} Absolute or relative file path to check.
  * @param[in] langConfig {StaticCheckEntry} Normalized static-check configuration entry.
  * @param[in] options {{ failOnly?: boolean; projectBase?: string }} Optional execution controls.
  * @return {number} Checker exit status where `0` means success and non-zero means failure.
  * @throws {ReqError} Throws when configuration is incomplete or names an unknown module.
+ * @satisfies REQ-854
  */
 export function dispatchStaticCheckForFile(
   filePath: string,
@@ -668,6 +773,9 @@ export function dispatchStaticCheckForFile(
     case "command":
       if (!cmd) {
         throw new ReqError(`Error: Command module requires 'cmd' in static-check config for '${filePath}'.`, 1);
+      }
+      if (langConfig["scan-by-crate"] === true && supportsStaticCheckCrateScan(cmd)) {
+        return dispatchStaticCheckForCrate(langConfig, options);
       }
       return new StaticCheckCommand(cmd, [filePath], params, failOnly).run();
     default:

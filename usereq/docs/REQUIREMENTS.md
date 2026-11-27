@@ -229,7 +229,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-249**: MUST persist local `static-check.<language>.enabled` with allowed values `enable|disable` and global `static-check.<language>.checkers` as ordered arrays.
 - **REQ-250**: MUST default global `static-check.C` and `static-check.C++` checker arrays to documented `cppcheck`, `clang-format`, `clang-tidy`, and `flawfinder` Command entries.
 - **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to documented `pyright`, `ruff`, `bandit`, `node --check`, and `eslint` Command entries.
-- **REQ-252**: MUST default every other global `static-check.<language>.checkers` array to `[]`.
+- **REQ-252**: MUST default every global `static-check.<language>.checkers` array outside the `C`, `C++`, `Python`, `JavaScript`, `TypeScript`, and `Rust` defaults to `[]`.
+- **REQ-853**: MUST default global `static-check.Rust` checker array to documented `cargo clippy` and `cargo geiger` Command entries.
 - **REQ-316**: MUST default local `static-check.<language>.enabled` to `enable` when global `checkers` is non-empty, otherwise `disable`.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, reset workflow state to `idle` and clear the active request for `session_start` reasons `startup|reload`, and publish single-line `pi-usereq` status text.
 - **REQ-109**: MUST omit `current-path`, `base`, `docs`, `src`, and `tests` path fields from the single-line status bar.
@@ -803,6 +804,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-697**: When effective `scan-by-dir` is TRUE, MUST execute each directory-scan-capable Command checker entry once over every configured `src-dir` directory plus `tests-dir`.
 - **REQ-698**: MUST exclude `tests/fixtures` and `<tests-dir>/fixtures` from directory-scan invocations through checker-native exclusion arguments for capable commands.
 - **REQ-699**: MUST default shipped `cppcheck`, `ruff`, and `eslint` checker entries to `scan-by-dir` TRUE and every other shipped entry to FALSE.
+- **REQ-849**: MUST expose optional boolean `scan-by-crate` on every static-check Command entry selecting single crate-level execution over per-file execution.
+- **REQ-850**: MUST resolve effective `scan-by-crate` from the persisted boolean, defaulting TRUE only for the crate-level-capable command `cargo`, FALSE otherwise.
+- **REQ-851**: When effective `scan-by-crate` is TRUE, MUST execute the Command checker entry exactly once from the project base with configured params and no file or directory targets.
+- **REQ-852**: MUST filter captured crate-level checker evidence lines that reference an excluded fixture root by absolute or project-relative path, because crate-level commands expose no native exclusion flags.
+- **REQ-854**: MUST dispatch crate-level Command entries without appending the target file path during explicit-file static-check execution.
 - **REQ-700**: MUST keep `req-files-static-check` per-file dispatch independent of `scan-by-dir`.
 - **REQ-701**: MUST expose `req-result-json-validator` only through agent-tool registration.
 - **REQ-702**: MUST validate JSON formatting through native TypeScript parsing and MUST NOT declare a JSON-validation runtime dependency in `package.json`.
@@ -1595,6 +1601,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-697 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` directory-scan loop; `src/core/static-check.ts` :: `dispatchStaticCheckForDirectories` :: one invocation per entry over selection directories. |
 | REQ-698 | `src/core/static-check.ts` :: `buildStaticCheckDirScanExclusionArgs` :: `cppcheck -i`, `ruff --exclude`, `eslint --ignore-pattern` fixture-root exclusion. |
 | REQ-699 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: `scan-by-dir: true` on `cppcheck`, `ruff`, `eslint` defaults. |
+| REQ-849 | `src/core/config.ts` :: `StaticCheckEntry` :: optional `scan-by-crate` boolean field on every Command entry. |
+| REQ-850 | `src/core/config.ts` :: `normalizeStaticCheckEntries`; `src/core/static-check.ts` :: `supportsStaticCheckCrateScan` :: persisted boolean wins, capability default TRUE for `cargo`. |
+| REQ-851 | `src/core/tool-runner.ts` :: `runProjectStaticCheck` crate-scan loop; `src/core/static-check.ts` :: `dispatchStaticCheckForCrate` :: one invocation from the project base with no file or directory targets. |
+| REQ-852 | `src/core/static-check.ts` :: `filterCrateEvidenceLines` :: drops captured crate-level evidence lines referencing excluded fixture roots by absolute or project-relative path. |
+| REQ-853 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: `cargo clippy` and `cargo geiger` Rust defaults with `scan-by-crate: true`. |
+| REQ-854 | `src/core/static-check.ts` :: `dispatchStaticCheckForFile` :: crate-level branch dispatches without appending the target file path. |
 | REQ-700 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: explicit-file dispatch without directory-scan branching. |
 | REQ-830 | `src/core/static-check.ts` :: `STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS` :: `gosec -exclude-dir` fixture-root exclusion builder. |
 | REQ-768 | `src/index.ts` :: `formatContextFilesSummary` :: appends the shared-helper occupancy suffix so the top-level `Context Files` summary value wraps the suffix in intense-red ANSI styling exactly above 80 displayed percent. |

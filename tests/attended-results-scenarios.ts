@@ -354,12 +354,12 @@ function getFailingStaticCheckConfig(): UseReqConfig["static-check"] {
 /**
  * @brief Builds the environment-isolated failing static-check configuration for the project scan archive.
  * @details Enables only the deterministic `Command` checker `false` for Python and explicitly
- *          disables C, C++, JavaScript, and TypeScript so the archived `project/static-check`
+ *          disables C, C++, JavaScript, TypeScript, and Rust so the archived `project/static-check`
  *          scenario never depends on default-seeded checkers (`cppcheck`, `clang-format`,
- *          `node --check`, `eslint`) being resolvable in the verification toolchain. Runtime
- *          is O(1). No side effects occur.
+ *          `node --check`, `eslint`, `cargo clippy`, `cargo geiger`) being resolvable in the
+ *          verification toolchain. Runtime is O(1). No side effects occur.
  * @return {UseReqConfig["static-check"]} Static-check configuration payload isolating the failing checker.
- * @satisfies REQ-019, REQ-043, REQ-250, REQ-251, REQ-316, TST-016
+ * @satisfies REQ-019, REQ-043, REQ-250, REQ-251, REQ-252, REQ-316, REQ-853, TST-016
  */
 function getIsolatedFailingStaticCheckConfig(): UseReqConfig["static-check"] {
   return {
@@ -368,6 +368,7 @@ function getIsolatedFailingStaticCheckConfig(): UseReqConfig["static-check"] {
     "C++": createStaticCheckLanguageConfig([], "disable"),
     JavaScript: createStaticCheckLanguageConfig([], "disable"),
     TypeScript: createStaticCheckLanguageConfig([], "disable"),
+    Rust: createStaticCheckLanguageConfig([], "disable"),
   };
 }
 

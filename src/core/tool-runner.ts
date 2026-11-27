@@ -23,8 +23,10 @@ import { generateMarkdown } from "./generate-markdown.js";
 import {
   STATIC_CHECK_EXT_TO_LANG,
   buildStaticCheckEntryIdentity,
+  dispatchStaticCheckForCrate,
   dispatchStaticCheckForDirectories,
   dispatchStaticCheckForFile,
+  supportsStaticCheckCrateScan,
   supportsStaticCheckDirScan,
 } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
@@ -485,12 +487,12 @@ function resolveStaticCheckDirScanTargets(selectionDirs: string[], files: string
 
 /**
  * @brief Runs configured static checks for project source and test directories.
- * @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, while every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Directory-scan invocations append after all per-file results in first-encountered language and checker order. Returns the declared `NO_SOURCE_STATIC_CHECK_RESULT` payload with exit code 0 and dispatches no checker when the fixture-filtered selection holds no supported source file. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
+ * @details Collects source and test files, excludes fixture roots, then dispatches each enabled checker: entries with effective `scan-by-crate` TRUE and a crate-level-capable command execute exactly once from the project base through `dispatchStaticCheckForCrate` with fixture-root evidence filtering, entries with effective `scan-by-dir` TRUE and a directory-scan-capable command execute once over the selection directories through `dispatchStaticCheckForDirectories` with checker-native fixture-root exclusion arguments, and every other entry keeps per-file dispatch through `dispatchStaticCheckForFile`. Crate-scan and directory-scan invocations append after all per-file results in first-encountered language and checker order. Returns the declared `NO_SOURCE_STATIC_CHECK_RESULT` payload with exit code 0 and dispatches no checker when the fixture-filtered selection holds no supported source file. Runtime is O(F * C + D) plus external checker cost. Side effects include filesystem reads, stdout interception, and process spawning.
  * @param[in] projectBase {string} Candidate project root.
  * @param[in] config {UseReqConfig | undefined} Optional preloaded configuration.
  * @return {ToolResult} Aggregated static-check result, or the declared no-source success payload with exit code 0 when the selection holds no supported source file.
  * @throws {ReqError} Throws when the project base or the effective configuration cannot be resolved.
- * @satisfies REQ-696, REQ-697, REQ-698, REQ-813, REQ-814
+ * @satisfies REQ-696, REQ-697, REQ-698, REQ-813, REQ-814, REQ-851, REQ-852
  */
 export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig): ToolResult {
   const base = resolveProjectBase(projectBase);
@@ -513,6 +515,8 @@ export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig
   const dirScanTargets = resolveStaticCheckDirScanTargets(selectionDirs, files, base);
   const seenDirScanIdentities = new Set<string>();
   const dirScanEntries: StaticCheckEntry[] = [];
+  const seenCrateScanIdentities = new Set<string>();
+  const crateScanEntries: StaticCheckEntry[] = [];
   let stderr = "";
   let overall = 0;
   let stdout = "";
@@ -521,6 +525,17 @@ export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig
     if (!lang) continue;
     const langConfigs = getActiveStaticCheckEntries(scConfig, lang);
     for (const langConfig of langConfigs) {
+      if (
+        langConfig["scan-by-crate"] === true
+        && supportsStaticCheckCrateScan(langConfig.cmd)
+      ) {
+        const identity = buildStaticCheckEntryIdentity(lang, langConfig);
+        if (!seenCrateScanIdentities.has(identity)) {
+          seenCrateScanIdentities.add(identity);
+          crateScanEntries.push(langConfig);
+        }
+        continue;
+      }
       if (
         langConfig["scan-by-dir"] === true
         && supportsStaticCheckDirScan(langConfig.cmd)
@@ -545,6 +560,16 @@ export function runProjectStaticCheck(projectBase: string, config?: UseReqConfig
   for (const langConfig of dirScanEntries) {
     stdout += captureStaticCheckOutput(() => {
       const rc = dispatchStaticCheckForDirectories(dirScanTargets, langConfig, {
+        failOnly: true,
+        projectBase: base,
+        excludedDirectoryPaths: existingFixtureRoots,
+      });
+      if (rc !== 0) overall = 1;
+    });
+  }
+  for (const langConfig of crateScanEntries) {
+    stdout += captureStaticCheckOutput(() => {
+      const rc = dispatchStaticCheckForCrate(langConfig, {
         failOnly: true,
         projectBase: base,
         excludedDirectoryPaths: existingFixtureRoots,

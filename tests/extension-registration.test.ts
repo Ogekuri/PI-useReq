@@ -9335,6 +9335,10 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.deepEqual(config["static-check"].TypeScript, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "eslint", params: [], "scan-by-dir": true },
   ], "enable"));
+  assert.deepEqual(config["static-check"].Rust, createStaticCheckLanguageConfig([
+    { module: "Command", cmd: "cargo", params: ["clippy", "--", "-D", "warnings"], "scan-by-crate": true },
+    { module: "Command", cmd: "cargo", params: ["geiger"], "scan-by-crate": true },
+  ], "enable"));
   assert.deepEqual(config["static-check"].Ruby, createStaticCheckLanguageConfig([], "disable"));
   assert.equal(config.DEBUG_ENABLED, "disable");
   assert.equal(Object.hasOwn(config, "DEBUG_LOG_FILE"), false);
@@ -9361,6 +9365,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   const localConfig = readProjectConfigJson(cwd);
   const globalConfig = readGlobalConfigJson();
   assert.equal((localConfig["static-check"] as Record<string, any>).Python.enabled, "enable");
+  assert.equal((localConfig["static-check"] as Record<string, any>).Rust.enabled, "enable");
   assert.equal((localConfig["static-check"] as Record<string, any>).Ruby.enabled, "disable");
   assert.equal(Object.hasOwn(localConfig, "DEBUG_ENABLED"), false);
   assert.equal(globalConfig.DEBUG_ENABLED, "disable");
@@ -9369,6 +9374,10 @@ test("default configuration applies the documented static-check, debug, notify, 
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
     { module: "Command", cmd: "bandit" },
+  ]);
+  assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Rust.checkers, [
+    { module: "Command", cmd: "cargo", params: ["clippy", "--", "-D", "warnings"], "scan-by-crate": true },
+    { module: "Command", cmd: "cargo", params: ["geiger"], "scan-by-crate": true },
   ]);
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Ruby.checkers, []);
   assert.equal(globalConfig.AUTO_GIT_COMMIT, "enable");

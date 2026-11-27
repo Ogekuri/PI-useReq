@@ -53,19 +53,20 @@ import {
   type DebugToolCommandsEnabled,
 } from "./debug-runtime.js";
 import { PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES, normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
-import { supportsStaticCheckDirScan } from "./static-check.js";
+import { supportsStaticCheckCrateScan, supportsStaticCheckDirScan } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 
 /**
  * @brief Describes one static-check module configuration entry.
- * @details Each record identifies the checker module, optional command or parameter list, and the optional `scan-by-dir` flag selecting recursive directory-scan execution over per-file execution used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
- * @satisfies REQ-694
+ * @details Each record identifies the checker module, optional command or parameter list, the optional `scan-by-dir` flag selecting recursive directory-scan execution over per-file execution, and the optional `scan-by-crate` flag selecting single crate-level execution over per-file execution used during per-language static analysis dispatch. The interface is type-only and has no runtime cost.
+ * @satisfies REQ-694, REQ-849
  */
 export interface StaticCheckEntry {
   module: string;
   cmd?: string;
   params?: string[];
   "scan-by-dir"?: boolean;
+  "scan-by-crate"?: boolean;
 }
 
 /**
@@ -269,8 +270,8 @@ export const DEFAULT_STATIC_CHECK_LANGUAGES = [
 
 /**
  * @brief Defines the default static-check entries per language.
- * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; every other shipped entry, including the PATH-resolved security checkers `clang-tidy`, `flawfinder`, and `bandit`, defaults to `false`. Access complexity is O(1).
- * @satisfies REQ-250, REQ-251, REQ-252, REQ-699
+ * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; crate-level shipped checkers (`cargo clippy`, `cargo geiger`) default to `scan-by-crate: true`; every other shipped entry, including the PATH-resolved security checkers `clang-tidy`, `flawfinder`, and `bandit`, defaults to `false`. Access complexity is O(1).
+ * @satisfies REQ-250, REQ-251, REQ-252, REQ-699, REQ-853
  */
 const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
   C: [
@@ -360,11 +361,25 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       "scan-by-dir": true,
     },
   ],
+  Rust: [
+    {
+      module: "Command",
+      cmd: "cargo",
+      params: ["clippy", "--", "-D", "warnings"],
+      "scan-by-crate": true,
+    },
+    {
+      module: "Command",
+      cmd: "cargo",
+      params: ["geiger"],
+      "scan-by-crate": true,
+    },
+  ],
 };
 
 /**
  * @brief Clones one static-check entry into its persisted shape.
- * @details Copies only the stable module, cmd, and params fields so runtime-only or unknown metadata never leaks into persisted configuration payloads. Runtime is O(p) in parameter count. No external state is mutated.
+ * @details Copies only the stable module, cmd, params, `scan-by-dir`, and `scan-by-crate` fields so runtime-only or unknown metadata never leaks into persisted configuration payloads. Runtime is O(p) in parameter count. No external state is mutated.
  * @param[in] entry {StaticCheckEntry} Source static-check entry.
  * @return {StaticCheckEntry} Persistable static-check entry clone.
  */
@@ -377,6 +392,7 @@ function cloneStaticCheckEntry(entry: StaticCheckEntry): StaticCheckEntry {
     ...(typeof entry.cmd === "string" && entry.cmd.trim() ? { cmd: entry.cmd.trim() } : {}),
     ...(params.length > 0 ? { params } : {}),
     ...(typeof entry["scan-by-dir"] === "boolean" ? { "scan-by-dir": entry["scan-by-dir"] } : {}),
+    ...(typeof entry["scan-by-crate"] === "boolean" ? { "scan-by-crate": entry["scan-by-crate"] } : {}),
   };
 }
 
@@ -485,7 +501,7 @@ function mergeStaticCheckConfig(
  * @brief Returns the documented default static-check configuration.
  * @details Emits one effective per-language config object for every supported language by merging documented global checker defaults with derived local enable defaults. Runtime is O(l + c). No external state is mutated.
  * @return {Record<string, StaticCheckLanguageConfig>} Fresh default effective static-check config.
- * @satisfies REQ-249, REQ-250, REQ-251, REQ-252, REQ-316
+ * @satisfies REQ-249, REQ-250, REQ-251, REQ-252, REQ-316, REQ-853
  */
 export function getDefaultStaticCheckConfig(): Record<string, StaticCheckLanguageConfig> {
   const globalStaticCheckConfig = getDefaultGlobalStaticCheckConfig();
@@ -768,7 +784,7 @@ function mergeConfigScopes(
  * @details Composes documented local and global defaults, then merges them into the effective runtime config consumed by CLI and extension code. Time complexity is O(l + c). No filesystem side effects occur.
  * @param[in] _projectBase {string} Absolute project root path retained for stable call sites.
  * @return {UseReqConfig} Fresh default effective configuration object.
- * @satisfies CTN-001, CTN-012, CTN-013, CTN-018, CTN-019, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-250, REQ-251, REQ-252, REQ-277, REQ-315, REQ-316, REQ-413, REQ-414
+ * @satisfies CTN-001, CTN-012, CTN-013, CTN-018, CTN-019, REQ-066, REQ-137, REQ-146, REQ-163, REQ-174, REQ-178, REQ-184, REQ-185, REQ-196, REQ-204, REQ-205, REQ-212, REQ-236, REQ-237, REQ-238, REQ-239, REQ-249, REQ-250, REQ-251, REQ-252, REQ-277, REQ-315, REQ-316, REQ-413, REQ-414, REQ-853
  */
 export function getDefaultConfig(_projectBase: string): UseReqConfig {
   const globalConfig = getDefaultGlobalConfig();
@@ -780,10 +796,10 @@ export function getDefaultConfig(_projectBase: string): UseReqConfig {
 
 /**
  * @brief Normalizes one raw checker-entry array from persisted config.
- * @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, preserves an explicit persisted `scan-by-dir` boolean, defaults absent flags to `true` for directory-scan-capable commands (`cppcheck`, `ruff`, `eslint`, `gosec`) and `false` otherwise, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
+ * @details Accepts only object entries with a non-empty module string, trims optional command text, filters blank params, preserves explicit persisted `scan-by-dir` and `scan-by-crate` booleans, defaults absent `scan-by-dir` flags to `true` for directory-scan-capable commands (`cppcheck`, `ruff`, `eslint`, `gosec`), defaults absent `scan-by-crate` flags to `true` for the crate-level-capable command (`cargo`), defaults both to FALSE otherwise, and drops malformed records without applying any legacy schema migrations. Runtime is O(c + p). No external state is mutated.
  * @param[in] value {unknown} Candidate persisted checker array.
  * @return {StaticCheckEntry[]} Normalized checker-entry vector.
- * @satisfies REQ-694, REQ-695
+ * @satisfies REQ-694, REQ-695, REQ-849, REQ-850
  */
 function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[] {
   if (!Array.isArray(value)) {
@@ -806,6 +822,11 @@ function normalizeStaticCheckEntries(value: unknown): StaticCheckEntry[] {
         ? { "scan-by-dir": entry["scan-by-dir"] }
         : (supportsStaticCheckDirScan(typeof entry.cmd === "string" ? entry.cmd : undefined)
           ? { "scan-by-dir": true }
+          : {})),
+      ...(typeof entry["scan-by-crate"] === "boolean"
+        ? { "scan-by-crate": entry["scan-by-crate"] }
+        : (supportsStaticCheckCrateScan(typeof entry.cmd === "string" ? entry.cmd : undefined)
+          ? { "scan-by-crate": true }
           : {})),
     }));
   }
