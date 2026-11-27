@@ -9329,6 +9329,69 @@ test("configuration menu can disable configurable active tools", async () => {
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
 
+test("enable-all and Enable tools reset remove the persisted default-equal enabled-tools entry", async () => {
+  const cwd = createTempDir("pi-usereq-menu-tools-prune-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const customizedConfig = getDefaultConfig(cwd);
+  customizedConfig["enabled-tools"] = ["req-search"];
+  saveFixtureConfigs(cwd, customizedConfig);
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+
+  await command!.handler("", createFakeCtx(cwd, {
+    selects: ["Enable tools", "Enable all configurable tools", "Save and close", "Save and close"],
+  }));
+
+  let globalConfig = readGlobalConfigJson();
+  assert.equal(Object.hasOwn(globalConfig, "enabled-tools"), false);
+  assert.equal(globalConfig.AUTO_GIT_COMMIT, "enable");
+  assert.ok(pi.getActiveTools().includes("req-search"));
+
+  await command!.handler("", createFakeCtx(cwd, {
+    selects: ["Enable tools", "Disable all configurable tools", "Save and close", "Save and close"],
+  }));
+  globalConfig = readGlobalConfigJson();
+  assert.deepEqual(globalConfig["enabled-tools"], []);
+
+  await command!.handler("", createFakeCtx(cwd, {
+    selects: ["Enable tools", "Reset defaults", "Approve reset", "Save and close", "Save and close"],
+  }));
+  globalConfig = readGlobalConfigJson();
+  assert.equal(Object.hasOwn(globalConfig, "enabled-tools"), false);
+  const activeTools = new Set(pi.getActiveTools());
+  for (const toolName of PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES) {
+    assert.ok(activeTools.has(toolName), `missing default active tool ${toolName}`);
+  }
+  const localConfig = readProjectConfigJson(cwd);
+  assert.equal(Object.hasOwn(localConfig, "enabled-tools"), false);
+});
+
+test("static-check reset removes restored-default static-check entries from persisted configuration files", async () => {
+  const cwd = createTempDir("pi-usereq-menu-static-prune-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  const customizedConfig = getDefaultConfig(cwd);
+  customizedConfig["static-check"].Python.checkers.push({ module: "Command", cmd: "custom-checker" });
+  customizedConfig["static-check"].Ruby.enabled = "enable";
+  saveFixtureConfigs(cwd, customizedConfig);
+  const pi = createFakePi();
+  piUsereqExtension(pi);
+  const command = pi.commands.get("pi-usereq");
+  assert.ok(command);
+
+  await command!.handler("", createFakeCtx(cwd, {
+    selects: ["Language static code checkers", "Reset defaults", "Approve reset", "Save and close", "Save and close"],
+  }));
+
+  const localConfig = readProjectConfigJson(cwd);
+  const globalConfig = readGlobalConfigJson();
+  assert.equal(Object.hasOwn(localConfig, "static-check"), false);
+  assert.equal(Object.hasOwn(globalConfig, "static-check"), false);
+  assert.equal(globalConfig.AUTO_GIT_COMMIT, "enable");
+  assert.equal(localConfig["docs-dir"], "usereq/docs");
+});
+
 test("configuration menu can persist notify and boot-sound settings without changing runtime sound", async () => {
   const cwd = createTempDir("pi-usereq-menu-notify-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
@@ -10612,11 +10675,7 @@ test("configuration menu can toggle per-language static-check enablement", async
   const localConfig = readProjectConfigJson(cwd);
   const globalConfig = readGlobalConfigJson();
   assert.equal((localConfig["static-check"] as Record<string, any>).Python.enabled, "disable");
-  assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
-    { module: "Command", cmd: "pyright", params: ["--outputjson"] },
-    { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
-    { module: "Command", cmd: "bandit" },
-  ]);
+  assert.equal(Object.hasOwn(globalConfig, "static-check"), false);
 });
 
 test("configuration menu can add guided static-check entries for explicit supported languages", async () => {

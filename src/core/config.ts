@@ -52,7 +52,7 @@ import {
   type DebugPromptsEnabled,
   type DebugToolCommandsEnabled,
 } from "./debug-runtime.js";
-import { normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
+import { PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES, normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
 import { supportsStaticCheckDirScan } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 
@@ -1177,6 +1177,77 @@ export function saveGlobalConfig(config: UseReqConfig): void {
 export function saveConfig(projectBase: string, config: UseReqConfig): void {
   saveLocalConfig(projectBase, config);
   saveGlobalConfig(config);
+}
+
+/**
+ * @brief Tests whether two JSON-compatible configuration values render identical JSON text.
+ * @details Compares `JSON.stringify(...)` renderings so arrays and objects compare structurally while `undefined` equals only `undefined`. Runtime is O(n) in serialized size. No external state is mutated.
+ * @param[in] left {unknown} First persisted configuration value.
+ * @param[in] right {unknown} Second persisted configuration value.
+ * @return {boolean} `true` when both values render identical JSON text.
+ */
+function isSamePersistedConfigValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * @brief Deletes every `static-check` entry equal to its documented default from one persisted scope payload.
+ * @details Removes per-language `static-check` entries whose projected value deep-equals the documented default, deletes the whole `static-check` container when it already equals the default subtree or becomes empty, and preserves every other payload key. Runtime is O(n) in static-check entry size. Side effects include in-place payload mutation.
+ * @param[in,out] payload {Record<string, unknown>} Persisted scope payload to prune.
+ * @param[in] defaultPayload {Record<string, unknown>} Schema-projected default payload supplying the documented default subtree.
+ * @return {void} No return value.
+ * @satisfies REQ-835, REQ-836
+ */
+function pruneStaticCheckDefaultsFromPayload(payload: Record<string, unknown>, defaultPayload: Record<string, unknown>): void {
+  const persisted = payload["static-check"];
+  if (persisted === undefined) {
+    return;
+  }
+  const defaults = defaultPayload["static-check"];
+  if (isSamePersistedConfigValue(persisted, defaults)) {
+    delete payload["static-check"];
+    return;
+  }
+  if (typeof persisted !== "object" || persisted === null || Array.isArray(persisted)) {
+    return;
+  }
+  if (typeof defaults !== "object" || defaults === null || Array.isArray(defaults)) {
+    return;
+  }
+  const persistedEntries = persisted as Record<string, unknown>;
+  const defaultEntries = defaults as Record<string, unknown>;
+  for (const language of Object.keys(persistedEntries)) {
+    if (isSamePersistedConfigValue(persistedEntries[language], defaultEntries[language])) {
+      delete persistedEntries[language];
+    }
+  }
+  if (Object.keys(persistedEntries).length === 0) {
+    delete payload["static-check"];
+  }
+}
+
+/**
+ * @brief Persists both configuration scopes while pruning default-equal tool and static-check entries.
+ * @details Projects the effective configuration into local and global payloads, deletes the global `enabled-tools` entry when the normalized effective enabled-tool set equals the default-enabled set, deletes every `static-check` entry equal to its documented default from both payloads, and writes both scope files with the pruning result so absence re-selects the documented defaults on later loads while every other persisted key is preserved. Runtime is O(n) in config size. Side effects include local and global configuration writes.
+ * @param[in] projectBase {string} Absolute project root path.
+ * @param[in] config {UseReqConfig} Effective configuration object to persist.
+ * @return {void} No return value.
+ * @satisfies REQ-831, REQ-832, REQ-833, REQ-834, REQ-835, REQ-836
+ */
+export function saveConfigWithDefaultPruning(projectBase: string, config: UseReqConfig): void {
+  const defaultConfig = getDefaultConfig(projectBase);
+  const localPayload = getPersistedLocalConfigPayload(config);
+  const globalPayload = getPersistedGlobalConfigPayload(config);
+  const enabledTools = normalizeEnabledPiUsereqTools(config["enabled-tools"]);
+  const enabledToolsMatchDefault = enabledTools.length === PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES.length
+    && enabledTools.every((toolName) => (PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES as readonly string[]).includes(toolName));
+  if (enabledToolsMatchDefault) {
+    delete globalPayload["enabled-tools"];
+  }
+  pruneStaticCheckDefaultsFromPayload(localPayload, getPersistedLocalConfigPayload(defaultConfig));
+  pruneStaticCheckDefaultsFromPayload(globalPayload, getPersistedGlobalConfigPayload(defaultConfig));
+  writeConfigFile(getProjectConfigPath(projectBase), localPayload);
+  writeConfigFile(getGlobalConfigPath(), globalPayload);
 }
 
 /**

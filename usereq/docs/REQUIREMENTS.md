@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.183"
+version: "0.0.184"
 date: "2026-11-27"
 author: "OpenAI Codex"
 scope:
@@ -901,6 +901,12 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-828**: MUST retain the reused worktree and keep the current session anchored on it when command-side preflight, prompt rendering, or prompt handoff fails before agent completion.
 - **REQ-829**: MUST resolve the reused execution plan's base-path from the main repository worktree and its original session from the retained execution-session `parentSession` link.
 - **REQ-830**: MUST build `gosec` directory-scan exclusion tokens as one repeatable `-exclude-dir <root>` argument per excluded fixture root.
+- **REQ-831**: MUST persist the global `enabled-tools` selection only when the effective enabled-tool set differs from the default-enabled selection.
+- **REQ-832**: MUST remove the persisted global `enabled-tools` entry when the effective enabled-tool set equals the default-enabled selection.
+- **REQ-833**: MUST persist the empty `enabled-tools` selection when Disable all configurable tools disables every configurable tool.
+- **REQ-834**: MUST make every `Reset defaults` action in the Enable tools menus re-apply the default-enabled selection and remove the persisted global `enabled-tools` entry.
+- **REQ-835**: MUST make `Reset static code checker` remove every static-check entry restored to its documented default from the persisted local and global configuration payloads.
+- **REQ-836**: MUST make the static-check subtree `Reset defaults` remove every static-check entry restored to its documented default from the persisted local and global configuration payloads.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1158,6 +1164,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-265**: MUST verify a prompt command reusing a dirty retained worktree validates the main repository git state and continues execution on the reused worktree.
 - **TST-266**: MUST verify command-side failures after REQ-825 worktree reuse retain the reused worktree and keep the current session anchored on it.
 - **TST-267**: MUST verify a successful reused-worktree run restores the main base-path session, merges the reused branch, and deletes the reused worktree.
+- **TST-268**: MUST verify Enable all configurable tools removes the persisted global `enabled-tools` entry when the effective selection equals the default-enabled selection.
+- **TST-269**: MUST verify Disable all configurable tools persists the empty `enabled-tools` selection and Enable tools `Reset defaults` actions remove the persisted global `enabled-tools` entry.
+- **TST-270**: MUST verify static-check resets remove restored-default static-check entries from persisted local and global configuration files while preserving unrelated persisted keys.
 
 ## 5. Observed Component Model
 

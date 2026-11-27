@@ -1816,7 +1816,7 @@ import { ReqError } from "./errors.js";
 
 ---
 
-# config.ts | TypeScript | 1259L | 46 symbols | 9 imports | 56 comments
+# config.ts | TypeScript | 1330L | 49 symbols | 9 imports | 59 comments
 > Path: `src/core/config.ts`
 - @brief Loads, normalizes, merges, and persists pi-usereq configuration.
 - @details Defines the effective configuration schema, split local/global persistence contracts, JSON serialization helpers, and prompt placeholder expansion paths. Runtime is dominated by filesystem reads and writes plus linear normalization over configured entries. Side effects include config-file persistence under `.pi-usereq.json` and `~/.config/pi-usereq/config.json`.
@@ -1829,7 +1829,7 @@ import { ReqError } from "./errors.js";
 import {
 import {
 import {
-import { normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
+import { PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES, normalizeEnabledPiUsereqTools } from "./pi-usereq-tools.js";
 import { supportsStaticCheckDirScan } from "./static-check.js";
 import { makeRelativeIfContainsProject } from "./utils.js";
 ```
@@ -2119,14 +2119,37 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 - @return {void} No return value.
 - @satisfies CTN-012, CTN-018, REQ-137, REQ-146, REQ-315
 
-### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L1189-1207)
+### fn `function isSamePersistedConfigValue(left: unknown, right: unknown): boolean` (L1189-1191)
+- @brief Tests whether two JSON-compatible configuration values render identical JSON text.
+- @details Compares `JSON.stringify(...)` renderings so arrays and objects compare structurally while `undefined` equals only `undefined`. Runtime is O(n) in serialized size. No external state is mutated.
+- @param[in] left {unknown} First persisted configuration value.
+- @param[in] right {unknown} Second persisted configuration value.
+- @return {boolean} `true` when both values render identical JSON text.
+
+### fn `function pruneStaticCheckDefaultsFromPayload(payload: Record<string, unknown>, defaultPayload: Record<string, unknown>): void` (L1201-1227)
+- @brief Deletes every `static-check` entry equal to its documented default from one persisted scope payload.
+- @details Removes per-language `static-check` entries whose projected value deep-equals the documented default, deletes the whole `static-check` container when it already equals the default subtree or becomes empty, and preserves every other payload key. Runtime is O(n) in static-check entry size. Side effects include in-place payload mutation.
+- @param[in] defaultPayload {Record<string, unknown>} Schema-projected default payload supplying the documented default subtree.
+- @param[in,out] payload {Record<string, unknown>} Persisted scope payload to prune.
+- @return {void} No return value.
+- @satisfies REQ-835, REQ-836
+
+### fn `export function saveConfigWithDefaultPruning(projectBase: string, config: UseReqConfig): void` (L1237-1251)
+- @brief Persists both configuration scopes while pruning default-equal tool and static-check entries.
+- @details Projects the effective configuration into local and global payloads, deletes the global `enabled-tools` entry when the normalized effective enabled-tool set equals the default-enabled set, deletes every `static-check` entry equal to its documented default from both payloads, and writes both scope files with the pruning result so absence re-selects the documented defaults on later loads while every other persisted key is preserved. Runtime is O(n) in config size. Side effects include local and global configuration writes.
+- @param[in] projectBase {string} Absolute project root path.
+- @param[in] config {UseReqConfig} Effective configuration object to persist.
+- @return {void} No return value.
+- @satisfies REQ-831, REQ-832, REQ-833, REQ-834, REQ-835, REQ-836
+
+### fn `export function normalizeConfigPaths(projectBase: string, config: UseReqConfig): UseReqConfig` (L1260-1278)
 - @brief Normalizes persisted directory fields to project-relative forms.
 - @details Rewrites docs, tests, and source directories using project containment heuristics, strips trailing separators, and restores defaults for empty results. Runtime is O(n) in configured path count plus path-length processing. No filesystem writes occur.
 - @param[in] projectBase {string} Absolute project root path.
 - @param[in] config {UseReqConfig} Configuration object to normalize.
 - @return {UseReqConfig} Normalized configuration copy.
 
-### fn `export function buildPromptReplacementPaths(` (L1217-1259)
+### fn `export function buildPromptReplacementPaths(` (L1288-1330)
 - @brief Builds placeholder replacements for bundled prompt rendering.
 - @details Computes runtime path context from the execution path, derives installation-owned template and guideline paths, enumerates visible guideline files from the installed resource tree, and returns the token map consumed by prompt templates. Runtime is O(g log g + s) where g is guideline count and s is source-directory count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute project root path.
@@ -2181,8 +2204,11 @@ import { makeRelativeIfContainsProject } from "./utils.js";
 |`saveLocalConfig`|fn||1154-1156|export function saveLocalConfig(projectBase: string, conf...|
 |`saveGlobalConfig`|fn||1165-1167|export function saveGlobalConfig(config: UseReqConfig): void|
 |`saveConfig`|fn||1177-1180|export function saveConfig(projectBase: string, config: U...|
-|`normalizeConfigPaths`|fn||1189-1207|export function normalizeConfigPaths(projectBase: string,...|
-|`buildPromptReplacementPaths`|fn||1217-1259|export function buildPromptReplacementPaths(|
+|`isSamePersistedConfigValue`|fn||1189-1191|function isSamePersistedConfigValue(left: unknown, right:...|
+|`pruneStaticCheckDefaultsFromPayload`|fn||1201-1227|function pruneStaticCheckDefaultsFromPayload(payload: Rec...|
+|`saveConfigWithDefaultPruning`|fn||1237-1251|export function saveConfigWithDefaultPruning(projectBase:...|
+|`normalizeConfigPaths`|fn||1260-1278|export function normalizeConfigPaths(projectBase: string,...|
+|`buildPromptReplacementPaths`|fn||1288-1330|export function buildPromptReplacementPaths(|
 
 
 ---
@@ -8660,12 +8686,12 @@ cost.
 - @satisfies DES-015, REQ-323, REQ-324, REQ-325
 
 ### fn `function saveProjectConfig(cwd: string, config: UseReqConfig): void` (L545-548)
-- @brief Persists effective project configuration from the extension runtime.
-- @details Resolves the project base, normalizes configured local directory paths into project-relative form, and delegates split local/global persistence to `saveConfig` without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
+- @brief Persists effective project configuration from the extension runtime with default-equal pruning.
+- @details Resolves the project base, normalizes configured local directory paths into project-relative form, and delegates split local/global persistence to `saveConfigWithDefaultPruning` so the global `enabled-tools` entry is removed when the effective selection equals the default-enabled selection and `static-check` entries restored to their documented defaults are removed from both persisted payloads without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
 - @param[in] cwd {string} Current working directory.
 - @param[in] config {UseReqConfig} Effective configuration to persist.
 - @return {void} No return value.
-- @satisfies REQ-146, REQ-315
+- @satisfies REQ-146, REQ-315, REQ-831, REQ-832, REQ-833, REQ-834, REQ-835, REQ-836
 
 ### fn `function formatLocalConfigPathForMenu(cwd: string): string` (L557-561)
 - @brief Formats the current local config path for top-level menu display.

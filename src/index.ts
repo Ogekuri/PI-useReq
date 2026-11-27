@@ -42,7 +42,7 @@ import {
   loadConfig,
   normalizeConfigPaths,
   resolveEffectiveGitWorktreeEnabled,
-  saveConfig,
+  saveConfigWithDefaultPruning,
   type StaticCheckEntry,
   type StaticCheckLanguageConfig,
   type UseReqConfig,
@@ -535,16 +535,16 @@ function registerDebugToolCommands(pi: ExtensionAPI): void {
 }
 
 /**
- * @brief Persists effective project configuration from the extension runtime.
- * @details Resolves the project base, normalizes configured local directory paths into project-relative form, and delegates split local/global persistence to `saveConfig` without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
+ * @brief Persists effective project configuration from the extension runtime with default-equal pruning.
+ * @details Resolves the project base, normalizes configured local directory paths into project-relative form, and delegates split local/global persistence to `saveConfigWithDefaultPruning` so the global `enabled-tools` entry is removed when the effective selection equals the default-enabled selection and `static-check` entries restored to their documented defaults are removed from both persisted payloads without serializing runtime-derived path metadata. Runtime is O(n) in config size. Side effects include config-file writes.
  * @param[in] cwd {string} Current working directory.
  * @param[in] config {UseReqConfig} Effective configuration to persist.
  * @return {void} No return value.
- * @satisfies REQ-146, REQ-315
+ * @satisfies REQ-146, REQ-315, REQ-831, REQ-832, REQ-833, REQ-834, REQ-835, REQ-836
  */
 function saveProjectConfig(cwd: string, config: UseReqConfig): void {
   const projectBase = getProjectBase(cwd);
-  saveConfig(projectBase, normalizeConfigPaths(projectBase, config));
+  saveConfigWithDefaultPruning(projectBase, normalizeConfigPaths(projectBase, config));
 }
 
 /**
