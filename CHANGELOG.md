@@ -1,7 +1,15 @@
 # Changelog
 
-## [0.109.36](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.36) - 2026-11-27
+## [0.109.37](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.37) - 2026-11-27
 ### ⛰️  Features
+- add powershell, codemode, tool_search to embedded inventory [useReq] *(pi-usereq-tools)*
+  REQ-063: PI_USEREQ_EMBEDDED_TOOL_NAMES grows to ten tools aligned with pi
+  CLI 1.6.1 (adds powershell, codemode, tool_search). REQ-064/REQ-841:
+  PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES becomes explicit and omits
+  tool_search, which stays default-disabled until enabled-tools selects it.
+  TST-273 adds inventory, default-state, and ordering coverage; two stale
+  startup-tool menu and enable-all pruning expectations were aligned to the
+  new defaults. usereq docs updated; full suite: 579 tests pass.
 - Add new /req-print-result slash-command.
 - Update prompts.
 - Update prompts.
@@ -35,6 +43,19 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- stop disposed controller ticker after session switch [useReq] *(extension-status)*
+  Root cause of fix ➔ running never reaching fix ➔ error after a result
+  "error" closure (log /tmp/PI-useReq/shellScripts-work-20261127101212-req-fix):
+  ctx.switchSession disposes the initiating status controller at the switch-
+  triggered session_shutdown, but the still-running command handler records the
+  post-handoff running transition on that disposed controller through the valid
+  replacement-session context, which restarted its 1-second ticker. Lifecycle
+  events then reach only the replacement controller, whose terminal error render
+  was overwritten every second by the disposed controller with growing timers.
+  Add a disposed latch: disposePiUsereqStatusController sets it and
+  syncPiUsereqStatusTicker never starts a ticker on a disposed controller;
+  one-shot renders and process-scoped persistence stay allowed (REQ-837..839).
+  Add TST-271 regression test; requirements, WORKFLOW.md and REFERENCES.md updated.
 - clear stale settlement facts on recovery [useReq] *(orchestration)*
   Follow-up to the lost-settlement watchdog fix: the REQ-224 auto-recovery and the successful req-wtd recovery cleared the prompt-orchestration runtime state but left the execution-session-keyed finalization snapshot and the armed settlement watchdog in place, so a successor orchestration reusing the same execution session (REQ-826 flow) could adopt the stale terminal outcome through the watchdog or the settle rebind recovery and be wrongly parked in error.
   autoRecoverTerminalReqCommandState now also clears the finalization snapshot and disarms the settlement watchdog (REQ-224).; The req-wtd success recovery clears the same facts (REQ-820).; Oscillation determination: the reported implement/change status oscillation cannot occur after the watchdog fix because a stale orchestration is forced terminal (watchdog park or REQ-823 gate park), its render source freezes (REQ-803/REQ-804), and REQ-224 recovery clears the full persisted state before the successor records its request; the new regression test asserts no stale request render after the successor starts.; New reproducer: lost settlement facts never bleed into a successor reused-worktree orchestration (failed pre-fix on the surviving snapshot; suite green 174 passed / 0 failed; tsc and eslint clean; WORKFLOW.md and REFERENCES.md updated).
@@ -154,6 +175,14 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Update bundled prompts from v0.12.21 to v0.12.22 [useReq] *(prompts)*
+- rename status fields to usage/time and add tool,check counts [useReq] *(extension-status)*
+  REQ-120: single-line order is now identity, status, branch, usage, tool,check, time, sound.
+  REQ-840 (new): tool,check renders enabled-tool and enabled-static-check language counts.
+  REQ-122/123/125/126/127/128/233/284/180: rename context to usage and elapsed to time.
+  TST-033/TST-049 updated; TST-272 (new) verifies the derived running-configuration counts.
+  Tests updated: extension-registration (177 pass), debug-extension-harness (11 pass).
+  WORKFLOW.md call-traces updated; REFERENCES.md regenerated.
 - Prune default-equal tools and static-check entries on save [useReq] *(config)*
   Add saveConfigWithDefaultPruning removing default-equal enabled-tools and static-check persisted entries.; Persist enabled-tools only when the selection differs from the documented defaults (REQ-831..REQ-834).; Remove restored-default static-check entries from local and global payloads (REQ-835..REQ-836).; Update requirements, runtime model, references, and persistence unit tests.
 - Enable all configurable tools by default [useReq] *(tools)*
@@ -1917,7 +1946,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.36\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.36
+- \[0.109.37\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.37
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -2026,4 +2055,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.36]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.36
+[0.109.37]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.37
