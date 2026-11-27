@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.184"
+version: "0.0.185"
 date: "2026-11-27"
 author: "OpenAI Codex"
 scope:
@@ -907,6 +907,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-834**: MUST make every `Reset defaults` action in the Enable tools menus re-apply the default-enabled selection and remove the persisted global `enabled-tools` entry.
 - **REQ-835**: MUST make `Reset static code checker` remove every static-check entry restored to its documented default from the persisted local and global configuration payloads.
 - **REQ-836**: MUST make the static-check subtree `Reset defaults` remove every static-check entry restored to its documented default from the persisted local and global configuration payloads.
+- **REQ-837**: MUST mark the status controller disposed at `session_shutdown` and MUST NOT restart its live elapsed ticker from a later transition on that disposed controller.
+- **REQ-838**: MUST keep persisting workflow-state and elapsed-timer transitions driven on a disposed controller into the process-scoped store so the replacement controller adopts them.
+- **REQ-839**: MUST let the replacement-session controller own live elapsed ticking after a switch-triggered `session_shutdown`, so its terminal transitions are never overwritten by a disposed initiating controller ticker.
 
 ## 4. Test Requirements
 - **TST-172**: MUST execute automated tests using repository-owned fixtures and test doubles without requiring an installed Python interpreter, external req application, or upstream source checkout.
@@ -1167,6 +1170,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-268**: MUST verify Enable all configurable tools removes the persisted global `enabled-tools` entry when the effective selection equals the default-enabled selection.
 - **TST-269**: MUST verify Disable all configurable tools persists the empty `enabled-tools` selection and Enable tools `Reset defaults` actions remove the persisted global `enabled-tools` entry.
 - **TST-270**: MUST verify static-check resets remove restored-default static-check entries from persisted local and global configuration files while preserving unrelated persisted keys.
+- **TST-271**: MUST verify a controller disposed by a switch-triggered `session_shutdown` never restarts its ticker after the post-handoff `running` transition while still rendering and persisting that transition.
 
 ## 5. Observed Component Model
 

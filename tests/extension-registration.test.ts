@@ -105,6 +105,7 @@ import {
 } from "../src/core/pi-usereq-tools.js";
 import {
   createPiUsereqStatusController,
+  disposePiUsereqStatusController,
   renderPiUsereqStatus,
   setPiUsereqStatusConfig,
   setPiUsereqWorkflowState,
@@ -8385,6 +8386,57 @@ test("stale replacement contexts do not break workflow-state rendering", () => {
   });
   assert.equal(controller.state.workflowState, "running");
   assert.equal(controller.latestContext, undefined);
+});
+
+/**
+ * @brief Verifies a disposed status controller never restarts its ticker after the post-handoff `running` transition.
+ * @details Reproduces the live pi runtime defect reported for `/tmp/PI-useReq/shellScripts-work-20261127101212-req-fix`: `ctx.switchSession(...)` delivers a switch-triggered `session_shutdown` that disposes the initiating controller, while the still-running command handler records the post-handoff `running` transition on that controller through the valid replacement-session context. Before the fix that transition restarted the disposed controller's 1-second ticker, which kept re-rendering `<prompt> ➔ running` with growing elapsed timers every second and overwrote the terminal `error` status bar the replacement controller rendered at `agent_settled` for the `result` "error" closure. The test drives the exact sequence at the unit level — in-flight `checking` transition, disposal, post-handoff `running` transition, direct render — and asserts the ticker stays stopped while the one-shot renders still emit, the workflow state still advances to `running`, and the process-scoped store still receives it for the replacement controller. Runtime is O(1) plus one git branch probe per render. Side effects are limited to temporary directory creation and process-scoped state mutation.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when the disposed controller restarts its ticker, stops rendering or persisting the post-handoff transition, or leaves the workflow state unchanged.
+ * @satisfies REQ-837, REQ-838, REQ-839, TST-271
+ */
+test("disposed status controller never restarts its ticker after the post-handoff running transition", () => {
+  const cwd = createTempDir("pi-usereq-disposed-controller-");
+  fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
+  clearPersistedPromptCommandRuntimeState();
+  const controller = createPiUsereqStatusController();
+  setPiUsereqStatusConfig(controller, getDefaultConfig(cwd));
+  const ctx = createFakeCtx(cwd, { selects: [] });
+  const renderedStatuses: string[] = [];
+  const originalSetStatus = ctx.ui.setStatus.bind(ctx.ui);
+  ctx.ui.setStatus = (key: string, value?: string) => {
+    if (key === "pi-usereq" && value !== undefined) {
+      renderedStatuses.push(value);
+    }
+    originalSetStatus(key, value);
+  };
+
+  // Arrange: the initiating controller enters the in-flight `checking` state before
+  // ctx.switchSession(...) tears its extension instance down.
+  setPiUsereqWorkflowState(controller, "checking", ctx);
+  assert.equal(controller.state.workflowState, "checking");
+  assert.notEqual(controller.tickHandle, undefined);
+
+  // Act: the switch-triggered session_shutdown disposes the controller, then the
+  // still-running command handler records the post-handoff `running` transition on
+  // that disposed controller through the valid replacement-session context.
+  disposePiUsereqStatusController(controller);
+  assert.equal(controller.disposed, true);
+  assert.equal(controller.tickHandle, undefined);
+  const statusCountAfterDisposal = renderedStatuses.length;
+  setPiUsereqWorkflowState(controller, "running", ctx);
+  renderPiUsereqStatus(controller, ctx);
+
+  // Assert: no ticker restarts on the disposed controller, while the one-shot renders
+  // still emit, the state advances to `running`, and the transition reaches the
+  // process-scoped store so the replacement-session controller adopts it.
+  assert.equal(controller.tickHandle, undefined);
+  assert.ok(renderedStatuses.length > statusCountAfterDisposal);
+  assert.equal(controller.latestContext, ctx);
+  assert.equal(controller.state.workflowState, "running");
+  assert.equal(readPersistedPromptCommandRuntimeState().workflowState, "running");
+  clearPersistedPromptCommandRuntimeState();
+  fs.rmSync(cwd, { recursive: true, force: true });
 });
 
 test("extension registers wrappers for all pi-usereq status hooks", () => {

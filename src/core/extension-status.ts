@@ -143,9 +143,10 @@ export interface PiUsereqStatusState {
 /**
  * @brief Stores the controller state required for event-driven status updates.
  * @details Keeps the mutable status snapshot, the current configuration, the
- * latest extension context used for rendering, and the interval handle used
- * for live elapsed-time refreshes. Compile-time only and introduces no runtime
- * cost.
+ * latest extension context used for rendering, the interval handle used for
+ * live elapsed-time refreshes, and the `disposed` latch set by
+ * `disposePiUsereqStatusController(...)`. Compile-time only and introduces no
+ * runtime cost.
  */
 export interface PiUsereqStatusController {
   config: UseReqConfig | undefined;
@@ -153,6 +154,12 @@ export interface PiUsereqStatusController {
   state: PiUsereqStatusState;
   tickHandle: ReturnType<typeof setInterval> | undefined;
   settlementWatchdogHandle: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * @brief Latch marking the controller as disposed by `session_shutdown` handling.
+   * @details `true` forbids the live elapsed ticker from starting on this controller; one-shot renders, state mutation, and process-scoped persistence stay allowed so a replacement-session controller adopts the transitions. Runtime is O(1) per read. Side effect: mutated only by `disposePiUsereqStatusController(...)`.
+   * @satisfies REQ-837, REQ-838, REQ-839
+   */
+  disposed: boolean;
 }
 
 /**
@@ -938,19 +945,26 @@ function stopStatusTicker(controller: PiUsereqStatusController): void {
  * so `running_timer`, `context_timer`, and `session_timer` advance concurrently,
  * and stops the ticker once the orchestration reaches a terminal state or the
  * workflow state is otherwise not in flight, so a controller holding a stale
- * in-flight record under an adopted terminal state can never keep ticking. The
- * interval handle is unreferenced so a leaked ticker can never keep a host
- * process alive. Runtime is O(1). Side effects include interval creation,
- * interval disposal, and footer-status mutation on timer ticks.
+ * in-flight record under an adopted terminal state can never keep ticking. A
+ * controller disposed by `session_shutdown` never starts a ticker: pi delivers
+ * every later lifecycle hook to the replacement-session controller, which owns
+ * live rendering, so a disposed initiating controller that still receives the
+ * post-handoff `running` transition through the valid replacement-session
+ * context must not resurrect a ticker that would overwrite the replacement
+ * controller's terminal render every second. The interval handle is
+ * unreferenced so a leaked ticker can never keep a host process alive. Runtime
+ * is O(1). Side effects include interval creation, interval disposal, and
+ * footer-status mutation on timer ticks.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
- * @satisfies REQ-123, REQ-803, REQ-808
+ * @satisfies REQ-123, REQ-803, REQ-808, REQ-837, REQ-839
  */
 function syncPiUsereqStatusTicker(
   controller: PiUsereqStatusController,
 ): void {
   if (
-    controller.state.orchestrationStartMs === undefined
+    controller.disposed
+    || controller.state.orchestrationStartMs === undefined
     || !isPiUsereqWorkflowStateInFlight(controller.state.workflowState)
   ) {
     stopStatusTicker(controller);
@@ -1007,6 +1021,7 @@ export function createPiUsereqStatusController(): PiUsereqStatusController {
     },
     tickHandle: undefined,
     settlementWatchdogHandle: undefined,
+    disposed: false,
   };
 }
 
@@ -1379,16 +1394,15 @@ export function updateExtensionStatus(
 
 /**
  * @brief Disposes the pi-usereq status controller.
- * @details Stops the live ticker, clears the cached context pointer, and leaves
- * the last captured status snapshot available for inspection until the
- * controller object itself is discarded. Runtime is O(1). Side effects are
- * limited to interval disposal and in-memory state mutation.
+ * @details Stops the live ticker, clears any armed settlement watchdog, clears the cached context pointer, and latches `disposed` so no later transition can restart the live ticker on this controller. pi delivers every post-`session_shutdown` lifecycle hook to the replacement-session controller, which owns live ticking; a switch-triggered shutdown therefore must leave the initiating controller without a ticker even when the still-running command handler records the post-handoff `running` transition through the valid replacement-session context, while one-shot renders and process-scoped persistence driven by that handler stay allowed. The last captured status snapshot stays available for inspection until the controller object itself is discarded. Runtime is O(1). Side effects are limited to interval disposal, timer disposal, and in-memory state mutation.
  * @param[in,out] controller {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
+ * @satisfies REQ-837, REQ-838, REQ-839
  */
 export function disposePiUsereqStatusController(
   controller: PiUsereqStatusController,
 ): void {
+  controller.disposed = true;
   stopStatusTicker(controller);
   if (controller.settlementWatchdogHandle !== undefined) {
     clearTimeout(controller.settlementWatchdogHandle);
