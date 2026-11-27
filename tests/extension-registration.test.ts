@@ -9294,7 +9294,7 @@ test("default configuration applies the documented static-check, debug, notify, 
     {
       module: "Command",
       cmd: "flawfinder",
-      params: [],
+      params: ["--minlevel=3", "--error-level=3"],
     },
   ], "enable"));
   assert.deepEqual(config["static-check"]["C++"], createStaticCheckLanguageConfig([
@@ -9321,16 +9321,17 @@ test("default configuration applies the documented static-check, debug, notify, 
     {
       module: "Command",
       cmd: "flawfinder",
-      params: [],
+      params: ["--minlevel=3", "--error-level=3"],
     },
   ], "enable"));
   assert.deepEqual(config["static-check"].Python, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
-    { module: "Command", cmd: "bandit", params: [] },
+    { module: "Command", cmd: "bandit", params: ["--tests", "B602,B605,B606,B506"] },
   ], "enable"));
   assert.deepEqual(config["static-check"].JavaScript, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "node", params: ["--check"] },
+    { module: "Command", cmd: "eslint", params: [], "scan-by-dir": true },
   ], "enable"));
   assert.deepEqual(config["static-check"].TypeScript, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "eslint", params: [], "scan-by-dir": true },
@@ -9374,7 +9375,11 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Python.checkers, [
     { module: "Command", cmd: "pyright", params: ["--outputjson"] },
     { module: "Command", cmd: "ruff", params: ["check"], "scan-by-dir": true },
-    { module: "Command", cmd: "bandit" },
+    { module: "Command", cmd: "bandit", params: ["--tests", "B602,B605,B606,B506"] },
+  ]);
+  assert.deepEqual((globalConfig["static-check"] as Record<string, any>).JavaScript.checkers, [
+    { module: "Command", cmd: "node", params: ["--check"] },
+    { module: "Command", cmd: "eslint", "scan-by-dir": true },
   ]);
   assert.deepEqual((globalConfig["static-check"] as Record<string, any>).Rust.checkers, [
     { module: "Command", cmd: "cargo", params: ["clippy", "--", "-D", "warnings"], "scan-by-crate": true },

@@ -270,8 +270,8 @@ export const DEFAULT_STATIC_CHECK_LANGUAGES = [
 
 /**
  * @brief Defines the default static-check entries per language.
- * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; crate-level shipped checkers (`cargo clippy`, `cargo geiger`) default to `scan-by-crate: true`; every other shipped entry, including the PATH-resolved security checkers `clang-tidy`, `flawfinder`, and `bandit` and the bundled `tsc` compiler checker, defaults to `false`. Access complexity is O(1).
- * @satisfies REQ-250, REQ-251, REQ-252, REQ-699, REQ-853, REQ-855
+ * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; crate-level shipped checkers (`cargo clippy`, `cargo geiger`) default to `scan-by-crate: true`; every other shipped entry, including the PATH-resolved security checkers `clang-tidy`, `flawfinder`, and `bandit` and the bundled `tsc` compiler checker, defaults to `false`. The security checker parameters are fixed: `flawfinder` carries `--minlevel=3 --error-level=3`, `bandit` carries `--tests B602,B605,B606,B506`, and the `JavaScript` language seeds `node --check` plus a `scan-by-dir` TRUE empty-param `eslint` entry. Access complexity is O(1).
+ * @satisfies REQ-250, REQ-251, REQ-252, REQ-699, REQ-853, REQ-855, REQ-857, REQ-858, REQ-859
  */
 const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
   C: [
@@ -298,7 +298,7 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
     {
       module: "Command",
       cmd: "flawfinder",
-      params: [],
+      params: ["--minlevel=3", "--error-level=3"],
     },
   ],
   "C++": [
@@ -325,7 +325,7 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
     {
       module: "Command",
       cmd: "flawfinder",
-      params: [],
+      params: ["--minlevel=3", "--error-level=3"],
     },
   ],
   Python: [
@@ -343,7 +343,7 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
     {
       module: "Command",
       cmd: "bandit",
-      params: [],
+      params: ["--tests", "B602,B605,B606,B506"],
     },
   ],
   JavaScript: [
@@ -351,6 +351,12 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       module: "Command",
       cmd: "node",
       params: ["--check"],
+    },
+    {
+      module: "Command",
+      cmd: "eslint",
+      params: [],
+      "scan-by-dir": true,
     },
   ],
   TypeScript: [

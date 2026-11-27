@@ -1386,7 +1386,7 @@
       - `buildStaticCheckRemovalConfirmationChoices(...)`: serialize targeted checker preview rows plus approve and abort actions for removal confirmation [`src/index.ts`]
       - `confirmStaticCheckRemoval(...)`: open one explicit removal-confirmation submenu and return the approval result [`src/index.ts`]
       - `resetStaticCheckConfig(...)`: restore documented per-language static-check defaults [`src/index.ts`]
-        - `getDefaultStaticCheckConfig(...)`: build documented per-language static-check defaults [`src/core/config.ts`]
+        - `getDefaultStaticCheckConfig(...)`: build documented per-language static-check defaults from the shipped checker inventory, including the `flawfinder --minlevel=3 --error-level=3`, `bandit --tests B602,B605,B606,B506`, and JavaScript `scan-by-dir` TRUE `eslint` entries [`src/core/config.ts`]
           - `createStaticCheckLanguageConfig(...)`: clone checker entries and derive the enable flag [`src/core/config.ts`]
       - `createStaticCheckLanguageConfig(...)`: create empty per-language configs for toggle and removal flows [`src/core/config.ts`]
       - `shellSplit(...)`: parse optional parameter input [`src/core/utils.ts`]

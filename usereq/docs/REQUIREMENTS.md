@@ -231,6 +231,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to documented `pyright`, `ruff`, `bandit`, `node --check`, `eslint`, and `tsc` Command entries.
 - **REQ-252**: MUST default every global `static-check.<language>.checkers` array outside the `C`, `C++`, `Python`, `JavaScript`, `TypeScript`, and `Rust` defaults to `[]`.
 - **REQ-853**: MUST default global `static-check.Rust` checker array to documented `cargo clippy` and `cargo geiger` Command entries.
+- **REQ-857**: MUST default the `flawfinder` shipped static-check entry to `cmd: "flawfinder"` with params `["--minlevel=3", "--error-level=3"]`.
+- **REQ-858**: MUST default the `bandit` shipped static-check entry to `cmd: "bandit"` with params `["--tests", "B602,B605,B606,B506"]`.
+- **REQ-859**: MUST default the `JavaScript` checker array to `node --check` plus a `scan-by-dir` TRUE `eslint` Command entry with empty params.
 - **REQ-316**: MUST default local `static-check.<language>.enabled` to `enable` when global `checkers` is non-empty, otherwise `disable`.
 - **REQ-009**: MUST refresh shared runtime path context, apply configured startup tools, reset workflow state to `idle` and clear the active request for `session_start` reasons `startup|reload`, and publish single-line `pi-usereq` status text.
 - **REQ-109**: MUST omit `current-path`, `base`, `docs`, `src`, and `tests` path fields from the single-line status bar.
@@ -1194,6 +1197,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-270**: MUST verify static-check resets remove restored-default static-check entries from persisted local and global configuration files while preserving unrelated persisted keys.
 - **TST-271**: MUST verify a controller disposed by a switch-triggered `session_shutdown` never restarts its ticker after the post-handoff `running` transition while still rendering and persisting that transition.
 - **TST-276**: MUST verify `req-audit` reports one `installed` verification row for every configured `Command` checker entry of the shipped default inventory, including `tsc`, `bandit`, `clang-tidy`, and `flawfinder`.
+- **TST-277**: MUST verify the shipped default inventory sets `flawfinder --minlevel=3 --error-level=3`, `bandit --tests B602,B605,B606,B506`, and the JavaScript `scan-by-dir` TRUE `eslint` entry.
 
 ## 5. Observed Component Model
 
@@ -1612,6 +1616,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-854 | `src/core/static-check.ts` :: `dispatchStaticCheckForFile` :: crate-level branch dispatches without appending the target file path. |
 | REQ-855 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: TypeScript `tsc` default entry with `cmd: "tsc"` and `["--noEmit"]` params. |
 | REQ-856 | `scripts/install-static-checkers.ts` :: `BUNDLED_NPM_CHECKERS` plus `resolveBundledCheckerPackageName` :: `tsc` bundled inventory entry installed through the `typescript` package. |
+| REQ-857 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: C and C++ `flawfinder` default entry with `["--minlevel=3", "--error-level=3"]` params. |
+| REQ-858 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: Python `bandit` default entry with `["--tests", "B602,B605,B606,B506"]` params. |
+| REQ-859 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: JavaScript `node --check` plus `scan-by-dir: true` `eslint` default entries. |
 | REQ-700 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: explicit-file dispatch without directory-scan branching. |
 | REQ-830 | `src/core/static-check.ts` :: `STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS` :: `gosec -exclude-dir` fixture-root exclusion builder. |
 | REQ-768 | `src/index.ts` :: `formatContextFilesSummary` :: appends the shared-helper occupancy suffix so the top-level `Context Files` summary value wraps the suffix in intense-red ANSI styling exactly above 80 displayed percent. |
@@ -1771,6 +1778,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-267 | `tests/extension-registration.test.ts` :: `req-change auto-recovers the error park and reuses the retained worktree through successful closure` :: base-path restore, branch merge, and worktree deletion after success. |
 | TST-273 | `tests/extension-registration.test.ts` :: `embedded pi CLI tool inventory covers powershell, codemode, and tool_search with codemode default-enabled and tool_search default-disabled` :: inventory membership, default states, and tail ordering. |
 | TST-276 | `tests/extension-registration.test.ts` :: `req-audit audits configured static checkers into the editor without an LLM session or worktree` :: default-inventory rows assert `tsc`, `bandit`, `clang-tidy`, and `flawfinder` verification outcomes. |
+| TST-277 | `tests/extension-registration.test.ts` :: `default configuration applies the documented static-check, debug, notify, sound, and pushover defaults` :: `flawfinder`, `bandit`, and JavaScript `eslint` default entry assertions. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`, `gosec`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.
