@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.188"
+version: "0.0.189"
 date: "2026-11-27"
 author: "OpenAI Codex"
 scope:
@@ -104,7 +104,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-011**: MUST implement `.github/workflows/release-npm.yml` as a two-job GitHub Actions pipeline where `check-branch` gates npm publication inside the release job, preserving changelog-driven GitHub Release creation for every canonical tag.
 - **DES-015**: MUST implement config-gated `debug-compress`, `debug-references`, `debug-static-check`, and `debug-tokens` slash-command wrappers in `src/index.ts` that reuse existing tool-runner execution paths.
 - **DES-016**: MUST deliver rendered bundled-prompt content to the LLM through `sendMessage` as a `display:false` custom message with `triggerTurn:true` and MUST NOT use `sendUserMessage` when `sendMessage` is available.
-- **DES-017**: MUST declare `pyright`, `ruff`, and `eslint` as pinned caret-range npm dependencies and register a `postinstall` script that installs bundled static checkers.
+- **DES-017**: MUST declare `pyright`, `ruff`, `eslint`, and `typescript` as pinned caret-range npm dependencies and register a `postinstall` script that installs bundled static checkers.
 - **DES-018**: MUST resolve checker executables by probing bundled `node_modules/.bin` paths relative to the installation path before falling back to `PATH` scan.
 - **DES-019**: MUST resolve the `%%INSTALLATION_PATH%%` keyword inside static-check `Command` `cmd` fields to the runtime installation path within `resolveCheckerExecutable` before executable probing.
 - **DES-020**: MUST extend `scripts/install-static-checkers.ts` to best-effort approve pending npm install scripts for bundled checker dependencies before probing bundled executables.
@@ -228,7 +228,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-248**: MUST render 20 per-language static-check toggle rows between `Reset static code checker` and `Reset defaults`, with right-aligned `on|off` values derived from persisted local enablement.
 - **REQ-249**: MUST persist local `static-check.<language>.enabled` with allowed values `enable|disable` and global `static-check.<language>.checkers` as ordered arrays.
 - **REQ-250**: MUST default global `static-check.C` and `static-check.C++` checker arrays to documented `cppcheck`, `clang-format`, `clang-tidy`, and `flawfinder` Command entries.
-- **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to documented `pyright`, `ruff`, `bandit`, `node --check`, and `eslint` Command entries.
+- **REQ-251**: MUST default global `static-check.Python`, `JavaScript`, and `TypeScript` checker arrays to documented `pyright`, `ruff`, `bandit`, `node --check`, `eslint`, and `tsc` Command entries.
 - **REQ-252**: MUST default every global `static-check.<language>.checkers` array outside the `C`, `C++`, `Python`, `JavaScript`, `TypeScript`, and `Rust` defaults to `[]`.
 - **REQ-853**: MUST default global `static-check.Rust` checker array to documented `cargo clippy` and `cargo geiger` Command entries.
 - **REQ-316**: MUST default local `static-check.<language>.enabled` to `enable` when global `checkers` is non-empty, otherwise `disable`.
@@ -809,6 +809,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-851**: When effective `scan-by-crate` is TRUE, MUST execute the Command checker entry exactly once from the project base with configured params and no file or directory targets.
 - **REQ-852**: MUST filter captured crate-level checker evidence lines that reference an excluded fixture root by absolute or project-relative path, because crate-level commands expose no native exclusion flags.
 - **REQ-854**: MUST dispatch crate-level Command entries without appending the target file path during explicit-file static-check execution.
+- **REQ-855**: MUST default the TypeScript static-check `Command` entry `tsc` to `cmd: "tsc"` with params `["--noEmit"]`.
+- **REQ-856**: MUST include `tsc` in the `scripts/install-static-checkers.ts` bundled npm checker inventory probing and best-effort installing the bundled TypeScript checker executable.
 - **REQ-700**: MUST keep `req-files-static-check` per-file dispatch independent of `scan-by-dir`.
 - **REQ-701**: MUST expose `req-result-json-validator` only through agent-tool registration.
 - **REQ-702**: MUST validate JSON formatting through native TypeScript parsing and MUST NOT declare a JSON-validation runtime dependency in `package.json`.
@@ -1191,6 +1193,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-269**: MUST verify Disable all configurable tools persists the empty `enabled-tools` selection and Enable tools `Reset defaults` actions remove the persisted global `enabled-tools` entry.
 - **TST-270**: MUST verify static-check resets remove restored-default static-check entries from persisted local and global configuration files while preserving unrelated persisted keys.
 - **TST-271**: MUST verify a controller disposed by a switch-triggered `session_shutdown` never restarts its ticker after the post-handoff `running` transition while still rendering and persisting that transition.
+- **TST-276**: MUST verify `req-audit` reports one `installed` verification row for every configured `Command` checker entry of the shipped default inventory, including `tsc`, `bandit`, `clang-tidy`, and `flawfinder`.
 
 ## 5. Observed Component Model
 
@@ -1607,6 +1610,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-852 | `src/core/static-check.ts` :: `filterCrateEvidenceLines` :: drops captured crate-level evidence lines referencing excluded fixture roots by absolute or project-relative path. |
 | REQ-853 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: `cargo clippy` and `cargo geiger` Rust defaults with `scan-by-crate: true`. |
 | REQ-854 | `src/core/static-check.ts` :: `dispatchStaticCheckForFile` :: crate-level branch dispatches without appending the target file path. |
+| REQ-855 | `src/core/config.ts` :: `DEFAULT_STATIC_CHECK_CHECKERS` :: TypeScript `tsc` default entry with `cmd: "tsc"` and `["--noEmit"]` params. |
+| REQ-856 | `scripts/install-static-checkers.ts` :: `BUNDLED_NPM_CHECKERS` plus `resolveBundledCheckerPackageName` :: `tsc` bundled inventory entry installed through the `typescript` package. |
 | REQ-700 | `src/core/tool-runner.ts` :: `runFilesStaticCheck` :: explicit-file dispatch without directory-scan branching. |
 | REQ-830 | `src/core/static-check.ts` :: `STATIC_CHECK_DIR_SCAN_EXCLUSION_ARG_BUILDERS` :: `gosec -exclude-dir` fixture-root exclusion builder. |
 | REQ-768 | `src/index.ts` :: `formatContextFilesSummary` :: appends the shared-helper occupancy suffix so the top-level `Context Files` summary value wraps the suffix in intense-red ANSI styling exactly above 80 displayed percent. |
@@ -1765,6 +1770,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-266 | `tests/extension-registration.test.ts` :: reuse coverage with a dirty main repository :: retained worktree and anchored session after command-side failure. |
 | TST-267 | `tests/extension-registration.test.ts` :: `req-change auto-recovers the error park and reuses the retained worktree through successful closure` :: base-path restore, branch merge, and worktree deletion after success. |
 | TST-273 | `tests/extension-registration.test.ts` :: `embedded pi CLI tool inventory covers powershell, codemode, and tool_search with codemode default-enabled and tool_search default-disabled` :: inventory membership, default states, and tail ordering. |
+| TST-276 | `tests/extension-registration.test.ts` :: `req-audit audits configured static checkers into the editor without an LLM session or worktree` :: default-inventory rows assert `tsc`, `bandit`, `clang-tidy`, and `flawfinder` verification outcomes. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`, `gosec`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

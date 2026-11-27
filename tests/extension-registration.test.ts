@@ -9334,6 +9334,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   ], "enable"));
   assert.deepEqual(config["static-check"].TypeScript, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "eslint", params: [], "scan-by-dir": true },
+    { module: "Command", cmd: "tsc", params: ["--noEmit"] },
   ], "enable"));
   assert.deepEqual(config["static-check"].Rust, createStaticCheckLanguageConfig([
     { module: "Command", cmd: "cargo", params: ["clippy", "--", "-D", "warnings"], "scan-by-crate": true },
@@ -12444,10 +12445,10 @@ test("result error park freezes elapsed timers a rebound runtime restores in fli
 
 /**
  * @brief Verifies `req-audit` audits configured static checkers into the editor without an LLM session or worktree.
- * @details Activates the extension on a fixture repository, asserts the dedicated registration and its `/req-continue` eligibility, dispatches the handler with a `--prj-base` argument targeting a plain temporary directory, and verifies the audit table reaches the editor with the `language`, `static-check`, and `installed` columns naming the audited base, the workflow status parks `audit ➔ done`, the outcome notification reports the audited configured-checker and missing-executable counts at info severity, and no new LLM session is created. Runtime is dominated by executable resolution probing. Side effects are limited to temporary filesystem mutation and fake UI state.
+ * @details Activates the extension on a fixture repository, asserts the dedicated registration and its `/req-continue` eligibility, dispatches the handler with a `--prj-base` argument targeting a plain temporary directory, and verifies the audit table reaches the editor with the `language`, `static-check`, and `installed` columns naming the audited base plus one `installed` verification row for every configured `Command` checker of the shipped default inventory (`tsc`, `bandit`, `clang-tidy`, and `flawfinder` included), the workflow status parks `audit ➔ done`, the outcome notification reports the audited configured-checker and missing-executable counts at info severity, and no new LLM session is created. Runtime is dominated by executable resolution probing. Side effects are limited to temporary filesystem mutation and fake UI state.
  * @return {Promise<void>} Promise resolved after the handler assertions complete.
  * @throws {AssertionError} Throws when the editor payload, workflow status, outcome notification, or session invariants diverge.
- * @satisfies REQ-842, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848, TST-274, TST-275
+ * @satisfies REQ-842, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848, TST-274, TST-275, TST-276
  */
 test("req-audit audits configured static checkers into the editor without an LLM session or worktree", async () => {
   const { projectBase } = initFixtureRepo({ fixtures: [] });
@@ -12470,6 +12471,12 @@ test("req-audit audits configured static checkers into the editor without an LLM
     assert.match(editorText, /language/, "editor payload renders the language column");
     assert.match(editorText, /installed/, "editor payload renders the installed column");
     assert.ok(editorText.includes(externalBase), "editor payload names the --prj-base audited base");
+    for (const defaultCheckerRow of ["tsc --noEmit", "bandit", "clang-tidy", "flawfinder"]) {
+      assert.ok(
+        editorText.includes(defaultCheckerRow),
+        `audit table missing shipped default checker row '${defaultCheckerRow}'`,
+      );
+    }
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
       /audit ➔ done/,

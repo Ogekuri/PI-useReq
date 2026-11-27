@@ -2,7 +2,7 @@
 /**
  * @file
  * @brief Implements the best-effort postinstall installer for bundled static checkers.
- * @details Probes bundled npm-backed static-check executables (`pyright`, `ruff`, `eslint`), attempts a best-effort `npm install --no-save --prefix` on miss, and prints platform-specific guidance for native checkers (`cppcheck`, `clang-format`). Runtime is dominated by child-process probing and optional npm execution. Side effects include stdout/stderr writes, filesystem reads, and best-effort `npm install` subprocess spawning. The script always exits with code `0` and never modifies git-tracked files.
+ * @details Probes bundled npm-backed static-check executables (`pyright`, `ruff`, `eslint`, `tsc`), attempts a best-effort `npm install --no-save --prefix` on miss (installing the `tsc` executable through the `typescript` package), and prints platform-specific guidance for native checkers (`cppcheck`, `clang-format`). Runtime is dominated by child-process probing and optional npm execution. Side effects include stdout/stderr writes, filesystem reads, and best-effort `npm install` subprocess spawning. The script always exits with code `0` and never modifies git-tracked files.
  */
 
 import process from "node:process";
@@ -13,10 +13,11 @@ import { resolveCheckerExecutable } from "../src/core/static-check.js";
 import { getInstallationPath } from "../src/core/path-context.js";
 
 /**
- * @brief Lists the npm-bundled static-check package names that the extension ships as dependencies.
- * @details Each entry maps to one executable name resolvable through bundled `node_modules/.bin` after `npm install` completes. Access complexity is O(1).
+ * @brief Lists the npm-bundled static-check executable names that the extension ships as dependencies.
+ * @details Each entry maps to one executable name resolvable through bundled `node_modules/.bin` after `npm install` completes; the `tsc` executable is shipped through the `typescript` package mapped by `resolveBundledCheckerPackageName`. Access complexity is O(1).
+ * @satisfies REQ-856
  */
-export const BUNDLED_NPM_CHECKERS = ["pyright", "ruff", "eslint"] as const;
+export const BUNDLED_NPM_CHECKERS = ["pyright", "ruff", "eslint", "tsc"] as const;
 
 /**
  * @brief Lists the native system-package-manager static-check executables that the extension cannot bundle.
@@ -27,7 +28,7 @@ export const NATIVE_CHECKERS = ["cppcheck", "clang-format"] as const;
 /**
  * @brief Maps one bundled npm checker name to its pinned caret install range.
  * @details Returns the caret range matching the package manifest so best-effort installs stay aligned with declared dependencies. Runtime is O(1). No side effects occur.
- * @param[in] pkg {string} Bundled npm package name.
+ * @param[in] pkg {string} Bundled npm checker executable name.
  * @return {string} Pinned caret install range.
  */
 function bundledCheckerRange(pkg: string): string {
@@ -38,9 +39,22 @@ function bundledCheckerRange(pkg: string): string {
       return "^1.5.4";
     case "eslint":
       return "^10.2.0";
+    case "tsc":
+      return "^5.9.3";
     default:
       return "latest";
   }
+}
+
+/**
+ * @brief Resolves the npm package name installing one bundled checker executable.
+ * @details Maps the `tsc` checker executable onto the `typescript` package that ships it and returns every other bundled checker executable name verbatim so `npm install` targets the owning package instead of a nonexistent executable package. Runtime is O(1). No side effects occur.
+ * @param[in] checkerExecutable {string} Bundled npm checker executable name.
+ * @return {string} npm package name providing the executable.
+ * @satisfies REQ-856
+ */
+export function resolveBundledCheckerPackageName(checkerExecutable: string): string {
+  return checkerExecutable === "tsc" ? "typescript" : checkerExecutable;
 }
 
 /**
@@ -265,17 +279,18 @@ function printNativeCheckerGuidance(): void {
 
 /**
  * @brief Attempts a best-effort `npm install` for one missing bundled checker.
- * @details Runs `npm install <pkg>@<range> --no-save --prefix <installation-root>` inside the installation parent directory, swallowing all errors so the postinstall flow never fails. Runtime is dominated by npm execution. Side effects include subprocess spawning and optional writes under the installation root.
- * @param[in] pkg {string} Bundled npm package name.
+ * @details Runs `npm install <package>@<range> --no-save --prefix <installation-root>` inside the installation parent directory, resolving the package name through `resolveBundledCheckerPackageName` so the `tsc` executable installs through the `typescript` package, swallowing all errors so the postinstall flow never fails. Runtime is dominated by npm execution. Side effects include subprocess spawning and optional writes under the installation root.
+ * @param[in] pkg {string} Bundled npm checker executable name.
  * @return {void} No return value.
  */
 function attemptBundledInstall(pkg: string): void {
   const range = bundledCheckerRange(pkg);
+  const packageName = resolveBundledCheckerPackageName(pkg);
   const installRoot = path.resolve(getInstallationPath(), "..");
   try {
     const result = spawnSync(
       "npm",
-      ["install", `${pkg}@${range}`, "--no-save", "--prefix", installRoot],
+      ["install", `${packageName}@${range}`, "--no-save", "--prefix", installRoot],
       { encoding: "utf8" },
     );
     if (result.error) {

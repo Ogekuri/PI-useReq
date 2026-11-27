@@ -270,8 +270,8 @@ export const DEFAULT_STATIC_CHECK_LANGUAGES = [
 
 /**
  * @brief Defines the default static-check entries per language.
- * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; crate-level shipped checkers (`cargo clippy`, `cargo geiger`) default to `scan-by-crate: true`; every other shipped entry, including the PATH-resolved security checkers `clang-tidy`, `flawfinder`, and `bandit`, defaults to `false`. Access complexity is O(1).
- * @satisfies REQ-250, REQ-251, REQ-252, REQ-699, REQ-853
+ * @details Seeds the documented default Command checker lists for enabled-by-default languages while languages omitted from the map default to empty checker lists. Directory-scan-capable shipped checkers (`cppcheck`, `ruff`, `eslint`) default to `scan-by-dir: true`; crate-level shipped checkers (`cargo clippy`, `cargo geiger`) default to `scan-by-crate: true`; every other shipped entry, including the PATH-resolved security checkers `clang-tidy`, `flawfinder`, and `bandit` and the bundled `tsc` compiler checker, defaults to `false`. Access complexity is O(1).
+ * @satisfies REQ-250, REQ-251, REQ-252, REQ-699, REQ-853, REQ-855
  */
 const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
   C: [
@@ -359,6 +359,11 @@ const DEFAULT_STATIC_CHECK_CHECKERS: Record<string, StaticCheckEntry[]> = {
       cmd: "eslint",
       params: [],
       "scan-by-dir": true,
+    },
+    {
+      module: "Command",
+      cmd: "tsc",
+      params: ["--noEmit"],
     },
   ],
   Rust: [
