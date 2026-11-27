@@ -11,6 +11,7 @@ import {
   REQ_REFERENCES_COMMAND_DESCRIPTION,
   REQ_REFERENCES_COMMIT_MESSAGE,
 } from "../src/core/req-references-command.js";
+import { REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION } from "../src/core/req-install-audit-command.js";
 import {
   NO_SOURCE_REFERENCES_PLACEHOLDER,
   NO_SOURCE_WORKFLOW_PLACEHOLDER,
@@ -1009,6 +1010,7 @@ test("extension registers prompt and config commands while exposing tool capabil
     "req-recreate",
     "req-refactor",
     "req-references",
+    "req-install-audit",
     "req-wtd",
     "req-print-result",
     "req-renumber",
@@ -1018,6 +1020,10 @@ test("extension registers prompt and config commands while exposing tool capabil
     assert.ok(commandNames.includes(name), `missing command ${name}`);
   }
   assert.equal(pi.commands.get("req-analyze")?.description, "Produce an analysis report");
+  assert.equal(
+    pi.commands.get("req-install-audit")?.description,
+    REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION,
+  );
 
   for (const name of [
     "req-files-tokens",
@@ -12424,5 +12430,53 @@ test("result error park freezes elapsed timers a rebound runtime restores in fli
     clearPersistedPromptCommandRuntimeState();
     process.chdir(previousCwd);
     fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies `req-install-audit` audits configured static checkers into the editor without an LLM session or worktree.
+ * @details Activates the extension on a fixture repository, asserts the dedicated registration and its `/req-continue` eligibility, dispatches the handler with a `--prj-base` argument targeting a plain temporary directory, and verifies the audit table reaches the editor with the `language`, `static-check`, and `installed` columns naming the audited base, the workflow status parks `install-audit ➔ done`, the outcome notification reports the audited configured-checker and missing-executable counts at info severity, and no new LLM session is created. Runtime is dominated by executable resolution probing. Side effects are limited to temporary filesystem mutation and fake UI state.
+ * @return {Promise<void>} Promise resolved after the handler assertions complete.
+ * @throws {AssertionError} Throws when the editor payload, workflow status, outcome notification, or session invariants diverge.
+ * @satisfies REQ-842, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848, TST-274, TST-275
+ */
+test("req-install-audit audits configured static checkers into the editor without an LLM session or worktree", async () => {
+  const { projectBase } = initFixtureRepo({ fixtures: [] });
+  const previousCwd = process.cwd();
+  const externalBase = path.join(projectBase, "..", "pi-usereq-install-audit-external-base");
+  try {
+    const pi = createFakePi();
+    piUsereqExtension(pi);
+    const ctx = createFakeCtx(projectBase);
+    await pi.emit("session_start", { reason: "startup" }, ctx);
+    const installAuditCommand = pi.commands.get("req-install-audit");
+    assert.ok(installAuditCommand, "missing req-install-audit registration");
+    assert.equal(installAuditCommand!.description, REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION);
+    assert.ok(NEXT_WORKFLOW_COMMAND_NAMES.includes("req-install-audit"));
+
+    fs.mkdirSync(externalBase, { recursive: true });
+    await installAuditCommand!.handler(`--prj-base ${externalBase}`, ctx);
+
+    const editorText = ctx.__state.editorText;
+    assert.match(editorText, /language/, "editor payload renders the language column");
+    assert.match(editorText, /installed/, "editor payload renders the installed column");
+    assert.ok(editorText.includes(externalBase), "editor payload names the --prj-base audited base");
+    assert.match(
+      ctx.__state.statuses.get("pi-usereq") ?? "",
+      /install-audit ➔ done/,
+    );
+    const outcome = ctx.__state.notifications.filter((entry: { message: string }) =>
+      entry.message.startsWith("req-install-audit:"),
+    ).at(-1);
+    assert.ok(outcome, "missing req-install-audit outcome notification");
+    assert.equal(outcome!.level, "info");
+    assert.match(
+      outcome!.message,
+      /req-install-audit: \d+ configured checker\(s\) audited; \d+ missing executable\(s\)\./,
+    );
+    assert.equal(ctx.__state.newSessions.length, 0, "the audit must not create a replacement LLM session");
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(externalBase, { recursive: true, force: true });
   }
 });

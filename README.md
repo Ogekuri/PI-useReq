@@ -61,7 +61,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 
 - **Node.js** - 24.0.0 or newer, per the `engines` constraint in `package.json`.
 - **pi CLI** (`pi.dev`) - the extension runs inside pi; requires `@earendil-works/pi-coding-agent` 1.5.2 or newer. A resolvable older host version surfaces one warning notification while the extension keeps working.
-- **Git repository** - every prompt-backed `req-*` slash command plus the non-agentic `/req-references` runs slash-command-owned git validation (`/req-print-result` and parameter-less `/req-continue` do not; `/req-wtd` validates only repository discoverability): the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
+- **Git repository** - every prompt-backed `req-*` slash command plus the non-agentic `/req-references` runs slash-command-owned git validation (`/req-print-result`, parameter-less `/req-continue`, and `/req-install-audit` do not; `/req-wtd` validates only repository discoverability): the project must be inside a git work tree, the tracked working tree must be clean, and `HEAD` must resolve (a detached `HEAD` is tolerated; a working branch is recommended because the branch name is embedded in generated worktree names).
 - **Requirements documentation** - the configured `docs-dir` (default `usereq/docs`) must contain the canonical documents required by the executed commands (`REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md`); the command table below lists each command's requirement, and `/req-write`, `/req-create`, `/req-workflow`, and `/req-references` are the entry points that generate them.
 - **Static code checkers** - the bundled checkers (`pyright`, `ruff`, `eslint`) install best-effort through the `postinstall` script; the native C/C++ checkers (`cppcheck`, `clang-format`) require a one-line system install (see [Install](#install)). Default configured languages: C, C++, JavaScript, Python, TypeScript.
 - **Models** - model selection and model configuration are managed by the pi client, not by pi-usereq: the extension bundles no model files and exposes no model-related configuration or management surface (custom providers and models are configured in the pi client, e.g. `~/.pi/agent/models.json`, and selected through its model picker). The extension is model-agnostic: it captures the active provider, model id, and thinking level at command start and re-applies them after a worktree session switch and after `/req-wtd` restoration.
@@ -69,7 +69,7 @@ in sync with the repository. All capabilities are exposed as slash commands and 
 
 ## Feature Highlights
 
-- **19 slash commands** - 15 prompt-backed `req-*` commands plus the dedicated `/req-references`, `/req-wtd`, `/req-continue`, and `/req-print-result` commands.
+- **20 slash commands** - 15 prompt-backed `req-*` commands plus the dedicated `/req-references`, `/req-install-audit`, `/req-wtd`, `/req-continue`, and `/req-print-result` commands.
 - **12 built-in agent tools** - token counting, summarization, compression, construct search, static-check, and final-output JSON validation tools for explicit files or for the configured project surface.
 - **Interactive configuration menu** - `/pi-usereq` manages local (`<base-path>/.pi-usereq.json`) and global (`~/.config/pi-usereq/config.json`) configuration with no manual JSON editing required.
 - **Standalone management and configuration CLI** - the `pi-usereq` bin exposes `--help`, `--ver`/`--version`, `--upgrade [--dev|--develop] [--force]`, `--uninstall`, plus `--get`/`--set`/`--unset`/`--print`/`--info`/`--print-raw`/`--write-config` over the same local and global scopes (see [Standalone CLI](#standalone-cli-pi-usereq)).
@@ -93,7 +93,11 @@ worktree so the next `/req-*` command auto-recovers the errored state and contin
 disposes of it. Every prompt-backed `req-*` command prints an on-screen invocation summary (command name, passed arguments, and active
 configuration); the full rendered prompt content is delivered only to the LLM agent and is never displayed on screen.
 `/req-references` is non-agentic: it executes directly without starting an LLM session or
-creating a worktree. `/req-print-result` reprints the final-output notification of the last completed agentic workflow through
+creating a worktree. `/req-install-audit` is non-agentic too: it loads the effective static-check configuration of the audited
+project base (an optional `--prj-base <path>` argument, otherwise the current directory), verifies on the operating system the
+installation of every configured `Command` checker executable through the same resolution used by static-check execution, and
+writes into the editor one table of all configured static checkers grouped by language with the columns `language`,
+`static-check`, and `installed` (or a documented line when no checker is configured). `/req-print-result` reprints the final-output notification of the last completed agentic workflow through
 one info notification; parameter-less `/req-continue` prints captured Next-Workflow data into the
 editor; a parameterized `/req-continue` delegates to the selected captured command, which owns its own orchestration.
 
@@ -136,6 +140,7 @@ editor; a parameterized `/req-continue` delegates to the selected captured comma
 | `/req-workflow` | Write a `WORKFLOW.md` using the project's source code | none |
 | `/req-flowchart` | Write a `FLOWCHART.md` using the project's source code | `REQUIREMENTS.md`, `WORKFLOW.md`, `REFERENCES.md` |
 | `/req-wtd` | Restore the base path, switch to the main branch, and remove the current or generated worktree (non-agentic) | none |
+| `/req-install-audit` | Audit the installation of configured static checker executables (non-agentic; optional `--prj-base <path>`; writes the grouped `language`/`static-check`/`installed` table into the editor) | none |
 | `/req-continue` | Continue the previous agentic workflow with a captured Next-Workflow command: with an integer ordinal, dispatch the captured command of that rank with its captured input text; without arguments, print the captured Next-Workflow command table into the editor | depends on the delegated command |
 | `/req-print-result` | Re-print the retained final-output notification of the last completed agentic workflow exactly as it was emitted (non-agentic) | none |
 
@@ -371,7 +376,7 @@ The interactive configuration menu exposes every user-facing setting; changes ar
 - **Git worktree** / **Worktree prefix** — enable/disable prompt-command worktree isolation and set the name prefix (default `PI-useReq-`).
 - **Language static code checkers** — per-language `enable`/`disable` flags and the global `Command`-module checker definitions (view/remove/reset with confirmation).
 - **Enable tools** — the subset of configurable startup tools activated for the project: the `files-*` and project tools plus the embedded pi tools (`read`, `bash`, `edit`, `write` enabled by default; `find`, `grep`, `ls` configurable and disabled by default).
-- **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed). Non-agentic `/req-references` and `/req-wtd` runs never dispatch command-notify, sound, or Pushover effects.
+- **Notifications** — command-notify, sound, and Pushover settings with per-event routing (completed/interrupted/failed). Non-agentic `/req-references`, `/req-install-audit`, and `/req-wtd` runs never dispatch command-notify, sound, or Pushover effects.
 - **Debug** — local debug logging: global enablement, prompt-content logging (`Enable debug prompts` plus `Log path for prompts`), log file, log-on-status filter, status-change/workflow-event toggles, enabled tools/prompts, and `Enable debug commands for tools`.
 - **Show local/global configuration** — write the exact config file contents into the editor.
 - **Reset defaults** — restore the default configuration with a confirmation preview.

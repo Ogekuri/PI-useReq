@@ -137,6 +137,11 @@ import {
   prepareReqReferencesCommandExecution,
 } from "./core/req-references-command.js";
 import {
+  REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION,
+  executeReqInstallAuditCommand,
+  parseReqInstallAuditProjectBase,
+} from "./core/req-install-audit-command.js";
+import {
   REQ_WTD_COMMAND_DESCRIPTION,
   executeReqWtdCommandExecution,
   prepareReqWtdCommandExecution,
@@ -4223,6 +4228,70 @@ function registerReqReferencesCommand(
 }
 
 /**
+ * @brief Registers the specialized non-agentic `req-install-audit` slash command.
+ * @details Registers the dedicated static-checker installation-audit command that auto-recovers terminal `error` or `warning` workflow state to `idle` before the startability gate, rejects in-flight invocation by transitioning workflow state to `error`, otherwise resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, records `install-audit` as the active request, transitions workflow state through `checking|running|done`, verifies every configured `Command` checker executable through the shared static-check executable resolution, renders the audit table grouped by language with `language`, `static-check`, and `installed` columns into the editor without starting an LLM session, dispatching a prompt message, or creating a worktree, emits one info outcome notification counting the audited configured checkers and missing executables through the stale-context-safe deferred-delivery helper, dispatches no command-notify, sound, or Pushover prompt-end effect, and returns to `install-audit ➔ done`. Runtime is dominated by executable resolution probing. Side effects include command registration, status-controller mutation, filesystem reads, editor-text mutation, and UI notifications.
+ * @param[in] pi {ExtensionAPI} Active extension API instance.
+ * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
+ * @return {void} No return value.
+ * @satisfies DES-049, REQ-221, REQ-224, REQ-439, REQ-441, REQ-447, REQ-635, REQ-663, REQ-842, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
+ */
+function registerReqInstallAuditCommand(
+  pi: ExtensionAPI,
+  statusController: PiUsereqStatusController,
+): void {
+  const installAuditCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+      autoRecoverTerminalReqCommandState(statusController, ctx);
+      if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
+        rejectNonIdleReqCommand(statusController, ctx);
+      }
+      const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
+      syncContextCwdMirror(ctx, commandCwd);
+      const projectBase = parseReqInstallAuditProjectBase(args, commandCwd);
+      bootstrapRuntimePathState(projectBase, {
+        gitPath: resolveRuntimeGitPath(projectBase),
+      });
+      const config = loadProjectConfig(projectBase);
+      setPiUsereqStatusConfig(statusController, config);
+      statusController.state.pendingPromptRequest = undefined;
+      statusController.state.activePromptRequest = undefined;
+      setPiUsereqWorkflowRequest(statusController, "install-audit", ctx);
+      setPiUsereqWorkflowState(statusController, "checking", ctx);
+      try {
+        setPiUsereqWorkflowState(statusController, "running", ctx);
+        const auditResult = executeReqInstallAuditCommand(projectBase, config);
+        setPiUsereqWorkflowState(statusController, "done", ctx);
+        try {
+          ctx.ui.setEditorText(auditResult.report);
+        } catch (editorError) {
+          if (!isStaleExtensionContextError(editorError)) {
+            throw editorError;
+          }
+        }
+        notifyContextSafely(
+          ctx,
+          `req-install-audit: ${auditResult.configuredCount} configured checker(s) audited; ${auditResult.missingCount} missing executable(s).`,
+          "info",
+        );
+        // REQ-772: the auxiliary non-agentic emission preserves the retained message so
+        // `/req-print-result` keeps reprinting the last agentic-flow termination.
+        notifyContextRetentionReminder(statusController, ctx, false);
+      } catch (error) {
+        statusController.state.pendingPromptRequest = undefined;
+        statusController.state.activePromptRequest = undefined;
+        setPiUsereqWorkflowState(statusController, "error", ctx);
+        const message = error instanceof Error ? error.message : String(error);
+        notifyContextSafely(ctx, message, "error");
+        throw error;
+      }
+  };
+  pi.registerCommand("req-install-audit", {
+    description: REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION,
+    handler: installAuditCommandHandler,
+  });
+  registerNextWorkflowCommandHandler("req-install-audit", installAuditCommandHandler);
+}
+
+/**
  * @brief Registers the specialized `req-continue` slash command.
  * @details Registers the dedicated chain-continuation command with two argument modes (REQ-659). A parameter-less invocation performs only the printing operation (REQ-738, REQ-739): it snapshots the captured Next-Workflow array, writes the Next-Workflow section table rendered by `formatNextWorkflowCommandTable(...)` into the editor, or the documented empty-list placeholder for an empty array (REQ-741), runs from every workflow state without applying the startability gate or transitioning workflow state, emits no notification, and never mutates the captured array (REQ-740); stale replacement-session editor rejections are suppressed. A parameterized invocation is orchestration-transparent (REQ-660): it requires one integer ordinal (REQ-662), resynchronizes a stale idle replacement runtime from the persisted terminal workflow state before delegation so the delegated command observes exactly the workflow state it would observe on direct invocation (REQ-663, REQ-656), applies no startability gate and performs no workflow-state transition or busy-state rejection of its own, terminates with a deterministic error without any operation and without transitioning the workflow state on an empty Next-Workflow array (REQ-661), selects the one-based ordinal entry, and delegates the selected pi-usereq command through its registered handler with the captured input text exactly like a manual user invocation while the delegated command owns every gate, every workflow-state transition, and every terminal outcome, so `/req-continue` itself never terminates with the `continue` to `done` transition (REQ-664). Runtime is O(n) in aggregate captured entry length for the print branch and O(1) for registration; dispatch cost is delegated to the selected command. Side effects include command registration, process-scoped handler registration, editor-text mutation for the print branch, delegated preflight, prompt dispatch, worktree orchestration, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
@@ -6220,6 +6289,7 @@ function activatePiUsereqExtension(pi: ExtensionAPI): void {
   registerReqReferencesCommand(pi, statusController);
   registerReqContinueCommand(pi, statusController);
   registerReqPrintResultCommand(pi);
+  registerReqInstallAuditCommand(pi, statusController);
   registerPromptCommands(pi, statusController);
   if (shouldRegisterDebugToolCommands(getProcessCwdSafe())) {
     registerDebugToolCommands(pi);

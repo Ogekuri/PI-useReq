@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.186"
+version: "0.0.187"
 date: "2026-11-27"
 author: "OpenAI Codex"
 scope:
@@ -93,6 +93,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **DES-012**: MUST implement bundled prompt-command git validation and worktree lifecycle logic in `src/core/prompt-command-runtime.ts` without invoking extension custom-tool executors from `src/core/tool-runner.ts`.
 - **DES-013**: MUST implement dedicated `req-references` git-validation, reference-write, staging, commit, and clean-repository verification logic in `src/core/req-references-command.ts` without starting an LLM session or creating a worktree.
 - **DES-048**: MUST implement dedicated `req-wtd` worktree-disposal orchestration in `src/core/req-wtd-command.ts`, reusing shared base-path restoration helpers without starting an LLM session or creating a worktree.
+- **DES-049**: MUST implement dedicated `req-install-audit` static-checker installation auditing in `src/core/req-install-audit-command.ts` outside `src/index.ts` business logic without starting an LLM session or creating a worktree.
 - **DES-004**: MUST implement modular static-check execution through debug-capable `StaticCheckBase` and user-facing `StaticCheckCommand`, selected by `dispatchStaticCheckForFile`.
 - **DES-005**: MUST centralize project file collection, token counting, summary generation, reference-file generation, compression, construct search, and static-check execution in `src/core/tool-runner.ts`.
 - **DES-006**: MUST reuse shared markdown and text renderers for CLI and agent-tool compression plus construct-search outputs, preserving source-leading tabs in emitted excerpts instead of dedicated agent-tool JSON payload builders.
@@ -203,6 +204,13 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin and built-in-extension tools named `read`, `bash`, `powershell`, `edit`, `write`, `grep`, `find`, `ls`, `codemode`, and `tool_search`.
 - **REQ-064**: MUST default every configurable custom tool and every configurable embedded tool `read`, `bash`, `powershell`, `edit`, `write`, `grep`, `find`, `ls`, and `codemode` to enabled.
 - **REQ-841**: MUST default the configurable embedded pi CLI tool `tool_search` to disabled until a persisted `enabled-tools` selection explicitly enables it.
+- **REQ-842**: MUST register `req-install-audit` as a dedicated non-agentic extension command with description `Audit the installation of configured static checker executables` and MUST NOT depend on a bundled prompt Markdown file.
+- **REQ-843**: MUST make `req-install-audit` resolve the audited project base from an optional `--prj-base <path>` command argument, falling back to the live bootstrap cwd when the argument is absent.
+- **REQ-844**: MUST make `req-install-audit` load the effective static-check configuration of the resolved project base from the existing local and global configuration scopes without mutating persisted configuration.
+- **REQ-845**: MUST make `req-install-audit` verify every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution.
+- **REQ-846**: MUST make `req-install-audit` render one table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed` reporting the per-entry executable verification outcome.
+- **REQ-847**: MUST make `req-install-audit` write the rendered table into the editor and MUST NOT start an LLM session, dispatch a prompt message, or create a worktree.
+- **REQ-848**: MUST make `req-install-audit` render the documented no-configured-checker line instead of a table when no static checker entry is configured.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted local and global configuration.
 - **REQ-067**: MUST send every bundled prompt-backed `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that sends bundled prompt-backed `req-<prompt>` payloads through the forked execution session by using only the replacement-session context for post-switch session-bound operations.
@@ -571,11 +579,11 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-438**: MUST emit one `req-references` notification per completed run stating whether the fixed-message commit was created or skipped without changes.
 - **REQ-439**: MUST defer non-agentic command-output notifications whose stale-context-safe delivery fails by enqueuing message plus severity into one process-scoped replay store instead of discarding them.
 - **REQ-440**: MUST drain the process-scoped replay store during `session_start` for reasons `new`, `resume`, `reload`, and `fork`, redelivering each queued notification through the restored context UI-notification channel.
-- **REQ-441**: MUST route `req-references` and `req-wtd` outcome notifications plus the final context-retention notification through the stale-context-safe deferred-delivery notification helper.
+- **REQ-441**: MUST route `req-references`, `req-install-audit`, and `req-wtd` outcome notifications plus the final context-retention notification through the stale-context-safe deferred-delivery notification helper.
 - **REQ-442**: MUST keep replayed notifications on the UI-notification channel without session messages or session switching, and MUST NOT replay already-delivered notifications.
 - **REQ-443**: MUST resolve `%%OUTPUT%%` from the concatenated `type === "text"` blocks of the last assistant message inside the `agent_end` payload, skipping `thinking` and tool-call content blocks.
 - **REQ-444**: MUST resolve `%%OUTPUT%%` to the empty string for agent runs whose last assistant message exposes no `text` content blocks.
-- **REQ-447**: MUST NOT dispatch command-notify, sound, or Pushover prompt-end effects for completed or failed non-agentic `req-references` and `req-wtd` runs.
+- **REQ-447**: MUST NOT dispatch command-notify, sound, or Pushover prompt-end effects for completed or failed non-agentic `req-references`, `req-install-audit`, and `req-wtd` runs.
 - **REQ-450**: MUST fall back the Pushover `message` body to the `%%RESULT%%` outcome token whenever the fully substituted Pushover text template resolves to empty.
 - **REQ-445**: MUST head-truncate the substituted Pushover `message` body with a fixed truncation marker whenever it exceeds the 1024-character Pushover Message API limit.
 - **REQ-446**: MUST document the `%%OUTPUT%%` token in the `Pushover text` menu row description.
@@ -934,6 +942,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-033**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `usage`, `tool,check`, `time`, and `sound` plus the documented icon-based `usage` gauge thresholds.
 - **TST-272**: MUST verify `tool,check` renders the enabled and total configurable-tool counts plus the enabled and total static-check language counts from the effective running configuration and canonical inventories.
 - **TST-273**: MUST verify the embedded-tool inventory includes `powershell`, `codemode`, and `tool_search`, defaults enable `codemode` and disable `tool_search`, and `tool_search` sorts after default-enabled embedded tools.
+- **TST-274**: MUST verify `req-install-audit` renders configured static checkers grouped by language with `language`, `static-check`, and `installed` columns reporting per-entry executable verification.
+- **TST-275**: MUST verify `req-install-audit` resolves `--prj-base` as the audited project base, falls back to the live cwd without it, and writes the table into the editor without starting an LLM session or worktree.
 - **TST-037**: MUST verify the `Notifications` menu persists notification and boot-sound settings only in global configuration through `Notification events` and `Sound events` submenus using the documented labels and order.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles only the active runtime sound level, leaves local and global configuration unchanged, and refreshes the status bar with the updated `sound` field.
 - **TST-097**: MUST verify `session_start` loads the active runtime sound level from persisted `notify-sound`.
