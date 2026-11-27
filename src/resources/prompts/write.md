@@ -17,10 +17,12 @@ In scope: author/update only `%%DOC_PATH%%/REQUIREMENTS.md` from [User Request](
 
 ## Iteration and Context Economy
 - **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
-- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected context under the `## Context Files` section or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST reuse files injected under the `## Context Files` section and prior tool results without fetching them again, except for the targeted canonical-document lookups defined below.
 - **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
 - **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
-- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `req-search`/`req-files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: Before any source-file search, MUST analyze the available information from `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/REFERENCES.md`, and `%%DOC_PATH%%/WORKFLOW.md` in agent context to identify the evidence the active Step still needs.
+- **CRITICAL**: MUST limit disk lookups in those documents to information missing from agent context or to necessary extraction or aggregation. Target only the relevant paths and sections. Tool priority: `ls` → `find` → `grep` → `read` → `bash`.
+- **CRITICAL**: For in-scope source searches, MUST use this tool priority: `req-search` → `ls` → `find` → `req-files-search` → `grep` → `read` → `bash`. For both search orders, use the highest-priority applicable tool; move lower only for unresolved evidence. Stop when the evidence is sufficient.
 - **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
 - **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
 - **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
@@ -123,6 +125,6 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 
 ## Context Files
-The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `req-search`, `req-files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+Treat files injected under the `## Context Files` section as authoritative context. Use them directly; apply the targeted lookup exceptions and tool priorities in `## Iteration and Context Economy`. If no files are injected, proceed without context-file assumptions.
 
 %%CONTEXT_FILES%%

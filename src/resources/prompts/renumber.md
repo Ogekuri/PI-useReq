@@ -17,10 +17,12 @@ In scope: renumbering requirement identifiers in `%%DOC_PATH%%/REQUIREMENTS.md` 
 
 ## Iteration and Context Economy
 - **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
-- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected context under the `## Context Files` section or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST reuse files injected under the `## Context Files` section and prior tool results without fetching them again, except for the targeted canonical-document lookups defined below.
 - **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
 - **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
-- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `req-search`/`req-files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: Before any source-file search, MUST analyze the available information from `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/REFERENCES.md`, and `%%DOC_PATH%%/WORKFLOW.md` in agent context to identify the evidence the active Step still needs.
+- **CRITICAL**: MUST limit disk lookups in those documents to information missing from agent context or to necessary extraction or aggregation. Target only the relevant paths and sections. Tool priority: `ls` → `find` → `grep` → `read` → `bash`.
+- **CRITICAL**: For in-scope source searches, MUST use this tool priority: `req-search` → `ls` → `find` → `req-files-search` → `grep` → `read` → `bash`. For both search orders, use the highest-priority applicable tool; move lower only for unresolved evidence. Stop when the evidence is sufficient.
 - **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
 - **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
 - **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
@@ -83,7 +85,7 @@ During the execution flow you MUST follow these directives:
 ## Steps
 Create internally a *check-list* for the **Global Roadmap** including all the numbered steps below: `1..4`, and start following the roadmap at the same time, executing the instructions of Step 1. If a tool call is required in Step 1, invoke it immediately; otherwise proceed to Step 1 without additional commentary. Do not add extra intent-adjustment checks unless explicitly listed in the Steps section.
 1. **CRITICAL**: Renumber requirement IDs in the **Software Requirements Specification**
-   - Read the **Software Requirements Specification** document `%%DOC_PATH%%/REQUIREMENTS.md`.
+   - Consult the **Software Requirements Specification** document `%%DOC_PATH%%/REQUIREMENTS.md`.
    - Determine the existing requirement ID scheme, if any (prefix + numeric width). If multiple schemes exist, select the most common one as the canonical output scheme; if no clear scheme exists, use `REQ-001`, `REQ-002`, ... as the output scheme.
    - Renumber requirements in strict document order (top-to-bottom, as they appear in the file) to a progressive sequence starting at 1.
       - You MUST NOT modify any requirement text after `:`, any headings, any ordering, or any non-ID content.
@@ -95,7 +97,7 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Produce and include in the final report an explicit old-ID → new-ID mapping in document order.
    - Save changes by overwriting `%%DOC_PATH%%/REQUIREMENTS.md` with only the ID and cross-reference updates applied.
 2. Validate the **Software Requirements Specification**
-   - Review `%%DOC_PATH%%/REQUIREMENTS.md`. If previously read and present in context, use that content; otherwise read the file and cross-reference with the source code.
+   - Review `%%DOC_PATH%%/REQUIREMENTS.md`. Use the current draft in context and apply `## Iteration and Context Economy` to any lookup needed for cross-referencing with source code.
       - Verify that the renumbered requirements still **accurately reflect the actual code behavior** (True State); renumbering MUST NOT alter requirement meaning, so the post-renumber document MUST remain behavior-equivalent to the pre-renumber draft.
       - Validate the renumbering invariants:
          - Only requirement IDs and requirement-ID cross-references changed; all other text is identical.
@@ -112,6 +114,6 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 
 ## Context Files
-The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `req-search`, `req-files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+Treat files injected under the `## Context Files` section as authoritative context. Use them directly; apply the targeted lookup exceptions and tool priorities in `## Iteration and Context Economy`. If no files are injected, proceed without context-file assumptions.
 
 %%CONTEXT_FILES%%

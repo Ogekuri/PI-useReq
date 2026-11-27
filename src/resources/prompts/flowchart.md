@@ -16,10 +16,12 @@ In scope: static analysis of source under %%SRC_PATHS%% to generate/overwrite on
 
 ## Iteration and Context Economy
 - **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
-- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected context under the `## Context Files` section or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST reuse files injected under the `## Context Files` section and prior tool results without fetching them again, except for the targeted canonical-document lookups defined below.
 - **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
 - **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
-- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `req-search`/`req-files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: Before any source-file search, MUST analyze the available information from `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/REFERENCES.md`, and `%%DOC_PATH%%/WORKFLOW.md` in agent context to identify the evidence the active Step still needs.
+- **CRITICAL**: MUST limit disk lookups in those documents to information missing from agent context or to necessary extraction or aggregation. Target only the relevant paths and sections. Tool priority: `ls` → `find` → `grep` → `read` → `bash`.
+- **CRITICAL**: For in-scope source searches, MUST use this tool priority: `req-search` → `ls` → `find` → `req-files-search` → `grep` → `read` → `bash`. For both search orders, use the highest-priority applicable tool; move lower only for unresolved evidence. Stop when the evidence is sufficient.
 - **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
 - **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
 - **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
@@ -66,10 +68,10 @@ In scope: static analysis of source under %%SRC_PATHS%% to generate/overwrite on
 - Visible graph text MUST NOT expose internal working tags such as temporary decision or join identifiers.
 
 ## Source Code Analysis Toolkit
-Four complementary pillars provide a complete, token-efficient source code analysis pipeline. Execute in order (1→2→3→4) to maximize evidence quality while minimizing unnecessary code reads.
+Apply `## Iteration and Context Economy` to all document lookups and source searches, including those in individual Steps.
 
 ### 1. Runtime Model: `%%DOC_PATH%%/WORKFLOW.md`
-Compact document — read in full. Contains:
+Use the available runtime model to identify:
 - **Execution Units Index**: all OS processes and threads with roles and entrypoints.
 - **Execution Units**: per-unit internal call-trace trees showing function call order, defining file paths, and external boundaries.
 - **Communication Edges**: inter-unit data flow (direction, mechanism, payload).
@@ -94,21 +96,14 @@ Use to: identify candidate symbols by name, description, or `@satisfies` link; o
 
 ### 3. Code Extraction: `req-search` / `req-files-search` tools
 Use after pillars 1-2 to extract only the targeted named constructs identified during analysis.
-- Prefer the `req-search` tool for project-wide named-symbol, declaration, and construct scans, and the `req-files-search` tool when target files are already known.
-- Use these tools as the preferred extraction path for named objects, functions, data structures, declarations, constructs, and known-file lookup; they return source content exactly as it appears in source files, including comments; use `rg`/`grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
+- Use `req-search` for project-wide construct names and `req-files-search` for unresolved names in selected files. Both return the matched source, including comments.
 - `req-search` and `req-files-search` always emit original source line numbers.
 - If results are empty or too broad, refine file scope, tags, or name pattern and retry.
 - Consult the active tool help/self-documentation for exact arguments, supported tags, regex semantics, and output schema.
 
 
-### 4. Supplementary Search: `rg` / `grep`
-Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
-
-### Recommended Analysis Workflow
-1. **Read `%%DOC_PATH%%/WORKFLOW.md`** (full read) → identify execution units, call-trace paths, and function names relevant to the task.
-2. **Read `%%DOC_PATH%%/REFERENCES.md`** (full read or targeted search) → locate candidate symbols by name/description/`@satisfies`, obtain file paths and line ranges, understand function contracts.
-3. **Extract code** via the `req-search` or `req-files-search` tool → use symbol names from steps 1-2 as `NAME_REGEX` and file paths as `req-files-search` targets.
-4. **Search code bodies** via `rg`/`grep` → after `req-search`/`req-files-search`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
+### 4. Supplementary Search
+Use `grep` for unresolved body text or cross-references, `read` for the required line range, and `bash` only if higher-priority tools cannot provide the evidence.
 
 ## Execution Protocol (Global vs Local)
 You must manage the execution flow using two distinct methods:
@@ -207,6 +202,6 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 
 ## Context Files
-The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `req-search`, `req-files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+Treat files injected under the `## Context Files` section as authoritative context. Use them directly; apply the targeted lookup exceptions and tool priorities in `## Iteration and Context Economy`. If no files are injected, proceed without context-file assumptions.
 
 %%CONTEXT_FILES%%

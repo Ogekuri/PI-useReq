@@ -18,10 +18,12 @@ In scope: reproduce/triage the defect with concrete evidence and prefer an evide
 
 ## Iteration and Context Economy
 - **CRITICAL**: Plan every Step to complete in the minimum number of iterations; batch independent reads, searches, and edits into a single response and dispatch parallel tool calls whenever no dependency forces sequencing.
-- **CRITICAL**: MUST NOT re-read, re-search, or re-fetch any file already provided as injected context under the `## Context Files` section or already read in the current session; reuse prior tool-output evidence instead.
+- **CRITICAL**: MUST reuse files injected under the `## Context Files` section and prior tool results without fetching them again, except for the targeted canonical-document lookups defined below.
 - **CRITICAL**: MUST NOT restate requirement text, prior tool output, or unchanged file contents into the context; cite them by file path, symbol, and line range, quoting only the minimal changed snippet.
 - **CRITICAL**: MUST add only information required by the active Step, a requirement ID, or explicit user-request text; omit narration, filler, restatements, and speculative commentary.
-- **CRITICAL**: MUST choose the most token-efficient evidence path in order: `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/WORKFLOW.md`, `%%DOC_PATH%%/REFERENCES.md`, then `req-search`/`req-files-search`, then `rg`/`grep` fallback, reading only targeted constructs and line ranges.
+- **CRITICAL**: Before any source-file search, MUST analyze the available information from `%%DOC_PATH%%/REQUIREMENTS.md`, `%%DOC_PATH%%/REFERENCES.md`, and `%%DOC_PATH%%/WORKFLOW.md` in agent context to identify the evidence the active Step still needs.
+- **CRITICAL**: MUST limit disk lookups in those documents to information missing from agent context or to necessary extraction or aggregation. Target only the relevant paths and sections. Tool priority: `ls` → `find` → `grep` → `read` → `bash`.
+- **CRITICAL**: For in-scope source searches, MUST use this tool priority: `req-search` → `ls` → `find` → `req-files-search` → `grep` → `read` → `bash`. For both search orders, use the highest-priority applicable tool; move lower only for unresolved evidence. Stop when the evidence is sufficient.
 - **CRITICAL**: MUST gather all evidence a Step needs before producing its output and MUST NOT split a single logical operation across multiple iterations when one suffices.
 - **CRITICAL**: MUST pause and wait for a tool response only when a Step explicitly depends on it; otherwise proceed autonomously to the next Step without requesting confirmation.
 - **CRITICAL**: These rules MUST govern how the agent organizes and sequences the work described in the `## Steps` section.
@@ -44,7 +46,7 @@ In scope: reproduce/triage the defect with concrete evidence and prefer an evide
 - **CRITICAL**: `next_workflow` and `next_commands` MUST agree before emission: if `next_workflow` describes any required or suggested follow-up action, the corresponding workflow-defined follow-up MUST be classified as triggered and its exact slash command MUST be present in `next_commands`; if `next_commands` is `[]`, `next_workflow` MUST state that no next action is required; MUST NOT describe an outcome-identified necessary follow-up action as optional or elective, MUST NOT invent follow-up actions outside the workflow-defined follow-up commands, and MUST execute this consistency cross-check immediately before emitting the final JSON response.
 - **CRITICAL**: When instructions generate shell commands, they MUST generate only linear shell commands compatible with restrictive filtering systems, MUST verify and apply correct quoting, escaping, or option termination for literal arguments that could be parsed as options or flags, MUST use explicit option termination for `rg` and `git grep` patterns beginning with `-` or `--`, MUST NOT rely on quoting or backslash escaping alone for those patterns, and MUST NOT use command substitution (`$()` or backticks), complex variable expansion, nested substitution, shell-derived helper composition, nested shell logic, or nested pipelines.
 - **CRITICAL**: NEVER write, modify, edit, or delete files outside of the active repository directory, except under `/tmp`.
-- You MUST read `%%DOC_PATH%%/REQUIREMENTS.md`, but you MUST NOT modify it in this workflow.
+- You MUST use `%%DOC_PATH%%/REQUIREMENTS.md` according to `## Iteration and Context Economy`, but you MUST NOT modify it in this workflow.
 - Treat static analysis as safe. Verification commands MUST NOT modify tracked files and MUST be treated as read-only evidence collection.
 - **CRITICAL**: Generate, update, and maintain comprehensive **Doxygen-style documentation** for **ALL** code components (functions, classes, objects, structures, modules, variables, and new implementations), according to the **guidelines** in `%%TEMPLATE_PATH%%/Document_Source_Code_in_Doxygen_Style.md`. When writing documentation, adopt a "Parser-First" mindset. Your output is not prose; it is semantic metadata. Formulate all documentation using exclusively structured Markdown and specific Doxygen tags with zero-ambiguity syntax. Eliminate conversational filler ("This function...", "Basically..."). Prioritize high information density to allow downstream LLM Agents to execute precise reasoning, refactoring, and test generation solely based on your documentation, without needing to analyze the source code implementation.
 - **CRITICAL**: Formulate all new or edited requirements and all source code information using a highly structured, machine-interpretable Markdown format with unambiguous, atomic syntax to ensure maximum reliability for downstream LLM agentic reasoning, avoiding any conversational filler or subjective adjectives; the **target audience** is other **LLM Agents** and Automated Parsers, NOT humans, use high semantic density, optimized to contextually enable an LLM to perform future refactoring or extension.
@@ -72,10 +74,10 @@ In scope: reproduce/triage the defect with concrete evidence and prefer an evide
 - `%%DOC_PATH%%/WORKFLOW.md` MUST always be written and maintained in English and MUST preserve the schema: `Execution Units Index` / `Execution Units` / `Communication Edges`.
 
 ## Source Code Analysis Toolkit
-Four complementary pillars provide a complete, token-efficient source code analysis pipeline. Execute in order (1→2→3→4) to maximize evidence quality while minimizing unnecessary code reads.
+Apply `## Iteration and Context Economy` to all document lookups and source searches, including those in individual Steps.
 
 ### 1. Runtime Model: `%%DOC_PATH%%/WORKFLOW.md`
-Compact document — read in full. Contains:
+Use the available runtime model to identify:
 - **Execution Units Index**: all OS processes and threads with roles and entrypoints.
 - **Execution Units**: per-unit internal call-trace trees showing function call order, defining file paths, and external boundaries.
 - **Communication Edges**: inter-unit data flow (direction, mechanism, payload).
@@ -100,21 +102,14 @@ Use to: identify candidate symbols by name, description, or `@satisfies` link; o
 
 ### 3. Code Extraction: `req-search` / `req-files-search` tools
 Use after pillars 1-2 to extract only the targeted named constructs identified during analysis.
-- Prefer the `req-search` tool for project-wide named-symbol, declaration, and construct scans, and the `req-files-search` tool when target files are already known.
-- Use these tools as the preferred extraction path for named objects, functions, data structures, declarations, constructs, and known-file lookup; they return source content exactly as it appears in source files, including comments; use `rg`/`grep` only for supplementary free-text/body-content search, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
+- Use `req-search` for project-wide construct names and `req-files-search` for unresolved names in selected files. Both return the matched source, including comments.
 - `req-search` and `req-files-search` always emit original source line numbers.
 - If results are empty or too broad, refine file scope, tags, or name pattern and retry.
 - Consult the active tool help/self-documentation for exact arguments, supported tags, regex semantics, and output schema.
 
 
-### 4. Supplementary Search: `rg` / `grep`
-Use for: string/pattern searches inside code bodies, cross-file references, configuration values, error messages, fallback cases that construct extraction cannot express, or confirmation inside already targeted files.
-
-### Recommended Analysis Workflow
-1. **Read `%%DOC_PATH%%/WORKFLOW.md`** (full read) → identify execution units, call-trace paths, and function names relevant to the task.
-2. **Read `%%DOC_PATH%%/REFERENCES.md`** (full read or targeted search) → locate candidate symbols by name/description/`@satisfies`, obtain file paths and line ranges, understand function contracts.
-3. **Extract code** via the `req-search` or `req-files-search` tool → use symbol names from steps 1-2 as `NAME_REGEX` and file paths as `req-files-search` targets.
-4. **Search code bodies** via `rg`/`grep` → after `req-search`/`req-files-search`, use only when you need free-text/body-content search, a fallback that construct extraction cannot express, or confirmation inside already targeted files.
+### 4. Supplementary Search
+Use `grep` for unresolved body text or cross-references, `read` for the required line range, and `bash` only if higher-priority tools cannot provide the evidence.
 
 
 ## Execution Protocol (Global vs Local)
@@ -156,7 +151,7 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
    - Preferred execution order for Step 1 when relevant suites exist: analyze and identify defect -> create one failing reproducer unit test -> design and implement source fix -> verify reproducer and full selected suites.
    - IMPLEMENT the **Implementation Delta** in the source code (creating new files/directories if necessary). You may make minimal mechanical adjustments needed to fit the actual codebase (file paths, symbol names), but you MUST NOT add new features or scope beyond the **Implementation Delta**.
 2. Generate **Verification Delta** by verifying static-analysis results, recording unit-test outcomes, and implementing needed bug fixes
-   - Read `%%DOC_PATH%%/REQUIREMENTS.md` and cross-reference with the source code from %%SRC_PATHS%%, %%TEST_PATH%% to check ALL requirements, but use progressive disclosure: provide full evidence only for `FAIL` items and a compact pointer-only index for `OK` items. For each requirement, prefer the `req-search` and `req-files-search` tools to locate named symbols, declarations, constructs, and already-known files used as evidence. Use `rg` / `grep` only for supplementary free-text/body-content searches, fallback cases that construct extraction cannot express, or confirmation inside already targeted files. Read only the identified files to verify compliance and do not assume compliance without locating the specific code implementation.
+   - Consult `%%DOC_PATH%%/REQUIREMENTS.md` and cross-reference with the source code from %%SRC_PATHS%%, %%TEST_PATH%% to check ALL requirements, but use progressive disclosure: provide full evidence only for `FAIL` items and a compact pointer-only index for `OK` items. Apply the source-search priority in `## Iteration and Context Economy` to locate specific implementation evidence for each requirement; do not infer compliance.
       - For each requirement, report `OK` if satisfied or `FAIL` if not.
       - Do not mark a requirement as `OK` without code evidence; for `OK` items provide only a compact pointer (file path + symbol + line range). For each requirement, provide a concise evidence pointer (file path + symbol + line range) excerpts only for `FAIL` requirements or when requirement is architectural, structural, or negative (e.g., "MUST NOT ..."). For such high-level requirements, cite the specific file paths or directory structures that prove compliance. Line ranges MUST be obtained from tooling output (e.g., `nl -ba` / `sed -n`) and MUST NOT be estimated. If evidence is missing, you MUST report `FAIL`. Do not assume implicit behavior.
       - For every `FAIL`, provide evidence with a short explanation. Provide file path(s) and line numbers where possible.
@@ -213,6 +208,6 @@ Create internally a *check-list* for the **Global Roadmap** including all the nu
 
 
 ## Context Files
-The content under this section is pre-loaded reference material for this workflow, already present in full in your context. Treat it as authoritative ground truth and reason over it directly; do NOT re-read, search, locate, or fetch it with `read`, `req-search`, `req-files-search`, `grep`, `ls`, or any discovery tool. If this section contains no file content, treat it as empty and proceed without context-file assumptions.
+Treat files injected under the `## Context Files` section as authoritative context. Use them directly; apply the targeted lookup exceptions and tool priorities in `## Iteration and Context Economy`. If no files are injected, proceed without context-file assumptions.
 
 %%CONTEXT_FILES%%
