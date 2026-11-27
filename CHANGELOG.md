@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.35](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.35) - 2026-11-26
+## [0.109.36](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.36) - 2026-11-27
 ### ⛰️  Features
 - Add new /req-print-result slash-command.
 - Update prompts.
@@ -154,6 +154,10 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Prune default-equal tools and static-check entries on save [useReq] *(config)*
+  Add saveConfigWithDefaultPruning removing default-equal enabled-tools and static-check persisted entries.; Persist enabled-tools only when the selection differs from the documented defaults (REQ-831..REQ-834).; Remove restored-default static-check entries from local and global payloads (REQ-835..REQ-836).; Update requirements, runtime model, references, and persistence unit tests.
+- Enable all configurable tools by default [useReq] *(tools)*
+  Update REQ-064 so every configurable custom and embedded tool defaults to enabled.; Alias PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES to the full embedded inventory.; Derive the config-CLI enabled-tools fallbackDefault from the shared default tuple.; Align default-matrix unit tests with the updated requirement.
 - Rename pi-prompts-update.sh to prompts-update.sh [useReq] *(scripts)*
   Rename scripts/pi-prompts-update.sh to scripts/prompts-update.sh and update
   the script @file header plus its temporary-directory prefix. Align
@@ -1913,7 +1917,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.35\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.35
+- \[0.109.36\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.36
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -2022,4 +2026,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.35]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.35
+[0.109.36]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.36
