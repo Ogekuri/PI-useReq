@@ -588,7 +588,7 @@ function buildExpectedFakeExtensionIdentityStatusField(): string {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the runtime extension identity prefix, workflow-state highlighting through `buildExpectedFakeWorkflowStateValue(...)` so `error` and `warning` share the blinking error token, branch field, icon-based usage gauge, effective running-configuration `tool,check` counts, consolidated time field, and sound field emitted by the extension using deterministic fake theme markers. The `tool,check` counts are derived from the effective configuration loaded from the supplied base path so expectations mirror the configuration the extension loads. Runtime is O(l) in static-check language count plus configuration reads plus optional git execution for branch discovery. No external state is mutated.
+ * @details Reconstructs the runtime extension identity prefix, workflow-state highlighting through `buildExpectedFakeWorkflowStateValue(...)` so `error` and `warning` share the blinking error token, branch field, icon-based usage gauge, effective running-configuration `tool,check` enabled/total counts, consolidated time field, and sound field emitted by the extension using deterministic fake theme markers. The `tool,check` enabled/total counts are derived from the effective configuration loaded from the supplied base path so expectations mirror the configuration the extension loads. Runtime is O(l) in static-check language count plus configuration reads plus optional git execution for branch discovery. No external state is mutated.
  * @param[in] options {{ workflowState?: string; workflowRequest?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered runtime extension prefix, `status`, `branch`, `usage`, `tool,check`, `time`, and `sound` fields.
  * @return {string} Encoded status-bar string.
  */
@@ -619,9 +619,9 @@ function buildExpectedFakeStatusText(options: {
   const statusConfig = options.basePath !== undefined
     ? loadConfig(options.basePath)
     : getDefaultConfig(process.cwd());
-  const toolCheckValue = `${statusConfig["enabled-tools"].length},${
+  const toolCheckValue = `${statusConfig["enabled-tools"].length}/${PI_USEREQ_STARTUP_TOOL_NAMES.length},${
     DEFAULT_STATIC_CHECK_LANGUAGES.filter((language) => statusConfig["static-check"][language]?.enabled === "enable").length
-  }`;
+  }/${DEFAULT_STATIC_CHECK_LANGUAGES.length}`;
   return [
     buildExpectedFakeExtensionIdentityStatusField(),
     `${formatFakeThemeForeground("accent", "status:")}${workflowStateValue}`,

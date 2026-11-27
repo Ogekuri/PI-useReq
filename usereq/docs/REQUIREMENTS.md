@@ -1,7 +1,7 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.185"
+version: "0.0.186"
 date: "2026-11-27"
 author: "OpenAI Codex"
 scope:
@@ -239,7 +239,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-283**: MUST resolve `branch` from the current `context-path` git HEAD during every status-bar rebuild so worktree switches and base-path restoration update immediately.
 - **REQ-284**: MUST render `usage` immediately after `branch` with separator ` • ` and one fixed-width gauge icon.
 - **REQ-122**: MUST map `usage` values to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands.
-- **REQ-840**: MUST render `tool,check` immediately after `usage` with separator ` • ` as `<enabled-tool-count>,<enabled-static-check-language-count>` derived from the effective running configuration.
+- **REQ-840**: MUST render `tool,check` immediately after `usage` with separator ` • ` as `<enabled-tool-count>/<total-tool-count>,<enabled-static-check-language-count>/<total-static-check-language-count>`, deriving numerators from the effective running configuration and denominators from the canonical configurable tool and static-check language inventories.
 - **REQ-123**: MUST render `time` immediately after `tool,check` as `⏱︎ <running_timer> ⚑ <context_timer> ⌛︎<session_timer>`.
 - **REQ-124**: MUST render every elapsed timer from zero as `M:SS` and MUST NOT render unset elapsed placeholders.
 - **REQ-125**: MUST render timed `time` segments as `M:SS`, keep minutes unbounded above 59, and zero-pad seconds to two digits.
@@ -932,7 +932,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-031**: MUST verify the status bar renders runtime `<extension>:v<version>` before `status`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
 - **TST-033**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `usage`, `tool,check`, `time`, and `sound` plus the documented icon-based `usage` gauge thresholds.
-- **TST-272**: MUST verify `tool,check` renders the enabled-tool count and the enabled static-check language count from the effective running configuration.
+- **TST-272**: MUST verify `tool,check` renders the enabled and total configurable-tool counts plus the enabled and total static-check language counts from the effective running configuration and canonical inventories.
 - **TST-273**: MUST verify the embedded-tool inventory includes `powershell`, `codemode`, and `tool_search`, defaults enable `codemode` and disable `tool_search`, and `tool_search` sorts after default-enabled embedded tools.
 - **TST-037**: MUST verify the `Notifications` menu persists notification and boot-sound settings only in global configuration through `Notification events` and `Sound events` submenus using the documented labels and order.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles only the active runtime sound level, leaves local and global configuration unchanged, and refreshes the status bar with the updated `sound` field.

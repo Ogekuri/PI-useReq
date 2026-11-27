@@ -16,6 +16,7 @@ import type { AgentFinalOutputReport } from "./agent-final-output.js";
 import { DEFAULT_STATIC_CHECK_LANGUAGES } from "./config.js";
 import type { UseReqConfig } from "./config.js";
 import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
+import { PI_USEREQ_STARTUP_TOOL_NAMES } from "./pi-usereq-tools.js";
 import type { PromptCommandExecutionPlan, PromptCommandStatusMarker } from "./prompt-command-runtime.js";
 import {
   clearPersistedPromptCommandFinalizationSnapshot,
@@ -794,18 +795,18 @@ function formatElapsedStatusValue(
 }
 
 /**
- * @brief Formats the consolidated `tool,check` status-bar value.
- * @details Counts the effective `enabled-tools` array and the static-check languages whose effective `enabled` flag equals `enable` in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order, then emits `<enabled-tool-count>,<enabled-static-check-language-count>` so the running-configuration tool and static-checker totals stay visible in one compact numeric field. Runtime is O(l) where l is the canonical static-check language count. No external state is mutated.
+ * @brief Formats the consolidated `tool,check` status-bar value as enabled/total pairs.
+ * @details Counts the effective `enabled-tools` array and the static-check languages whose effective `enabled` flag equals `enable` in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order, then emits `<enabled-tool-count>/<total-tool-count>,<enabled-static-check-language-count>/<total-static-check-language-count>` where each denominator is the size of the canonical configurable inventory (`PI_USEREQ_STARTUP_TOOL_NAMES` for tools and `DEFAULT_STATIC_CHECK_LANGUAGES` for static-check languages) so the enabled-versus-total tool and static-checker facts stay visible in one compact numeric field. Runtime is O(l) where l is the canonical static-check language count. No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
- * @return {string} Consolidated `tool,check` field value.
+ * @return {string} Consolidated `tool,check` field value carrying enabled/total pairs.
  * @satisfies REQ-840
  */
 function formatToolCheckStatusValue(config: UseReqConfig): string {
-  const enabledToolCount = config["enabled-tools"].length;
+  const toolValue = `${config["enabled-tools"].length}/${PI_USEREQ_STARTUP_TOOL_NAMES.length}`;
   const enabledCheckCount = DEFAULT_STATIC_CHECK_LANGUAGES
     .filter((language) => config["static-check"][language]?.enabled === "enable")
     .length;
-  return `${enabledToolCount},${enabledCheckCount}`;
+  return `${toolValue},${enabledCheckCount}/${DEFAULT_STATIC_CHECK_LANGUAGES.length}`;
 }
 
 /**
