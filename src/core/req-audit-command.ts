@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief Implements the specialized non-agentic `req-install-audit` slash-command workflow.
+ * @brief Implements the specialized non-agentic `req-audit` slash-command workflow.
  * @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
  * @satisfies DES-049, REQ-843, REQ-844, REQ-845, REQ-846, REQ-848
  */
@@ -17,11 +17,11 @@ import { formatRuntimePathForDisplay } from "./path-context.js";
 import { resolveCheckerExecutable } from "./static-check.js";
 
 /**
- * @brief Stores the dedicated `req-install-audit` slash-command description.
- * @details Rendered verbatim by the extension command registration so `req-install-audit` never depends on a bundled prompt Markdown heading. Access complexity is O(1).
+ * @brief Stores the dedicated `req-audit` slash-command description.
+ * @details Rendered verbatim by the extension command registration so `req-audit` never depends on a bundled prompt Markdown heading. Access complexity is O(1).
  * @satisfies REQ-842
  */
-export const REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION =
+export const REQ_AUDIT_COMMAND_DESCRIPTION =
   "Audit the installation of configured static checker executables";
 
 /**
@@ -29,40 +29,40 @@ export const REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION =
  * @details Emitted verbatim as the whole report payload when the effective static-check configuration of the audited project base holds no checker entry, so the command output always names the absence deterministically instead of rendering an empty table. Access complexity is O(1).
  * @satisfies REQ-848
  */
-export const REQ_INSTALL_AUDIT_NO_CHECKERS_LINE =
-  "req-install-audit: No static checker is configured in the active local and global configuration.";
+export const REQ_AUDIT_NO_CHECKERS_LINE =
+  "req-audit: No static checker is configured in the active local and global configuration.";
 
 /**
  * @brief Represents the verification outcome of one configured static checker entry.
  * @details `yes` marks a `Command` entry whose executable resolved through the shared static-check executable resolution, `no` marks a `Command` entry whose executable did not resolve or carries no command, and `n/a` marks a configured entry that delegates no external command-line executable. The alias is compile-time only and introduces no runtime cost.
  * @satisfies REQ-845, REQ-846
  */
-export type ReqInstallAuditInstalledState = "yes" | "no" | "n/a";
+export type ReqAuditInstalledState = "yes" | "no" | "n/a";
 
 /**
  * @brief Describes one audit table row for one configured static checker entry.
  * @details Pairs the owning canonical language with the shell-like checker command summary and the executable verification outcome. The interface is compile-time only and introduces no runtime cost.
  * @satisfies REQ-846
  */
-export interface ReqInstallAuditCheckerRow {
+export interface ReqAuditCheckerRow {
   /** Canonical static-check language owning the configured checker entry. */
   language: string;
   /** Shell-like command summary identifying the configured checker entry. */
   checker: string;
   /** Executable verification outcome of the configured checker entry. */
-  installed: ReqInstallAuditInstalledState;
+  installed: ReqAuditInstalledState;
 }
 
 /**
- * @brief Describes the outcome facts of one completed `req-install-audit` run.
+ * @brief Describes the outcome facts of one completed `req-audit` run.
  * @details Carries the resolved audited project base, the ordered audit rows grouped by language, the rendered report payload written into the editor, the total configured checker count, and the count of `Command` entries whose executable did not resolve. The interface is compile-time only and introduces no runtime cost.
  * @satisfies REQ-846, REQ-847
  */
-export interface ReqInstallAuditResult {
+export interface ReqAuditResult {
   /** Absolute audited project base path whose effective configuration was audited. */
   projectBase: string;
   /** Audit rows in canonical language order, preserving configured entry order per language. */
-  rows: ReqInstallAuditCheckerRow[];
+  rows: ReqAuditCheckerRow[];
   /** Rendered report payload written into the editor by the command handler. */
   report: string;
   /** Total number of configured static checker entries included in the audit. */
@@ -79,7 +79,7 @@ export interface ReqInstallAuditResult {
  * @note Complexity: O(p) in parameter count. Pure; no side effects.
  * @satisfies REQ-846
  */
-function formatReqInstallAuditCheckerEntry(entry: StaticCheckEntry): string {
+function formatReqAuditCheckerEntry(entry: StaticCheckEntry): string {
   const command = entry.cmd?.trim();
   if (!command) {
     return entry.module;
@@ -92,11 +92,11 @@ function formatReqInstallAuditCheckerEntry(entry: StaticCheckEntry): string {
  * @brief Resolves the executable verification outcome of one configured static checker entry.
  * @details Returns `n/a` for entries that delegate no external command-line executable, resolves `Command` entry executables through the shared `resolveCheckerExecutable(...)` resolution used by static-check execution, and reports `no` for `Command` entries whose executable is unresolvable or absent. Runtime is O(p) in PATH entry count plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
  * @param[in] entry {StaticCheckEntry} Configured static-check entry to verify.
- * @return {ReqInstallAuditInstalledState} Executable verification outcome of the entry.
+ * @return {ReqAuditInstalledState} Executable verification outcome of the entry.
  * @note Complexity: O(p) in PATH entry count for `Command` entries; O(1) otherwise.
  * @satisfies REQ-845
  */
-function resolveReqInstallAuditInstalledState(entry: StaticCheckEntry): ReqInstallAuditInstalledState {
+function resolveReqAuditInstalledState(entry: StaticCheckEntry): ReqAuditInstalledState {
   if (entry.module !== "Command") {
     return "n/a";
   }
@@ -108,7 +108,7 @@ function resolveReqInstallAuditInstalledState(entry: StaticCheckEntry): ReqInsta
 }
 
 /**
- * @brief Parses the optional `--prj-base <path>` argument of one `req-install-audit` invocation.
+ * @brief Parses the optional `--prj-base <path>` argument of one `req-audit` invocation.
  * @details Accepts the `--prj-base <path>` two-token spelling and the `--prj-base=<path>` attached spelling, rejects every other argument token with a deterministic diagnostic so the command grammar stays unambiguous, and resolves the supplied path to an absolute form; a missing or empty argument falls back to the supplied live bootstrap cwd. Runtime is O(n) in argument count. No external state is mutated.
  * @param[in] rawArgs {string} Raw user-supplied command argument string.
  * @param[in] fallbackCwd {string} Live bootstrap cwd used as the audited project base when no `--prj-base` argument is supplied.
@@ -117,7 +117,7 @@ function resolveReqInstallAuditInstalledState(entry: StaticCheckEntry): ReqInsta
  * @note Complexity: O(n) in argument count. Pure aside from thrown diagnostics.
  * @satisfies REQ-843
  */
-export function parseReqInstallAuditProjectBase(rawArgs: string, fallbackCwd: string): string {
+export function parseReqAuditProjectBase(rawArgs: string, fallbackCwd: string): string {
   const trimmedArgs = rawArgs.trim();
   if (trimmedArgs.length === 0) {
     return path.resolve(fallbackCwd);
@@ -129,7 +129,7 @@ export function parseReqInstallAuditProjectBase(rawArgs: string, fallbackCwd: st
     if (token === "--prj-base") {
       const value = tokens[index + 1];
       if (value === undefined) {
-        throw new ReqError("/req-install-audit requires a path value after --prj-base.", 1);
+        throw new ReqError("/req-audit requires a path value after --prj-base.", 1);
       }
       projectBase = value;
       index += 1;
@@ -140,7 +140,7 @@ export function parseReqInstallAuditProjectBase(rawArgs: string, fallbackCwd: st
       continue;
     }
     throw new ReqError(
-      `/req-install-audit rejects the unsupported argument ${JSON.stringify(token)}; only --prj-base <path> is accepted.`,
+      `/req-audit rejects the unsupported argument ${JSON.stringify(token)}; only --prj-base <path> is accepted.`,
       1,
     );
   }
@@ -151,35 +151,35 @@ export function parseReqInstallAuditProjectBase(rawArgs: string, fallbackCwd: st
 }
 
 /**
- * @brief Executes the specialized `req-install-audit` direct workflow and returns the rendered audit report.
+ * @brief Executes the specialized `req-audit` direct workflow and returns the rendered audit report.
  * @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, renders one display-width-aligned table with the `language`, `static-check`, and `installed` columns through the shared table formatter, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute audited project base path whose effective configuration is audited.
  * @param[in] config {UseReqConfig} Effective configuration of the audited project base loaded from the existing local and global scopes.
- * @return {ReqInstallAuditResult} Audit outcome facts including the rendered report payload.
+ * @return {ReqAuditResult} Audit outcome facts including the rendered report payload.
  * @note Complexity: O(l * c * p). No configuration mutation occurs.
  * @satisfies REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
  */
-export function executeReqInstallAuditCommand(
+export function executeReqAuditCommand(
   projectBase: string,
   config: UseReqConfig,
-): ReqInstallAuditResult {
+): ReqAuditResult {
   const staticCheckConfig = config["static-check"] ?? {};
-  const rows: ReqInstallAuditCheckerRow[] = [];
+  const rows: ReqAuditCheckerRow[] = [];
   for (const language of DEFAULT_STATIC_CHECK_LANGUAGES) {
     const entries = staticCheckConfig[language]?.checkers ?? [];
     for (const entry of entries) {
       rows.push({
         language,
-        checker: formatReqInstallAuditCheckerEntry(entry),
-        installed: resolveReqInstallAuditInstalledState(entry),
+        checker: formatReqAuditCheckerEntry(entry),
+        installed: resolveReqAuditInstalledState(entry),
       });
     }
   }
   const configuredCount = rows.length;
   const missingCount = rows.filter((row) => row.installed === "no").length;
-  const contextLine = `req-install-audit: Auditing static checker executables for ${formatRuntimePathForDisplay(projectBase)}.`;
+  const contextLine = `req-audit: Auditing static checker executables for ${formatRuntimePathForDisplay(projectBase)}.`;
   const report = configuredCount === 0
-    ? `${contextLine}\n${REQ_INSTALL_AUDIT_NO_CHECKERS_LINE}`
+    ? `${contextLine}\n${REQ_AUDIT_NO_CHECKERS_LINE}`
     : `${contextLine}\n\n${formatConfigTable(
       ["language", "static-check", "installed"],
       rows.map((row) => [row.language, row.checker, row.installed]),

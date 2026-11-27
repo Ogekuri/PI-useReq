@@ -4,10 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  REQ_INSTALL_AUDIT_NO_CHECKERS_LINE,
-  executeReqInstallAuditCommand,
-  parseReqInstallAuditProjectBase,
-} from "../src/core/req-install-audit-command.js";
+  REQ_AUDIT_NO_CHECKERS_LINE,
+  executeReqAuditCommand,
+  parseReqAuditProjectBase,
+} from "../src/core/req-audit-command.js";
 import {
   createStaticCheckLanguageConfig,
   getDefaultConfig,
@@ -20,7 +20,7 @@ import { ReqError } from "../src/core/errors.js";
  * @return {string} Absolute temporary project base path.
  */
 function createTemporaryProjectBase(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-install-audit-"));
+  return fs.mkdtempSync(path.join(os.tmpdir(), "pi-usereq-audit-"));
 }
 
 /**
@@ -30,11 +30,11 @@ function createTemporaryProjectBase(): string {
  * @throws {AssertionError} Throws when grouping, column values, or counts diverge from the documented contract.
  * @satisfies REQ-845, REQ-846, TST-274
  */
-test("req-install-audit renders configured checkers grouped by language with language, static-check, and installed columns", () => {
+test("req-audit renders configured checkers grouped by language with language, static-check, and installed columns", () => {
   const projectBase = createTemporaryProjectBase();
   try {
     const config = getDefaultConfig(projectBase);
-    const missingCommand = "pi-usereq-install-audit-missing-checker";
+    const missingCommand = "pi-usereq-audit-missing-checker";
     config["static-check"] = {
       C: createStaticCheckLanguageConfig([
         { module: "Command", cmd: missingCommand },
@@ -47,7 +47,7 @@ test("req-install-audit renders configured checkers grouped by language with lan
       TypeScript: createStaticCheckLanguageConfig([{ module: "Command", cmd: "node" }]),
     };
 
-    const result = executeReqInstallAuditCommand(projectBase, config);
+    const result = executeReqAuditCommand(projectBase, config);
 
     assert.equal(result.configuredCount, 4);
     assert.equal(result.missingCount, 1);
@@ -92,18 +92,18 @@ test("req-install-audit renders configured checkers grouped by language with lan
  * @throws {AssertionError} Throws when the empty configuration still renders a table or wrong counts.
  * @satisfies REQ-848, TST-274
  */
-test("req-install-audit renders the no-configured-checker line instead of a table", () => {
+test("req-audit renders the no-configured-checker line instead of a table", () => {
   const projectBase = createTemporaryProjectBase();
   try {
     const config = getDefaultConfig(projectBase);
     config["static-check"] = {};
 
-    const result = executeReqInstallAuditCommand(projectBase, config);
+    const result = executeReqAuditCommand(projectBase, config);
 
     assert.equal(result.configuredCount, 0);
     assert.equal(result.missingCount, 0);
     assert.equal(result.rows.length, 0);
-    assert.ok(result.report.includes(REQ_INSTALL_AUDIT_NO_CHECKERS_LINE));
+    assert.ok(result.report.includes(REQ_AUDIT_NO_CHECKERS_LINE));
     assert.ok(!result.report.includes("installed"), "no table renders for an empty configuration");
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
@@ -117,18 +117,18 @@ test("req-install-audit renders the no-configured-checker line instead of a tabl
  * @throws {AssertionError} Throws when argument resolution or rejection diverges from the documented grammar.
  * @satisfies REQ-843, TST-275
  */
-test("req-install-audit resolves --prj-base and falls back to the live cwd", () => {
-  const fallbackCwd = path.join(os.tmpdir(), "pi-usereq-install-audit-fallback");
-  assert.equal(parseReqInstallAuditProjectBase("", fallbackCwd), path.resolve(fallbackCwd));
-  assert.equal(parseReqInstallAuditProjectBase("   ", fallbackCwd), path.resolve(fallbackCwd));
+test("req-audit resolves --prj-base and falls back to the live cwd", () => {
+  const fallbackCwd = path.join(os.tmpdir(), "pi-usereq-audit-fallback");
+  assert.equal(parseReqAuditProjectBase("", fallbackCwd), path.resolve(fallbackCwd));
+  assert.equal(parseReqAuditProjectBase("   ", fallbackCwd), path.resolve(fallbackCwd));
   assert.equal(
-    parseReqInstallAuditProjectBase("--prj-base /tmp/pi-usereq-audit-target", fallbackCwd),
+    parseReqAuditProjectBase("--prj-base /tmp/pi-usereq-audit-target", fallbackCwd),
     path.resolve("/tmp/pi-usereq-audit-target"),
   );
   assert.equal(
-    parseReqInstallAuditProjectBase("--prj-base=/tmp/pi-usereq-audit-attached", fallbackCwd),
+    parseReqAuditProjectBase("--prj-base=/tmp/pi-usereq-audit-attached", fallbackCwd),
     path.resolve("/tmp/pi-usereq-audit-attached"),
   );
-  assert.throws(() => parseReqInstallAuditProjectBase("--unknown", fallbackCwd), ReqError);
-  assert.throws(() => parseReqInstallAuditProjectBase("--prj-base", fallbackCwd), ReqError);
+  assert.throws(() => parseReqAuditProjectBase("--unknown", fallbackCwd), ReqError);
+  assert.throws(() => parseReqAuditProjectBase("--prj-base", fallbackCwd), ReqError);
 });

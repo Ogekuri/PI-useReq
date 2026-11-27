@@ -35,7 +35,7 @@
     │   ├── prompt-command-runtime.ts
     │   ├── prompt-command-state.ts
     │   ├── prompts.ts
-    │   ├── req-install-audit-command.ts
+    │   ├── req-audit-command.ts
     │   ├── req-references-command.ts
     │   ├── req-wtd-command.ts
     │   ├── resources.ts
@@ -6584,9 +6584,9 @@ import type { PiUsereqWorkflowState } from "./extension-status.js";
 
 ---
 
-# req-install-audit-command.ts | TypeScript | 194L | 7 symbols | 6 imports | 18 comments
-> Path: `src/core/req-install-audit-command.ts`
-- @brief Implements the specialized non-agentic `req-install-audit` slash-command workflow.
+# req-audit-command.ts | TypeScript | 194L | 7 symbols | 6 imports | 18 comments
+> Path: `src/core/req-audit-command.ts`
+- @brief Implements the specialized non-agentic `req-audit` slash-command workflow.
 - @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
 - @satisfies DES-049, REQ-843, REQ-844, REQ-845, REQ-846, REQ-848
 
@@ -6602,21 +6602,21 @@ import { resolveCheckerExecutable } from "./static-check.js";
 
 ## Definitions
 
-- type `export type ReqInstallAuditInstalledState = "yes" | "no" | "n/a";` (L40)
+- type `export type ReqAuditInstalledState = "yes" | "no" | "n/a";` (L40)
 - @brief Represents the verification outcome of one configured static checker entry.
 - @details `yes` marks a `Command` entry whose executable resolved through the shared static-check executable resolution, `no` marks a `Command` entry whose executable did not resolve or carries no command, and `n/a` marks a configured entry that delegates no external command-line executable. The alias is compile-time only and introduces no runtime cost.
 - @satisfies REQ-845, REQ-846
-### iface `export interface ReqInstallAuditCheckerRow` (L47-54)
+### iface `export interface ReqAuditCheckerRow` (L47-54)
 - @brief Describes one audit table row for one configured static checker entry.
 - @details Pairs the owning canonical language with the shell-like checker command summary and the executable verification outcome. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-846
 
-### iface `export interface ReqInstallAuditResult` (L61-72)
-- @brief Describes the outcome facts of one completed `req-install-audit` run.
+### iface `export interface ReqAuditResult` (L61-72)
+- @brief Describes the outcome facts of one completed `req-audit` run.
 - @details Carries the resolved audited project base, the ordered audit rows grouped by language, the rendered report payload written into the editor, the total configured checker count, and the count of `Command` entries whose executable did not resolve. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-846, REQ-847
 
-### fn `function formatReqInstallAuditCheckerEntry(entry: StaticCheckEntry): string` (L82-89)
+### fn `function formatReqAuditCheckerEntry(entry: StaticCheckEntry): string` (L82-89)
 - @brief Formats one configured static checker entry as a shell-like command summary.
 - @details Joins the configured command with its parameter list into one deterministic space-separated token sequence so the `static-check` table column identifies the externally invoked command line; entries carrying no command render the owning module name. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Configured static-check entry to summarize.
@@ -6624,16 +6624,16 @@ import { resolveCheckerExecutable } from "./static-check.js";
 - @note Complexity: O(p) in parameter count. Pure; no side effects.
 - @satisfies REQ-846
 
-### fn `function resolveReqInstallAuditInstalledState(entry: StaticCheckEntry): ReqInstallAuditInstalledState` (L99-108)
+### fn `function resolveReqAuditInstalledState(entry: StaticCheckEntry): ReqAuditInstalledState` (L99-108)
 - @brief Resolves the executable verification outcome of one configured static checker entry.
 - @details Returns `n/a` for entries that delegate no external command-line executable, resolves `Command` entry executables through the shared `resolveCheckerExecutable(...)` resolution used by static-check execution, and reports `no` for `Command` entries whose executable is unresolvable or absent. Runtime is O(p) in PATH entry count plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
 - @param[in] entry {StaticCheckEntry} Configured static-check entry to verify.
-- @return {ReqInstallAuditInstalledState} Executable verification outcome of the entry.
+- @return {ReqAuditInstalledState} Executable verification outcome of the entry.
 - @note Complexity: O(p) in PATH entry count for `Command` entries; O(1) otherwise.
 - @satisfies REQ-845
 
-### fn `export function parseReqInstallAuditProjectBase(rawArgs: string, fallbackCwd: string): string` (L120-151)
-- @brief Parses the optional `--prj-base <path>` argument of one `req-install-audit` invocation.
+### fn `export function parseReqAuditProjectBase(rawArgs: string, fallbackCwd: string): string` (L120-151)
+- @brief Parses the optional `--prj-base <path>` argument of one `req-audit` invocation.
 - @details Accepts the `--prj-base <path>` two-token spelling and the `--prj-base=<path>` attached spelling, rejects every other argument token with a deterministic diagnostic so the command grammar stays unambiguous, and resolves the supplied path to an absolute form; a missing or empty argument falls back to the supplied live bootstrap cwd. Runtime is O(n) in argument count. No external state is mutated.
 - @param[in] rawArgs {string} Raw user-supplied command argument string.
 - @param[in] fallbackCwd {string} Live bootstrap cwd used as the audited project base when no `--prj-base` argument is supplied.
@@ -6642,25 +6642,25 @@ import { resolveCheckerExecutable } from "./static-check.js";
 - @note Complexity: O(n) in argument count. Pure aside from thrown diagnostics.
 - @satisfies REQ-843
 
-### fn `export function executeReqInstallAuditCommand(` (L162-194)
-- @brief Executes the specialized `req-install-audit` direct workflow and returns the rendered audit report.
+### fn `export function executeReqAuditCommand(` (L162-194)
+- @brief Executes the specialized `req-audit` direct workflow and returns the rendered audit report.
 - @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, renders one display-width-aligned table with the `language`, `static-check`, and `installed` columns through the shared table formatter, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute audited project base path whose effective configuration is audited.
 - @param[in] config {UseReqConfig} Effective configuration of the audited project base loaded from the existing local and global scopes.
-- @return {ReqInstallAuditResult} Audit outcome facts including the rendered report payload.
+- @return {ReqAuditResult} Audit outcome facts including the rendered report payload.
 - @note Complexity: O(l * c * p). No configuration mutation occurs.
 - @satisfies REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`ReqInstallAuditInstalledState`|type||40||
-|`ReqInstallAuditCheckerRow`|iface||47-54|export interface ReqInstallAuditCheckerRow|
-|`ReqInstallAuditResult`|iface||61-72|export interface ReqInstallAuditResult|
-|`formatReqInstallAuditCheckerEntry`|fn||82-89|function formatReqInstallAuditCheckerEntry(entry: StaticC...|
-|`resolveReqInstallAuditInstalledState`|fn||99-108|function resolveReqInstallAuditInstalledState(entry: Stat...|
-|`parseReqInstallAuditProjectBase`|fn||120-151|export function parseReqInstallAuditProjectBase(rawArgs: ...|
-|`executeReqInstallAuditCommand`|fn||162-194|export function executeReqInstallAuditCommand(|
+|`ReqAuditInstalledState`|type||40||
+|`ReqAuditCheckerRow`|iface||47-54|export interface ReqAuditCheckerRow|
+|`ReqAuditResult`|iface||61-72|export interface ReqAuditResult|
+|`formatReqAuditCheckerEntry`|fn||82-89|function formatReqAuditCheckerEntry(entry: StaticCheckEnt...|
+|`resolveReqAuditInstalledState`|fn||99-108|function resolveReqAuditInstalledState(entry: StaticCheck...|
+|`parseReqAuditProjectBase`|fn||120-151|export function parseReqAuditProjectBase(rawArgs: string,...|
+|`executeReqAuditCommand`|fn||162-194|export function executeReqAuditCommand(|
 
 
 ---
@@ -9445,15 +9445,15 @@ registration and status updates.
 
 ### fn `const referencesCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> =>` (L4165-4222)
 
-### fn `function registerReqInstallAuditCommand(` (L4238-4292)
-- @brief Registers the specialized non-agentic `req-install-audit` slash command.
-- @details Registers the dedicated static-checker installation-audit command that auto-recovers terminal `error` or `warning` workflow state to `idle` before the startability gate, rejects in-flight invocation by transitioning workflow state to `error`, otherwise resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, records `install-audit` as the active request, transitions workflow state through `checking|running|done`, verifies every configured `Command` checker executable through the shared static-check executable resolution, renders the audit table grouped by language with `language`, `static-check`, and `installed` columns into the editor without starting an LLM session, dispatching a prompt message, or creating a worktree, emits one info outcome notification counting the audited configured checkers and missing executables through the stale-context-safe deferred-delivery helper, dispatches no command-notify, sound, or Pushover prompt-end effect, and returns to `install-audit ➔ done`. Runtime is dominated by executable resolution probing. Side effects include command registration, status-controller mutation, filesystem reads, editor-text mutation, and UI notifications.
+### fn `function registerReqAuditCommand(` (L4238-4292)
+- @brief Registers the specialized non-agentic `req-audit` slash command.
+- @details Registers the dedicated static-checker installation-audit command that auto-recovers terminal `error` or `warning` workflow state to `idle` before the startability gate, rejects in-flight invocation by transitioning workflow state to `error`, otherwise resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, records `audit` as the active request, transitions workflow state through `checking|running|done`, verifies every configured `Command` checker executable through the shared static-check executable resolution, renders the audit table grouped by language with `language`, `static-check`, and `installed` columns into the editor without starting an LLM session, dispatching a prompt message, or creating a worktree, emits one info outcome notification counting the audited configured checkers and missing executables through the stale-context-safe deferred-delivery helper, dispatches no command-notify, sound, or Pushover prompt-end effect, and returns to `audit ➔ done`. Runtime is dominated by executable resolution probing. Side effects include command registration, status-controller mutation, filesystem reads, editor-text mutation, and UI notifications.
 - @param[in] pi {ExtensionAPI} Active extension API instance.
 - @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
 - @return {void} No return value.
 - @satisfies DES-049, REQ-221, REQ-224, REQ-439, REQ-441, REQ-447, REQ-635, REQ-663, REQ-842, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
 
-### fn `const installAuditCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> =>` (L4242-4286)
+### fn `const auditCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> =>` (L4242-4286)
 
 ### fn `function registerReqContinueCommand(` (L4302-4360)
 - @brief Registers the specialized `req-continue` slash command.
@@ -9808,8 +9808,8 @@ registration and status updates.
 |`wtdCommandHandler`|fn||4079-4145|const wtdCommandHandler = async (args: string, ctx: Exten...|
 |`registerReqReferencesCommand`|fn||4161-4228|function registerReqReferencesCommand(|
 |`referencesCommandHandler`|fn||4165-4222|const referencesCommandHandler = async (args: string, ctx...|
-|`registerReqInstallAuditCommand`|fn||4238-4292|function registerReqInstallAuditCommand(|
-|`installAuditCommandHandler`|fn||4242-4286|const installAuditCommandHandler = async (args: string, c...|
+|`registerReqAuditCommand`|fn||4238-4292|function registerReqAuditCommand(|
+|`auditCommandHandler`|fn||4242-4286|const auditCommandHandler = async (args: string, ctx: Ext...|
 |`registerReqContinueCommand`|fn||4302-4360|function registerReqContinueCommand(|
 |`continueCommandHandler`|fn||4306-4354|const continueCommandHandler = async (args: string, ctx: ...|
 |`registerReqPrintResultCommand`|fn||4369-4390|function registerReqPrintResultCommand(pi: ExtensionAPI):...|

@@ -137,10 +137,10 @@ import {
   prepareReqReferencesCommandExecution,
 } from "./core/req-references-command.js";
 import {
-  REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION,
-  executeReqInstallAuditCommand,
-  parseReqInstallAuditProjectBase,
-} from "./core/req-install-audit-command.js";
+  REQ_AUDIT_COMMAND_DESCRIPTION,
+  executeReqAuditCommand,
+  parseReqAuditProjectBase,
+} from "./core/req-audit-command.js";
 import {
   REQ_WTD_COMMAND_DESCRIPTION,
   executeReqWtdCommandExecution,
@@ -4228,25 +4228,25 @@ function registerReqReferencesCommand(
 }
 
 /**
- * @brief Registers the specialized non-agentic `req-install-audit` slash command.
- * @details Registers the dedicated static-checker installation-audit command that auto-recovers terminal `error` or `warning` workflow state to `idle` before the startability gate, rejects in-flight invocation by transitioning workflow state to `error`, otherwise resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, records `install-audit` as the active request, transitions workflow state through `checking|running|done`, verifies every configured `Command` checker executable through the shared static-check executable resolution, renders the audit table grouped by language with `language`, `static-check`, and `installed` columns into the editor without starting an LLM session, dispatching a prompt message, or creating a worktree, emits one info outcome notification counting the audited configured checkers and missing executables through the stale-context-safe deferred-delivery helper, dispatches no command-notify, sound, or Pushover prompt-end effect, and returns to `install-audit ➔ done`. Runtime is dominated by executable resolution probing. Side effects include command registration, status-controller mutation, filesystem reads, editor-text mutation, and UI notifications.
+ * @brief Registers the specialized non-agentic `req-audit` slash command.
+ * @details Registers the dedicated static-checker installation-audit command that auto-recovers terminal `error` or `warning` workflow state to `idle` before the startability gate, rejects in-flight invocation by transitioning workflow state to `error`, otherwise resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, records `audit` as the active request, transitions workflow state through `checking|running|done`, verifies every configured `Command` checker executable through the shared static-check executable resolution, renders the audit table grouped by language with `language`, `static-check`, and `installed` columns into the editor without starting an LLM session, dispatching a prompt message, or creating a worktree, emits one info outcome notification counting the audited configured checkers and missing executables through the stale-context-safe deferred-delivery helper, dispatches no command-notify, sound, or Pushover prompt-end effect, and returns to `audit ➔ done`. Runtime is dominated by executable resolution probing. Side effects include command registration, status-controller mutation, filesystem reads, editor-text mutation, and UI notifications.
  * @param[in] pi {ExtensionAPI} Active extension API instance.
  * @param[in,out] statusController {PiUsereqStatusController} Mutable status controller.
  * @return {void} No return value.
  * @satisfies DES-049, REQ-221, REQ-224, REQ-439, REQ-441, REQ-447, REQ-635, REQ-663, REQ-842, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
  */
-function registerReqInstallAuditCommand(
+function registerReqAuditCommand(
   pi: ExtensionAPI,
   statusController: PiUsereqStatusController,
 ): void {
-  const installAuditCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+  const auditCommandHandler = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
       autoRecoverTerminalReqCommandState(statusController, ctx);
       if (!isPiUsereqWorkflowStartable(statusController.state.workflowState)) {
         rejectNonIdleReqCommand(statusController, ctx);
       }
       const commandCwd = resolveLiveBootstrapCwd(ctx.cwd);
       syncContextCwdMirror(ctx, commandCwd);
-      const projectBase = parseReqInstallAuditProjectBase(args, commandCwd);
+      const projectBase = parseReqAuditProjectBase(args, commandCwd);
       bootstrapRuntimePathState(projectBase, {
         gitPath: resolveRuntimeGitPath(projectBase),
       });
@@ -4254,11 +4254,11 @@ function registerReqInstallAuditCommand(
       setPiUsereqStatusConfig(statusController, config);
       statusController.state.pendingPromptRequest = undefined;
       statusController.state.activePromptRequest = undefined;
-      setPiUsereqWorkflowRequest(statusController, "install-audit", ctx);
+      setPiUsereqWorkflowRequest(statusController, "audit", ctx);
       setPiUsereqWorkflowState(statusController, "checking", ctx);
       try {
         setPiUsereqWorkflowState(statusController, "running", ctx);
-        const auditResult = executeReqInstallAuditCommand(projectBase, config);
+        const auditResult = executeReqAuditCommand(projectBase, config);
         setPiUsereqWorkflowState(statusController, "done", ctx);
         try {
           ctx.ui.setEditorText(auditResult.report);
@@ -4269,7 +4269,7 @@ function registerReqInstallAuditCommand(
         }
         notifyContextSafely(
           ctx,
-          `req-install-audit: ${auditResult.configuredCount} configured checker(s) audited; ${auditResult.missingCount} missing executable(s).`,
+          `req-audit: ${auditResult.configuredCount} configured checker(s) audited; ${auditResult.missingCount} missing executable(s).`,
           "info",
         );
         // REQ-772: the auxiliary non-agentic emission preserves the retained message so
@@ -4284,11 +4284,11 @@ function registerReqInstallAuditCommand(
         throw error;
       }
   };
-  pi.registerCommand("req-install-audit", {
-    description: REQ_INSTALL_AUDIT_COMMAND_DESCRIPTION,
-    handler: installAuditCommandHandler,
+  pi.registerCommand("req-audit", {
+    description: REQ_AUDIT_COMMAND_DESCRIPTION,
+    handler: auditCommandHandler,
   });
-  registerNextWorkflowCommandHandler("req-install-audit", installAuditCommandHandler);
+  registerNextWorkflowCommandHandler("req-audit", auditCommandHandler);
 }
 
 /**
@@ -6289,7 +6289,7 @@ function activatePiUsereqExtension(pi: ExtensionAPI): void {
   registerReqReferencesCommand(pi, statusController);
   registerReqContinueCommand(pi, statusController);
   registerReqPrintResultCommand(pi);
-  registerReqInstallAuditCommand(pi, statusController);
+  registerReqAuditCommand(pi, statusController);
   registerPromptCommands(pi, statusController);
   if (shouldRegisterDebugToolCommands(getProcessCwdSafe())) {
     registerDebugToolCommands(pi);
