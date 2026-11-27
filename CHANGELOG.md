@@ -1,7 +1,20 @@
 # Changelog
 
-## [0.109.38](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.38) - 2026-11-27
+## [0.109.39](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.39) - 2026-11-27
 ### ⛰️  Features
+- Add non-agentic static-checker installation audit command [useReq] *(req-install-audit)*
+  Introduce the dedicated non-agentic /req-install-audit slash command auditing
+  the operating-system installation of every configured Command checker
+  executable through the shared static-check executable resolution.
+  Add DES-049 plus REQ-842..REQ-848 and amend REQ-441/REQ-447 to cover the
+  new command; add TST-274/TST-275 to the SRS (version 0.0.187).
+  Implement src/core/req-install-audit-command.ts with --prj-base argument
+  resolution and the grouped language/static-check/installed table.
+  Register the command in src/index.ts with stale-safe editor delivery,
+  workflow transitions, outcome notification, and /req-continue delegation.
+  Add tests/req-install-audit-command.test.ts plus handler-level coverage,
+  update the command inventory, README command docs, WORKFLOW.md runtime
+  model, and regenerate REFERENCES.md.
 - add powershell, codemode, tool_search to embedded inventory [useReq] *(pi-usereq-tools)*
   REQ-063: PI_USEREQ_EMBEDDED_TOOL_NAMES grows to ten tools aligned with pi
   CLI 1.6.1 (adds powershell, codemode, tool_search). REQ-064/REQ-841:
@@ -175,6 +188,12 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- add scan-by-crate mode and cargo Rust defaults [useReq] *(static-check)*
+  Requirement Delta: amend REQ-252; add REQ-849..REQ-854 covering the optional scan-by-crate entry flag, its effective resolution (persisted boolean wins, default TRUE only for cargo), single crate-level dispatch from the project base, fixture-root evidence-line filtering, Rust default checkers (cargo clippy and cargo geiger), and explicit-file crate dispatch without file targets.
+  Implementation Delta: extend StaticCheckEntry, cloneStaticCheckEntry, normalizeStaticCheckEntries, and DEFAULT_STATIC_CHECK_CHECKERS in src/core/config.ts; add supportsStaticCheckCrateScan, filterCrateEvidenceLines, dispatchStaticCheckForCrate, and the dispatchStaticCheckForFile crate branch in src/core/static-check.ts; wire crate-scan dispatch into runProjectStaticCheck in src/core/tool-runner.ts; extend the config CLI checker-entry schema token list.
+  Verification: req-static-check clean; unit suite 583 tests, 583 passed, 0 failed. Updated extension-registration default-config assertions and the attended-results isolated static-check scenario (Rust disabled). README default-language list and Rust toolchain install guidance updated; WORKFLOW.md call-traces extended; REFERENCES.md regenerated.
+- BREAKING CHANGE: Rename req-install-audit command to req-audit [useReq] *(core)*
+  Renames the dedicated command module to src/core/req-audit-command.ts with ReqAudit* symbols and req-audit diagnostics.; Renames registration to registerReqAuditCommand with handler auditCommandHandler and workflow request token audit.; Updates Next-Workflow eligibility to req-audit in src/core/next-workflow.ts.; Updates requirements DES-049, REQ-842..REQ-848, REQ-441, REQ-447, TST-274, TST-275 plus README references.; Renames unit tests to tests/req-audit-command.test.ts; static check passes and the full suite reports 583 passing tests.
 - Show enabled and total counts in tool,check status field [useReq] *(status)*
   REQ-840/TST-272 now mandate tool,check as <enabled>/<total> pairs.; formatToolCheckStatusValue appends PI_USEREQ_STARTUP_TOOL_NAMES and
   DEFAULT_STATIC_CHECK_LANGUAGES inventory denominators.
@@ -1950,7 +1969,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.38\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.38
+- \[0.109.39\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.39
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -2059,4 +2078,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.38]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.38
+[0.109.39]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.39
