@@ -198,14 +198,26 @@ function escapeTableCellText(text: string): string {
 }
 
 /**
+ * @brief Enumerates the supported rendered table frame styles.
+ * @details `square` preserves the single-line `┌┬┐`/`├┼┤`/`└┴┘` frame used by configuration CLI printouts; `rounded` selects the rounded `╭┬╮`/`╰┴╯` corner frame with the double-line `╞╪╡` header separator. The alias is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-547
+ */
+export type ConfigTableFrame = "square" | "rounded";
+
+/**
  * @brief Renders one configuration table from headers plus row cells.
- * @details Escapes control characters in every header and cell, computes every column width from the maximum display width, then emits aligned top, header, separator, data, and bottom borders with exactly one space of horizontal padding per cell. Missing cells render empty. Runtime is O(r * c) plus width measurement. No external state is mutated.
+ * @details Escapes control characters in every header and cell, computes every column width from the maximum display width, then emits the frame selected by `frame`, the header row, the header separator, every data row, and the closing border with exactly one space of horizontal padding per cell: the `square` frame emits `┌┬┐`/`├┼┤`/`└┴┘` with single-line fills, while the `rounded` frame emits the rounded `╭┬╮`/`╰┴╯` corners and the double-line `╞╪╡` header separator. Missing cells render empty. Runtime is O(r * c) plus width measurement. No external state is mutated.
  * @param[in] headers {string[]} Ordered column headers.
  * @param[in] rows {string[][]} Ordered physical row cells.
+ * @param[in] frame {ConfigTableFrame} Border style; defaults to the square frame so configuration CLI printouts stay unchanged.
  * @return {string[]} Rendered table lines without structural prefixes.
  * @satisfies REQ-547, REQ-551
  */
-export function formatConfigTable(headers: string[], rows: string[][]): string[] {
+export function formatConfigTable(
+  headers: string[],
+  rows: string[][],
+  frame: ConfigTableFrame = "square",
+): string[] {
   const safeHeaders = headers.map((header) => escapeTableCellText(header));
   const safeRows = rows.map((row) => row.map((cell) => escapeTableCellText(cell)));
   const columnCount = safeHeaders.length;
@@ -215,20 +227,21 @@ export function formatConfigTable(headers: string[], rows: string[][]): string[]
       widths[column] = Math.max(widths[column] ?? 0, measureDisplayWidth(row[column] ?? ""));
     }
   }
-  const borderLine = (left: string, middle: string, right: string): string =>
-    `${left}${widths.map((width) => "─".repeat(width + 2)).join(middle)}${right}`;
+  const borderLine = (left: string, fill: string, middle: string, right: string): string =>
+    `${left}${widths.map((width) => fill.repeat(width + 2)).join(middle)}${right}`;
   const contentLine = (cells: string[]): string =>
     `│${widths
       .map((width, column) => ` ${padTableCell(cells[column] ?? "", width)} `)
       .join("│")}│`;
+  const rounded = frame === "rounded";
   const lines: string[] = [
-    borderLine("┌", "┬", "┐"),
+    rounded ? borderLine("╭", "─", "┬", "╮") : borderLine("┌", "─", "┬", "┐"),
     contentLine(safeHeaders),
-    borderLine("├", "┼", "┤"),
+    rounded ? borderLine("╞", "═", "╪", "╡") : borderLine("├", "─", "┼", "┤"),
   ];
   for (const row of safeRows) {
     lines.push(contentLine(row));
   }
-  lines.push(borderLine("└", "┴", "┘"));
+  lines.push(rounded ? borderLine("╰", "─", "┴", "╯") : borderLine("└", "─", "┴", "┘"));
   return lines;
 }

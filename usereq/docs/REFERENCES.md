@@ -906,7 +906,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 
 ---
 
-# config-cli-render.ts | TypeScript | 234L | 12 symbols | 0 imports | 15 comments
+# config-cli-render.ts | TypeScript | 247L | 13 symbols | 0 imports | 16 comments
 > Path: `src/core/config-cli-render.ts`
 - @brief Renders deterministic configuration trees and tables for the configuration CLI.
 - @details Implements the single data-driven tree renderer shared by `--print` and `--info`, plus one display-width-aware table formatter used for selection, array, and item-schema details. Tree topology depends only on real node ancestry, never on label width or detail count. Runtime is O(n) in emitted lines plus column count. The module is pure and performs no I/O.
@@ -976,17 +976,22 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 - @return {string} Single-line escaped cell text.
 - @satisfies REQ-547
 
-### fn `export function formatConfigTable(headers: string[], rows: string[][]): string[]` (L208-234)
+- type `export type ConfigTableFrame = "square" | "rounded";` (L205)
+- @brief Enumerates the supported rendered table frame styles.
+- @details `square` preserves the single-line `┌┬┐`/`├┼┤`/`└┴┘` frame used by configuration CLI printouts; `rounded` selects the rounded `╭┬╮`/`╰┴╯` corner frame with the double-line `╞╪╡` header separator. The alias is compile-time only and introduces no runtime cost.
+- @satisfies REQ-547
+### fn `export function formatConfigTable(` (L216-247)
 - @brief Renders one configuration table from headers plus row cells.
-- @details Escapes control characters in every header and cell, computes every column width from the maximum display width, then emits aligned top, header, separator, data, and bottom borders with exactly one space of horizontal padding per cell. Missing cells render empty. Runtime is O(r * c) plus width measurement. No external state is mutated.
+- @details Escapes control characters in every header and cell, computes every column width from the maximum display width, then emits the frame selected by `frame`, the header row, the header separator, every data row, and the closing border with exactly one space of horizontal padding per cell: the `square` frame emits `┌┬┐`/`├┼┤`/`└┴┘` with single-line fills, while the `rounded` frame emits the rounded `╭┬╮`/`╰┴╯` corners and the double-line `╞╪╡` header separator. Missing cells render empty. Runtime is O(r * c) plus width measurement. No external state is mutated.
 - @param[in] headers {string[]} Ordered column headers.
 - @param[in] rows {string[][]} Ordered physical row cells.
+- @param[in] frame {ConfigTableFrame} Border style; defaults to the square frame so configuration CLI printouts stay unchanged.
 - @return {string[]} Rendered table lines without structural prefixes.
 - @satisfies REQ-547, REQ-551
 
-### fn `const borderLine = (left: string, middle: string, right: string): string =>` (L218-219)
+### fn `const borderLine = (left: string, fill: string, middle: string, right: string): string =>` (L230-231)
 
-### fn `const contentLine = (cells: string[]): string =>` (L220-223)
+### fn `const contentLine = (cells: string[]): string =>` (L232-235)
 
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
@@ -1000,9 +1005,10 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 |`measureDisplayWidth`|fn||161-171|export function measureDisplayWidth(text: string): number|
 |`padTableCell`|fn||181-183|function padTableCell(text: string, width: number): string|
 |`escapeTableCellText`|fn||192-198|function escapeTableCellText(text: string): string|
-|`formatConfigTable`|fn||208-234|export function formatConfigTable(headers: string[], rows...|
-|`borderLine`|fn||218-219|const borderLine = (left: string, middle: string, right: ...|
-|`contentLine`|fn||220-223|const contentLine = (cells: string[]): string =>|
+|`ConfigTableFrame`|type||205||
+|`formatConfigTable`|fn||216-247|export function formatConfigTable(|
+|`borderLine`|fn||230-231|const borderLine = (left: string, fill: string, middle: s...|
+|`contentLine`|fn||232-235|const contentLine = (cells: string[]): string =>|
 
 
 ---
@@ -6584,10 +6590,10 @@ import type { PiUsereqWorkflowState } from "./extension-status.js";
 
 ---
 
-# req-audit-command.ts | TypeScript | 319L | 12 symbols | 7 imports | 26 comments
+# req-audit-command.ts | TypeScript | 320L | 12 symbols | 7 imports | 26 comments
 > Path: `src/core/req-audit-command.ts`
 - @brief Implements the specialized non-agentic `req-audit` slash-command workflow.
-- @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one terminal-width-bounded table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`, wrapping over-wide static-check cells into border-aligned continuation rows so the borders render correctly inside the pi CLI editor. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
+- @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one terminal-width-bounded rounded table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`, framing it with the rounded `╭┬╮`/`╰┴╯` corners and the double-line `╞╪╡` header separator and wrapping over-wide static-check cells into border-aligned continuation rows so the borders render correctly inside the pi CLI editor. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
 - @satisfies DES-049, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
 
 ## Imports
@@ -6676,7 +6682,7 @@ import { wrapNextWorkflowTableCellText } from "./next-workflow.js";
 
 ### fn `export function executeReqAuditCommand(` (L255-258)
 - @brief Executes the specialized `req-audit` direct workflow and returns the rendered audit report.
-- @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, bounds the rendered table width to the supplied terminal column count or the process-detected pi CLI terminal column count by wrapping the static-check column into border-aligned continuation rows while keeping the natural single-line layout on wide and unknown terminals, renders one display-width-aligned table with the `language`, `static-check`, and `installed` columns through the shared table formatter, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
+- @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, bounds the rendered table width to the supplied terminal column count or the process-detected pi CLI terminal column count by wrapping the static-check column into border-aligned continuation rows while keeping the natural single-line layout on wide and unknown terminals, renders one display-width-aligned rounded table with the `language`, `static-check`, and `installed` columns through the shared table formatter with the rounded `╭┬╮`/`╰┴╯` corner frame and the double-line `╞╪╡` header separator, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute audited project base path whose effective configuration is audited.
 - @param[in] config {UseReqConfig} Effective configuration of the audited project base loaded from the existing local and global scopes.
 - @param[in] options {ReqAuditExecuteOptions} Optional terminal-column execution controls; an absent value selects the process-detected terminal column count.
@@ -6684,12 +6690,12 @@ import { wrapNextWorkflowTableCellText } from "./next-workflow.js";
 - @note Complexity: O(l * c * p). No configuration mutation occurs.
 - @satisfies REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
 
-### fn `function renderReqAuditTable(rows: readonly ReqAuditCheckerRow[], terminalColumns: number | undefined): string` (L296-319)
-- @brief Renders the audit table with the static-check column bounded to the terminal width.
-- @details Measures the language, installed, and natural static-check column widths, resolves the effective static-check wrap target through `resolveReqAuditTextColumnTargetWidth(...)` against the supplied terminal column count or the process-detected fallback, builds the wrapped physical rows through `buildReqAuditTableRows(...)`, and renders the display-width-aligned table through the shared table formatter. Runtime is O(n) in aggregate checker length. No external state is mutated.
+### fn `function renderReqAuditTable(rows: readonly ReqAuditCheckerRow[], terminalColumns: number | undefined): string` (L296-320)
+- @brief Renders the audit table with rounded borders, a double-line header separator, and the static-check column bounded to the terminal width.
+- @details Measures the language, installed, and natural static-check column widths, resolves the effective static-check wrap target through `resolveReqAuditTextColumnTargetWidth(...)` against the supplied terminal column count or the process-detected fallback, builds the wrapped physical rows through `buildReqAuditTableRows(...)`, and renders the display-width-aligned table through the shared table formatter with the rounded frame `╭┬╮`/`╰┴╯` and the double-line `╞╪╡` header separator, so the frame glyphs match the documented rounded table framing. Runtime is O(n) in aggregate checker length. No external state is mutated.
 - @param[in] rows {ReqAuditCheckerRow[]} Audit rows in canonical language order.
 - @param[in] terminalColumns {number | undefined} pi CLI terminal column count bounding the rendered table width; `undefined` keeps the natural layout.
-- @return {string} Complete rendered table text with one aligned border per physical row.
+- @return {string} Complete rendered rounded table text with one aligned border per physical row.
 - @note Complexity: O(n) in aggregate checker length. Pure aside from the process stdout metadata read performed by the default width source.
 - @satisfies REQ-846, REQ-847
 
@@ -6707,7 +6713,7 @@ import { wrapNextWorkflowTableCellText } from "./next-workflow.js";
 |`resolveReqAuditTextColumnTargetWidth`|fn||202-219|function resolveReqAuditTextColumnTargetWidth(|
 |`buildReqAuditTableRows`|fn||230-243|function buildReqAuditTableRows(|
 |`executeReqAuditCommand`|fn||255-258|export function executeReqAuditCommand(|
-|`renderReqAuditTable`|fn||296-319|function renderReqAuditTable(rows: readonly ReqAuditCheck...|
+|`renderReqAuditTable`|fn||296-320|function renderReqAuditTable(rows: readonly ReqAuditCheck...|
 
 
 ---

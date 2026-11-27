@@ -87,6 +87,56 @@ test("req-audit renders configured checkers grouped by language with language, s
 });
 
 /**
+ * @brief Verifies the audit table frame uses the documented rounded corners and double-line header separator.
+ * @details Configures one `C` language with two checker entries, executes the audit, and verifies the rendered frame opens with `╭` joined by `┬`, closes with `╰` joined by `┴`, separates the header row from every data row with the double-line `╞═╪═╡` separator, keeps all frame lines on one shared display width, and emits no legacy square corner or row-separator glyph. Runtime is dominated by executable resolution probing. Side effects are limited to temporary filesystem mutation.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when the frame glyphs, header separator, or frame alignment diverge from the documented rounded table framing.
+ * @satisfies REQ-846, TST-274
+ */
+test("req-audit frames the table with rounded corners and the double-line header separator", () => {
+  const projectBase = createTemporaryProjectBase();
+  try {
+    const config = getDefaultConfig(projectBase);
+    config["static-check"] = {
+      C: createStaticCheckLanguageConfig([
+        { module: "Command", cmd: "pi-usereq-audit-missing-checker" },
+        { module: "Dummy", cmd: "dummy-driver" },
+      ]),
+    };
+
+    const lines = executeReqAuditCommand(projectBase, config).report.split("\n");
+    const topBorder = lines.find((line) => line.startsWith("╭"));
+    assert.ok(topBorder !== undefined, "the table opens with a rounded top-left corner");
+    assert.ok(topBorder.endsWith("╮"), "the top border closes with a rounded top-right corner");
+    assert.ok(topBorder.includes("┬"), "the top border joins the columns with the documented junction");
+    const headerSeparator = lines.find((line) => /^╞═+╪═+╪═+╡$/.test(line));
+    assert.ok(
+      headerSeparator !== undefined,
+      "the header row is separated from the data rows by the double-line separator",
+    );
+    const headerIndex = lines.findIndex((line) => line.includes("static-check"));
+    const separatorIndex = lines.indexOf(headerSeparator);
+    assert.equal(separatorIndex, headerIndex + 1, "the double-line separator directly follows the header row");
+    const bottomBorder = lines.find((line) => line.startsWith("╰"));
+    assert.ok(bottomBorder !== undefined, "the table closes with a rounded bottom-left corner");
+    assert.ok(bottomBorder.endsWith("╯"), "the bottom border closes with a rounded bottom-right corner");
+    assert.ok(bottomBorder.includes("┴"), "the bottom border joins the columns with the documented junction");
+    const frameLines = lines.filter((line) => /^[╭╞╰]/.test(line));
+    assert.equal(frameLines.length, 3, "the frame renders exactly one top, header-separator, and bottom line");
+    assert.equal(
+      new Set(frameLines.map((line) => measureDisplayWidth(line))).size,
+      1,
+      "every frame line shares one identical display width",
+    );
+    for (const legacyGlyph of ["┌", "┐", "├", "┤", "└", "┘"]) {
+      assert.ok(!lines.some((line) => line.includes(legacyGlyph)), `the frame emits no legacy ${legacyGlyph} glyph`);
+    }
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
  * @brief Verifies the audit table wraps within the requested terminal width keeping every border aligned.
  * @details Configures one `C` language with a long resolvable command and one unresolvable command, executes the audit with a 100-column terminal budget, and verifies every rendered line stays within the terminal width, every border line shares one identical width, every table content line carries exactly four cells so the borders align on every physical row, the wrapped checker content stays complete across its continuation lines, continuation rows keep the language and installed cells empty, the per-row verification verdicts stay on the first physical row of each logical row, and the unknown-terminal rendering keeps the natural single-line layout. Runtime is dominated by executable resolution probing. Side effects are limited to temporary filesystem mutation.
  * @return {void} No return value.
@@ -113,7 +163,7 @@ test("req-audit wraps the static-check column within the requested terminal widt
 
     const result = executeReqAuditCommand(projectBase, config, { terminalColumns: 100 });
     const lines = result.report.split("\n");
-    const borderLines = lines.filter((line) => /^[┌├└]/.test(line));
+    const borderLines = lines.filter((line) => /^[╭╞╰]/.test(line));
     assert.ok(borderLines.length >= 3, "report renders the bordered table");
     const borderWidths = new Set(borderLines.map((line) => line.length));
     assert.equal(borderWidths.size, 1, "all border lines share one identical width");
@@ -149,7 +199,7 @@ test("req-audit wraps the static-check column within the requested terminal widt
 
     const naturalResult = executeReqAuditCommand(projectBase, config);
     const naturalLines = naturalResult.report.split("\n");
-    const naturalTableLines = naturalLines.filter((line) => /^[│┌├└]/.test(line));
+    const naturalTableLines = naturalLines.filter((line) => /^[│╭╞╰]/.test(line));
     const naturalContentLines = naturalTableLines.filter((line) => line.startsWith("│"));
     assert.equal(
       naturalContentLines.length,
