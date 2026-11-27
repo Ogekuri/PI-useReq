@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.40](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.40) - 2026-11-27
+## [0.109.41](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.41) - 2026-11-27
 ### ⛰️  Features
 - Add non-agentic static-checker installation audit command [useReq] *(req-install-audit)*
   Introduce the dedicated non-agentic /req-install-audit slash command auditing
@@ -56,6 +56,11 @@
 - Update prompts.
 
 ### 🐛  Bug Fixes
+- render rounded table frame with double-line header separator [useReq] *(req-audit)*
+  add selectable rounded frame to the shared config table formatter; render the /req-audit table with rounded corners and the double-line header separator; add the rounded-frame reproducer test and align the border assertions; update WORKFLOW.md runtime model and regenerate REFERENCES.md
+- Update .pi-usereq.json config.
+- wrap audit table to terminal width keeping borders aligned [useReq] *(req-audit)*
+  The req-audit report rendered the language/static-check/installed table at its natural width (115+ display columns for the shipped default inventory), so the pi TUI editor wrapped the physical lines and broke the table borders on screen. executeReqAuditCommand now resolves the pi CLI terminal column count (process stdout, explicit option override), derives the static-check column wrap budget from the fixed language/installed/chrome widths with the 35-column minimum floor, wraps every checker cell into border-aligned continuation rows through the shared wrapNextWorkflowTableCellText contract (now exported from next-workflow), and keeps the natural single-line layout byte-identical on wide and unknown terminals. Adds one bordered-table wrapping reproducer to tests/req-audit-command.test.ts and updates WORKFLOW/REFERENCES.
 - stop disposed controller ticker after session switch [useReq] *(extension-status)*
   Root cause of fix ➔ running never reaching fix ➔ error after a result
   "error" closure (log /tmp/PI-useReq/shellScripts-work-20261127101212-req-fix):
@@ -188,6 +193,8 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- update flawfinder, bandit, and JavaScript eslint defaults [useReq] *(static-check)*
+  add REQ-857/REQ-858/REQ-859 and TST-277 to the SRS; default flawfinder to --minlevel=3 --error-level=3 for C and C++; default bandit to --tests B602,B605,B606,B506 for Python; seed a scan-by-dir eslint entry in the JavaScript defaults; align the default-configuration test expectations; refresh WORKFLOW.md runtime model and regenerate REFERENCES.md
 - Add tsc default checker, audit and installer coverage [useReq] *(static-check)*
   Add bundled tsc TypeScript static-check default (cmd tsc, params --noEmit) per REQ-855; REQ-251 documented TypeScript defaults gain tsc (REQUIREMENTS v0.0.189).; Declare typescript as pinned caret-range npm dependency per DES-017 so bundled tsc resolves for consumer installs and req-audit verification.; Extend scripts/install-static-checkers.ts bundled npm inventory with tsc per REQ-856, installing it through the typescript package via resolveBundledCheckerPackageName.; Extend req-audit verification tests per TST-276 asserting shipped-default rows tsc, bandit, clang-tidy, flawfinder.; Regenerate usereq/docs/REFERENCES.md; WORKFLOW.md runtime model unchanged (default-data-only delta).
 - add scan-by-crate mode and cargo Rust defaults [useReq] *(static-check)*
@@ -1971,7 +1978,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.40\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.40
+- \[0.109.41\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.41
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -2080,4 +2087,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.40]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.40
+[0.109.41]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.41
