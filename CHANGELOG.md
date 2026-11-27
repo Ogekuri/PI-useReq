@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.37](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.37) - 2026-11-27
+## [0.109.38](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.38) - 2026-11-27
 ### ⛰️  Features
 - add powershell, codemode, tool_search to embedded inventory [useReq] *(pi-usereq-tools)*
   REQ-063: PI_USEREQ_EMBEDDED_TOOL_NAMES grows to ten tools aligned with pi
@@ -175,6 +175,10 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Show enabled and total counts in tool,check status field [useReq] *(status)*
+  REQ-840/TST-272 now mandate tool,check as <enabled>/<total> pairs.; formatToolCheckStatusValue appends PI_USEREQ_STARTUP_TOOL_NAMES and
+  DEFAULT_STATIC_CHECK_LANGUAGES inventory denominators.
+  Status-bar test helper expectations updated to the pairs format.; WORKFLOW.md call-trace nodes refreshed; REFERENCES.md regenerated.
 - Update bundled prompts from v0.12.21 to v0.12.22 [useReq] *(prompts)*
 - rename status fields to usage/time and add tool,check counts [useReq] *(extension-status)*
   REQ-120: single-line order is now identity, status, branch, usage, tool,check, time, sound.
@@ -1946,7 +1950,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.37\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.37
+- \[0.109.38\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.38
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -2055,4 +2059,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.37]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.37
+[0.109.38]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.38
