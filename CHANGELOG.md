@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.109.39](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.39) - 2026-11-27
+## [0.109.40](https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.40) - 2026-11-27
 ### ⛰️  Features
 - Add non-agentic static-checker installation audit command [useReq] *(req-install-audit)*
   Introduce the dedicated non-agentic /req-install-audit slash command auditing
@@ -188,6 +188,8 @@
   skip duplicate pi-usereq extension activation when another pi-managed\n  installation already owns registration in the same pi host process,\n  removing the per-tool extension conflict diagnostics\n- allow same-installation re-activation across /new, /resume, /fork, and\n  /reload session rebinds and release the claim on activation failure\n- repair the agent-bin pi-usereq launcher after every successful\n  same-source upgrade child so the management CLI never stays dangling\n- add reproducer tests plus WORKFLOW.md and REFERENCES.md updates
 
 ### 🚜  Changes
+- Add tsc default checker, audit and installer coverage [useReq] *(static-check)*
+  Add bundled tsc TypeScript static-check default (cmd tsc, params --noEmit) per REQ-855; REQ-251 documented TypeScript defaults gain tsc (REQUIREMENTS v0.0.189).; Declare typescript as pinned caret-range npm dependency per DES-017 so bundled tsc resolves for consumer installs and req-audit verification.; Extend scripts/install-static-checkers.ts bundled npm inventory with tsc per REQ-856, installing it through the typescript package via resolveBundledCheckerPackageName.; Extend req-audit verification tests per TST-276 asserting shipped-default rows tsc, bandit, clang-tidy, flawfinder.; Regenerate usereq/docs/REFERENCES.md; WORKFLOW.md runtime model unchanged (default-data-only delta).
 - add scan-by-crate mode and cargo Rust defaults [useReq] *(static-check)*
   Requirement Delta: amend REQ-252; add REQ-849..REQ-854 covering the optional scan-by-crate entry flag, its effective resolution (persisted boolean wins, default TRUE only for cargo), single crate-level dispatch from the project base, fixture-root evidence-line filtering, Rust default checkers (cargo clippy and cargo geiger), and explicit-file crate dispatch without file targets.
   Implementation Delta: extend StaticCheckEntry, cloneStaticCheckEntry, normalizeStaticCheckEntries, and DEFAULT_STATIC_CHECK_CHECKERS in src/core/config.ts; add supportsStaticCheckCrateScan, filterCrateEvidenceLines, dispatchStaticCheckForCrate, and the dispatchStaticCheckForFile crate branch in src/core/static-check.ts; wire crate-scan dispatch into runProjectStaticCheck in src/core/tool-runner.ts; extend the config CLI checker-entry schema token list.
@@ -1969,7 +1971,7 @@
 - \[0.107.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.107.0
 - \[0.108.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.108.0
 - \[0.109.0\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.0
-- \[0.109.39\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.39
+- \[0.109.40\]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.109.40
 
 [0.1.0]: https://github.com/Ogekuri/PI-useReq/releases/tag/v0.1.0
 [0.2.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.1.0..v0.2.0
@@ -2078,4 +2080,4 @@
 [0.107.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.106.0..v0.107.0
 [0.108.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.107.0..v0.108.0
 [0.109.0]: https://github.com/Ogekuri/PI-useReq/compare/v0.108.0..v0.109.0
-[0.109.39]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.39
+[0.109.40]: https://github.com/Ogekuri/PI-useReq/compare/v0.109.0..v0.109.40
