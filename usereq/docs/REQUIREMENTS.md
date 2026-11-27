@@ -1,8 +1,8 @@
 ---
 title: "PI-useReq Requirements"
 description: Software requirements specification
-version: "0.0.182"
-date: "2026-11-26"
+version: "0.0.183"
+date: "2026-11-27"
 author: "OpenAI Codex"
 scope:
   paths:
@@ -201,7 +201,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-231**: MUST order non-`req-files-*` custom-tool toggles alphabetically, append `req-files-*` custom-tool toggles alphabetically, and place default-disabled custom-tool toggles after default-enabled custom-tool toggles inside each custom subgroup.
 - **REQ-232**: MUST order embedded-tool toggles alphabetically and place default-disabled embedded-tool toggles after default-enabled embedded-tool toggles.
 - **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls`.
-- **REQ-064**: MUST default `req-files-tokens`, `req-files-summarize`, `req-files-compress`, `req-files-search`, `req-summarize`, `req-references`, `req-compress`, `req-search`, `req-tokens`, `req-files-static-check`, `req-static-check`, `req-result-json-validator`, plus embedded `read`, `bash`, `edit`, and `write` to enabled.
+- **REQ-064**: MUST default every configurable custom tool and every configurable embedded tool `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls` to enabled.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted local and global configuration.
 - **REQ-067**: MUST send every bundled prompt-backed `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that sends bundled prompt-backed `req-<prompt>` payloads through the forked execution session by using only the replacement-session context for post-switch session-bound operations.

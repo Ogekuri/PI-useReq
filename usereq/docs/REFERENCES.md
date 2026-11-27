@@ -1017,7 +1017,7 @@ import { buildLanguageSpecs } from "./source-analyzer.js";
 import {
 import { DEBUG_PROMPT_NAMES, DEBUG_WORKFLOW_STATES } from "./debug-runtime.js";
 import { ReqError } from "./errors.js";
-import { PI_USEREQ_CUSTOM_TOOL_NAMES, PI_USEREQ_EMBEDDED_TOOL_NAMES, PI_USEREQ_STARTUP_TOOL_NAMES } from "./pi-usereq-tools.js";
+import { PI_USEREQ_CUSTOM_TOOL_NAMES, PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES, PI_USEREQ_EMBEDDED_TOOL_NAMES, PI_USEREQ_STARTUP_TOOL_NAMES } from "./pi-usereq-tools.js";
 import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 ```
 

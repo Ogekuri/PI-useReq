@@ -9135,7 +9135,7 @@ test("terminal workflow adoptions freeze stale in-flight elapsed timers and stop
   }
 });
 
-test("session_start enables default custom tools and default embedded tools only", async () => {
+test("session_start enables all configurable tools by default", async () => {
   const cwd = createTempDir("pi-usereq-default-tools-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -9149,9 +9149,9 @@ test("session_start enables default custom tools and default embedded tools only
   }
   assert.equal(activeTools.has("req-search"), true);
   assert.equal(activeTools.has("req-files-search"), true);
-  assert.equal(activeTools.has("find"), false);
-  assert.equal(activeTools.has("grep"), false);
-  assert.equal(activeTools.has("ls"), false);
+  assert.equal(activeTools.has("find"), true);
+  assert.equal(activeTools.has("grep"), true);
+  assert.equal(activeTools.has("ls"), true);
 });
 
 test("default configuration applies the documented static-check, debug, notify, sound, and pushover defaults", () => {
@@ -9269,7 +9269,7 @@ test("default configuration applies the documented static-check, debug, notify, 
   assert.equal(Object.hasOwn(localConfig, "enabled-tools"), false);
 });
 
-test("configuration menu orders tool toggles and can enable embedded builtin tools", async () => {
+test("configuration menu orders tool toggles and can disable embedded builtin tools", async () => {
   const cwd = createTempDir("pi-usereq-menu-embedded-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const pi = createFakePi();
@@ -9298,15 +9298,15 @@ test("configuration menu orders tool toggles and can enable embedded builtin too
     "req-files-tokens",
     "bash",
     "edit",
-    "read",
-    "write",
     "find",
     "grep",
     "ls",
+    "read",
+    "write",
     "Reset defaults",
   ]);
-  assert.ok((config as { "enabled-tools": string[] })["enabled-tools"].includes("grep"));
-  assert.ok(pi.getActiveTools().includes("grep"));
+  assert.ok(!(config as { "enabled-tools": string[] })["enabled-tools"].includes("grep"));
+  assert.ok(!pi.getActiveTools().includes("grep"));
 });
 
 test("configuration menu can disable configurable active tools", async () => {

@@ -32,10 +32,10 @@ export const PI_USEREQ_EMBEDDED_TOOL_NAMES = ["read", "bash", "edit", "write", "
 
 /**
  * @brief Enumerates embedded pi CLI tools enabled by default.
- * @details Restricts default embedded-tool activation to the read/write shell quartet required by the updated project configuration behavior. Access complexity is O(1).
- * @satisfies REQ-064
+ * @details Aliases the full configurable embedded-tool inventory so the default startup-tool selection keeps every configurable embedded tool active until a persisted `enabled-tools` selection explicitly overrides it. Access complexity is O(1).
+ * @satisfies REQ-063, REQ-064, REQ-742
  */
-export const PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES = ["read", "bash", "edit", "write"] as const;
+export const PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES = PI_USEREQ_EMBEDDED_TOOL_NAMES;
 
 /**
  * @brief Enumerates every configurable active-tool name.
@@ -48,7 +48,7 @@ export const PI_USEREQ_STARTUP_TOOL_NAMES = [
 
 /**
  * @brief Enumerates the default enabled-tool configuration.
- * @details Enables the documented analysis and static-check custom tools plus the supported embedded read/write shell quartet, while leaving embedded discovery helpers disabled until explicitly configured. Access complexity is O(1).
+ * @details Enables every configurable custom tool plus every configurable embedded tool so the absent-configuration fallback and the derived schema defaults activate the full configurable inventory. Access complexity is O(1).
  * @satisfies REQ-064, REQ-742
  */
 export const PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES = [

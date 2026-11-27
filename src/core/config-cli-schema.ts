@@ -13,7 +13,7 @@ import {
 } from "./config.js";
 import { DEBUG_PROMPT_NAMES, DEBUG_WORKFLOW_STATES } from "./debug-runtime.js";
 import { ReqError } from "./errors.js";
-import { PI_USEREQ_CUSTOM_TOOL_NAMES, PI_USEREQ_EMBEDDED_TOOL_NAMES, PI_USEREQ_STARTUP_TOOL_NAMES } from "./pi-usereq-tools.js";
+import { PI_USEREQ_CUSTOM_TOOL_NAMES, PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES, PI_USEREQ_EMBEDDED_TOOL_NAMES, PI_USEREQ_STARTUP_TOOL_NAMES } from "./pi-usereq-tools.js";
 import { PI_NOTIFY_SOUND_LEVELS } from "./pi-notify.js";
 
 /**
@@ -535,7 +535,7 @@ export function getConfigSchema(): ConfigSchemaSection[] {
       description: "Tool names enabled at session start.",
       valueKind: "string-array",
       constraints: "Array[String]: configurable tool names",
-      fallbackDefault: ["read", "bash", "edit", "write"],
+      fallbackDefault: [...PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES],
       itemEnum: PI_USEREQ_STARTUP_TOOL_NAMES,
       example: "read",
     }),
