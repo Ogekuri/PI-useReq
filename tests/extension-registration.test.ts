@@ -101,8 +101,10 @@ import {
   comparePiUsereqStartupToolNames,
   PI_USEREQ_CUSTOM_TOOL_NAMES,
   PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES,
+  PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES,
   PI_USEREQ_EMBEDDED_TOOL_NAMES,
   PI_USEREQ_STARTUP_TOOL_NAMES,
+  normalizeEnabledPiUsereqTools,
 } from "../src/core/pi-usereq-tools.js";
 import {
   createPiUsereqStatusController,
@@ -8242,6 +8244,47 @@ test("prompt commands remain functional when custom tool registrations are remov
   }
 });
 
+test("embedded pi CLI tool inventory covers powershell, codemode, and tool_search with codemode default-enabled and tool_search default-disabled", () => {
+  const expectedEmbeddedToolNames = [
+    "read",
+    "bash",
+    "powershell",
+    "edit",
+    "write",
+    "grep",
+    "find",
+    "ls",
+    "codemode",
+    "tool_search",
+  ];
+  const expectedDefaultEmbeddedToolNames = [
+    "read",
+    "bash",
+    "powershell",
+    "edit",
+    "write",
+    "grep",
+    "find",
+    "ls",
+    "codemode",
+  ];
+
+  assert.deepEqual([...PI_USEREQ_EMBEDDED_TOOL_NAMES], expectedEmbeddedToolNames);
+  assert.deepEqual([...PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES], expectedDefaultEmbeddedToolNames);
+  assert.deepEqual(
+    PI_USEREQ_STARTUP_TOOL_NAMES.filter((toolName) => (PI_USEREQ_EMBEDDED_TOOL_NAMES as readonly string[]).includes(toolName)),
+    expectedEmbeddedToolNames,
+  );
+  assert.ok((PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES as readonly string[]).includes("codemode"));
+  assert.ok(!(PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES as readonly string[]).includes("tool_search"));
+  assert.deepEqual(normalizeEnabledPiUsereqTools(undefined), [...PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES]);
+  assert.deepEqual(normalizeEnabledPiUsereqTools(["tool_search"]), ["tool_search"]);
+  assert.ok(comparePiUsereqStartupToolNames("codemode", "tool_search") < 0);
+  for (const defaultEmbeddedToolName of PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES) {
+    assert.ok(comparePiUsereqStartupToolNames(defaultEmbeddedToolName, "tool_search") < 0);
+  }
+});
+
 test("session_start applies configured pi-usereq startup tools", async () => {
   const cwd = createTempDir("pi-usereq-tools-startup-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
@@ -9357,12 +9400,15 @@ test("configuration menu orders tool toggles and can disable embedded builtin to
     "req-files-summarize",
     "req-files-tokens",
     "bash",
+    "codemode",
     "edit",
     "find",
     "grep",
     "ls",
+    "powershell",
     "read",
     "write",
+    "tool_search",
     "Reset defaults",
   ]);
   assert.ok(!(config as { "enabled-tools": string[] })["enabled-tools"].includes("grep"));
@@ -9389,7 +9435,7 @@ test("configuration menu can disable configurable active tools", async () => {
   assert.deepEqual(pi.getActiveTools().filter((toolName: string) => PI_USEREQ_STARTUP_TOOL_NAMES.includes(toolName as never)), []);
 });
 
-test("enable-all and Enable tools reset remove the persisted default-equal enabled-tools entry", async () => {
+test("enable-all persists the full configurable tool selection and Enable tools reset removes the default-equal enabled-tools entry", async () => {
   const cwd = createTempDir("pi-usereq-menu-tools-prune-");
   fs.mkdirSync(path.dirname(getProjectConfigPath(cwd)), { recursive: true });
   const customizedConfig = getDefaultConfig(cwd);
@@ -9405,7 +9451,10 @@ test("enable-all and Enable tools reset remove the persisted default-equal enabl
   }));
 
   let globalConfig = readGlobalConfigJson();
-  assert.equal(Object.hasOwn(globalConfig, "enabled-tools"), false);
+  assert.deepEqual(globalConfig["enabled-tools"], [
+    ...PI_USEREQ_CUSTOM_TOOL_NAMES,
+    ...PI_USEREQ_EMBEDDED_TOOL_NAMES,
+  ].sort(comparePiUsereqStartupToolNames));
   assert.equal(globalConfig.AUTO_GIT_COMMIT, "enable");
   assert.ok(pi.getActiveTools().includes("req-search"));
 

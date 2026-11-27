@@ -200,8 +200,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-315**: MUST persist every `Enable tools` menu flag only in global configuration.
 - **REQ-231**: MUST order non-`req-files-*` custom-tool toggles alphabetically, append `req-files-*` custom-tool toggles alphabetically, and place default-disabled custom-tool toggles after default-enabled custom-tool toggles inside each custom subgroup.
 - **REQ-232**: MUST order embedded-tool toggles alphabetically and place default-disabled embedded-tool toggles after default-enabled embedded-tool toggles.
-- **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin tools named `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls`.
-- **REQ-064**: MUST default every configurable custom tool and every configurable embedded tool `read`, `bash`, `edit`, `write`, `find`, `grep`, and `ls` to enabled.
+- **REQ-063**: MUST derive configurable embedded pi CLI tools from runtime builtin and built-in-extension tools named `read`, `bash`, `powershell`, `edit`, `write`, `grep`, `find`, `ls`, `codemode`, and `tool_search`.
+- **REQ-064**: MUST default every configurable custom tool and every configurable embedded tool `read`, `bash`, `powershell`, `edit`, `write`, `grep`, `find`, `ls`, and `codemode` to enabled.
+- **REQ-841**: MUST default the configurable embedded pi CLI tool `tool_search` to disabled until a persisted `enabled-tools` selection explicitly enables it.
 - **REQ-066**: MUST omit `reset-context` and `context-reset` fields from persisted local and global configuration.
 - **REQ-067**: MUST send every bundled prompt-backed `req-<prompt>` payload into the current active session.
 - **REQ-068**: MUST use one prompt-delivery path that sends bundled prompt-backed `req-<prompt>` payloads through the forked execution session by using only the replacement-session context for post-switch session-bound operations.
@@ -932,6 +933,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
 - **TST-033**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `usage`, `tool,check`, `time`, and `sound` plus the documented icon-based `usage` gauge thresholds.
 - **TST-272**: MUST verify `tool,check` renders the enabled-tool count and the enabled static-check language count from the effective running configuration.
+- **TST-273**: MUST verify the embedded-tool inventory includes `powershell`, `codemode`, and `tool_search`, defaults enable `codemode` and disable `tool_search`, and `tool_search` sorts after default-enabled embedded tools.
 - **TST-037**: MUST verify the `Notifications` menu persists notification and boot-sound settings only in global configuration through `Notification events` and `Sound events` submenus using the documented labels and order.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles only the active runtime sound level, leaves local and global configuration unchanged, and refreshes the status bar with the updated `sound` field.
 - **TST-097**: MUST verify `session_start` loads the active runtime sound level from persisted `notify-sound`.
@@ -1629,6 +1631,9 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | REQ-827 | `src/core/prompt-command-runtime.ts` :: `preparePromptCommandExecution` reuse branch :: validates the main repository while the reused worktree stays dirty-usable. |
 | REQ-828 | `src/core/prompt-command-runtime.ts` :: `abortPromptCommandExecution` reuse branch :: retains the reused worktree and the anchored session on command-side failure. |
 | REQ-829 | `src/core/prompt-command-runtime.ts` :: `resolveReusedPromptWorktree` plus `readPromptSessionParentSessionFile` :: derives base-path and original session for the reused plan. |
+| REQ-063 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_EMBEDDED_TOOL_NAMES` :: enumerates ten embedded pi CLI tool names including `powershell`, `codemode`, and `tool_search`. |
+| REQ-064 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_DEFAULT_ENABLED_TOOL_NAMES` plus `normalizeEnabledPiUsereqTools` :: default tuple enables every configurable custom tool and every embedded tool except `tool_search`; absent-configuration fallback returns it. |
+| REQ-841 | `src/core/pi-usereq-tools.ts` :: `PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES` :: omits `tool_search` so absent configuration and schema defaults leave it disabled. |
 
 ### 8.4 TST Evidence
 | ID | Evidence |
@@ -1737,6 +1742,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 | TST-265 | `tests/extension-registration.test.ts` :: reuse coverage with a dirty retained worktree :: main-repository validation and continued execution on the reused worktree. |
 | TST-266 | `tests/extension-registration.test.ts` :: reuse coverage with a dirty main repository :: retained worktree and anchored session after command-side failure. |
 | TST-267 | `tests/extension-registration.test.ts` :: `req-change auto-recovers the error park and reuses the retained worktree through successful closure` :: base-path restore, branch merge, and worktree deletion after success. |
+| TST-273 | `tests/extension-registration.test.ts` :: `embedded pi CLI tool inventory covers powershell, codemode, and tool_search with codemode default-enabled and tool_search default-disabled` :: inventory membership, default states, and tail ordering. |
 
 ## 9. Performance Notes
 - Project static-check executes `scan-by-dir` Command checkers (`cppcheck`, `ruff`, `eslint`, `gosec`) as one recursive invocation per checker entry over the configured source and test directories instead of one process per file.

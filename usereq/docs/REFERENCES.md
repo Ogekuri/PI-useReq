@@ -5446,29 +5446,29 @@ import { parseAgentFinalOutput } from "./agent-final-output.js";
 
 ---
 
-# pi-usereq-tools.ts | TypeScript | 182L | 7 symbols | 0 imports | 17 comments
+# pi-usereq-tools.ts | TypeScript | 203L | 7 symbols | 0 imports | 17 comments
 > Path: `src/core/pi-usereq-tools.ts`
 - @brief Declares the configurable pi-usereq active-tool inventory.
 - @details Provides canonical custom-tool names, supported embedded-tool names, default enablement subsets, and normalization helpers shared by configuration loading, extension startup, and test doubles. The module is side-effect free. Lookup and normalization costs are linear in configured tool count.
 
 ## Definitions
 
-- type `export type PiUsereqCustomToolName = (typeof PI_USEREQ_CUSTOM_TOOL_NAMES)[number];` (L83)
+- type `export type PiUsereqCustomToolName = (typeof PI_USEREQ_CUSTOM_TOOL_NAMES)[number];` (L104)
 - @brief Represents one valid extension-owned configurable tool identifier.
 - @details Narrows arbitrary strings to the literal union derived from `PI_USEREQ_CUSTOM_TOOL_NAMES`. The alias is compile-time only and introduces no runtime cost.
-- type `export type PiUsereqEmbeddedToolName = (typeof PI_USEREQ_EMBEDDED_TOOL_NAMES)[number];` (L89)
+- type `export type PiUsereqEmbeddedToolName = (typeof PI_USEREQ_EMBEDDED_TOOL_NAMES)[number];` (L110)
 - @brief Represents one valid embedded configurable tool identifier.
 - @details Narrows arbitrary strings to the literal union derived from `PI_USEREQ_EMBEDDED_TOOL_NAMES`. The alias is compile-time only and introduces no runtime cost.
-- type `export type PiUsereqStartupToolName = (typeof PI_USEREQ_STARTUP_TOOL_NAMES)[number];` (L95)
+- type `export type PiUsereqStartupToolName = (typeof PI_USEREQ_STARTUP_TOOL_NAMES)[number];` (L116)
 - @brief Represents one valid configurable active-tool identifier.
 - @details Narrows arbitrary strings to the literal union derived from `PI_USEREQ_STARTUP_TOOL_NAMES`. The alias is compile-time only and introduces no runtime cost.
-### fn `export function isPiUsereqEmbeddedToolName(name: string): name is PiUsereqEmbeddedToolName` (L121-123)
+### fn `export function isPiUsereqEmbeddedToolName(name: string): name is PiUsereqEmbeddedToolName` (L142-144)
 - @brief Tests whether one tool name belongs to the supported embedded-tool subset.
 - @details Performs one set-membership probe against `PI_USEREQ_EMBEDDED_TOOL_SET`. Runtime is O(1). No external state is mutated.
 - @param[in] name {string} Candidate tool name.
 - @return {boolean} `true` when the name belongs to the embedded configurable-tool subset.
 
-### fn `export function normalizeEnabledPiUsereqTools(value: unknown): PiUsereqStartupToolName[]` (L133-140)
+### fn `export function normalizeEnabledPiUsereqTools(value: unknown): PiUsereqStartupToolName[]` (L154-161)
 - @brief Normalizes a user-configured active-tool list.
 - @details Returns the default enabled-tool tuple when the input is not an array. Otherwise filters to string entries, removes names outside the configurable tool set, and deduplicates while preserving first-seen order. Time complexity is O(n). No external state is mutated.
 - @param[in] value {unknown} Raw configuration payload for `enabled-tools`.
@@ -5476,14 +5476,14 @@ import { parseAgentFinalOutput } from "./agent-final-output.js";
 - @satisfies REQ-064, REQ-742
 - @post Returned values are members of `PI_USEREQ_STARTUP_TOOL_NAMES` only.
 
-### fn `function buildPiUsereqStartupToolSortKey(` (L149-157)
+### fn `function buildPiUsereqStartupToolSortKey(` (L170-178)
 - @brief Builds the menu-order partition key for one configurable tool name.
 - @details Encodes the documented `Enable tools` ordering by grouping custom tools before embedded tools, placing non-`files-*` custom tools before `files-*` custom tools, and moving default-disabled names to the tail of each resolved partition. Runtime is O(1). No external state is mutated.
 - @param[in] name {PiUsereqStartupToolName} Canonical configurable tool name.
 - @return {[number, number, number, string]} Stable tuple `{group, subgroup, default_state, name}` used for lexicographic ordering.
 - @satisfies REQ-007, REQ-231, REQ-232
 
-### fn `export function comparePiUsereqStartupToolNames(` (L167-182)
+### fn `export function comparePiUsereqStartupToolNames(` (L188-203)
 - @brief Compares two configurable tool names using the documented menu order.
 - @details Applies the partition key emitted by `buildPiUsereqStartupToolSortKey(...)` and falls back to lexical comparison inside the final key slot so the `Enable tools` submenu stays deterministic across runtimes. Runtime is O(1). No external state is mutated.
 - @param[in] left {PiUsereqStartupToolName} Left configurable tool name.
@@ -5494,13 +5494,13 @@ import { parseAgentFinalOutput } from "./agent-final-output.js";
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`PiUsereqCustomToolName`|type||83||
-|`PiUsereqEmbeddedToolName`|type||89||
-|`PiUsereqStartupToolName`|type||95||
-|`isPiUsereqEmbeddedToolName`|fn||121-123|export function isPiUsereqEmbeddedToolName(name: string):...|
-|`normalizeEnabledPiUsereqTools`|fn||133-140|export function normalizeEnabledPiUsereqTools(value: unkn...|
-|`buildPiUsereqStartupToolSortKey`|fn||149-157|function buildPiUsereqStartupToolSortKey(|
-|`comparePiUsereqStartupToolNames`|fn||167-182|export function comparePiUsereqStartupToolNames(|
+|`PiUsereqCustomToolName`|type||104||
+|`PiUsereqEmbeddedToolName`|type||110||
+|`PiUsereqStartupToolName`|type||116||
+|`isPiUsereqEmbeddedToolName`|fn||142-144|export function isPiUsereqEmbeddedToolName(name: string):...|
+|`normalizeEnabledPiUsereqTools`|fn||154-161|export function normalizeEnabledPiUsereqTools(value: unkn...|
+|`buildPiUsereqStartupToolSortKey`|fn||170-178|function buildPiUsereqStartupToolSortKey(|
+|`comparePiUsereqStartupToolNames`|fn||188-203|export function comparePiUsereqStartupToolNames(|
 
 
 ---

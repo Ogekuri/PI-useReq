@@ -25,17 +25,38 @@ export const PI_USEREQ_CUSTOM_TOOL_NAMES = [
 
 /**
  * @brief Enumerates supported embedded pi CLI tools configurable through `enabled-tools`.
- * @details The tuple is constrained to embedded tools that remain independently addressable alongside the extension-owned tool inventory. Membership checks become O(1) when projected through `PI_USEREQ_EMBEDDED_TOOL_SET`.
+ * @details The tuple is constrained to embedded pi CLI tools that remain independently addressable alongside the extension-owned tool inventory: core builtin tools ordered as the pi CLI `allToolNames` tuple plus the built-in-extension tools `codemode` and `tool_search` whose registrations carry `sourceInfo.source === "builtin"`. Membership checks become O(1) when projected through `PI_USEREQ_EMBEDDED_TOOL_SET`.
  * @satisfies REQ-063
  */
-export const PI_USEREQ_EMBEDDED_TOOL_NAMES = ["read", "bash", "edit", "write", "find", "grep", "ls"] as const;
+export const PI_USEREQ_EMBEDDED_TOOL_NAMES = [
+  "read",
+  "bash",
+  "powershell",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+  "codemode",
+  "tool_search",
+] as const;
 
 /**
  * @brief Enumerates embedded pi CLI tools enabled by default.
- * @details Aliases the full configurable embedded-tool inventory so the default startup-tool selection keeps every configurable embedded tool active until a persisted `enabled-tools` selection explicitly overrides it. Access complexity is O(1).
- * @satisfies REQ-063, REQ-064, REQ-742
+ * @details Explicitly excludes `tool_search`, which stays default-disabled until a persisted `enabled-tools` selection enables it, so the default startup-tool selection activates every configurable embedded tool except `tool_search`. Access complexity is O(1).
+ * @satisfies REQ-064, REQ-742, REQ-841
  */
-export const PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES = PI_USEREQ_EMBEDDED_TOOL_NAMES;
+export const PI_USEREQ_DEFAULT_EMBEDDED_TOOL_NAMES = [
+  "read",
+  "bash",
+  "powershell",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+  "codemode",
+] as const;
 
 /**
  * @brief Enumerates every configurable active-tool name.
