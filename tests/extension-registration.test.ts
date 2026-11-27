@@ -25,6 +25,7 @@ import {
 import {
   createStaticCheckLanguageConfig,
   DEFAULT_DOCS_DIR,
+  DEFAULT_STATIC_CHECK_LANGUAGES,
   getDefaultConfig,
   getGlobalConfigPath,
   getProjectConfigPath,
@@ -585,8 +586,8 @@ function buildExpectedFakeExtensionIdentityStatusField(): string {
 
 /**
  * @brief Builds the expected fake pi-usereq status-bar string for assertions.
- * @details Reconstructs the runtime extension identity prefix, workflow-state highlighting through `buildExpectedFakeWorkflowStateValue(...)` so `error` and `warning` share the blinking error token, branch field, icon-based context gauge, consolidated elapsed field, and sound field emitted by the extension using deterministic fake theme markers. Runtime is O(1) plus optional git execution for branch discovery. No external state is mutated.
- * @param[in] options {{ workflowState?: string; workflowRequest?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered runtime extension prefix, `status`, `branch`, `context`, `elapsed`, and `sound` fields.
+ * @details Reconstructs the runtime extension identity prefix, workflow-state highlighting through `buildExpectedFakeWorkflowStateValue(...)` so `error` and `warning` share the blinking error token, branch field, icon-based usage gauge, effective running-configuration `tool,check` counts, consolidated time field, and sound field emitted by the extension using deterministic fake theme markers. The `tool,check` counts are derived from the effective configuration loaded from the supplied base path so expectations mirror the configuration the extension loads. Runtime is O(l) in static-check language count plus configuration reads plus optional git execution for branch discovery. No external state is mutated.
+ * @param[in] options {{ workflowState?: string; workflowRequest?: string; basePath?: string; contextFilledCells: number; contextPercent?: number | null; et: string; sound?: string }} Expected status facts for rendered runtime extension prefix, `status`, `branch`, `usage`, `tool,check`, `time`, and `sound` fields.
  * @return {string} Encoded status-bar string.
  */
 function buildExpectedFakeStatusText(options: {
@@ -613,12 +614,19 @@ function buildExpectedFakeStatusText(options: {
     filledCells: options.contextFilledCells,
     percent: options.contextPercent,
   });
+  const statusConfig = options.basePath !== undefined
+    ? loadConfig(options.basePath)
+    : getDefaultConfig(process.cwd());
+  const toolCheckValue = `${statusConfig["enabled-tools"].length},${
+    DEFAULT_STATIC_CHECK_LANGUAGES.filter((language) => statusConfig["static-check"][language]?.enabled === "enable").length
+  }`;
   return [
     buildExpectedFakeExtensionIdentityStatusField(),
     `${formatFakeThemeForeground("accent", "status:")}${workflowStateValue}`,
     buildField("branch", branchValue),
-    `${formatFakeThemeForeground("accent", "context:")}${contextBar}`,
-    buildField("elapsed", options.et),
+    `${formatFakeThemeForeground("accent", "usage:")}${contextBar}`,
+    buildField("tool,check", toolCheckValue),
+    buildField("time", options.et),
     buildField("sound", options.sound ?? "none"),
   ].join(formatFakeThemeForeground("dim", " • "));
 }
@@ -8649,7 +8657,7 @@ test("orchestration elapsed timers tick live, restart per orchestration, and acc
     await pi.emit("session_start", { reason: "startup" }, ctx);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 0:00 ⚑ 0:00 ⌛︎0:00<\/warning>/,
     );
 
     // First orchestration on the empty context: the three timers count in unison.
@@ -8659,7 +8667,7 @@ test("orchestration elapsed timers tick live, restart per orchestration, and acc
     intervalCallbacks[0]!();
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
 
     await pi.emit("agent_start", {}, ctx);
@@ -8691,7 +8699,7 @@ test("orchestration elapsed timers tick live, restart per orchestration, and acc
     await pi.emit("agent_start", {}, ctx);
     assert.match(
       ctx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 1:05 ⌛︎1:05<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 0:00 ⚑ 1:05 ⌛︎1:05<\/warning>/,
     );
 
     nowMs = 125_000;
@@ -8765,7 +8773,7 @@ test("new agentic flow after /new restarts the context timer from zero on the em
     }, firstCtx);
     assert.match(
       firstCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
 
     // `/new` rebinds the runtime on a fresh empty session; the process-scoped store keeps the
@@ -8779,7 +8787,7 @@ test("new agentic flow after /new restarts the context timer from zero on the em
     }, newCtx);
     assert.match(
       newCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
 
     // First orchestration on the empty context: `context_timer` must restart from zero while
@@ -8790,7 +8798,7 @@ test("new agentic flow after /new restarts the context timer from zero on the em
     intervalCallbacks[1]!();
     assert.match(
       newCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 0:01 ⚑ 0:01 ⌛︎1:02<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 0:01 ⚑ 0:01 ⌛︎1:02<\/warning>/,
     );
 
     nowMs = 122_000;
@@ -8863,7 +8871,7 @@ test("new agentic flow after /new resets the context timer even when the command
     }, firstCtx);
     assert.match(
       firstCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
 
     // `/new` rebinds the runtime on a fresh empty session, but the command context handed to
@@ -8887,7 +8895,7 @@ test("new agentic flow after /new resets the context timer even when the command
     intervalCallbacks[1]!();
     assert.match(
       newCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 0:01 ⚑ 0:01 ⌛︎1:02<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 0:01 ⚑ 0:01 ⌛︎1:02<\/warning>/,
     );
   } finally {
     Date.now = originalDateNow;
@@ -8928,7 +8936,7 @@ test("elapsed timers persist across new-session rebinding and reload closes in-f
     }, firstCtx);
     assert.match(
       firstCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
     await firstPi.emit("session_shutdown", {}, firstCtx);
 
@@ -8941,7 +8949,7 @@ test("elapsed timers persist across new-session rebinding and reload closes in-f
     }, newCtx);
     assert.match(
       newCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 1:01 ⚑ 1:01 ⌛︎1:01<\/warning>/,
     );
 
     // In-flight orchestration on the replacement: `reload` must close it and keep every timer
@@ -8955,7 +8963,7 @@ test("elapsed timers persist across new-session rebinding and reload closes in-f
     await reloadPi.emit("session_start", { reason: "reload" }, reloadCtx);
     assert.match(
       reloadCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 0:59 ⚑ 0:59 ⌛︎2:00<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 0:59 ⚑ 0:59 ⌛︎2:00<\/warning>/,
     );
   } finally {
     Date.now = originalDateNow;
@@ -9041,7 +9049,7 @@ test("rebound runtime freezes elapsed timers adopted from a terminal orchestrati
     await reboundPi.commands.get("req-change")!.handler("Adjust docs", reboundCtx);
     assert.match(
       reboundCtx.__state.statuses.get("pi-usereq") ?? "",
-      /<accent>elapsed:<\/accent><warning>⏱︎ 0:00 ⚑ 1:05 ⌛︎1:05<\/warning>/,
+      /<accent>time:<\/accent><warning>⏱︎ 0:00 ⚑ 1:05 ⌛︎1:05<\/warning>/,
     );
   } finally {
     Date.now = originalDateNow;

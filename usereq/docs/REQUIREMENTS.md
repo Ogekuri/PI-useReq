@@ -233,14 +233,15 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-117**: MUST route every intercepted hook through `updateExtensionStatus` with the originating hook name and event payload, even when no hook-specific side effect exists.
 - **REQ-118**: MUST obtain latest context-usage facts from `ctx.getContextUsage()` or an equivalent runtime API and store them in extension session state.
 - **REQ-119**: MUST refresh stored context-usage facts during `session_start` and after intercepted events before rebuilding the status bar when newer data is available.
-- **REQ-120**: MUST render single-line status fields in this order: `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, `sound`, deriving `<extension>` and `<version>` from runtime extension package metadata.
+- **REQ-120**: MUST render single-line status fields in this order: `<extension>:v<version>`, `status`, `branch`, `usage`, `tool,check`, `time`, `sound`, deriving `<extension>` and `<version>` from runtime extension package metadata.
 - **REQ-121**: MUST render `branch` immediately after `status` with separator ` • ` and the active git branch name prefixed with `⎇ `.
 - **REQ-283**: MUST resolve `branch` from the current `context-path` git HEAD during every status-bar rebuild so worktree switches and base-path restoration update immediately.
-- **REQ-284**: MUST render `context` immediately after `branch` with separator ` • ` and one fixed-width gauge icon.
-- **REQ-122**: MUST map `context` usage to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands.
-- **REQ-123**: MUST render `elapsed` immediately after `context` as `⏱︎ <running_timer> ⚑ <context_timer> ⌛︎<session_timer>`.
+- **REQ-284**: MUST render `usage` immediately after `branch` with separator ` • ` and one fixed-width gauge icon.
+- **REQ-122**: MUST map `usage` values to `▕_▏`, `▕▂▏`, `▕▄▏`, `▕▆▏`, and `▕█▏` for `0`, `>0-<25`, `>=25-<50`, `>=50-<75`, and `>=75` percent bands.
+- **REQ-840**: MUST render `tool,check` immediately after `usage` with separator ` • ` as `<enabled-tool-count>,<enabled-static-check-language-count>` derived from the effective running configuration.
+- **REQ-123**: MUST render `time` immediately after `tool,check` as `⏱︎ <running_timer> ⚑ <context_timer> ⌛︎<session_timer>`.
 - **REQ-124**: MUST render every elapsed timer from zero as `M:SS` and MUST NOT render unset elapsed placeholders.
-- **REQ-125**: MUST render timed `elapsed` segments as `M:SS`, keep minutes unbounded above 59, and zero-pad seconds to two digits.
+- **REQ-125**: MUST render timed `time` segments as `M:SS`, keep minutes unbounded above 59, and zero-pad seconds to two digits.
 - **REQ-803**: MUST start `running_timer` at zero when a new orchestration starts, tick it live while the orchestration is in flight, and keep its frozen final value after the orchestration reaches a terminal state.
 - **REQ-804**: MUST treat a workflow-state transition from a non-in-flight state into `checking` or `running` as orchestration start, and from `checking|running|merging` into `done|warning|error|idle` as orchestration end.
 - **REQ-805**: MUST reset `context_timer` to zero when an orchestration starts on an empty context and MUST continue `context_timer` from its accumulated value when the context already holds session entries.
@@ -249,10 +250,10 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-808**: MUST update `running_timer`, `context_timer`, and `session_timer` concurrently through one shared live update logic while an orchestration is in flight.
 - **REQ-809**: MUST preserve elapsed-timer accumulators and the in-flight orchestration record across session replacement within the same pi process.
 - **REQ-810**: MUST NOT render `running_timer` above `context_timer` nor `context_timer` above `session_timer`.
-- **REQ-126**: MUST render `context` gauge icons below 90 percent with the same non-error theme token used by `status`, and theme `error` at 90 percent or above.
-- **REQ-127**: MUST render `context` as non-blinking theme `error` `▕█▏` when normalized usage is `>=90-<100` percent.
-- **REQ-233**: MUST render `context` as blinking theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is supported.
-- **REQ-128**: MUST render `context` as theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is unavailable.
+- **REQ-126**: MUST render `usage` gauge icons below 90 percent with the same non-error theme token used by `status`, and theme `error` at 90 percent or above.
+- **REQ-127**: MUST render `usage` as non-blinking theme `error` `▕█▏` when normalized usage is `>=90-<100` percent.
+- **REQ-233**: MUST render `usage` as blinking theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is supported.
+- **REQ-128**: MUST render `usage` as theme `error` `▕█▏` when normalized usage is `>=100` percent and terminal blink control is unavailable.
 - **REQ-131**: MUST persist a boot sound level with allowed values `none`, `low`, `mid`, and `high`, defaulting to `none`.
 - **REQ-132**: MUST execute the configured sound command when the corresponding prompt-end sound event toggle is enabled and the active runtime sound level is not `none`.
 - **REQ-133**: MUST persist configurable shell-command strings for sound levels `low`, `mid`, and `high`, and MUST substitute `%%INSTALLATION_PATH%%` with the runtime extension installation path before execution.
@@ -276,7 +277,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **REQ-176**: MUST implement command-notify exclusively by executing `PI_NOTIFY_CMD` when command-notify is globally enabled and the corresponding prompt-end notify event toggle is enabled.
 - **REQ-178**: MUST persist sound event toggles in keys `notify-sound-on-completed`, `notify-sound-on-interrupted`, and `notify-sound-on-failed`, defaulting to completed enabled and interrupted plus failed disabled.
 - **REQ-179**: MUST label sound rows as `Enable sound (boot value)` and `Sound command (low vol.)`, `Sound command (mid vol.)`, and `Sound command (high vol.)`.
-- **REQ-180**: MUST render `sound` immediately after `elapsed`, showing the active runtime sound level as `none`, `low`, `mid`, or `high`.
+- **REQ-180**: MUST render `sound` immediately after `time`, showing the active runtime sound level as `none`, `low`, `mid`, or `high`.
 - **REQ-181**: MUST make the `Notifications` menu expose `Enable notification`, `Notification events`, and `Notify command` before sound rows.
 - **REQ-183**: MUST make the `Notifications` menu expose `Sound events` immediately after `Enable sound (boot value)` and before sound hotkey plus command rows.
 - **REQ-288**: MUST persist menu-selected `notify-sound` changes to global configuration without changing the active runtime sound level.
@@ -929,7 +930,8 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-006**: MUST verify `session_start` activates configured startup tools, resets workflow state to `idle` for `startup|reload`, restores persisted terminal state for `new`, and updates the single-line `pi-usereq` status bar.
 - **TST-031**: MUST verify the status bar renders runtime `<extension>:v<version>` before `status`, omits `current-path`, `base`, `docs`, `src`, `tests`, `git`, and `tools`, and preserves documented field-value theme separation.
 - **TST-032**: MUST verify extension registration installs wrappers for all documented lifecycle hooks and routes replayed hook payloads through `updateExtensionStatus`.
-- **TST-033**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, and `sound` plus the documented icon-based `context` gauge thresholds.
+- **TST-033**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `usage`, `tool,check`, `time`, and `sound` plus the documented icon-based `usage` gauge thresholds.
+- **TST-272**: MUST verify `tool,check` renders the enabled-tool count and the enabled static-check language count from the effective running configuration.
 - **TST-037**: MUST verify the `Notifications` menu persists notification and boot-sound settings only in global configuration through `Notification events` and `Sound events` submenus using the documented labels and order.
 - **TST-038**: MUST verify the sound-toggle shortcut cycles only the active runtime sound level, leaves local and global configuration unchanged, and refreshes the status bar with the updated `sound` field.
 - **TST-097**: MUST verify `session_start` loads the active runtime sound level from persisted `notify-sound`.
@@ -937,7 +939,7 @@ PI-useReq is a TypeScript pi extension plus companion Node CLI and standalone ex
 - **TST-047**: MUST verify the `Notifications` menu exposes `Pushover events` before direct Pushover settings, keeps `Enable pushover` dimmed and locked until both credential fields are non-empty, and persists Pushover event and credential values only in global configuration.
 - **TST-072**: MUST verify `Pushover text` displays escaped control sequences in menus and decodes the documented escape sequences from input before persistence.
 - **TST-048**: MUST verify native Pushover requests honor global enable, completed/interrupted/failed Pushover toggles, credentials, priority, title, and text placeholder substitution including `%%RESULT%%` plus `%%OUTPUT%%` for enabled prompt-end outcomes.
-- **TST-049**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `context`, `elapsed`, and `sound` fields and appends `sound:<level>`.
+- **TST-049**: MUST verify the status bar renders ordered `<extension>:v<version>`, `status`, `branch`, `usage`, `tool,check`, `time`, and `sound` fields and appends `sound:<level>`.
 - **TST-050**: MUST verify `PI_NOTIFY_CMD` placeholder substitution including `%%RESULT%%` plus `%%OUTPUT%%` and routing honor global notify enable plus completed/interrupted/failed notify toggles.
 - **TST-034**: MUST verify `ctx.getContextUsage()` snapshots refresh status updates and `elapsed` timers accumulate executed orchestrations across escape-triggered cancellation.
 - **TST-255**: MUST verify `running_timer` restarts per orchestration, `context_timer` resets only on empty-context orchestration starts, and `session_timer` accumulates without reset.

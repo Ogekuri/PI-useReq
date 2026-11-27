@@ -13,6 +13,7 @@ import type {
   ThemeColor,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentFinalOutputReport } from "./agent-final-output.js";
+import { DEFAULT_STATIC_CHECK_LANGUAGES } from "./config.js";
 import type { UseReqConfig } from "./config.js";
 import type { PiNotifyOutcome, PiNotifySoundLevel } from "./pi-notify.js";
 import type { PromptCommandExecutionPlan, PromptCommandStatusMarker } from "./prompt-command-runtime.js";
@@ -707,7 +708,7 @@ function resolveContextUsageIconText(
 }
 
 /**
- * @brief Formats one icon-based context-usage gauge.
+ * @brief Formats one icon-based context-usage gauge rendered as the `usage` status-bar field value.
  * @details Renders the documented gauge icon with the same non-error status-value theme token used by `status` below `90%`, switches to theme `error` for `>=90%`, and enables terminal blink only for `>=100%`. Runtime is O(1). No external state is mutated.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] contextUsage {ContextUsage | undefined} Normalized context snapshot.
@@ -773,7 +774,7 @@ function resolveElapsedTimerSnapshot(
 }
 
 /**
- * @brief Formats the consolidated `elapsed` status-bar value.
+ * @brief Formats the consolidated `time` status-bar value.
  * @details Emits the running-orchestration segment `⏱︎ <running_timer>`, the
  * current-context segment `⚑ <context_timer>`, and the process-lifetime
  * segment `⌛︎<session_timer>` with fixed spacing, rendering every timer from
@@ -781,7 +782,7 @@ function resolveElapsedTimerSnapshot(
  * is mutated.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
- * @return {string} Consolidated `elapsed` field value.
+ * @return {string} Consolidated `time` field value.
  * @satisfies REQ-123, REQ-124, REQ-125, REQ-803, REQ-810
  */
 function formatElapsedStatusValue(
@@ -790,6 +791,21 @@ function formatElapsedStatusValue(
 ): string {
   const timers = resolveElapsedTimerSnapshot(state, nowMs);
   return `⏱︎ ${formatStatusDuration(timers.runningMs)} ⚑ ${formatStatusDuration(timers.contextMs)} ⌛︎${formatStatusDuration(timers.sessionMs)}`;
+}
+
+/**
+ * @brief Formats the consolidated `tool,check` status-bar value.
+ * @details Counts the effective `enabled-tools` array and the static-check languages whose effective `enabled` flag equals `enable` in canonical `DEFAULT_STATIC_CHECK_LANGUAGES` order, then emits `<enabled-tool-count>,<enabled-static-check-language-count>` so the running-configuration tool and static-checker totals stay visible in one compact numeric field. Runtime is O(l) where l is the canonical static-check language count. No external state is mutated.
+ * @param[in] config {UseReqConfig} Effective project configuration.
+ * @return {string} Consolidated `tool,check` field value.
+ * @satisfies REQ-840
+ */
+function formatToolCheckStatusValue(config: UseReqConfig): string {
+  const enabledToolCount = config["enabled-tools"].length;
+  const enabledCheckCount = DEFAULT_STATIC_CHECK_LANGUAGES
+    .filter((language) => config["static-check"][language]?.enabled === "enable")
+    .length;
+  return `${enabledToolCount},${enabledCheckCount}`;
 }
 
 /**
@@ -888,14 +904,14 @@ function formatExtensionIdentityStatusField(
 
 /**
  * @brief Builds the full single-line pi-usereq status-bar payload.
- * @details Renders the runtime extension identity prefix before status, then renders status, branch, context, elapsed, and sound fields with dim bullet separators, workflow-state highlighting, the `⎇ `-prefixed branch value, the documented icon-based context gauge, and the active runtime sound level instead of the persisted boot value. Runtime is O(1). No external state is mutated.
+ * @details Renders the runtime extension identity prefix before status, then renders status, branch, usage, tool,check, time, and sound fields with dim bullet separators, workflow-state highlighting, the `⎇ `-prefixed branch value, the documented icon-based usage gauge, the effective running-configuration tool and static-checker counts, and the active runtime sound level instead of the persisted boot value. Runtime is O(1). No external state is mutated.
  * @param[in] config {UseReqConfig} Effective project configuration.
  * @param[in] theme {StatusThemeAdapter} Normalized status theme.
  * @param[in] state {PiUsereqStatusState} Mutable status state snapshot.
  * @param[in] branchName {string} Active git branch name shown in the footer.
  * @param[in] nowMs {number} Current wall-clock time in milliseconds.
  * @return {string} Single-line status-bar text.
- * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-156, REQ-159, REQ-180, REQ-222, REQ-223, REQ-233, REQ-283, REQ-284
+ * @satisfies REQ-109, REQ-112, REQ-120, REQ-121, REQ-123, REQ-124, REQ-125, REQ-126, REQ-127, REQ-128, REQ-156, REQ-159, REQ-180, REQ-222, REQ-223, REQ-233, REQ-283, REQ-284, REQ-840
  */
 function buildPiUsereqStatusText(
   config: UseReqConfig,
@@ -904,7 +920,7 @@ function buildPiUsereqStatusText(
   branchName: string,
   nowMs: number,
 ): string {
-  const elapsedText = formatElapsedStatusValue(state, nowMs);
+  const timeText = formatElapsedStatusValue(state, nowMs);
   const soundText = resolvePiUsereqRuntimeSoundLevel(state, config);
   return [
     formatExtensionIdentityStatusField(theme),
@@ -916,10 +932,11 @@ function buildPiUsereqStatusText(
     formatStatusField(theme, "branch", `${PI_USEREQ_STATUS_BRANCH_PREFIX}${branchName}`),
     formatRenderedStatusField(
       theme,
-      "context",
+      "usage",
       formatContextUsageBar(theme, state.contextUsage),
     ),
-    formatStatusField(theme, "elapsed", elapsedText),
+    formatStatusField(theme, "tool,check", formatToolCheckStatusValue(config)),
+    formatStatusField(theme, "time", timeText),
     formatStatusField(theme, "sound", soundText),
   ].join(theme.separator);
 }
