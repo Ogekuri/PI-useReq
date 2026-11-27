@@ -1,8 +1,8 @@
 /**
  * @file
  * @brief Implements the specialized non-agentic `req-audit` slash-command workflow.
- * @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
- * @satisfies DES-049, REQ-843, REQ-844, REQ-845, REQ-846, REQ-848
+ * @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one terminal-width-bounded table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`, wrapping over-wide static-check cells into border-aligned continuation rows so the borders render correctly inside the pi CLI editor. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
+ * @satisfies DES-049, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
  */
 
 import path from "node:path";
@@ -12,9 +12,10 @@ import {
   type UseReqConfig,
 } from "./config.js";
 import { ReqError } from "./errors.js";
-import { formatConfigTable } from "./config-cli-render.js";
+import { formatConfigTable, measureDisplayWidth } from "./config-cli-render.js";
 import { formatRuntimePathForDisplay } from "./path-context.js";
 import { resolveCheckerExecutable } from "./static-check.js";
+import { wrapNextWorkflowTableCellText } from "./next-workflow.js";
 
 /**
  * @brief Stores the dedicated `req-audit` slash-command description.
@@ -31,6 +32,30 @@ export const REQ_AUDIT_COMMAND_DESCRIPTION =
  */
 export const REQ_AUDIT_NO_CHECKERS_LINE =
   "req-audit: No static checker is configured in the active local and global configuration.";
+
+/**
+ * @brief Stores the fixed per-table chrome width of one rendered audit table row.
+ * @details Composes the two corner borders, the two middle separators, and the two padding spaces around each of the three table cells, so the complete rendered table width equals the language column width plus the static-check column width plus the installed column width plus this constant. Access complexity is O(1).
+ * @satisfies REQ-846
+ */
+export const REQ_AUDIT_TABLE_ROW_CHROME_WIDTH = 10;
+
+/**
+ * @brief Stores the minimum display-column budget granted to the wrapped static-check column.
+ * @details Applied whenever the derived terminal budget falls below this floor so degenerate narrow terminals still render hard-broken, border-aligned continuation rows instead of an arbitrarily crushed column, mirroring the documented fixed-minimum table wrap contract. Access complexity is O(1).
+ * @satisfies REQ-846
+ */
+export const REQ_AUDIT_TEXT_COLUMN_MIN_WIDTH = 35;
+
+/**
+ * @brief Describes the optional execution controls of one `req-audit` command execution.
+ * @details Carries the pi CLI terminal column count used to bound the rendered audit table width; an absent or non-positive value keeps the natural single-line table layout so offline harnesses and wide terminals preserve the established rendering byte-for-byte. The interface is compile-time only and introduces no runtime cost.
+ * @satisfies REQ-846, REQ-847
+ */
+export interface ReqAuditExecuteOptions {
+  /** pi CLI terminal column count bounding the rendered table width; `undefined` keeps the natural layout. */
+  terminalColumns?: number | undefined;
+}
 
 /**
  * @brief Represents the verification outcome of one configured static checker entry.
@@ -151,10 +176,78 @@ export function parseReqAuditProjectBase(rawArgs: string, fallbackCwd: string): 
 }
 
 /**
+ * @brief Reads the pi CLI terminal column count from the hosting process standard output.
+ * @details Returns `process.stdout.columns` only when it is a positive integer so non-TTY pipes, redirected output, and offline harnesses select the natural table layout through `resolveReqAuditTextColumnTargetWidth(...)`. Runtime is O(1). No external state is mutated.
+ * @return {number | undefined} Positive terminal column count, or `undefined` when unavailable.
+ * @note Complexity: O(1). Pure aside from the process stdout metadata read.
+ * @satisfies REQ-846
+ */
+function readReqAuditTerminalColumns(): number | undefined {
+  const columns = process.stdout.columns;
+  return typeof columns === "number" && Number.isInteger(columns) && columns > 0
+    ? columns
+    : undefined;
+}
+
+/**
+ * @brief Resolves the effective static-check column wrap target for one audit table rendering.
+ * @details Returns the natural longest checker width when the terminal column count is unavailable or when the natural table still fits within the terminal, so wide and unknown-terminal renderings stay byte-identical to the established single-line layout; otherwise returns the terminal-derived budget `terminalColumns - fixedColumnsWidth` floored at `REQ_AUDIT_TEXT_COLUMN_MIN_WIDTH` so every wrapped physical row keeps the table borders aligned on screen. Runtime is O(1). No external state is mutated.
+ * @param[in] terminalColumns {number | undefined} pi CLI terminal column count; `undefined` or invalid selects the natural width.
+ * @param[in] fixedColumnsWidth {number} Summed display width of the language column, the installed column, and the per-row chrome.
+ * @param[in] longestCheckerWidth {number} Natural display width of the widest static-check cell.
+ * @return {number} Effective static-check column wrap target in display columns; never above `longestCheckerWidth`.
+ * @note Complexity: O(1). Pure; no side effects.
+ * @satisfies REQ-846
+ */
+function resolveReqAuditTextColumnTargetWidth(
+  terminalColumns: number | undefined,
+  fixedColumnsWidth: number,
+  longestCheckerWidth: number,
+): number {
+  if (
+    typeof terminalColumns !== "number" ||
+    !Number.isInteger(terminalColumns) ||
+    terminalColumns <= 0 ||
+    fixedColumnsWidth + longestCheckerWidth <= terminalColumns
+  ) {
+    return longestCheckerWidth;
+  }
+  return Math.min(
+    longestCheckerWidth,
+    Math.max(REQ_AUDIT_TEXT_COLUMN_MIN_WIDTH, terminalColumns - fixedColumnsWidth),
+  );
+}
+
+/**
+ * @brief Builds the audit table cells with the static-check column wrapped into continuation rows.
+ * @details Wraps every checker summary into display-width-bounded lines through the shared `wrapNextWorkflowTableCellText(...)` contract, renders the first physical row of every logical row with its language and installed verdict cells, and renders every continuation row with empty language and installed cells so the shared table formatter computes aligned borders across all physical rows. Runtime is O(n) in aggregate checker length. No external state is mutated.
+ * @param[in] rows {ReqAuditCheckerRow[]} Audit rows in canonical language order.
+ * @param[in] textColumnWidth {number} Maximum display width per wrapped static-check cell line.
+ * @return {string[][]} Physical row cells consumed by the shared table formatter.
+ * @note Complexity: O(n) in aggregate checker length. Pure; no side effects.
+ * @satisfies REQ-846, REQ-847
+ */
+function buildReqAuditTableRows(
+  rows: readonly ReqAuditCheckerRow[],
+  textColumnWidth: number,
+): string[][] {
+  const wrappedRows: string[][] = [];
+  for (const row of rows) {
+    const checkerLines = wrapNextWorkflowTableCellText(row.checker, textColumnWidth);
+    wrappedRows.push([row.language, checkerLines[0] ?? "", row.installed]);
+    for (const continuationLine of checkerLines.slice(1)) {
+      wrappedRows.push(["", continuationLine, ""]);
+    }
+  }
+  return wrappedRows;
+}
+
+/**
  * @brief Executes the specialized `req-audit` direct workflow and returns the rendered audit report.
- * @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, renders one display-width-aligned table with the `language`, `static-check`, and `installed` columns through the shared table formatter, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
+ * @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, bounds the rendered table width to the supplied terminal column count or the process-detected pi CLI terminal column count by wrapping the static-check column into border-aligned continuation rows while keeping the natural single-line layout on wide and unknown terminals, renders one display-width-aligned table with the `language`, `static-check`, and `installed` columns through the shared table formatter, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
  * @param[in] projectBase {string} Absolute audited project base path whose effective configuration is audited.
  * @param[in] config {UseReqConfig} Effective configuration of the audited project base loaded from the existing local and global scopes.
+ * @param[in] options {ReqAuditExecuteOptions} Optional terminal-column execution controls; an absent value selects the process-detected terminal column count.
  * @return {ReqAuditResult} Audit outcome facts including the rendered report payload.
  * @note Complexity: O(l * c * p). No configuration mutation occurs.
  * @satisfies REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
@@ -162,6 +255,7 @@ export function parseReqAuditProjectBase(rawArgs: string, fallbackCwd: string): 
 export function executeReqAuditCommand(
   projectBase: string,
   config: UseReqConfig,
+  options: ReqAuditExecuteOptions = {},
 ): ReqAuditResult {
   const staticCheckConfig = config["static-check"] ?? {};
   const rows: ReqAuditCheckerRow[] = [];
@@ -180,10 +274,7 @@ export function executeReqAuditCommand(
   const contextLine = `req-audit: Auditing static checker executables for ${formatRuntimePathForDisplay(projectBase)}.`;
   const report = configuredCount === 0
     ? `${contextLine}\n${REQ_AUDIT_NO_CHECKERS_LINE}`
-    : `${contextLine}\n\n${formatConfigTable(
-      ["language", "static-check", "installed"],
-      rows.map((row) => [row.language, row.checker, row.installed]),
-    ).join("\n")}`;
+    : `${contextLine}\n\n${renderReqAuditTable(rows, options.terminalColumns ?? readReqAuditTerminalColumns())}`;
   return {
     projectBase: path.resolve(projectBase),
     rows,
@@ -191,4 +282,38 @@ export function executeReqAuditCommand(
     configuredCount,
     missingCount,
   };
+}
+
+/**
+ * @brief Renders the audit table with the static-check column bounded to the terminal width.
+ * @details Measures the language, installed, and natural static-check column widths, resolves the effective static-check wrap target through `resolveReqAuditTextColumnTargetWidth(...)` against the supplied terminal column count or the process-detected fallback, builds the wrapped physical rows through `buildReqAuditTableRows(...)`, and renders the display-width-aligned table through the shared table formatter. Runtime is O(n) in aggregate checker length. No external state is mutated.
+ * @param[in] rows {ReqAuditCheckerRow[]} Audit rows in canonical language order.
+ * @param[in] terminalColumns {number | undefined} pi CLI terminal column count bounding the rendered table width; `undefined` keeps the natural layout.
+ * @return {string} Complete rendered table text with one aligned border per physical row.
+ * @note Complexity: O(n) in aggregate checker length. Pure aside from the process stdout metadata read performed by the default width source.
+ * @satisfies REQ-846, REQ-847
+ */
+function renderReqAuditTable(rows: readonly ReqAuditCheckerRow[], terminalColumns: number | undefined): string {
+  const languageWidth = Math.max(
+    measureDisplayWidth("language"),
+    ...rows.map((row) => measureDisplayWidth(row.language)),
+  );
+  const installedWidth = Math.max(
+    measureDisplayWidth("installed"),
+    ...rows.map((row) => measureDisplayWidth(row.installed)),
+  );
+  const longestCheckerWidth = Math.max(
+    measureDisplayWidth("static-check"),
+    ...rows.map((row) => measureDisplayWidth(row.checker)),
+  );
+  const fixedColumnsWidth = languageWidth + installedWidth + REQ_AUDIT_TABLE_ROW_CHROME_WIDTH;
+  const textColumnWidth = resolveReqAuditTextColumnTargetWidth(
+    terminalColumns,
+    fixedColumnsWidth,
+    longestCheckerWidth,
+  );
+  return formatConfigTable(
+    ["language", "static-check", "installed"],
+    buildReqAuditTableRows(rows, textColumnWidth),
+  ).join("\n");
 }

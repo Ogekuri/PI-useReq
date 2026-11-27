@@ -4046,14 +4046,14 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 - @note Complexity: O(n) in word length. Pure; no side effects.
 - @satisfies REQ-729
 
-### fn `function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[]` (L303-333)
-- @brief Wraps one captured input text into `Text` cell lines bounded by the effective wrap target.
-- @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, a single word wider than `maxWidth` is hard-broken at display-width boundaries across multiple lines with the final chunk staying open for following words so no produced line exceeds `maxWidth` and the column never widens for unbreakable words, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
+### fn `export function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[]` (L303-333)
+- @brief Wraps one captured input text into cell lines bounded by the effective wrap target.
+- @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, a single word wider than `maxWidth` is hard-broken at display-width boundaries across multiple lines with the final chunk staying open for following words so no produced line exceeds `maxWidth` and the column never widens for unbreakable words, and a fully empty normalization yields one empty line. Exported so the `req-audit` table renderer reuses the identical border-preserving wrap contract for its `static-check` continuation rows instead of duplicating the algorithm. Runtime is O(n) in input length. No external state is mutated.
 - @param[in] inputText {string} Captured input text.
 - @param[in] maxWidth {number} Maximum display width per produced line.
 - @return {string[]} Wrapped cell lines in reading order; never empty.
 - @note Complexity: O(n) in input length. Pure; no side effects.
-- @satisfies REQ-724, REQ-729
+- @satisfies REQ-724, REQ-729, REQ-846
 
 ### fn `export function condenseNextWorkflowTableInputText(inputText: string): string` (L343-351)
 - @brief Condenses one captured input text for Next-Workflow and `/req-continue` table cell rendering.
@@ -4127,7 +4127,7 @@ import { PROMPT_COMMAND_NAMES } from "./prompt-command-catalog.js";
 |`resolveNextWorkflowTextColumnTargetWidth`|fn||237-250|export function resolveNextWorkflowTextColumnTargetWidth(|
 |`readNextWorkflowTerminalColumns`|fn||259-262|function readNextWorkflowTerminalColumns(): number | unde...|
 |`splitUnbreakableWordByDisplayWidth`|fn||273-292|function splitUnbreakableWordByDisplayWidth(word: string,...|
-|`wrapNextWorkflowTableCellText`|fn||303-333|function wrapNextWorkflowTableCellText(inputText: string,...|
+|`wrapNextWorkflowTableCellText`|fn||303-333|export function wrapNextWorkflowTableCellText(inputText: ...|
 |`condenseNextWorkflowTableInputText`|fn||343-351|export function condenseNextWorkflowTableInputText(inputT...|
 |`renderNextWorkflowRoundedTable`|fn||362-392|function renderNextWorkflowRoundedTable(headers: readonly...|
 |`border`|fn||369-372|const border = (left: string, fill: string, middle: strin...|
@@ -6584,39 +6584,45 @@ import type { PiUsereqWorkflowState } from "./extension-status.js";
 
 ---
 
-# req-audit-command.ts | TypeScript | 194L | 7 symbols | 6 imports | 18 comments
+# req-audit-command.ts | TypeScript | 319L | 12 symbols | 7 imports | 26 comments
 > Path: `src/core/req-audit-command.ts`
 - @brief Implements the specialized non-agentic `req-audit` slash-command workflow.
-- @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
-- @satisfies DES-049, REQ-843, REQ-844, REQ-845, REQ-846, REQ-848
+- @details Audits the operating-system installation of the executables used by the configured static checkers that delegate execution to the command line (`Command` module entries invoked as external commands). The workflow resolves the audited project base from an optional `--prj-base <path>` command argument falling back to the live bootstrap cwd, loads the effective static-check configuration of that project base from the existing local and global configuration scopes without mutating persisted configuration, resolves every configured `Command` checker executable through the shared static-check executable resolution used by static-check execution, and renders one terminal-width-bounded table of every configured static checker grouped by language with columns `language`, `static-check`, and `installed`, wrapping over-wide static-check cells into border-aligned continuation rows so the borders render correctly inside the pi CLI editor. The workflow performs no LLM-session initialization, dispatches no prompt message, and creates no worktree. Runtime is dominated by executable resolution probing (installation `node_modules/.bin` plus PATH scans). Side effects are limited to filesystem reads and subprocess-free existence/access probes.
+- @satisfies DES-049, REQ-843, REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
 
 ## Imports
 ```
 import path from "node:path";
 import {
 import { ReqError } from "./errors.js";
-import { formatConfigTable } from "./config-cli-render.js";
+import { formatConfigTable, measureDisplayWidth } from "./config-cli-render.js";
 import { formatRuntimePathForDisplay } from "./path-context.js";
 import { resolveCheckerExecutable } from "./static-check.js";
+import { wrapNextWorkflowTableCellText } from "./next-workflow.js";
 ```
 
 ## Definitions
 
-- type `export type ReqAuditInstalledState = "yes" | "no" | "n/a";` (L40)
+### iface `export interface ReqAuditExecuteOptions` (L55-58)
+- @brief Describes the optional execution controls of one `req-audit` command execution.
+- @details Carries the pi CLI terminal column count used to bound the rendered audit table width; an absent or non-positive value keeps the natural single-line table layout so offline harnesses and wide terminals preserve the established rendering byte-for-byte. The interface is compile-time only and introduces no runtime cost.
+- @satisfies REQ-846, REQ-847
+
+- type `export type ReqAuditInstalledState = "yes" | "no" | "n/a";` (L65)
 - @brief Represents the verification outcome of one configured static checker entry.
 - @details `yes` marks a `Command` entry whose executable resolved through the shared static-check executable resolution, `no` marks a `Command` entry whose executable did not resolve or carries no command, and `n/a` marks a configured entry that delegates no external command-line executable. The alias is compile-time only and introduces no runtime cost.
 - @satisfies REQ-845, REQ-846
-### iface `export interface ReqAuditCheckerRow` (L47-54)
+### iface `export interface ReqAuditCheckerRow` (L72-79)
 - @brief Describes one audit table row for one configured static checker entry.
 - @details Pairs the owning canonical language with the shell-like checker command summary and the executable verification outcome. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-846
 
-### iface `export interface ReqAuditResult` (L61-72)
+### iface `export interface ReqAuditResult` (L86-97)
 - @brief Describes the outcome facts of one completed `req-audit` run.
 - @details Carries the resolved audited project base, the ordered audit rows grouped by language, the rendered report payload written into the editor, the total configured checker count, and the count of `Command` entries whose executable did not resolve. The interface is compile-time only and introduces no runtime cost.
 - @satisfies REQ-846, REQ-847
 
-### fn `function formatReqAuditCheckerEntry(entry: StaticCheckEntry): string` (L82-89)
+### fn `function formatReqAuditCheckerEntry(entry: StaticCheckEntry): string` (L107-114)
 - @brief Formats one configured static checker entry as a shell-like command summary.
 - @details Joins the configured command with its parameter list into one deterministic space-separated token sequence so the `static-check` table column identifies the externally invoked command line; entries carrying no command render the owning module name. Runtime is O(p) in parameter count. No external state is mutated.
 - @param[in] entry {StaticCheckEntry} Configured static-check entry to summarize.
@@ -6624,7 +6630,7 @@ import { resolveCheckerExecutable } from "./static-check.js";
 - @note Complexity: O(p) in parameter count. Pure; no side effects.
 - @satisfies REQ-846
 
-### fn `function resolveReqAuditInstalledState(entry: StaticCheckEntry): ReqAuditInstalledState` (L99-108)
+### fn `function resolveReqAuditInstalledState(entry: StaticCheckEntry): ReqAuditInstalledState` (L124-133)
 - @brief Resolves the executable verification outcome of one configured static checker entry.
 - @details Returns `n/a` for entries that delegate no external command-line executable, resolves `Command` entry executables through the shared `resolveCheckerExecutable(...)` resolution used by static-check execution, and reports `no` for `Command` entries whose executable is unresolvable or absent. Runtime is O(p) in PATH entry count plus bounded filesystem metadata checks. Side effects are limited to filesystem reads.
 - @param[in] entry {StaticCheckEntry} Configured static-check entry to verify.
@@ -6632,7 +6638,7 @@ import { resolveCheckerExecutable } from "./static-check.js";
 - @note Complexity: O(p) in PATH entry count for `Command` entries; O(1) otherwise.
 - @satisfies REQ-845
 
-### fn `export function parseReqAuditProjectBase(rawArgs: string, fallbackCwd: string): string` (L120-151)
+### fn `export function parseReqAuditProjectBase(rawArgs: string, fallbackCwd: string): string` (L145-176)
 - @brief Parses the optional `--prj-base <path>` argument of one `req-audit` invocation.
 - @details Accepts the `--prj-base <path>` two-token spelling and the `--prj-base=<path>` attached spelling, rejects every other argument token with a deterministic diagnostic so the command grammar stays unambiguous, and resolves the supplied path to an absolute form; a missing or empty argument falls back to the supplied live bootstrap cwd. Runtime is O(n) in argument count. No external state is mutated.
 - @param[in] rawArgs {string} Raw user-supplied command argument string.
@@ -6642,25 +6648,66 @@ import { resolveCheckerExecutable } from "./static-check.js";
 - @note Complexity: O(n) in argument count. Pure aside from thrown diagnostics.
 - @satisfies REQ-843
 
-### fn `export function executeReqAuditCommand(` (L162-194)
+### fn `function readReqAuditTerminalColumns(): number | undefined` (L185-190)
+- @brief Reads the pi CLI terminal column count from the hosting process standard output.
+- @details Returns `process.stdout.columns` only when it is a positive integer so non-TTY pipes, redirected output, and offline harnesses select the natural table layout through `resolveReqAuditTextColumnTargetWidth(...)`. Runtime is O(1). No external state is mutated.
+- @return {number | undefined} Positive terminal column count, or `undefined` when unavailable.
+- @note Complexity: O(1). Pure aside from the process stdout metadata read.
+- @satisfies REQ-846
+
+### fn `function resolveReqAuditTextColumnTargetWidth(` (L202-219)
+- @brief Resolves the effective static-check column wrap target for one audit table rendering.
+- @details Returns the natural longest checker width when the terminal column count is unavailable or when the natural table still fits within the terminal, so wide and unknown-terminal renderings stay byte-identical to the established single-line layout; otherwise returns the terminal-derived budget `terminalColumns - fixedColumnsWidth` floored at `REQ_AUDIT_TEXT_COLUMN_MIN_WIDTH` so every wrapped physical row keeps the table borders aligned on screen. Runtime is O(1). No external state is mutated.
+- @param[in] terminalColumns {number | undefined} pi CLI terminal column count; `undefined` or invalid selects the natural width.
+- @param[in] fixedColumnsWidth {number} Summed display width of the language column, the installed column, and the per-row chrome.
+- @param[in] longestCheckerWidth {number} Natural display width of the widest static-check cell.
+- @return {number} Effective static-check column wrap target in display columns; never above `longestCheckerWidth`.
+- @note Complexity: O(1). Pure; no side effects.
+- @satisfies REQ-846
+
+### fn `function buildReqAuditTableRows(` (L230-243)
+- @brief Builds the audit table cells with the static-check column wrapped into continuation rows.
+- @details Wraps every checker summary into display-width-bounded lines through the shared `wrapNextWorkflowTableCellText(...)` contract, renders the first physical row of every logical row with its language and installed verdict cells, and renders every continuation row with empty language and installed cells so the shared table formatter computes aligned borders across all physical rows. Runtime is O(n) in aggregate checker length. No external state is mutated.
+- @param[in] rows {ReqAuditCheckerRow[]} Audit rows in canonical language order.
+- @param[in] textColumnWidth {number} Maximum display width per wrapped static-check cell line.
+- @return {string[][]} Physical row cells consumed by the shared table formatter.
+- @note Complexity: O(n) in aggregate checker length. Pure; no side effects.
+- @satisfies REQ-846, REQ-847
+
+### fn `export function executeReqAuditCommand(` (L255-258)
 - @brief Executes the specialized `req-audit` direct workflow and returns the rendered audit report.
-- @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, renders one display-width-aligned table with the `language`, `static-check`, and `installed` columns through the shared table formatter, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
+- @details Iterates the canonical supported static-check language order so table rows stay grouped by language, collects every configured checker entry of the effective static-check configuration regardless of the per-language enable flag, resolves the executable verification outcome of every configured entry, bounds the rendered table width to the supplied terminal column count or the process-detected pi CLI terminal column count by wrapping the static-check column into border-aligned continuation rows while keeping the natural single-line layout on wide and unknown terminals, renders one display-width-aligned table with the `language`, `static-check`, and `installed` columns through the shared table formatter, and prepends one context line naming the audited project base; a configuration holding no checker entry renders the documented no-configured-checker line instead of a table. The audit reads configuration and probes executables only, never mutating persisted configuration. Runtime is O(l * c * p) where l is language count, c is configured checker count, and p is PATH entry count. Side effects are limited to filesystem reads.
 - @param[in] projectBase {string} Absolute audited project base path whose effective configuration is audited.
 - @param[in] config {UseReqConfig} Effective configuration of the audited project base loaded from the existing local and global scopes.
+- @param[in] options {ReqAuditExecuteOptions} Optional terminal-column execution controls; an absent value selects the process-detected terminal column count.
 - @return {ReqAuditResult} Audit outcome facts including the rendered report payload.
 - @note Complexity: O(l * c * p). No configuration mutation occurs.
 - @satisfies REQ-844, REQ-845, REQ-846, REQ-847, REQ-848
 
+### fn `function renderReqAuditTable(rows: readonly ReqAuditCheckerRow[], terminalColumns: number | undefined): string` (L296-319)
+- @brief Renders the audit table with the static-check column bounded to the terminal width.
+- @details Measures the language, installed, and natural static-check column widths, resolves the effective static-check wrap target through `resolveReqAuditTextColumnTargetWidth(...)` against the supplied terminal column count or the process-detected fallback, builds the wrapped physical rows through `buildReqAuditTableRows(...)`, and renders the display-width-aligned table through the shared table formatter. Runtime is O(n) in aggregate checker length. No external state is mutated.
+- @param[in] rows {ReqAuditCheckerRow[]} Audit rows in canonical language order.
+- @param[in] terminalColumns {number | undefined} pi CLI terminal column count bounding the rendered table width; `undefined` keeps the natural layout.
+- @return {string} Complete rendered table text with one aligned border per physical row.
+- @note Complexity: O(n) in aggregate checker length. Pure aside from the process stdout metadata read performed by the default width source.
+- @satisfies REQ-846, REQ-847
+
 ## Symbol Index
 |Symbol|Kind|Vis|Lines|Sig|
 |---|---|---|---|---|
-|`ReqAuditInstalledState`|type||40||
-|`ReqAuditCheckerRow`|iface||47-54|export interface ReqAuditCheckerRow|
-|`ReqAuditResult`|iface||61-72|export interface ReqAuditResult|
-|`formatReqAuditCheckerEntry`|fn||82-89|function formatReqAuditCheckerEntry(entry: StaticCheckEnt...|
-|`resolveReqAuditInstalledState`|fn||99-108|function resolveReqAuditInstalledState(entry: StaticCheck...|
-|`parseReqAuditProjectBase`|fn||120-151|export function parseReqAuditProjectBase(rawArgs: string,...|
-|`executeReqAuditCommand`|fn||162-194|export function executeReqAuditCommand(|
+|`ReqAuditExecuteOptions`|iface||55-58|export interface ReqAuditExecuteOptions|
+|`ReqAuditInstalledState`|type||65||
+|`ReqAuditCheckerRow`|iface||72-79|export interface ReqAuditCheckerRow|
+|`ReqAuditResult`|iface||86-97|export interface ReqAuditResult|
+|`formatReqAuditCheckerEntry`|fn||107-114|function formatReqAuditCheckerEntry(entry: StaticCheckEnt...|
+|`resolveReqAuditInstalledState`|fn||124-133|function resolveReqAuditInstalledState(entry: StaticCheck...|
+|`parseReqAuditProjectBase`|fn||145-176|export function parseReqAuditProjectBase(rawArgs: string,...|
+|`readReqAuditTerminalColumns`|fn||185-190|function readReqAuditTerminalColumns(): number | undefined|
+|`resolveReqAuditTextColumnTargetWidth`|fn||202-219|function resolveReqAuditTextColumnTargetWidth(|
+|`buildReqAuditTableRows`|fn||230-243|function buildReqAuditTableRows(|
+|`executeReqAuditCommand`|fn||255-258|export function executeReqAuditCommand(|
+|`renderReqAuditTable`|fn||296-319|function renderReqAuditTable(rows: readonly ReqAuditCheck...|
 
 
 ---

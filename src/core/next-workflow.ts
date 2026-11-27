@@ -292,15 +292,15 @@ function splitUnbreakableWordByDisplayWidth(word: string, maxWidth: number): str
 }
 
 /**
- * @brief Wraps one captured input text into `Text` cell lines bounded by the effective wrap target.
- * @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, a single word wider than `maxWidth` is hard-broken at display-width boundaries across multiple lines with the final chunk staying open for following words so no produced line exceeds `maxWidth` and the column never widens for unbreakable words, and a fully empty normalization yields one empty line. Runtime is O(n) in input length. No external state is mutated.
+ * @brief Wraps one captured input text into cell lines bounded by the effective wrap target.
+ * @details Collapses every whitespace run into one space, splits the normalized text into whitespace-delimited words, and greedily appends each word to the current line while the joined display width stays within `maxWidth`; a word that no longer fits starts a new line, a single word wider than `maxWidth` is hard-broken at display-width boundaries across multiple lines with the final chunk staying open for following words so no produced line exceeds `maxWidth` and the column never widens for unbreakable words, and a fully empty normalization yields one empty line. Exported so the `req-audit` table renderer reuses the identical border-preserving wrap contract for its `static-check` continuation rows instead of duplicating the algorithm. Runtime is O(n) in input length. No external state is mutated.
  * @param[in] inputText {string} Captured input text.
  * @param[in] maxWidth {number} Maximum display width per produced line.
  * @return {string[]} Wrapped cell lines in reading order; never empty.
- * @satisfies REQ-724, REQ-729
+ * @satisfies REQ-724, REQ-729, REQ-846
  * @note Complexity: O(n) in input length. Pure; no side effects.
  */
-function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[] {
+export function wrapNextWorkflowTableCellText(inputText: string, maxWidth: number): string[] {
   const normalized = inputText.replace(/\s+/g, " ").trim();
   if (normalized === "") {
     return [""];

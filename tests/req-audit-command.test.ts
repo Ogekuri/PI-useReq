@@ -8,6 +8,7 @@ import {
   executeReqAuditCommand,
   parseReqAuditProjectBase,
 } from "../src/core/req-audit-command.js";
+import { measureDisplayWidth } from "../src/core/config-cli-render.js";
 import {
   createStaticCheckLanguageConfig,
   getDefaultConfig,
@@ -80,6 +81,85 @@ test("req-audit renders configured checkers grouped by language with language, s
     assert.ok(dummyIndex < pythonIndex, "Python rows follow the grouped C rows");
     assert.ok(pythonIndex < typescriptIndex, "TypeScript rows follow the grouped Python rows");
     assert.ok(result.report.includes(projectBase), "report names the audited project base");
+  } finally {
+    fs.rmSync(projectBase, { recursive: true, force: true });
+  }
+});
+
+/**
+ * @brief Verifies the audit table wraps within the requested terminal width keeping every border aligned.
+ * @details Configures one `C` language with a long resolvable command and one unresolvable command, executes the audit with a 100-column terminal budget, and verifies every rendered line stays within the terminal width, every border line shares one identical width, every table content line carries exactly four cells so the borders align on every physical row, the wrapped checker content stays complete across its continuation lines, continuation rows keep the language and installed cells empty, the per-row verification verdicts stay on the first physical row of each logical row, and the unknown-terminal rendering keeps the natural single-line layout. Runtime is dominated by executable resolution probing. Side effects are limited to temporary filesystem mutation.
+ * @return {void} No return value.
+ * @throws {AssertionError} Throws when the table exceeds the terminal width, borders diverge across physical rows, wrapped content is lost, or the unknown-terminal layout wraps.
+ * @satisfies REQ-846, REQ-847
+ */
+test("req-audit wraps the static-check column within the requested terminal width keeping the table borders aligned", () => {
+  const projectBase = createTemporaryProjectBase();
+  try {
+    const config = getDefaultConfig(projectBase);
+    const longCommand =
+      "cppcheck --error-exitcode=1 --enable=warning,style,performance,portability --std=c11";
+    const missingCommand = "pi-usereq-audit-missing-checker";
+    config["static-check"] = {
+      C: createStaticCheckLanguageConfig([
+        { module: "Command", cmd: "cppcheck", params: [
+          "--error-exitcode=1",
+          "--enable=warning,style,performance,portability",
+          "--std=c11",
+        ] },
+        { module: "Command", cmd: missingCommand },
+      ]),
+    };
+
+    const result = executeReqAuditCommand(projectBase, config, { terminalColumns: 100 });
+    const lines = result.report.split("\n");
+    const borderLines = lines.filter((line) => /^[┌├└]/.test(line));
+    assert.ok(borderLines.length >= 3, "report renders the bordered table");
+    const borderWidths = new Set(borderLines.map((line) => line.length));
+    assert.equal(borderWidths.size, 1, "all border lines share one identical width");
+    const tableWidth = [...borderWidths][0]!;
+    assert.ok(tableWidth <= 100, `table width ${tableWidth} exceeds the 100-column terminal`);
+    const contentLines = lines.filter((line) => line.startsWith("│"));
+    assert.ok(contentLines.length > 2, "the long checker row wraps into continuation rows");
+    for (const line of contentLines) {
+      assert.equal(line.length, tableWidth, `content line diverges from the border width: ${line}`);
+      assert.equal(line.split("│").length, 5, `content line does not carry four aligned cells: ${line}`);
+    }
+    const verdictRows = contentLines.filter((line) => {
+      const cells = line.split("│");
+      return ["yes", "no", "n/a"].includes(cells[3]!.trim());
+    });
+    assert.equal(verdictRows.length, 2, "each logical row renders exactly one physical row carrying the verdict");
+    for (const row of verdictRows) {
+      const cells = row.split("│");
+      assert.ok(cells[1]!.trim().length > 0, "the first physical row carries the language cell");
+    }
+    const wrappedChunks = contentLines
+      .filter((line) => line.split("│")[2]!.includes("cppcheck") || line.split("│")[2]!.includes("--"))
+      .map((line) => line.split("│")[2]!.trim())
+      .filter((cell) => cell !== "static-check");
+    const rebuilt = wrappedChunks.join(" ");
+    for (const token of longCommand.split(" ")) {
+      assert.ok(rebuilt.includes(token), `wrapped checker content lost the token '${token}'`);
+    }
+    assert.ok(
+      result.report.includes(missingCommand),
+      "the unresolvable checker row stays present with its no verdict",
+    );
+
+    const naturalResult = executeReqAuditCommand(projectBase, config);
+    const naturalLines = naturalResult.report.split("\n");
+    const naturalTableLines = naturalLines.filter((line) => /^[│┌├└]/.test(line));
+    const naturalContentLines = naturalTableLines.filter((line) => line.startsWith("│"));
+    assert.equal(
+      naturalContentLines.length,
+      3,
+      "the unknown-terminal rendering keeps one physical row per logical row",
+    );
+    assert.ok(
+      naturalTableLines.every((line) => measureDisplayWidth(line) > 100),
+      "the natural rendering keeps the unwrapped single-line table",
+    );
   } finally {
     fs.rmSync(projectBase, { recursive: true, force: true });
   }
